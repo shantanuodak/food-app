@@ -6,6 +6,12 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		CDB5B13A2F4B642600A82851 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B1392F4B642600A82851 /* GoogleSignIn */; };
+		CDB5B13C2F4B642600A82851 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B13B2F4B642600A82851 /* GoogleSignInSwift */; };
+		CDB5B1412F4B7A2C00A82851 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B1402F4B7A2C00A82851 /* Supabase */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		CDD80CD32F4268E4008A5987 /* Food App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Food App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -23,16 +29,27 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDB5B13A2F4B642600A82851 /* GoogleSignIn in Frameworks */,
+				CDB5B13C2F4B642600A82851 /* GoogleSignInSwift in Frameworks */,
+				CDB5B1412F4B7A2C00A82851 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		CDB5B13F2F4B7A2C00A82851 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		CDD80CCA2F4268E4008A5987 = {
 			isa = PBXGroup;
 			children = (
 				CDD80CD52F4268E4008A5987 /* Food App */,
+				CDB5B13F2F4B7A2C00A82851 /* Frameworks */,
 				CDD80CD42F4268E4008A5987 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -65,6 +82,9 @@
 			);
 			name = "Food App";
 			packageProductDependencies = (
+				CDB5B1392F4B642600A82851 /* GoogleSignIn */,
+				CDB5B13B2F4B642600A82851 /* GoogleSignInSwift */,
+				CDB5B1402F4B7A2C00A82851 /* Supabase */,
 			);
 			productName = "Food App";
 			productReference = CDD80CD32F4268E4008A5987 /* Food App.app */;
@@ -82,6 +102,14 @@
 				TargetAttributes = {
 					CDD80CD22F4268E4008A5987 = {
 						CreatedOnToolsVersion = 26.2;
+						SystemCapabilities = {
+							com.apple.HealthKit = {
+								enabled = 1;
+							};
+							com.apple.SignInWithApple = {
+								enabled = 1;
+							};
+						};
 					};
 				};
 			};
@@ -94,6 +122,10 @@
 			);
 			mainGroup = CDD80CCA2F4268E4008A5987;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				CDB5B1372F4B63FC00A82851 /* XCRemoteSwiftPackageReference "supabase-swift" */,
+				CDB5B1382F4B642600A82851 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = CDD80CD42F4268E4008A5987 /* Products */;
 			projectDirPath = "";
@@ -247,12 +279,23 @@
 		CDD80CDF2F4268E6008A5987 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				API_BASE_URL = "http://localhost:8080";
+				API_ENV = local;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Food App/Food App.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 9CL8Q244T8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Food-App-Info.plist";
+				INFOPLIST_KEY_APIBaseURL = "$(API_BASE_URL)";
+				INFOPLIST_KEY_APIEnvironment = "$(API_ENV)";
+				INFOPLIST_KEY_NSAppTransportSecurity_NSAllowsLocalNetworking = YES;
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take food photos to estimate calories and macros.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose food photos to estimate calories and macros.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -263,8 +306,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Personal.Food-App";
+				PRODUCT_BUNDLE_IDENTIFIER = com.shantanu.foodapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -278,12 +322,22 @@
 		CDD80CE02F4268E6008A5987 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				API_BASE_URL = "https://api.foodapp.example";
+				API_ENV = production;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = "Food App/Food App.entitlements";
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 1;
+				CURRENT_PROJECT_VERSION = 2;
+				DEVELOPMENT_TEAM = 9CL8Q244T8;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Food-App-Info.plist";
+				INFOPLIST_KEY_APIBaseURL = "$(API_BASE_URL)";
+				INFOPLIST_KEY_APIEnvironment = "$(API_ENV)";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Take food photos to estimate calories and macros.";
+				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Choose food photos to estimate calories and macros.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -294,8 +348,9 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = "Personal.Food-App";
+				PRODUCT_BUNDLE_IDENTIFIER = com.shantanu.foodapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
+				PROVISIONING_PROFILE_SPECIFIER = "";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
 				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
@@ -328,6 +383,43 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		CDB5B1372F4B63FC00A82851 /* XCRemoteSwiftPackageReference "supabase-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/supabase/supabase-swift.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 2.5.1;
+			};
+		};
+		CDB5B1382F4B642600A82851 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		CDB5B1392F4B642600A82851 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CDB5B1382F4B642600A82851 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		CDB5B13B2F4B642600A82851 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CDB5B1382F4B642600A82851 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+		CDB5B1402F4B7A2C00A82851 /* Supabase */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = CDB5B1372F4B63FC00A82851 /* XCRemoteSwiftPackageReference "supabase-swift" */;
+			productName = Supabase;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = CDD80CCB2F4268E4008A5987 /* Project object */;
 }

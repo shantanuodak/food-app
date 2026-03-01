@@ -1,0 +1,58 @@
+import type { ParseResult } from './deterministicParser.js';
+import type { AICallUsage } from './aiNormalizerService.js';
+
+export type ParsePipelineRoute = 'cache' | 'gemini' | 'fatsecret' | 'unresolved';
+
+export type ParseDecisionContext = {
+  userId: string;
+  featureFlags: {
+    geminiEnabled: boolean;
+    fatsecretEnabled: boolean;
+  };
+  budget?: {
+    dailyBudgetUsd: number;
+    userSoftCapUsd: number;
+    globalUsedTodayUsd: number;
+    userUsedTodayUsd: number;
+    userSoftCapExceeded: boolean;
+  };
+  cacheScope: string;
+  allowFallback: boolean;
+};
+
+export type ParseDecisionResult = {
+  result: ParseResult;
+  route: ParsePipelineRoute;
+  cacheHit: boolean;
+  sourcesUsed: Array<'cache' | 'fatsecret' | 'gemini' | 'manual'>;
+  reasonCodes: string[];
+  fallbackUsed: boolean;
+  fallbackModel: string | null;
+  fallbackUsage: AICallUsage | null;
+  needsClarification: boolean;
+  clarificationQuestions: string[];
+};
+
+export type ParseProviderName = 'cache' | 'gemini' | 'fatsecret';
+
+export type ParseProviderInput = {
+  text: string;
+  baseline: ParseResult;
+  context: ParseDecisionContext;
+};
+
+export type ParseProviderOutput = {
+  result: ParseResult;
+  accepted: boolean;
+  rejectionReason?: string;
+  cacheHit?: boolean;
+  fallbackUsed?: boolean;
+  fallbackModel?: string | null;
+  fallbackUsage?: AICallUsage | null;
+};
+
+export interface ParseProvider {
+  name: ParseProviderName;
+  isEnabled(context: ParseDecisionContext): boolean;
+  parse(input: ParseProviderInput): Promise<ParseProviderOutput | null>;
+}

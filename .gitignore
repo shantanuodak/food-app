@@ -1,0 +1,21 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+npm-debug.log*
+
+# Secrets / env
+.env
+*.env
+backend/.env
+backend/.env.*
+
+# Build output
+dist/
+.codex_build/
+
+# Xcode user/build artifacts
+DerivedData/
+*.xcuserstate
+xcuserdata/

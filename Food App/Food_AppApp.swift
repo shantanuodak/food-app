@@ -7,11 +7,24 @@
 
 import SwiftUI
 
+#if canImport(GoogleSignIn)
+import GoogleSignIn
+#endif
+
 @main
 struct Food_AppApp: App {
+    @StateObject private var appStore = AppStore()
+
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(appStore)
+                .preferredColorScheme(.dark)
+                .onOpenURL { url in
+#if canImport(GoogleSignIn)
+                    _ = GIDSignIn.sharedInstance.handle(url)
+#endif
+                }
         }
     }
 }

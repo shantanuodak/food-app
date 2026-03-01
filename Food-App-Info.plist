@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLName</key>
+			<string>google</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.469326671014-3brjp95rijvh94qrttlqdldtp7cpboms</string>
+			</array>
+		</dict>
+	</array>
+	<key>GIDClientID</key>
+	<string>469326671014-3brjp95rijvh94qrttlqdldtp7cpboms.apps.googleusercontent.com</string>
+	<key>GIDServerClientID</key>
+	<string>469326671014-ntevjbtkmldgs655prijlivnu37q2soa.apps.googleusercontent.com</string>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Food App reads activity, nutrition, and body weight data to personalize your targets and show progress trends.</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Food App writes calories and macro entries so your nutrition logs stay in sync with Apple Health.</string>
+	<key>SupabaseAnonKey</key>
+	<string>sb_publishable_PmQWhxR1aafmI_QgeXHhIQ_HRAgEJdD</string>
+	<key>SupabaseURL</key>
+	<string>https://dsihtvqjefpgktngacsm.supabase.co</string>
+</dict>
+</plist>
