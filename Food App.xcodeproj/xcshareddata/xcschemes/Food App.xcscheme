@@ -53,17 +53,12 @@
       <EnvironmentVariables>
          <EnvironmentVariable
             key = "APP_ENV"
-            value = "local"
+            value = "production"
             isEnabled = "YES">
          </EnvironmentVariable>
          <EnvironmentVariable
-            key = "API_BASE_URL_LOCAL"
-            value = "http://10.0.0.230:8080"
-            isEnabled = "YES">
-         </EnvironmentVariable>
-         <EnvironmentVariable
-            key = "API_BASE_URL_SIMULATOR"
-            value = "http://localhost:8080"
+            key = "API_BASE_URL_PROD"
+            value = "https://food-app-backend-ifdx.onrender.com"
             isEnabled = "YES">
          </EnvironmentVariable>
       </EnvironmentVariables>

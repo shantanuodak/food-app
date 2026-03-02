@@ -2812,7 +2812,7 @@ struct MainLoggingShellView: View {
             let prefix = isRetry ? L10n.retrySucceededPrefix : L10n.savedSuccessfullyPrefix
             let timeToLogMs = flowStartedAt.map { elapsedMs(since: $0) }
             if intent == .auto {
-                saveSuccessMessage = "Auto-saved"
+                saveSuccessMessage = nil
                 lastAutoSavedContentFingerprint = autoSaveContentFingerprint(effectiveRequest)
             } else {
                 if let timeToLogMs {
@@ -2826,7 +2826,7 @@ struct MainLoggingShellView: View {
             let syncedToHealth = await syncSavedLogToAppleHealthIfEnabled(effectiveRequest)
             if syncedToHealth {
                 if intent == .auto {
-                    saveSuccessMessage = "Auto-saved • Synced to Apple Health"
+                    saveSuccessMessage = nil
                 } else if let current = saveSuccessMessage, !current.isEmpty {
                     saveSuccessMessage = "\(current) • Synced to Apple Health"
                 }
@@ -3575,7 +3575,7 @@ private struct EditableParsedItem: Identifiable {
             currentSource: nutritionSourceId
         )
 
-        ParsedFoodItem(
+        return ParsedFoodItem(
             name: resolvedName,
             quantity: quantity,
             unit: resolvedUnit,

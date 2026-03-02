@@ -6,12 +6,16 @@ enum AppEnvironment: String {
     case production
 
     static func from(_ raw: String?) -> AppEnvironment {
-        guard let raw else { return .local }
-        return AppEnvironment(rawValue: raw.lowercased()) ?? .local
+        guard let raw else { return .production }
+        return AppEnvironment(rawValue: raw.lowercased()) ?? .production
     }
 }
 
 struct AppConfiguration {
+    private static let defaultLocalBaseURL = "https://food-app-backend-ifdx.onrender.com"
+    private static let defaultStagingBaseURL = "https://food-app-backend-ifdx.onrender.com"
+    private static let defaultProductionBaseURL = "https://food-app-backend-ifdx.onrender.com"
+
     let environment: AppEnvironment
     let baseURL: URL
     let authToken: String
@@ -27,7 +31,17 @@ struct AppConfiguration {
         let environmentOverride = AppEnvironment.from(processInfo.environment["APP_ENV"])
         let environment: AppEnvironment = processInfo.environment["APP_ENV"] == nil ? bundleEnvironment : environmentOverride
 
-        let bundleBaseURL = (bundle.object(forInfoDictionaryKey: "APIBaseURL") as? String) ?? "http://localhost:8080"
+        let environmentDefaultBaseURL: String
+        switch environment {
+        case .local:
+            environmentDefaultBaseURL = defaultLocalBaseURL
+        case .staging:
+            environmentDefaultBaseURL = defaultStagingBaseURL
+        case .production:
+            environmentDefaultBaseURL = defaultProductionBaseURL
+        }
+
+        let bundleBaseURL = (bundle.object(forInfoDictionaryKey: "APIBaseURL") as? String) ?? environmentDefaultBaseURL
         let overrideKey: String
         switch environment {
         case .local:
@@ -105,33 +119,31 @@ struct AppConfiguration {
     }
 
     private static func resolveBaseURL(from rawValue: String, environment: AppEnvironment, processInfo: ProcessInfo) -> URL {
-        let fallbackURL = URL(string: "http://localhost:8080")!
+        let fallbackURLString: String
+        switch environment {
+        case .local:
+            fallbackURLString = defaultLocalBaseURL
+        case .staging:
+            fallbackURLString = defaultStagingBaseURL
+        case .production:
+            fallbackURLString = defaultProductionBaseURL
+        }
+        let fallbackURL = URL(string: fallbackURLString)!
         let resolved = URL(string: rawValue) ?? fallbackURL
 
-#if targetEnvironment(simulator)
-        if environment == .local {
-            if let simulatorOverride = processInfo.environment["API_BASE_URL_SIMULATOR"]?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !simulatorOverride.isEmpty,
-               let simulatorURL = URL(string: simulatorOverride) {
-                return simulatorURL
-            }
-
-            if shouldRewriteSimulatorHostToLocalhost(resolved.host),
-               var components = URLComponents(url: resolved, resolvingAgainstBaseURL: false) {
-                components.host = "localhost"
-                return components.url ?? resolved
-            }
+        // Safety rail: app should never call loopback/private hosts.
+        if shouldForceNonLocalHost(resolved.host) {
+            return fallbackURL
         }
-#endif
 
         return resolved
     }
 
-    private static func shouldRewriteSimulatorHostToLocalhost(_ host: String?) -> Bool {
-        guard let host else { return false }
+    private static func shouldForceNonLocalHost(_ host: String?) -> Bool {
+        guard let host else { return true }
         let normalized = host.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if normalized == "localhost" || normalized == "127.0.0.1" || normalized == "::1" {
-            return false
+            return true
         }
         return isPrivateIPv4Host(normalized)
     }
