@@ -37,7 +37,7 @@ export type ParsedItem = {
   needsClarification?: boolean;
   manualOverride?: boolean;
   manualOverrideMeta?: ParsedItemManualOverride;
-  sourceFamily?: 'cache' | 'fatsecret' | 'gemini' | 'manual';
+  sourceFamily?: 'cache' | 'deterministic' | 'fatsecret' | 'gemini' | 'manual';
   originalNutritionSourceId?: string;
 };
 
