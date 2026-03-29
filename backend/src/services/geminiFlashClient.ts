@@ -136,6 +136,30 @@ function extractCandidateText(response: GeminiResponse): string | null {
   return text || null;
 }
 
+function isRetryableStatus(status: number): boolean {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function jitterDelay(baseMs: number, jitterMs: number): number {
+  if (jitterMs <= 0) {
+    return baseMs;
+  }
+  const delta = Math.floor(Math.random() * jitterMs);
+  return baseMs + delta;
+}
+
+function computeRetryDelayMs(attempt: number): number {
+  const baseDelay = Math.max(50, config.geminiRetryBaseDelayMs);
+  const maxDelay = Math.max(baseDelay, config.geminiRetryMaxDelayMs);
+  const expDelay = Math.min(maxDelay, baseDelay * 2 ** Math.max(0, attempt - 1));
+  return jitterDelay(expDelay, Math.max(0, config.geminiRetryJitterMs));
+}
+
+async function sleep(ms: number): Promise<void> {
+  if (ms <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function performGeminiJsonRequest(
   model: string,
   parts: MultimodalPart[],
@@ -153,7 +177,7 @@ async function performGeminiJsonRequest(
     config.geminiApiKey
   )}`;
 
-  const maxAttempts = Math.max(1, config.geminiAbortRetryCount + 1);
+  const maxAttempts = Math.max(1, config.geminiRetryMaxAttempts, config.geminiAbortRetryCount + 1);
   const timeoutMs = Math.max(1_000, config.geminiTimeoutMs);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -183,12 +207,20 @@ async function performGeminiJsonRequest(
 
       if (!response.ok) {
         const body = await response.text().catch(() => '');
+        const now = Date.now();
         if (response.status === 429) {
-          markRateLimitFailure(Date.now());
+          markRateLimitFailure(now);
         } else {
           clearRateLimitStreakOnNon429Failure();
         }
+        const retryable = isRetryableStatus(response.status);
         console.warn('Gemini API request failed', response.status, body);
+        if (retryable && attempt < maxAttempts) {
+          const delayMs = computeRetryDelayMs(attempt);
+          console.warn('[gemini_retry]', JSON.stringify({ attempt, maxAttempts, delayMs, status: response.status }));
+          await sleep(delayMs);
+          continue;
+        }
         return null;
       }
 
@@ -212,15 +244,19 @@ async function performGeminiJsonRequest(
     } catch (err) {
       clearRateLimitStreakOnNon429Failure();
 
-      if (isAbortLikeError(err) && attempt < maxAttempts) {
+      if (attempt < maxAttempts) {
+        const delayMs = computeRetryDelayMs(attempt);
         console.warn(
-          '[gemini_abort_retry]',
+          '[gemini_retry]',
           JSON.stringify({
             attempt,
             maxAttempts,
-            timeoutMs
+            timeoutMs,
+            delayMs,
+            abortLike: isAbortLikeError(err)
           })
         );
+        await sleep(delayMs);
         continue;
       }
 
@@ -246,6 +282,19 @@ export async function generateGeminiMultimodalJson(
 
 export function isGeminiCircuitOpenForDiagnostics(nowMs = Date.now()): boolean {
   return isCircuitOpen(nowMs);
+}
+
+export function getGeminiCircuitRetryAfterSeconds(nowMs = Date.now()): number | null {
+  if (!isCircuitOpen(nowMs)) {
+    return null;
+  }
+
+  const remainingMs = geminiCircuitBreaker.openedUntilMs - nowMs;
+  if (remainingMs <= 0) {
+    return null;
+  }
+
+  return Math.max(1, Math.ceil(remainingMs / 1000));
 }
 
 export function getGeminiCircuitBreakerStateForTests(): CircuitBreakerState {

@@ -7,6 +7,7 @@ import { createParseRequest, getParseRequestForUser, isParseRequestStale } from 
 import { ApiError } from '../utils/errors.js';
 import { config } from '../config.js';
 import { executePrimaryParse } from '../services/parseOrchestrator.js';
+import { getGeminiCircuitRetryAfterSeconds } from '../services/geminiFlashClient.js';
 import { collectSourcesUsed } from '../services/parseContractService.js';
 import { parseImageWithGemini } from '../services/imageParseService.js';
 import { checkParseRateLimit } from '../services/parseRateLimiterService.js';
@@ -205,9 +206,14 @@ router.post('/', async (req, res, next) => {
       clarificationQuestions,
       budget,
       cacheDebug,
-      sourcesUsed
+      sourcesUsed,
+      reasonCodes
     } =
       orchestrated;
+
+    const retryAfterSeconds = reasonCodes.includes('gemini_circuit_open')
+      ? getGeminiCircuitRetryAfterSeconds()
+      : null;
 
     res.setHeader('x-parse-route', route);
     res.setHeader('x-parse-duration-ms', String(roundedDurationMs));
@@ -227,6 +233,8 @@ router.post('/', async (req, res, next) => {
       budget,
       needsClarification,
       clarificationQuestions,
+      reasonCodes,
+      ...(retryAfterSeconds ? { retryAfterSeconds } : {}),
       parseDurationMs: roundedDurationMs,
       loggedAt: loggedAt.toISOString(),
       confidence: result.confidence,

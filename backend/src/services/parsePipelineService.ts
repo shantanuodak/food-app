@@ -1,7 +1,6 @@
 import type { ParseResult } from './deterministicParser.js';
 import { buildParseCacheDebugInfo, getParseCache, setParseCache } from './parseCacheService.js';
 import { tryCheapAIFallback, type AICallUsage } from './aiNormalizerService.js';
-import { tryFatSecretParse } from './fatsecretParserService.js';
 import { isGeminiCircuitOpenForDiagnostics } from './geminiFlashClient.js';
 import { buildClarificationQuestions } from './clarificationService.js';
 import { splitFoodTextSegments } from './foodTextSegmentation.js';
@@ -22,9 +21,7 @@ const inFlightParses = new Map<string, Promise<ParsePipelineOutput>>();
 type UnresolvedReason =
   | 'gemini_not_executed'
   | 'gemini_request_failed'
-  | 'gemini_circuit_open'
-  | 'fatsecret_semantic_mismatch'
-  | 'fatsecret_unavailable_or_rejected';
+  | 'gemini_circuit_open';
 
 function createEmptyParseResult(_text: string): ParseResult {
   return {
@@ -58,6 +55,25 @@ function isValidParseResultShape(value: unknown): value is ParseResult {
   );
 }
 
+function resultUsesRetiredProvider(result: ParseResult): boolean {
+  return result.items.some((item) => {
+    const nutritionSourceId = item.nutritionSourceId.trim().toLowerCase();
+    const originalNutritionSourceId = (item.originalNutritionSourceId || '').trim().toLowerCase();
+    const sourceFamily = (item.sourceFamily || '').trim().toLowerCase();
+
+    return (
+      nutritionSourceId.includes('fatsecret') ||
+      nutritionSourceId.includes('deterministic') ||
+      nutritionSourceId.includes('seed_') ||
+      originalNutritionSourceId.includes('fatsecret') ||
+      originalNutritionSourceId.includes('deterministic') ||
+      originalNutritionSourceId.includes('seed_') ||
+      sourceFamily === 'fatsecret' ||
+      sourceFamily === 'deterministic'
+    );
+  });
+}
+
 function hasUnresolvedSignal(text: string, result: ParseResult): boolean {
   if (result.items.length === 0) {
     return true;
@@ -71,6 +87,7 @@ function hasUnresolvedSignal(text: string, result: ParseResult): boolean {
 function normalizeNutritionSourceId(rawSourceId: string, route: ParsePipelineRoute): string {
   const trimmed = rawSourceId.trim();
   if (!trimmed) {
+    if (route === 'deterministic') return 'deterministic_estimate';
     if (route === 'fatsecret') return 'fatsecret_estimate';
     if (route === 'gemini') return 'gemini_estimate';
     return 'cache_estimate';
@@ -86,6 +103,7 @@ function normalizeNutritionSourceId(rawSourceId: string, route: ParsePipelineRou
     return trimmed;
   }
 
+  if (route === 'deterministic') return 'deterministic_estimate';
   if (route === 'fatsecret') return 'fatsecret_estimate';
   if (route === 'gemini') return 'gemini_estimate';
   return 'cache_estimate';
@@ -193,7 +211,7 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
   result: ParseResult;
   route: ParsePipelineRoute;
   cacheHit: boolean;
-  sourcesUsed: Array<'cache' | 'fatsecret' | 'gemini' | 'manual'>;
+  sourcesUsed: Array<'cache' | 'deterministic' | 'fatsecret' | 'gemini' | 'manual'>;
   reasonCodes: string[];
   fallbackUsed: boolean;
   fallbackModel: string | null;
@@ -205,9 +223,6 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
   let fallbackUsed = false;
   let fallbackModel: string | null = null;
   let fallbackUsage: AICallUsage | null = null;
-  let fatSecretCandidate: ParseResult | null = null;
-  let fatsecretUnavailableOrRejected = false;
-  const fatsecretRejectionCodes = new Set<string>();
   let geminiExecuted = false;
   let geminiReturnedNoResult = false;
   let geminiCircuitWasOpen = false;
@@ -219,9 +234,6 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
       geminiEnabledForRequest = providerEnabled;
     }
     if (!providerEnabled) {
-      if (provider.name === 'fatsecret') {
-        fatsecretUnavailableOrRejected = true;
-      }
       continue;
     }
     if (provider.name === 'gemini') {
@@ -234,9 +246,6 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
       context
     });
     if (!attempt) {
-      if (provider.name === 'fatsecret') {
-        fatsecretUnavailableOrRejected = true;
-      }
       if (provider.name === 'gemini') {
         geminiReturnedNoResult = true;
         geminiCircuitWasOpen = isGeminiCircuitOpenForDiagnostics();
@@ -254,22 +263,6 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
       break;
     }
 
-    if (provider.name === 'fatsecret') {
-      if (attempt.result.items.length > 0) {
-        fatSecretCandidate = attempt.result;
-      }
-      if (attempt.accepted) {
-        result = attempt.result;
-        route = 'fatsecret';
-        break;
-      }
-      fatsecretUnavailableOrRejected = true;
-      if (attempt.rejectionReason) {
-        fatsecretRejectionCodes.add(attempt.rejectionReason);
-      }
-      continue;
-    }
-
     if (provider.name === 'gemini') {
       if (!attempt.accepted) {
         geminiReturnedNoResult = true;
@@ -285,33 +278,31 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
     }
   }
 
-  // If Gemini returned empty and FatSecret had non-empty output, keep FatSecret as a safety net.
-  if (route !== 'fatsecret' && fatSecretCandidate && result.items.length === 0) {
-    result = fatSecretCandidate;
-    route = 'fatsecret';
-  }
-
   if (route === 'unresolved') {
     const reasons: UnresolvedReason[] = [];
-    if (fatsecretRejectionCodes.has('FATSECRET_SEMANTIC_MISMATCH')) {
-      reasons.push('fatsecret_semantic_mismatch');
-    }
-    if (fatsecretUnavailableOrRejected) {
-      reasons.push('fatsecret_unavailable_or_rejected');
-    }
     if (!geminiEnabledForRequest) {
       reasons.push('gemini_not_executed');
     } else if (!geminiExecuted || geminiReturnedNoResult) {
       reasons.push(geminiCircuitWasOpen ? 'gemini_circuit_open' : 'gemini_request_failed');
     }
     logUnresolvedRoute(text, context, reasons);
+    return {
+      result: normalizeParseResultContract(ensureItemExplanations(sanitizeResultSources(result, route), route), route),
+      route,
+      cacheHit,
+      sourcesUsed: collectSourcesUsed(result.items, route, cacheHit),
+      reasonCodes: reasons,
+      fallbackUsed,
+      fallbackModel,
+      fallbackUsage
+    };
   }
 
   result = sanitizeResultSources(result, route);
   result = ensureItemExplanations(result, route);
   result = normalizeParseResultContract(result, route);
   const sourcesUsed = collectSourcesUsed(result.items, route, cacheHit);
-  const reasonCodes = Array.from(fatsecretRejectionCodes);
+  const reasonCodes: string[] = [];
 
   return {
     result,
@@ -348,6 +339,18 @@ function createCacheProvider(): ParseProvider {
           return null;
         }
 
+        if (resultUsesRetiredProvider(cached.result)) {
+          console.info(
+            '[parse_cache_skip]',
+            JSON.stringify({
+              reason: 'retired_provider_cached_result',
+              cacheScope: context.cacheScope,
+              textHash: cached.textHash
+            })
+          );
+          return null;
+        }
+
         if (!shouldAcceptCachedResult(cached.result)) {
           console.info(
             '[parse_cache_skip]',
@@ -375,34 +378,6 @@ function createCacheProvider(): ParseProvider {
   };
 }
 
-function createFatSecretProvider(): ParseProvider {
-  return {
-    name: 'fatsecret',
-    isEnabled: (context) =>
-      context.featureFlags.fatsecretEnabled && config.fatsecretEnabled && Boolean(config.fatsecretClientId && config.fatsecretClientSecret),
-    async parse({ text, baseline }) {
-      const candidate = await tryFatSecretParse(text, baseline);
-      if (!candidate) {
-        return null;
-      }
-      if (candidate.items.length === 0) {
-        return {
-          result: candidate,
-          accepted: false,
-          rejectionReason: 'FATSECRET_NO_MATCH'
-        };
-      }
-
-      const accepted = candidate.confidence >= config.fatsecretMinConfidence;
-      return {
-        result: candidate,
-        accepted,
-        rejectionReason: accepted ? undefined : 'FATSECRET_LOW_CONFIDENCE'
-      };
-    }
-  };
-}
-
 function createGeminiProvider(): ParseProvider {
   return {
     name: 'gemini',
@@ -425,7 +400,7 @@ function createGeminiProvider(): ParseProvider {
 }
 
 export function createDefaultParseProviders(): ParseProvider[] {
-  return [createCacheProvider(), createFatSecretProvider(), createGeminiProvider()];
+  return [createCacheProvider(), createGeminiProvider()];
 }
 
 export async function runPrimaryParsePipeline(

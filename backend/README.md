@@ -121,8 +121,8 @@ RLS hardening:
 - Parse budget is tracked and returned in response for monitoring; primary parse does not hard-block on budget.
 - Gemini 429 circuit breaker:
   - `GEMINI_CIRCUIT_BREAKER_ENABLED=true`
-  - `GEMINI_CIRCUIT_BREAKER_CONSECUTIVE_429=2`
-  - `GEMINI_CIRCUIT_BREAKER_COOLDOWN_MS=60000`
+  - `GEMINI_CIRCUIT_BREAKER_CONSECUTIVE_429=5`
+  - `GEMINI_CIRCUIT_BREAKER_COOLDOWN_MS=20000`
   - opens after repeated 429s and temporarily skips Gemini calls.
 
 `POST /v1/logs/parse` clarification behavior:
