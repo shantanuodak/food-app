@@ -1,7 +1,7 @@
 import type { ParseResult } from './deterministicParser.js';
 import type { AICallUsage } from './aiNormalizerService.js';
 
-export type ParsePipelineRoute = 'cache' | 'gemini' | 'fatsecret' | 'unresolved';
+export type ParsePipelineRoute = 'cache' | 'deterministic' | 'gemini' | 'fatsecret' | 'unresolved';
 
 export type ParseDecisionContext = {
   userId: string;
@@ -24,7 +24,7 @@ export type ParseDecisionResult = {
   result: ParseResult;
   route: ParsePipelineRoute;
   cacheHit: boolean;
-  sourcesUsed: Array<'cache' | 'fatsecret' | 'gemini' | 'manual'>;
+  sourcesUsed: Array<'cache' | 'deterministic' | 'fatsecret' | 'gemini' | 'manual'>;
   reasonCodes: string[];
   fallbackUsed: boolean;
   fallbackModel: string | null;
