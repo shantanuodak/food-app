@@ -3,12 +3,11 @@ import { ApiError } from '../utils/errors.js';
 import { getBudgetSnapshotForUser, writeAiCostEvent } from './aiCostService.js';
 import { getEffectiveFeatureFlags } from './adminFeatureFlagsService.js';
 import { buildParseCacheDebugInfo, type ParseCacheDebugInfo } from './parseCacheService.js';
-import { runPrimaryParsePipeline } from './parsePipelineService.js';
+import { runSegmentAwareParsePipeline } from './parsePipelineService.js';
 import { checkParseRateLimit } from './parseRateLimiterService.js';
 import { createParseRequest } from './parseRequestService.js';
 import type { ParseDecisionResult } from './parseDecisionTypes.js';
 import { getOnboardingParsePreferences } from './onboardingService.js';
-import { splitFoodTextSegments } from './foodTextSegmentation.js';
 
 type ParseAuthContext = {
   userId: string;
@@ -99,21 +98,19 @@ export async function executePrimaryParse(input: PrimaryParseOrchestratorInput):
   const preferences = await getOnboardingParsePreferences(userId);
   const locale = normalizeLocale(input.locale);
   const units = (preferences.units || 'unknown').toLowerCase();
-  const segmentCount = splitFoodTextSegments(input.text).length;
-  const effectivePromptVersion = segmentCount > 1 ? config.parsePromptVersion : config.parsePromptVersion.replace(':v2', ':v1');
   const cacheScope = [
     `user=${userId}`,
     `cachev=${config.parseCacheSchemaVersion}`,
     `parser=${config.parseVersion}`,
     `routev=${config.parseProviderRouteVersion}`,
-    `prompt=${effectivePromptVersion}`,
+    `prompt=${config.parsePromptVersion}`,
     `locale=${locale}`,
     `units=${units}`,
     'primary'
   ].join('|');
   const cacheDebug = config.debugParseCacheKey ? buildParseCacheDebugInfo(input.text, cacheScope) : undefined;
 
-  const pipeline = await runPrimaryParsePipeline(input.text, {
+  const pipeline = await runSegmentAwareParsePipeline(input.text, {
     allowFallback: fallbackAllowed,
     cacheScope,
     featureFlags,

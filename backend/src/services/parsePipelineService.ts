@@ -1,6 +1,6 @@
 import type { ParseResult } from './deterministicParser.js';
 import { buildParseCacheDebugInfo, getParseCache, setParseCache } from './parseCacheService.js';
-import { tryCheapAIFallback, type AICallUsage } from './aiNormalizerService.js';
+import { tryCheapAIFallbackDetailed, type AICallUsage, type AIFallbackFailureReason } from './aiNormalizerService.js';
 import { isGeminiCircuitOpenForDiagnostics } from './geminiFlashClient.js';
 import { buildClarificationQuestions } from './clarificationService.js';
 import { splitFoodTextSegments } from './foodTextSegmentation.js';
@@ -21,7 +21,13 @@ const inFlightParses = new Map<string, Promise<ParsePipelineOutput>>();
 type UnresolvedReason =
   | 'gemini_not_executed'
   | 'gemini_request_failed'
-  | 'gemini_circuit_open';
+  | 'gemini_circuit_open'
+  | 'gemini_timeout'
+  | 'gemini_rate_limited'
+  | 'gemini_http_error'
+  | 'gemini_empty_response'
+  | 'gemini_network_error'
+  | 'gemini_invalid_response';
 
 function createEmptyParseResult(_text: string): ParseResult {
   return {
@@ -227,6 +233,7 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
   let geminiReturnedNoResult = false;
   let geminiCircuitWasOpen = false;
   let geminiEnabledForRequest = false;
+  let geminiFailureReason: UnresolvedReason | null = null;
 
   for (const provider of providers) {
     const providerEnabled = provider.isEnabled(context);
@@ -253,6 +260,16 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
       continue;
     }
 
+    if (provider.name === 'gemini' && !attempt.accepted) {
+      geminiReturnedNoResult = true;
+      geminiCircuitWasOpen = isGeminiCircuitOpenForDiagnostics();
+      const rejectionReason = attempt.rejectionReason as AIFallbackFailureReason | undefined;
+      if (rejectionReason) {
+        geminiFailureReason = rejectionReason;
+      }
+      continue;
+    }
+
     if (provider.name === 'cache') {
       if (!attempt.accepted) {
         continue;
@@ -264,11 +281,6 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
     }
 
     if (provider.name === 'gemini') {
-      if (!attempt.accepted) {
-        geminiReturnedNoResult = true;
-        geminiCircuitWasOpen = isGeminiCircuitOpenForDiagnostics();
-        continue;
-      }
       result = attempt.result;
       route = 'gemini';
       fallbackUsed = attempt.fallbackUsed ?? true;
@@ -283,7 +295,7 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
     if (!geminiEnabledForRequest) {
       reasons.push('gemini_not_executed');
     } else if (!geminiExecuted || geminiReturnedNoResult) {
-      reasons.push(geminiCircuitWasOpen ? 'gemini_circuit_open' : 'gemini_request_failed');
+      reasons.push(geminiCircuitWasOpen ? 'gemini_circuit_open' : (geminiFailureReason ?? 'gemini_request_failed'));
     }
     logUnresolvedRoute(text, context, reasons);
     return {
@@ -383,17 +395,21 @@ function createGeminiProvider(): ParseProvider {
     name: 'gemini',
     isEnabled: (context) => context.featureFlags.geminiEnabled && context.allowFallback && config.aiFallbackEnabled,
     async parse({ text, baseline }) {
-      const fallback = await tryCheapAIFallback(text, baseline);
-      if (!fallback) {
-        return null;
+      const fallbackAttempt = await tryCheapAIFallbackDetailed(text, baseline);
+      if (!fallbackAttempt.output) {
+        return {
+          result: baseline,
+          accepted: false,
+          rejectionReason: fallbackAttempt.failureReason
+        };
       }
 
       return {
-        result: fallback.result,
+        result: fallbackAttempt.output.result,
         accepted: true,
         fallbackUsed: true,
-        fallbackModel: fallback.usage.model,
-        fallbackUsage: fallback.usage
+        fallbackModel: fallbackAttempt.output.usage.model,
+        fallbackUsage: fallbackAttempt.output.usage
       };
     }
   };
@@ -480,4 +496,114 @@ export async function runPrimaryParsePipeline(
       inFlightParses.delete(inFlightKey);
     }
   }
+}
+
+function combineParseResults(results: ParseResult[]): ParseResult {
+  const items = results.flatMap((r) => r.items);
+  const confidence = results.length > 0 ? Math.min(...results.map((r) => r.confidence)) : 0;
+  const totals = {
+    calories: Math.round(items.reduce((s, i) => s + i.calories, 0) * 10) / 10,
+    protein: Math.round(items.reduce((s, i) => s + i.protein, 0) * 10) / 10,
+    carbs: Math.round(items.reduce((s, i) => s + i.carbs, 0) * 10) / 10,
+    fat: Math.round(items.reduce((s, i) => s + i.fat, 0) * 10) / 10
+  };
+  return { confidence, assumptions: [], items, totals };
+}
+
+/**
+ * Segment-aware pipeline: checks cache per segment, calls Gemini only
+ * for segments that are not cached, then merges everything together.
+ * Falls back to the standard single-text pipeline for single-segment input.
+ */
+export async function runSegmentAwareParsePipeline(
+  text: string,
+  options?: Parameters<typeof runPrimaryParsePipeline>[1]
+): Promise<ParsePipelineOutput> {
+  const segments = splitFoodTextSegments(text);
+
+  if (segments.length <= 1) {
+    return runPrimaryParsePipeline(text, options);
+  }
+
+  const cacheScope = options?.cacheScope ?? 'global';
+
+  // Check cache for every segment in parallel
+  const cacheChecks = await Promise.all(
+    segments.map(async (seg) => {
+      const cached = await getParseCache(seg, cacheScope);
+      if (cached && shouldAcceptCachedResultPublic(cached.result)) {
+        return { seg, result: cached.result, fromCache: true };
+      }
+      return { seg, result: null as ParseResult | null, fromCache: false };
+    })
+  );
+
+  const allCached = cacheChecks.every((c) => c.fromCache);
+
+  // Full cache hit across all segments
+  if (allCached) {
+    const combined = combineParseResults(cacheChecks.map((c) => c.result as ParseResult));
+    const clarification = computeClarificationState(text, combined);
+    return {
+      result: combined,
+      route: 'cache',
+      cacheHit: true,
+      sourcesUsed: collectSourcesUsed(combined.items, 'cache', true),
+      reasonCodes: [],
+      fallbackUsed: false,
+      fallbackModel: null,
+      fallbackUsage: null,
+      needsClarification: clarification.needsClarification,
+      clarificationQuestions: clarification.clarificationQuestions
+    };
+  }
+
+  // Partial cache hit: only call Gemini for the uncached segments
+  const uncachedSegments = cacheChecks.filter((c) => !c.fromCache).map((c) => c.seg);
+  const uncachedText = uncachedSegments.join('\n');
+
+  const uncachedOutput = await runPrimaryParsePipeline(uncachedText, options);
+
+  // If the uncached pipeline returned items, cache each segment result individually
+  if (uncachedOutput.result.items.length > 0 && !uncachedOutput.cacheHit) {
+    for (const seg of uncachedSegments) {
+      const segItem = uncachedOutput.result.items.find(
+        (item) => item.name.toLowerCase().includes(seg.toLowerCase().replace(/^\d+\s*/, ''))
+      );
+      if (segItem) {
+        const segResult: ParseResult = {
+          confidence: segItem.matchConfidence,
+          assumptions: [],
+          items: [segItem],
+          totals: {
+            calories: segItem.calories,
+            protein: segItem.protein,
+            carbs: segItem.carbs,
+            fat: segItem.fat
+          }
+        };
+        setParseCache(seg, segResult, cacheScope).catch(() => {});
+      }
+    }
+  }
+
+  // Merge cached segment results with freshly-parsed ones
+  const cachedResults = cacheChecks.filter((c) => c.fromCache).map((c) => c.result as ParseResult);
+  const merged = combineParseResults([...cachedResults, uncachedOutput.result]);
+  const clarification = computeClarificationState(text, merged);
+
+  return {
+    ...uncachedOutput,
+    result: merged,
+    route: cachedResults.length > 0 ? 'gemini' : uncachedOutput.route,
+    cacheHit: false,
+    sourcesUsed: collectSourcesUsed(merged.items, uncachedOutput.route, false),
+    needsClarification: clarification.needsClarification,
+    clarificationQuestions: clarification.clarificationQuestions
+  };
+}
+
+// Expose shouldAcceptCachedResult for use in segment pipeline
+function shouldAcceptCachedResultPublic(result: ParseResult): boolean {
+  return shouldAcceptCachedResult(result);
 }
