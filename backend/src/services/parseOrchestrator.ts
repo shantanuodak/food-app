@@ -8,6 +8,7 @@ import { checkParseRateLimit } from './parseRateLimiterService.js';
 import { createParseRequest } from './parseRequestService.js';
 import type { ParseDecisionResult } from './parseDecisionTypes.js';
 import { getOnboardingParsePreferences } from './onboardingService.js';
+import { splitFoodTextSegments } from './foodTextSegmentation.js';
 
 type ParseAuthContext = {
   userId: string;
@@ -98,12 +99,14 @@ export async function executePrimaryParse(input: PrimaryParseOrchestratorInput):
   const preferences = await getOnboardingParsePreferences(userId);
   const locale = normalizeLocale(input.locale);
   const units = (preferences.units || 'unknown').toLowerCase();
+  const segmentCount = splitFoodTextSegments(input.text).length;
+  const effectivePromptVersion = segmentCount > 1 ? config.parsePromptVersion : config.parsePromptVersion.replace(':v2', ':v1');
   const cacheScope = [
     `user=${userId}`,
     `cachev=${config.parseCacheSchemaVersion}`,
     `parser=${config.parseVersion}`,
     `routev=${config.parseProviderRouteVersion}`,
-    `prompt=${config.parsePromptVersion}`,
+    `prompt=${effectivePromptVersion}`,
     `locale=${locale}`,
     `units=${units}`,
     'primary'
