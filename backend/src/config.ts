@@ -86,7 +86,7 @@ export const config = {
   geminiRetryJitterMs: integerWithDefault('GEMINI_RETRY_JITTER_MS', 200),
   parseRateLimitEnabled: booleanWithDefault('PARSE_RATE_LIMIT_ENABLED', true),
   parseRateLimitWindowMs: integerWithDefault('PARSE_RATE_LIMIT_WINDOW_MS', 60_000),
-  parseRateLimitMaxRequests: integerWithDefault('PARSE_RATE_LIMIT_MAX_REQUESTS', 24),
+  parseRateLimitMaxRequests: integerWithDefault('PARSE_RATE_LIMIT_MAX_REQUESTS', 60),
   geminiCircuitBreakerEnabled: booleanWithDefault('GEMINI_CIRCUIT_BREAKER_ENABLED', true),
   geminiCircuitBreakerConsecutive429: integerWithDefault('GEMINI_CIRCUIT_BREAKER_CONSECUTIVE_429', 5),
   geminiCircuitBreakerCooldownMs: integerWithDefault('GEMINI_CIRCUIT_BREAKER_COOLDOWN_MS', 20_000),
@@ -131,7 +131,7 @@ export const config = {
   parseProviderRouteVersion: process.env.PARSE_PROVIDER_ROUTE_VERSION || 'r2',
   parsePromptVersion:
     process.env.PARSE_PROMPT_VERSION ||
-    `${process.env.AI_FALLBACK_MODEL_NAME || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash'}:v1`,
+    `${process.env.AI_FALLBACK_MODEL_NAME || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash'}:v2`,
   parseRequestTtlHours: numberWithDefault('PARSE_REQUEST_TTL_HOURS', 24),
   alertEscalationRateThreshold: numberWithDefault('ALERT_ESCALATION_RATE_THRESHOLD', 0.08),
   alertEscalationWindowMinutes: numberWithDefault('ALERT_ESCALATION_WINDOW_MINUTES', 15),
