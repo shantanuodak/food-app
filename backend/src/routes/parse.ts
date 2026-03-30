@@ -20,7 +20,7 @@ const parseSchema = z.object({
     .string()
     .transform((value) => value.trim())
     .refine((value) => value.length > 0, 'text must not be empty')
-    .refine((value) => value.length <= 500, 'text exceeds max length (500)'),
+    .refine((value) => value.length <= 1500, 'text exceeds max length (1500)'),
   loggedAt: z.string().datetime()
 });
 
