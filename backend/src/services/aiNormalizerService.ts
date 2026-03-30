@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { config } from '../config.js';
 import type { ParseResult } from './deterministicParser.js';
-import { generateGeminiJson } from './geminiFlashClient.js';
+import { generateGeminiJsonWithDiagnostics, type GeminiFailureReason } from './geminiFlashClient.js';
 import { splitFoodTextSegments } from './foodTextSegmentation.js';
 
 export type AICallUsage = {
@@ -14,6 +14,13 @@ export type AICallUsage = {
 type FallbackOutput = {
   result: ParseResult;
   usage: AICallUsage;
+};
+
+export type AIFallbackFailureReason = GeminiFailureReason | 'gemini_invalid_response';
+
+type FallbackAttemptResult = {
+  output: FallbackOutput | null;
+  failureReason?: AIFallbackFailureReason;
 };
 
 const parseItemSchema = z.object({
@@ -32,7 +39,7 @@ const parseItemSchema = z.object({
   nutritionSourceId: z.string(),
   needsClarification: z.boolean().optional(),
   manualOverride: z.boolean().optional(),
-  sourceFamily: z.enum(['cache', 'fatsecret', 'gemini', 'manual']).optional(),
+  sourceFamily: z.enum(['cache', 'deterministic', 'fatsecret', 'gemini', 'manual']).optional(),
   originalNutritionSourceId: z.string().optional(),
   foodDescription: z.string().optional(),
   explanation: z.string().optional()
@@ -65,8 +72,9 @@ function buildGeminiFallbackPrompt(inputText: string, initialResult: ParseResult
     '- keep items practical for meal logging',
     '- input may contain spelling mistakes; infer the intended common food item',
     '- preserve user-entered order of food mentions',
-    '- when input is a list, avoid dropping lines; return a best-guess item for each food mention',
-    '- if uncertain, still return a reasonable estimate',
+    `- you MUST return exactly ${segments.length} item(s) — one per input segment, in the same order`,
+    '- each segment is a separate food item even if joined by "and", "&", or "with"; never merge two segments into one item',
+    '- if uncertain about a segment, still return a best-guess item with a lower matchConfidence',
     '- assumptions must always be an empty array',
     '- avoid zero-calorie outputs unless the item is truly near-zero',
     '- for each item, include a short foodDescription and a 3-5 sentence explanation of how you interpreted the item and estimated nutrition',
@@ -78,25 +86,32 @@ function buildGeminiFallbackPrompt(inputText: string, initialResult: ParseResult
   ].join('\n');
 }
 
-async function tryGeminiFallback(inputText: string, initialResult: ParseResult): Promise<FallbackOutput | null> {
+async function tryGeminiFallback(inputText: string, initialResult: ParseResult): Promise<FallbackAttemptResult> {
   if (!config.geminiApiKey) {
-    return null;
+    return { output: null };
   }
 
-  let response: Awaited<ReturnType<typeof generateGeminiJson>>;
+  let response: Awaited<ReturnType<typeof generateGeminiJsonWithDiagnostics>>;
   try {
-    response = await generateGeminiJson({
+    response = await generateGeminiJsonWithDiagnostics({
       model: config.aiFallbackModelName || config.geminiFlashModel,
       prompt: buildGeminiFallbackPrompt(inputText, initialResult),
       temperature: 0.1
     });
   } catch (err) {
     console.warn('Gemini fallback request failed', err);
-    return null;
+    return { output: null, failureReason: 'gemini_network_error' };
   }
 
   if (!response) {
-    return null;
+    return { output: null };
+  }
+
+  if ('failureReason' in response) {
+    return {
+      output: null,
+      failureReason: response.failureReason
+    };
   }
 
   try {
@@ -104,32 +119,40 @@ async function tryGeminiFallback(inputText: string, initialResult: ParseResult):
     const validated = parseResultSchema.parse(candidate);
 
     return {
-      result: {
-        ...validated,
-        assumptions: []
+      output: {
+        result: {
+          ...validated,
+          assumptions: []
+        },
+        usage: {
+          model: response.usage.model,
+          inputTokens: response.usage.inputTokens,
+          outputTokens: response.usage.outputTokens,
+          estimatedCostUsd: config.aiFallbackCostUsd
+        }
       },
-      usage: {
-        model: response.usage.model,
-        inputTokens: response.usage.inputTokens,
-        outputTokens: response.usage.outputTokens,
-        estimatedCostUsd: config.aiFallbackCostUsd
-      }
     };
   } catch (err) {
     console.warn('Gemini fallback JSON parsing/validation failed', err);
-    return null;
+    return { output: null, failureReason: 'gemini_invalid_response' };
   }
 }
 
 export async function tryGeminiPrimaryParse(inputText: string, initialResult: ParseResult): Promise<FallbackOutput | null> {
+  return (await tryGeminiFallback(inputText, initialResult)).output;
+}
+
+export async function tryCheapAIFallbackDetailed(
+  inputText: string,
+  initialResult: ParseResult
+): Promise<FallbackAttemptResult> {
+  if (!config.aiFallbackEnabled) {
+    return { output: null };
+  }
+
   return tryGeminiFallback(inputText, initialResult);
 }
 
 export async function tryCheapAIFallback(inputText: string, initialResult: ParseResult): Promise<FallbackOutput | null> {
-  if (!config.aiFallbackEnabled) {
-    return null;
-  }
-
-  const geminiResult = await tryGeminiFallback(inputText, initialResult);
-  return geminiResult;
+  return (await tryCheapAIFallbackDetailed(inputText, initialResult)).output;
 }
