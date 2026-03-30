@@ -562,10 +562,23 @@ export async function runSegmentAwareParsePipeline(
   const uncachedSegments = cacheChecks.filter((c) => !c.fromCache).map((c) => c.seg);
   const uncachedText = uncachedSegments.join('\n');
 
-  const uncachedOutput = await runPrimaryParsePipeline(uncachedText, options);
+  let uncachedOutput = await runPrimaryParsePipeline(uncachedText, options);
 
-  // If the uncached pipeline returned items, cache each segment result individually
-  if (uncachedOutput.result.items.length > 0 && !uncachedOutput.cacheHit) {
+  // If Gemini returned fewer items than segments (coverage gap), fall back to
+  // one call per missing segment so nothing gets silently dropped
+  if (uncachedOutput.result.items.length < uncachedSegments.length) {
+    const perSegmentResults: ParseResult[] = [];
+    for (const seg of uncachedSegments) {
+      const segOutput = await runPrimaryParsePipeline(seg, options);
+      perSegmentResults.push(segOutput.result);
+      if (segOutput.result.items.length > 0 && !segOutput.cacheHit) {
+        setParseCache(seg, segOutput.result, cacheScope).catch(() => {});
+      }
+    }
+    const combined = combineParseResults(perSegmentResults);
+    uncachedOutput = { ...uncachedOutput, result: combined, cacheHit: false };
+  } else if (uncachedOutput.result.items.length > 0 && !uncachedOutput.cacheHit) {
+    // Full item count matched — cache each segment individually for future reuse
     for (const seg of uncachedSegments) {
       const segItem = uncachedOutput.result.items.find(
         (item) => item.name.toLowerCase().includes(seg.toLowerCase().replace(/^\d+\s*/, ''))
