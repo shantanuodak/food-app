@@ -27,8 +27,18 @@ enum APIClientError: Error, LocalizedError {
 }
 
 final class APIClient {
+    private enum RequestTimeout {
+        static let `default`: TimeInterval = 20
+        static let parseText: TimeInterval = 35
+        static let parseImage: TimeInterval = 45
+        /// Generous timeout for endpoints that hit on cold launch or onboarding.
+        /// Render.com free tier can take up to ~60s to wake from inactivity.
+        static let coldStart: TimeInterval = 65
+    }
+
     private let configuration: AppConfiguration
-    private let authTokenProvider: () -> String?
+    private let authTokenProvider: () async throws -> String?
+    private let authRecoveryHandler: (() async -> Bool)?
     private let session: URLSession
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
@@ -36,7 +46,8 @@ final class APIClient {
     init(
         configuration: AppConfiguration,
         session: URLSession = .shared,
-        authTokenProvider: (() -> String?)? = nil
+        authTokenProvider: (() async throws -> String?)? = nil,
+        authRecoveryHandler: (() async -> Bool)? = nil
     ) {
         self.configuration = configuration
         if let authTokenProvider {
@@ -45,6 +56,7 @@ final class APIClient {
             let fallbackToken = configuration.authToken
             self.authTokenProvider = { fallbackToken }
         }
+        self.authRecoveryHandler = authRecoveryHandler
         self.session = session
         self.decoder = JSONDecoder()
         self.encoder = JSONEncoder()
@@ -116,6 +128,14 @@ final class APIClient {
         try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [URLQueryItem(name: "date", value: date)], requiresAuth: true)
     }
 
+    func getDayLogs(date: String) async throws -> DayLogsResponse {
+        try await request(path: "/v1/logs/day-logs", method: "GET", queryItems: [URLQueryItem(name: "date", value: date)], requiresAuth: true)
+    }
+
+    func postHealthActivity(_ requestBody: HealthActivityRequest) async throws -> HealthActivityResponse {
+        try await request(path: "/v1/health/activity", method: "POST", body: requestBody, requiresAuth: true)
+    }
+
     func getProgress(from: String, to: String, timezone: String) async throws -> ProgressResponse {
         try await request(
             path: "/v1/logs/progress",
@@ -179,7 +199,8 @@ final class APIClient {
         queryItems: [URLQueryItem] = [],
         bodyData: Data?,
         requiresAuth: Bool,
-        extraHeaders: [String: String] = [:]
+        extraHeaders: [String: String] = [:],
+        didAttemptAuthRecovery: Bool = false
     ) async throws -> Response {
         guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
             throw APIClientError.invalidURL
@@ -194,27 +215,14 @@ final class APIClient {
             throw APIClientError.invalidURL
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.timeoutInterval = 20
-        if extraHeaders["Content-Type"] == nil {
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        }
-
-        if requiresAuth {
-            guard let token = authTokenProvider()?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
-                throw APIClientError.missingAuthToken
-            }
-            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-        }
-
-        for (key, value) in extraHeaders {
-            request.setValue(value, forHTTPHeaderField: key)
-        }
-
-        if let bodyData {
-            request.httpBody = bodyData
-        }
+        let request = try await makeRequest(
+            url: url,
+            method: method,
+            bodyData: bodyData,
+            requiresAuth: requiresAuth,
+            extraHeaders: extraHeaders,
+            timeoutInterval: timeoutInterval(for: path)
+        )
 
         let data: Data
         let response: URLResponse
@@ -232,6 +240,22 @@ final class APIClient {
             throw APIClientError.networkFailure("No HTTP response.")
         }
 
+        if requiresAuth,
+           !didAttemptAuthRecovery,
+           (httpResponse.statusCode == 401 || httpResponse.statusCode == 403),
+           let authRecoveryHandler,
+           await authRecoveryHandler() {
+            return try await performRequest(
+                path: path,
+                method: method,
+                queryItems: queryItems,
+                bodyData: bodyData,
+                requiresAuth: requiresAuth,
+                extraHeaders: extraHeaders,
+                didAttemptAuthRecovery: true
+            )
+        }
+
         if (200 ... 299).contains(httpResponse.statusCode) {
             do {
                 return try decoder.decode(Response.self, from: data)
@@ -245,5 +269,61 @@ final class APIClient {
         }
 
         throw APIClientError.unexpectedStatus(httpResponse.statusCode)
+    }
+
+    private func makeRequest(
+        url: URL,
+        method: String,
+        bodyData: Data?,
+        requiresAuth: Bool,
+        extraHeaders: [String: String],
+        timeoutInterval: TimeInterval
+    ) async throws -> URLRequest {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.timeoutInterval = timeoutInterval
+        if extraHeaders["Content-Type"] == nil {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+
+        if requiresAuth {
+            let tokenValue: String?
+            do {
+                tokenValue = try await authTokenProvider()
+            } catch let apiError as APIClientError {
+                throw apiError
+            } catch {
+                throw APIClientError.networkFailure(error.localizedDescription)
+            }
+
+            guard let token = tokenValue?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
+                throw APIClientError.missingAuthToken
+            }
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+
+        for (key, value) in extraHeaders {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        if let bodyData {
+            request.httpBody = bodyData
+        }
+
+        return request
+    }
+
+    private func timeoutInterval(for path: String) -> TimeInterval {
+        switch path {
+        case "/v1/logs/parse":
+            return RequestTimeout.parseText
+        case "/v1/logs/parse/image":
+            return RequestTimeout.parseImage
+        // These endpoints are hit at launch and after onboarding — allow time for cold starts.
+        case "/v1/onboarding", "/v1/logs/day-summary", "/v1/logs/day-logs":
+            return RequestTimeout.coldStart
+        default:
+            return RequestTimeout.default
+        }
     }
 }

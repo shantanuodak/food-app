@@ -3,24 +3,31 @@ import type { ParseResult } from '../src/services/deterministicParser.js';
 
 const baseEnv = { ...process.env };
 
+function buildItem(overrides?: Partial<ParseResult['items'][number]>): ParseResult['items'][number] {
+  return {
+    name: 'egg',
+    quantity: 1,
+    unit: 'count',
+    grams: 50,
+    calories: 72,
+    protein: 6.3,
+    carbs: 0.6,
+    fat: 4.8,
+    matchConfidence: 0.9,
+    nutritionSourceId: 'gemini_estimate',
+    sourceFamily: 'gemini',
+    originalNutritionSourceId: 'gemini_estimate',
+    foodDescription: 'Egg',
+    explanation: 'Estimated from the entered food item.',
+    ...overrides
+  };
+}
+
 function parseResult(overrides?: Partial<ParseResult>): ParseResult {
   return {
     confidence: 0.9,
     assumptions: [],
-    items: [
-      {
-        name: 'egg',
-        quantity: 1,
-        unit: 'count',
-        grams: 50,
-        calories: 72,
-        protein: 6.3,
-        carbs: 0.6,
-        fat: 4.8,
-        matchConfidence: 0.9,
-        nutritionSourceId: 'seed_egg'
-      }
-    ],
+    items: [buildItem()],
     totals: {
       calories: 72,
       protein: 6.3,
@@ -43,7 +50,6 @@ describe('parse pipeline routing', () => {
 
     const getParseCache = vi.fn(async () => ({ textHash: 'hash-cache', result: parseResult() }));
     const setParseCache = vi.fn(async () => {});
-    const tryFatSecretParse = vi.fn(async () => null);
     const tryCheapAIFallback = vi.fn(async () => null);
 
     vi.doMock('../src/services/parseCacheService.js', () => ({
@@ -55,8 +61,12 @@ describe('parse pipeline routing', () => {
         textHash: `${scope}:${text.trim().toLowerCase()}`
       })
     }));
-    vi.doMock('../src/services/fatsecretParserService.js', () => ({ tryFatSecretParse }));
-    vi.doMock('../src/services/aiNormalizerService.js', () => ({ tryCheapAIFallback }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallback,
+      tryCheapAIFallbackDetailed: async (...args: Parameters<typeof tryCheapAIFallback>) => ({
+        output: await tryCheapAIFallback(...args)
+      })
+    }));
     vi.doMock('../src/services/clarificationService.js', () => ({
       buildClarificationQuestions: () => []
     }));
@@ -65,26 +75,45 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: true, geminiEnabled: true },
+      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
       userId: 'u1'
     });
 
     expect(output.route).toBe('cache');
     expect(output.cacheHit).toBe(true);
     expect(output.fallbackUsed).toBe(false);
-    expect(output.result.items[0]?.nutritionSourceId).toBe('cache_estimate');
-    expect(tryFatSecretParse).not.toHaveBeenCalled();
+    expect(output.result.items[0]?.nutritionSourceId).toBe('gemini_estimate');
     expect(tryCheapAIFallback).not.toHaveBeenCalled();
     expect(setParseCache).not.toHaveBeenCalled();
   });
 
-  test('uses fatsecret route when accepted and skips gemini', async () => {
+  test('skips cached results sourced from retired providers and reparses with gemini', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
 
-    const getParseCache = vi.fn(async () => null);
+    const getParseCache = vi.fn(async () => ({
+      textHash: 'hash-cache',
+      result: parseResult({
+        items: [
+          buildItem({
+            nutritionSourceId: 'fatsecret_estimate',
+            sourceFamily: 'fatsecret',
+            originalNutritionSourceId: 'fatsecret_estimate'
+          })
+        ]
+      })
+    }));
     const setParseCache = vi.fn(async () => {});
-    const tryFatSecretParse = vi.fn(async () => parseResult());
-    const tryCheapAIFallback = vi.fn(async () => null);
+    const tryCheapAIFallback = vi.fn(async () => ({
+      result: parseResult({
+        confidence: 0.82
+      }),
+      usage: {
+        model: 'gemini-2.5-flash',
+        inputTokens: 10,
+        outputTokens: 30,
+        estimatedCostUsd: 0.001
+      }
+    }));
 
     vi.doMock('../src/services/parseCacheService.js', () => ({
       getParseCache,
@@ -95,8 +124,12 @@ describe('parse pipeline routing', () => {
         textHash: `${scope}:${text.trim().toLowerCase()}`
       })
     }));
-    vi.doMock('../src/services/fatsecretParserService.js', () => ({ tryFatSecretParse }));
-    vi.doMock('../src/services/aiNormalizerService.js', () => ({ tryCheapAIFallback }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallback,
+      tryCheapAIFallbackDetailed: async (...args: Parameters<typeof tryCheapAIFallback>) => ({
+        output: await tryCheapAIFallback(...args)
+      })
+    }));
     vi.doMock('../src/services/clarificationService.js', () => ({
       buildClarificationQuestions: () => []
     }));
@@ -105,24 +138,23 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: true, geminiEnabled: true },
+      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
       userId: 'u1'
     });
 
-    expect(output.route).toBe('fatsecret');
+    expect(output.route).toBe('gemini');
     expect(output.cacheHit).toBe(false);
-    expect(output.fallbackUsed).toBe(false);
-    expect(output.result.items[0]?.nutritionSourceId).toBe('fatsecret_estimate');
-    expect(tryCheapAIFallback).not.toHaveBeenCalled();
+    expect(output.fallbackUsed).toBe(true);
+    expect(output.result.items[0]?.nutritionSourceId).toBe('gemini_estimate');
+    expect(tryCheapAIFallback).toHaveBeenCalledTimes(1);
     expect(setParseCache).toHaveBeenCalledTimes(1);
   });
 
-  test('uses gemini fallback when cache and fatsecret miss', async () => {
+  test('uses gemini fallback when cache misses', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
 
     const getParseCache = vi.fn(async () => null);
     const setParseCache = vi.fn(async () => {});
-    const tryFatSecretParse = vi.fn(async () => null);
     const tryCheapAIFallback = vi.fn(async () => ({
       result: parseResult(),
       usage: {
@@ -142,8 +174,12 @@ describe('parse pipeline routing', () => {
         textHash: `${scope}:${text.trim().toLowerCase()}`
       })
     }));
-    vi.doMock('../src/services/fatsecretParserService.js', () => ({ tryFatSecretParse }));
-    vi.doMock('../src/services/aiNormalizerService.js', () => ({ tryCheapAIFallback }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallback,
+      tryCheapAIFallbackDetailed: async (...args: Parameters<typeof tryCheapAIFallback>) => ({
+        output: await tryCheapAIFallback(...args)
+      })
+    }));
     vi.doMock('../src/services/clarificationService.js', () => ({
       buildClarificationQuestions: () => []
     }));
@@ -152,7 +188,7 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: true, geminiEnabled: true },
+      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
       userId: 'u1'
     });
 
@@ -164,24 +200,57 @@ describe('parse pipeline routing', () => {
     expect(setParseCache).toHaveBeenCalledTimes(1);
   });
 
-  test('falls back to fatsecret candidate if gemini returns empty', async () => {
+  test('returns unresolved when gemini yields no result', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
 
     const getParseCache = vi.fn(async () => null);
     const setParseCache = vi.fn(async () => {});
-    const tryFatSecretParse = vi.fn(async () => parseResult({ confidence: 0.5 }));
-    const tryCheapAIFallback = vi.fn(async () => ({
-      result: parseResult({
-        confidence: 0.4,
-        items: [],
-        totals: { calories: 0, protein: 0, carbs: 0, fat: 0 }
-      }),
-      usage: {
-        model: 'gemini-2.5-flash',
-        inputTokens: 12,
-        outputTokens: 8,
-        estimatedCostUsd: 0.001
-      }
+    const tryCheapAIFallback = vi.fn(async () => null);
+
+    vi.doMock('../src/services/parseCacheService.js', () => ({
+      getParseCache,
+      setParseCache,
+      buildParseCacheDebugInfo: (text: string, scope: string) => ({
+        scope,
+        normalizedText: text.trim().toLowerCase(),
+        textHash: `${scope}:${text.trim().toLowerCase()}`
+      })
+    }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallback,
+      tryCheapAIFallbackDetailed: async (...args: Parameters<typeof tryCheapAIFallback>) => ({
+        output: await tryCheapAIFallback(...args)
+      })
+    }));
+    vi.doMock('../src/services/clarificationService.js', () => ({
+      buildClarificationQuestions: () => ['Please list each food with quantity.']
+    }));
+
+    const { runPrimaryParsePipeline } = await import('../src/services/parsePipelineService.js');
+    const output = await runPrimaryParsePipeline('2 eggs and toast', {
+      cacheScope: 'user:v2:primary',
+      allowFallback: true,
+      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
+      userId: 'u1'
+    });
+
+    expect(output.route).toBe('unresolved');
+    expect(output.fallbackUsed).toBe(false);
+    expect(output.result.items.length).toBe(0);
+    expect(output.needsClarification).toBe(true);
+    expect(output.clarificationQuestions.length).toBeGreaterThan(0);
+    expect(setParseCache).not.toHaveBeenCalled();
+  });
+
+  test('returns specific gemini failure reason codes when fallback fails', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+
+    const getParseCache = vi.fn(async () => null);
+    const setParseCache = vi.fn(async () => {});
+    const tryCheapAIFallback = vi.fn(async () => null);
+    const tryCheapAIFallbackDetailed = vi.fn(async () => ({
+      output: null,
+      failureReason: 'gemini_timeout'
     }));
 
     vi.doMock('../src/services/parseCacheService.js', () => ({
@@ -193,8 +262,10 @@ describe('parse pipeline routing', () => {
         textHash: `${scope}:${text.trim().toLowerCase()}`
       })
     }));
-    vi.doMock('../src/services/fatsecretParserService.js', () => ({ tryFatSecretParse }));
-    vi.doMock('../src/services/aiNormalizerService.js', () => ({ tryCheapAIFallback }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallback,
+      tryCheapAIFallbackDetailed
+    }));
     vi.doMock('../src/services/clarificationService.js', () => ({
       buildClarificationQuestions: () => ['Please list each food with quantity.']
     }));
@@ -203,23 +274,20 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs and toast', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: true, geminiEnabled: true },
+      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
       userId: 'u1'
     });
 
-    expect(output.route).toBe('fatsecret');
-    expect(output.fallbackUsed).toBe(true);
-    expect(output.result.items.length).toBeGreaterThan(0);
-    expect(output.needsClarification).toBe(true);
-    expect(output.clarificationQuestions.length).toBeGreaterThan(0);
+    expect(output.route).toBe('unresolved');
+    expect(output.reasonCodes).toEqual(['gemini_timeout']);
+    expect(setParseCache).not.toHaveBeenCalled();
   });
 
-  test('uses gemini when fatsecret candidate is below confidence threshold', async () => {
+  test('returns unresolved when gemini is disabled', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
 
     const getParseCache = vi.fn(async () => null);
     const setParseCache = vi.fn(async () => {});
-    const tryFatSecretParse = vi.fn(async () => parseResult({ confidence: 0.31 }));
     const tryCheapAIFallback = vi.fn(async () => ({
       result: parseResult({ confidence: 0.84 }),
       usage: {
@@ -239,8 +307,12 @@ describe('parse pipeline routing', () => {
         textHash: `${scope}:${text.trim().toLowerCase()}`
       })
     }));
-    vi.doMock('../src/services/fatsecretParserService.js', () => ({ tryFatSecretParse }));
-    vi.doMock('../src/services/aiNormalizerService.js', () => ({ tryCheapAIFallback }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallback,
+      tryCheapAIFallbackDetailed: async (...args: Parameters<typeof tryCheapAIFallback>) => ({
+        output: await tryCheapAIFallback(...args)
+      })
+    }));
     vi.doMock('../src/services/clarificationService.js', () => ({
       buildClarificationQuestions: () => []
     }));
@@ -249,53 +321,14 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('vanilla icecream scoop', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: true, geminiEnabled: true },
-      userId: 'u1'
-    });
-
-    expect(output.route).toBe('gemini');
-    expect(output.fallbackUsed).toBe(true);
-    expect(tryFatSecretParse).toHaveBeenCalledTimes(1);
-    expect(tryCheapAIFallback).toHaveBeenCalledTimes(1);
-    expect(output.result.confidence).toBeGreaterThan(0.8);
-  });
-
-  test('returns unresolved route when no provider yields items', async () => {
-    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
-
-    const getParseCache = vi.fn(async () => null);
-    const setParseCache = vi.fn(async () => {});
-    const tryFatSecretParse = vi.fn(async () => null);
-    const tryCheapAIFallback = vi.fn(async () => null);
-
-    vi.doMock('../src/services/parseCacheService.js', () => ({
-      getParseCache,
-      setParseCache,
-      buildParseCacheDebugInfo: (text: string, scope: string) => ({
-        scope,
-        normalizedText: text.trim().toLowerCase(),
-        textHash: `${scope}:${text.trim().toLowerCase()}`
-      })
-    }));
-    vi.doMock('../src/services/fatsecretParserService.js', () => ({ tryFatSecretParse }));
-    vi.doMock('../src/services/aiNormalizerService.js', () => ({ tryCheapAIFallback }));
-    vi.doMock('../src/services/clarificationService.js', () => ({
-      buildClarificationQuestions: () => ['Please list each food with quantity.']
-    }));
-
-    const { runPrimaryParsePipeline } = await import('../src/services/parsePipelineService.js');
-    const output = await runPrimaryParsePipeline('3 eggs', {
-      cacheScope: 'user:v2:primary',
-      allowFallback: true,
-      featureFlags: { fatsecretEnabled: true, geminiEnabled: true },
+      featureFlags: { fatsecretEnabled: false, geminiEnabled: false },
       userId: 'u1'
     });
 
     expect(output.route).toBe('unresolved');
-    expect(output.cacheHit).toBe(false);
     expect(output.fallbackUsed).toBe(false);
+    expect(tryCheapAIFallback).not.toHaveBeenCalled();
     expect(output.result.items).toHaveLength(0);
-    expect(output.needsClarification).toBe(true);
     expect(setParseCache).not.toHaveBeenCalled();
   });
 });

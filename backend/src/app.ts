@@ -6,6 +6,7 @@ import parseRoutes from './routes/parse.js';
 import logsRoutes from './routes/logs.js';
 import internalMetricsRoutes from './routes/internalMetrics.js';
 import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js';
+import healthRoutes from './routes/health.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 export function createApp() {
@@ -22,6 +23,7 @@ export function createApp() {
   app.use('/v1/logs/parse', authRequired, parseRoutes);
   app.use('/v1/logs', authRequired, logsRoutes);
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
+  app.use('/v1/health', authRequired, healthRoutes);
   app.use('/v1/internal', internalMetricsRoutes);
 
   app.use(notFoundHandler);

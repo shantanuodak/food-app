@@ -42,6 +42,7 @@ type SaveLogInput = {
     fat: number;
   };
   sourcesUsed?: Array<'cache' | 'fatsecret' | 'gemini' | 'manual'>;
+  assumptions?: string[];
   items: LogItemInput[];
 };
 
@@ -82,9 +83,9 @@ export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse>
       INSERT INTO food_logs (
         user_id, logged_at, meal_type, raw_text,
         total_calories, total_protein_g, total_carbs_g, total_fat_g,
-        parse_confidence, parse_sources_used_json, image_ref, input_kind, created_at, updated_at
+        parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, NOW(), NOW())
       RETURNING id
       `,
       [
@@ -98,6 +99,7 @@ export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse>
         input.totals.fat,
         input.confidence,
         JSON.stringify(input.sourcesUsed || []),
+        JSON.stringify(input.assumptions || []),
         input.imageRef ?? null,
         input.inputKind ?? 'text'
       ]
@@ -191,9 +193,9 @@ export async function saveFoodLogStrict(input: {
       INSERT INTO food_logs (
         user_id, logged_at, meal_type, raw_text,
         total_calories, total_protein_g, total_carbs_g, total_fat_g,
-        parse_confidence, parse_sources_used_json, image_ref, input_kind, created_at, updated_at
+        parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11, $12, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, NOW(), NOW())
       RETURNING id
       `,
       [
@@ -207,6 +209,7 @@ export async function saveFoodLogStrict(input: {
         input.log.totals.fat,
         input.log.confidence,
         JSON.stringify(input.log.sourcesUsed || []),
+        JSON.stringify(input.log.assumptions || []),
         input.log.imageRef ?? null,
         input.log.inputKind ?? 'text'
       ]

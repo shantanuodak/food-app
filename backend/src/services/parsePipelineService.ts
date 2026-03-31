@@ -117,15 +117,11 @@ function normalizeNutritionSourceId(rawSourceId: string, route: ParsePipelineRou
 
 function sanitizeResultSources(result: ParseResult, route: ParsePipelineRoute): ParseResult {
   if (result.items.length === 0) {
-    return {
-      ...result,
-      assumptions: []
-    };
+    return result;
   }
 
   return {
     ...result,
-    assumptions: [],
     items: result.items.map((item) => ({
       ...item,
       nutritionSourceId: normalizeNutritionSourceId(item.nutritionSourceId, route)

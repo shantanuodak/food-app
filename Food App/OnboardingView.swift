@@ -12,6 +12,7 @@ struct OnboardingView: View {
     @State private var healthPermissionMessage: String?
     @State private var hasRestored = false
     @State private var pendingRouteError: String?
+    @State private var baselineStep: BaselineScreenStep = .sex
     @State private var screenStates: [OnboardingRoute: OnboardingScreenState] = {
         OnboardingRoute.allCases.reduce(into: [OnboardingRoute: OnboardingScreenState]()) { result, route in
             result[route] = OnboardingScreenState()
@@ -28,43 +29,28 @@ struct OnboardingView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                OnboardingAnimatedBackground()
-
                 if flow.onboardingRoute == .welcome {
-                    VStack(spacing: 14) {
-                        Spacer(minLength: 16)
-                        bodyBlock
-                        Spacer(minLength: 8)
-
-                        VStack(spacing: 8) {
-                            Text(flow.onboardingRoute.headline)
-                                .font(.system(size: 40, weight: .bold))
-                                .foregroundStyle(OnboardingGlassTheme.textPrimary)
-                                .multilineTextAlignment(.center)
-                                .lineLimit(2)
-                                .minimumScaleFactor(0.85)
-
-                            if !flow.onboardingRoute.subhead.isEmpty {
-                                Text(flow.onboardingRoute.subhead)
-                                    .font(.system(size: 17, weight: .medium))
-                                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                                    .multilineTextAlignment(.center)
-                            }
+                    OB01WelcomeScreen(
+                        onGetStarted: {
+                            flow.moveNextOnboarding()
+                        },
+                        onExistingAccount: {
+                            flow.moveToOnboarding(.account)
                         }
-                        .offset(y: -12)
-
-                        if let localError {
-                            Text(localError)
-                                .font(.footnote)
-                                .foregroundStyle(.red)
-                                .multilineTextAlignment(.center)
-                        }
-
-                        actionBlock
-                    }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
-                    .padding()
+                    )
+                } else if flow.onboardingRoute == .goal {
+                    goalRouteView
+                } else if flow.onboardingRoute == .age {
+                    ageRouteView
+                } else if flow.onboardingRoute == .baseline {
+                    baselineRouteView
+                } else if flow.onboardingRoute == .activity {
+                    activityRouteView
+                } else if flow.onboardingRoute == .pace {
+                    paceRouteView
                 } else {
+                    OnboardingAnimatedBackground()
+
                     VStack(alignment: .leading, spacing: 16) {
                         if let progressStep = flow.onboardingRoute.progressStep {
                             OnboardingProgressHeader(step: progressStep, total: totalProgressSteps)
@@ -75,7 +61,7 @@ struct OnboardingView: View {
                                 headerBlock
                                 bodyBlock
 
-                                if let localError {
+                                if flow.onboardingRoute != .ready, let localError {
                                     Text(localError)
                                         .font(.footnote)
                                         .foregroundStyle(.red)
@@ -92,10 +78,11 @@ struct OnboardingView: View {
                     .padding()
                 }
             }
-            .navigationTitle(flow.onboardingRoute == .welcome ? "" : flow.onboardingRoute.headline)
+            .navigationTitle(shouldHideNavigationBar ? "" : (flow.onboardingRoute == .welcome ? "" : flow.onboardingRoute.headline))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar(shouldHideNavigationBar ? .hidden : .visible, for: .navigationBar)
             .toolbar {
-                if flow.onboardingRoute.hasBack {
+                if flow.onboardingRoute.hasBack, !shouldHideNavigationBar {
                     ToolbarItem(placement: .topBarLeading) {
                         Button("Back") {
                             flow.moveBackOnboarding()
@@ -104,22 +91,24 @@ struct OnboardingView: View {
                     }
                 }
 
-                ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        ForEach(OnboardingRoute.allCases, id: \.self) { route in
-                            Button(route.headline) {
-                                flow.moveToOnboarding(route)
+                if flow.onboardingRoute != .welcome, !shouldHideNavigationBar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Menu {
+                            ForEach(OnboardingRoute.debugRoutes, id: \.self) { route in
+                                Button(route.headline) {
+                                    flow.moveToOnboarding(route)
+                                }
                             }
+                            Divider()
+                            Button("Clear auth session", role: .destructive) {
+                                appStore.authService.signOut()
+                                localError = "Auth session cleared. Sign in again on Save your setup."
+                            }
+                        } label: {
+                            Image(systemName: "ladybug")
                         }
-                        Divider()
-                        Button("Clear auth session", role: .destructive) {
-                            appStore.authService.signOut()
-                            localError = "Auth session cleared. Sign in again on Save your setup."
-                        }
-                    } label: {
-                        Image(systemName: "ladybug")
+                        .accessibilityLabel(Text("Debug route jump"))
                     }
-                    .accessibilityLabel(Text("Debug route jump"))
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
@@ -127,6 +116,7 @@ struct OnboardingView: View {
         .onAppear {
             appStore.refreshHealthAuthorizationState()
             restorePersistedContextIfNeeded()
+            syncBaselineStepForCurrentDraft()
             syncScreenStateHooks()
         }
         .onChange(of: draft) { _, _ in
@@ -140,6 +130,9 @@ struct OnboardingView: View {
             } else {
                 localError = nil
             }
+            if flow.onboardingRoute == .baseline {
+                syncBaselineStepForCurrentDraft()
+            }
             persistDraft()
             syncScreenStateHooks()
         }
@@ -149,10 +142,155 @@ struct OnboardingView: View {
         screenStates[flow.onboardingRoute] ?? OnboardingScreenState()
     }
 
+    private var shouldHideNavigationBar: Bool {
+        flow.onboardingRoute == .welcome ||
+            flow.onboardingRoute == .goal ||
+            flow.onboardingRoute == .age ||
+            flow.onboardingRoute == .baseline ||
+            flow.onboardingRoute == .activity ||
+            flow.onboardingRoute == .pace
+    }
+
+    private var goalRouteView: some View {
+        ZStack {
+            OnboardingAnimatedBackground()
+
+            VStack(spacing: 0) {
+                goalTopBar
+                    .padding(.top, 12)
+                    .padding(.horizontal, 16)
+
+                Spacer(minLength: 12)
+
+                OB02GoalScreen(selectedGoal: $draft.goal)
+                    .padding(.horizontal, 16)
+
+                if let localError {
+                    Text(localError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.top, 20)
+                        .padding(.horizontal, 24)
+                        .multilineTextAlignment(.center)
+                }
+
+                Spacer()
+
+                Button {
+                    flow.moveNextOnboarding()
+                } label: {
+                    Text("Continue")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                        .frame(width: 271, height: 55)
+                        .background(Color.black)
+                        .clipShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(!canContinueCurrentScreen || isSubmitting || isAccountLoading)
+                .opacity((canContinueCurrentScreen && !isSubmitting && !isAccountLoading) ? 1 : 0.5)
+                .padding(.bottom, 24)
+            }
+        }
+    }
+
+    private var activityRouteView: some View {
+        OB04ActivityScreen(
+            selectedActivity: $draft.activity,
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: { flow.moveNextOnboarding() }
+        )
+    }
+
+    private var ageRouteView: some View {
+        OB03AgeScreen(
+            age: $draft.ageValue,
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: handleAgeContinue
+        )
+    }
+
+    private var baselineRouteView: some View {
+        OB03BaselineScreen(
+            draft: $draft,
+            step: $baselineStep,
+            onBack: handleBaselineBack,
+            onContinue: handleBaselineContinue
+        )
+    }
+
+    private var paceRouteView: some View {
+        OB05PaceScreen(
+            draft: $draft,
+            selectedPace: $draft.pace,
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: { flow.moveNextOnboarding() }
+        )
+    }
+
+    private var goalTopBar: some View {
+        ZStack {
+            Text("Set Your Goal")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.black)
+
+            HStack {
+                Button {
+                    flow.moveBackOnboarding()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(Color.white)
+                                .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isSubmitting || isAccountLoading)
+
+                Spacer()
+            }
+        }
+        .frame(height: 44)
+    }
+
+    private var activityTopBar: some View {
+        ZStack {
+            Text("Your Activity Level")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.black)
+
+            HStack {
+                Button {
+                    flow.moveBackOnboarding()
+                } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 18, weight: .semibold))
+                        .foregroundStyle(.black)
+                        .frame(width: 44, height: 44)
+                        .background(
+                            Circle()
+                                .fill(Color.white)
+                                .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
+                        )
+                }
+                .buttonStyle(.plain)
+                .disabled(isSubmitting || isAccountLoading)
+
+                Spacer()
+            }
+        }
+        .frame(height: 44)
+    }
+
     private var headerBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(flow.onboardingRoute.headline)
-                .font(.title2.bold())
+                .font(OnboardingTypography.onboardingHeadline())
+                .foregroundStyle(OnboardingGlassTheme.textPrimary)
             if !flow.onboardingRoute.subhead.isEmpty {
                 Text(flow.onboardingRoute.subhead)
                     .font(.subheadline)
@@ -165,18 +303,17 @@ struct OnboardingView: View {
     private var bodyBlock: some View {
         switch flow.onboardingRoute {
         case .welcome:
-            OB01WelcomeScreen()
+            EmptyView()
         case .goal:
             OB02GoalScreen(selectedGoal: $draft.goal)
+        case .age:
+            EmptyView()
         case .baseline:
-            OB03BaselineScreen(
-                draft: $draft,
-                isValid: draft.isBaselineValid
-            )
+            EmptyView()
         case .activity:
-            OB04ActivityScreen(selectedActivity: $draft.activity)
+            EmptyView()
         case .pace:
-            OB05PaceScreen(selectedPace: $draft.pace)
+            EmptyView()
         case .preferencesOptional:
             OB06PreferencesOptionalScreen(preferences: $draft.preferences)
         case .planPreview:
@@ -191,7 +328,6 @@ struct OnboardingView: View {
                 isLoading: isAccountLoading,
                 prefersGooglePrimary: isSupabaseAuthMode,
                 enableApple: true,
-                enableEmail: !isSupabaseAuthMode,
                 onSelectProvider: continueAccount(provider:)
             )
         case .permissions:
@@ -204,7 +340,10 @@ struct OnboardingView: View {
                 onDisconnectHealth: disconnectHealthAccess
             )
         case .ready:
-            OB10ReadyScreen()
+            OB10ReadyScreen(
+                statusMessage: readyScreenStatusMessage,
+                isError: currentScreenState.loadState == .error
+            )
         }
     }
 
@@ -220,7 +359,7 @@ struct OnboardingView: View {
                     flow.moveToOnboarding(.account)
                 }
             }
-        case .goal, .baseline, .activity, .pace:
+        case .goal, .age, .baseline, .activity, .pace:
             primaryButton("Continue") {
                 flow.moveNextOnboarding()
             }
@@ -256,6 +395,7 @@ struct OnboardingView: View {
                 primaryButton("Log first meal") {
                     finishOnboarding()
                 }
+                .disabled(isSubmitting)
                 secondaryButton("Explore app") {
                     finishOnboarding()
                 }
@@ -291,6 +431,9 @@ struct OnboardingView: View {
         switch flow.onboardingRoute {
         case .goal:
             return draft.goal != nil
+        case .age:
+            return draft.ageValue >= Double(OnboardingBaselineRange.age.lowerBound) &&
+                draft.ageValue <= Double(OnboardingBaselineRange.age.upperBound)
         case .baseline:
             return draft.isBaselineValid
         case .activity:
@@ -327,6 +470,11 @@ struct OnboardingView: View {
                     isSuccess: true
                 )
             }
+        case .age:
+            OnboardingValueCard(
+                title: "Profile setup",
+                bodyText: "We’ll use age with your height and weight to personalize calorie estimates."
+            )
         case .baseline:
             if draft.isBaselineValid {
                 OnboardingValueCard(
@@ -415,34 +563,77 @@ struct OnboardingView: View {
                 allergies: [],
                 units: draft.units ?? .imperial,
                 activityLevel: draft.activity?.apiValue ?? .moderate,
-                timezone: TimeZone.current.identifier
+                timezone: TimeZone.current.identifier,
+                age: Int(draft.ageValue.rounded()),
+                sex: (draft.sex ?? .other).rawValue,
+                heightCm: draft.heightInCm,
+                weightKg: draft.weightInKg,
+                pace: (draft.pace ?? .balanced).rawValue,
+                activityDetail: draft.activity?.rawValue
             )
 
-            do {
-                _ = try await appStore.apiClient.submitOnboarding(request)
-                OnboardingPersistence.save(draft: draft, route: flow.onboardingRoute, defaults: defaults)
-                appStore.setHealthSyncEnabled(draft.connectHealth)
-                appStore.markOnboardingComplete()
-                setScreenState(.ready, state: .default)
-                flow.showHome()
-            } catch {
-                if appStore.handleAuthFailureIfNeeded(error) {
-                    let message = isSupabaseAuthMode
-                        ? "Session expired. Please sign in again with Apple or Google."
-                        : L10n.authSessionExpired
+            // Retry up to 2 times for network/timeout failures (handles Render.com cold starts).
+            // On the first transient failure, show a warm-up message and retry automatically.
+            let maxAttempts = 2
+            var lastError: Error?
+
+            for attempt in 1...maxAttempts {
+                do {
+                    _ = try await appStore.apiClient.submitOnboarding(request)
+                    OnboardingPersistence.save(draft: draft, route: flow.onboardingRoute, defaults: defaults)
+                    appStore.setHealthSyncEnabled(draft.connectHealth)
+                    appStore.markOnboardingComplete()
+                    setScreenState(.ready, state: .default)
+                    flow.showHome()
+                    return
+                } catch {
+                    if appStore.handleAuthFailureIfNeeded(error) {
+                        let message = isSupabaseAuthMode
+                            ? "Session expired. Please sign in again with Apple or Google."
+                            : L10n.authSessionExpired
+                        appStore.setError(message)
+                        setScreenState(.ready, state: .error, errorMessage: message)
+                        setScreenState(.account, state: .error, errorMessage: message)
+                        pendingRouteError = message
+                        flow.moveToOnboarding(.account)
+                        return
+                    }
+
+                    lastError = error
+                    let isTransient = isTransientNetworkError(error)
+
+                    if isTransient && attempt < maxAttempts {
+                        // Show a friendly warm-up message and retry automatically
+                        setScreenState(.ready, state: .loading, errorMessage: "Server is warming up, please wait…")
+                        try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s pause before retry
+                        continue
+                    }
+
+                    // Non-retryable or final attempt — show the error
+                    let message = readyScreenErrorMessage(for: error)
+                    localError = nil
                     appStore.setError(message)
                     setScreenState(.ready, state: .error, errorMessage: message)
-                    setScreenState(.account, state: .error, errorMessage: message)
-                    pendingRouteError = message
-                    flow.moveToOnboarding(.account)
                     return
                 }
-                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
-                localError = message
-                appStore.setError(message)
-                setScreenState(.ready, state: .error, errorMessage: message)
             }
         }
+    }
+
+    /// Returns true for errors that are likely transient (timeout, no connection)
+    /// and worth retrying automatically — typically Render.com cold-start delays.
+    private func isTransientNetworkError(_ error: Error) -> Bool {
+        if let apiError = error as? APIClientError, case .networkFailure = apiError {
+            return true
+        }
+        let nsError = error as NSError
+        let transientCodes: Set<Int> = [
+            NSURLErrorTimedOut,
+            NSURLErrorNetworkConnectionLost,
+            NSURLErrorNotConnectedToInternet,
+            NSURLErrorCannotConnectToHost
+        ]
+        return nsError.domain == NSURLErrorDomain && transientCodes.contains(nsError.code)
     }
 
     private var dietPreferencePayload: String {
@@ -455,6 +646,30 @@ struct OnboardingView: View {
             .joined(separator: ",")
     }
 
+    private var readyScreenStatusMessage: String? {
+        guard flow.onboardingRoute == .ready else {
+            return nil
+        }
+        return currentScreenState.errorMessage
+    }
+
+    private func readyScreenErrorMessage(for error: Error) -> String {
+        if let apiError = error as? APIClientError {
+            switch apiError {
+            case .networkFailure:
+                return "Couldn't finish setup right now. Check your connection and try again."
+            case let .server(statusCode, _):
+                if statusCode >= 500 {
+                    return "Couldn't finish setup right now. Server is unavailable. Try again."
+                }
+            default:
+                break
+            }
+        }
+
+        return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
     private func setScreenState(_ route: OnboardingRoute, state: OnboardingScreenLoadState, errorMessage: String? = nil) {
         screenStates[route] = OnboardingScreenState(loadState: state, errorMessage: errorMessage)
     }
@@ -464,7 +679,7 @@ struct OnboardingView: View {
             if currentScreenState.loadState == .disabled {
                 setScreenState(flow.onboardingRoute, state: .default)
             }
-        } else if [.goal, .baseline, .activity, .pace].contains(flow.onboardingRoute) {
+        } else if [.goal, .age, .baseline, .activity, .pace].contains(flow.onboardingRoute) {
             setScreenState(flow.onboardingRoute, state: .disabled)
         }
     }
@@ -491,7 +706,11 @@ struct OnboardingView: View {
         draft = restoredDraft
         appStore.setHealthSyncEnabled(draft.connectHealth)
         draft.connectHealth = appStore.isHealthSyncEnabled
-        flow.moveToOnboarding(restored.route)
+        if restored.route == .preferencesOptional {
+            flow.moveToOnboarding(.planPreview)
+        } else {
+            flow.moveToOnboarding(restored.route)
+        }
     }
 
     private func requestHealthAccess() {
@@ -524,6 +743,48 @@ struct OnboardingView: View {
         appStore.disconnectAppleHealth()
         draft.connectHealth = false
         healthPermissionMessage = "Apple Health disconnected."
+    }
+
+    private func syncBaselineStepForCurrentDraft() {
+        if !draft.baselineTouchedSex {
+            baselineStep = .sex
+        } else if !draft.baselineTouchedHeight {
+            baselineStep = .height
+        } else {
+            baselineStep = .weight
+        }
+    }
+
+    private func handleAgeContinue() {
+        draft.ageValue = draft.ageValue
+        draft.baselineTouchedAge = true
+        flow.moveNextOnboarding()
+    }
+
+    private func handleBaselineBack() {
+        switch baselineStep {
+        case .sex:
+            flow.moveBackOnboarding()
+        case .height:
+            baselineStep = .sex
+        case .weight:
+            baselineStep = .height
+        }
+    }
+
+    private func handleBaselineContinue() {
+        switch baselineStep {
+        case .sex:
+            guard draft.baselineTouchedSex, draft.sex != nil else { return }
+            baselineStep = .height
+        case .height:
+            draft.baselineTouchedHeight = true
+            baselineStep = .weight
+        case .weight:
+            draft.baselineTouchedWeight = true
+            guard draft.isBaselineValid else { return }
+            flow.moveNextOnboarding()
+        }
     }
 }
 

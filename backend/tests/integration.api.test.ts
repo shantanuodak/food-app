@@ -246,16 +246,25 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
   });
 
   test('onboarding -> parse -> save -> day-summary flow', async () => {
+    const onboardingPayload = {
+      goal: 'maintain',
+      dietPreference: 'none',
+      allergies: [],
+      units: 'imperial',
+      activityLevel: 'moderate',
+      timezone: 'America/New_York',
+      age: 30,
+      sex: 'male',
+      heightCm: 170,
+      weightKg: 70,
+      pace: 'balanced',
+      activityDetail: 'lightlyActive'
+    };
+
     const onboardingResponse = await request(app)
       .post('/v1/onboarding')
       .set(authHeader)
-      .send({
-        goal: 'maintain',
-        dietPreference: 'none',
-        allergies: [],
-        units: 'imperial',
-        activityLevel: 'moderate'
-      });
+      .send(onboardingPayload);
 
     expect(onboardingResponse.status).toBe(200);
     expect(onboardingResponse.body.calorieTarget).toBeGreaterThan(0);
@@ -324,7 +333,10 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(summaryResponse.status).toBe(200);
     expect(summaryResponse.body.date).toBe('2026-02-15');
     expect(summaryResponse.body.totals.calories).toBeGreaterThan(0);
-    expect(summaryResponse.body.targets.calories).toBeGreaterThan(0);
+    expect(summaryResponse.body.targets.calories).toBe(onboardingResponse.body.calorieTarget);
+    expect(summaryResponse.body.targets.protein).toBe(onboardingResponse.body.macroTargets.protein);
+    expect(summaryResponse.body.targets.carbs).toBe(onboardingResponse.body.macroTargets.carbs);
+    expect(summaryResponse.body.targets.fat).toBe(onboardingResponse.body.macroTargets.fat);
     expect(typeof summaryResponse.body.remaining.calories).toBe('number');
   });
 
@@ -335,6 +347,12 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
       allergies: ['peanut'],
       units: 'metric',
       activityLevel: 'moderate',
+      age: 25,
+      sex: 'female',
+      heightCm: 160,
+      weightKg: 55,
+      pace: 'conservative',
+      activityDetail: 'moderatelyActive',
       timezone: 'America/New_York'
     };
 
@@ -344,11 +362,17 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     const firstProv = await request(app).get('/v1/onboarding/provenance').set(authHeader);
     expect(firstProv.status).toBe(200);
     expect(firstProv.body.mode).toBe('computed_provenance_v1');
-    expect(firstProv.body.calculatorVersion).toBe('onboarding-target-calculator-v2');
+    expect(firstProv.body.calculatorVersion).toBe('onboarding-target-calculator-v3');
     expect(typeof firstProv.body.inputsHash).toBe('string');
     expect(firstProv.body.inputsHash.length).toBe(64);
     expect(firstProv.body.inputs.timezone).toBe('America/New_York');
     expect(firstProv.body.inputs.units).toBe('metric');
+    expect(firstProv.body.inputs.age).toBe(25);
+    expect(firstProv.body.inputs.sex).toBe('female');
+    expect(firstProv.body.inputs.heightCm).toBe(160);
+    expect(firstProv.body.inputs.weightKg).toBe(55);
+    expect(firstProv.body.inputs.pace).toBe('conservative');
+    expect(firstProv.body.inputs.activityDetail).toBe('moderatelyActive');
 
     const second = await request(app).post('/v1/onboarding').set(authHeader).send(payload);
     expect(second.status).toBe(200);
@@ -356,9 +380,35 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     const secondProv = await request(app).get('/v1/onboarding/provenance').set(authHeader);
     expect(secondProv.status).toBe(200);
     expect(secondProv.body.mode).toBe('computed_provenance_v1');
-    expect(secondProv.body.calculatorVersion).toBe('onboarding-target-calculator-v2');
+    expect(secondProv.body.calculatorVersion).toBe('onboarding-target-calculator-v3');
     expect(secondProv.body.inputsHash).toBe(firstProv.body.inputsHash);
     expect(secondProv.body.inputs).toEqual(firstProv.body.inputs);
+  });
+
+  test('legacy onboarding request without biometric fields still succeeds', async () => {
+    const response = await request(app)
+      .post('/v1/onboarding')
+      .set(authHeader)
+      .send({
+        goal: 'maintain',
+        dietPreference: 'none',
+        allergies: [],
+        units: 'imperial',
+        activityLevel: 'moderate',
+        timezone: 'UTC'
+      });
+
+    expect(response.status).toBe(200);
+    expect(response.body.calorieTarget).toBe(2200);
+    expect(response.body.macroTargets.protein).toBeGreaterThan(0);
+
+    const provenance = await request(app).get('/v1/onboarding/provenance').set(authHeader);
+    expect(provenance.status).toBe(200);
+    expect(provenance.body.calculatorVersion).toBe('onboarding-target-calculator-v3');
+    expect(provenance.body.inputs.age).toBeNull();
+    expect(provenance.body.inputs.sex).toBeNull();
+    expect(provenance.body.inputs.heightCm).toBeNull();
+    expect(provenance.body.inputs.weightKg).toBeNull();
   });
 
   test('cache key namespace changes when onboarding units change', async () => {

@@ -1,0 +1,182 @@
+import { pool } from '../db.js';
+import { ApiError } from '../utils/errors.js';
+
+type DayLogItem = {
+  id: string;
+  foodName: string;
+  quantity: number;
+  amount: number;
+  unit: string;
+  unitNormalized: string;
+  grams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  nutritionSourceId: string;
+  sourceFamily: string | null;
+  matchConfidence: number;
+};
+
+type DayLogEntry = {
+  id: string;
+  loggedAt: string;
+  rawText: string;
+  inputKind: string;
+  confidence: number;
+  totals: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  items: DayLogItem[];
+};
+
+type DayLogsResponse = {
+  date: string;
+  timezone: string;
+  logs: DayLogEntry[];
+};
+
+function toNumber(value: unknown): number {
+  if (value === null || value === undefined) return 0;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function round(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function isValidTimezone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function normalizeTimezone(value: string | null | undefined): string {
+  const tz = (value || '').trim();
+  return tz || 'UTC';
+}
+
+function validateDate(date: string): void {
+  const dt = new Date(`${date}T00:00:00.000Z`);
+  if (Number.isNaN(dt.valueOf())) {
+    throw new ApiError(400, 'INVALID_INPUT', 'Invalid date. Use YYYY-MM-DD');
+  }
+}
+
+export async function getDayLogs(userId: string, date: string, timezoneOverride?: string): Promise<DayLogsResponse> {
+  validateDate(date);
+
+  const profileResult = await pool.query<{ timezone: string | null }>(
+    `SELECT timezone FROM onboarding_profiles WHERE user_id = $1`,
+    [userId]
+  );
+
+  const profileTimezone = normalizeTimezone(profileResult.rows[0]?.timezone);
+  const effectiveTimezone = normalizeTimezone(timezoneOverride || profileTimezone);
+  if (!isValidTimezone(effectiveTimezone)) {
+    throw new ApiError(400, 'INVALID_INPUT', 'Invalid timezone');
+  }
+
+  const logsResult = await pool.query<{
+    id: string;
+    logged_at: Date;
+    raw_text: string;
+    input_kind: string;
+    parse_confidence: string;
+    total_calories: string;
+    total_protein_g: string;
+    total_carbs_g: string;
+    total_fat_g: string;
+  }>(
+    `
+    SELECT id, logged_at, raw_text, input_kind, parse_confidence,
+           total_calories, total_protein_g, total_carbs_g, total_fat_g
+    FROM food_logs
+    WHERE user_id = $1
+      AND (logged_at AT TIME ZONE $2)::date = $3::date
+    ORDER BY logged_at ASC
+    `,
+    [userId, effectiveTimezone, date]
+  );
+
+  if (logsResult.rows.length === 0) {
+    return { date, timezone: effectiveTimezone, logs: [] };
+  }
+
+  const logIds = logsResult.rows.map((r) => r.id);
+
+  const itemsResult = await pool.query<{
+    id: string;
+    food_log_id: string;
+    food_name: string;
+    quantity: string;
+    amount: string | null;
+    unit: string;
+    unit_normalized: string | null;
+    grams: string;
+    calories: string;
+    protein_g: string;
+    carbs_g: string;
+    fat_g: string;
+    nutrition_source_id: string;
+    source_family: string | null;
+    match_confidence: string;
+  }>(
+    `
+    SELECT id, food_log_id, food_name, quantity, amount, unit, unit_normalized,
+           grams, calories, protein_g, carbs_g, fat_g,
+           nutrition_source_id, source_family, match_confidence
+    FROM food_log_items
+    WHERE food_log_id = ANY($1)
+    ORDER BY food_log_id, id
+    `,
+    [logIds]
+  );
+
+  const itemsByLogId = new Map<string, DayLogItem[]>();
+  for (const item of itemsResult.rows) {
+    if (!itemsByLogId.has(item.food_log_id)) {
+      itemsByLogId.set(item.food_log_id, []);
+    }
+    itemsByLogId.get(item.food_log_id)!.push({
+      id: item.id,
+      foodName: item.food_name,
+      quantity: toNumber(item.quantity),
+      amount: toNumber(item.amount ?? item.quantity),
+      unit: item.unit,
+      unitNormalized: item.unit_normalized ?? item.unit,
+      grams: round(toNumber(item.grams)),
+      calories: round(toNumber(item.calories)),
+      protein: round(toNumber(item.protein_g)),
+      carbs: round(toNumber(item.carbs_g)),
+      fat: round(toNumber(item.fat_g)),
+      nutritionSourceId: item.nutrition_source_id,
+      sourceFamily: item.source_family,
+      matchConfidence: toNumber(item.match_confidence)
+    });
+  }
+
+  const logs: DayLogEntry[] = logsResult.rows.map((log) => ({
+    id: log.id,
+    loggedAt: log.logged_at instanceof Date ? log.logged_at.toISOString() : String(log.logged_at),
+    rawText: log.raw_text,
+    inputKind: log.input_kind || 'text',
+    confidence: round(toNumber(log.parse_confidence)),
+    totals: {
+      calories: round(toNumber(log.total_calories)),
+      protein: round(toNumber(log.total_protein_g)),
+      carbs: round(toNumber(log.total_carbs_g)),
+      fat: round(toNumber(log.total_fat_g))
+    },
+    items: itemsByLogId.get(log.id) ?? []
+  }));
+
+  return { date, timezone: effectiveTimezone, logs };
+}

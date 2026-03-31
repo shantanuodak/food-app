@@ -1,6 +1,25 @@
 import Foundation
 import Combine
 
+enum AppearancePreference: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .system:
+            return "System"
+        case .light:
+            return "Light"
+        case .dark:
+            return "Dark"
+        }
+    }
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     @Published var isOnboardingComplete: Bool
@@ -8,7 +27,13 @@ final class AppStore: ObservableObject {
     @Published var isNetworkReachable: Bool
     @Published var networkQualityHint: String
     @Published var isHealthSyncEnabled: Bool
+    @Published var appearancePreference: AppearancePreference
     @Published private(set) var healthAuthorizationState: HealthAuthorizationState
+    @Published private(set) var todaySteps: Double = 0
+    @Published private(set) var todayActiveEnergy: Double = 0
+    /// True once the stored session has been validated/refreshed (or confirmed absent).
+    /// Data fetching that requires auth should wait for this before proceeding.
+    @Published private(set) var isSessionRestored: Bool = false
 
     let configuration: AppConfiguration
     let authSessionStore: AuthSessionStore
@@ -19,6 +44,7 @@ final class AppStore: ObservableObject {
     private let defaults: UserDefaults
     private let onboardingKey = "app.onboarding.completed"
     private let healthSyncKey = "app.health.sync.enabled.v1"
+    private let appearancePreferenceKey = "app.appearance.preference.v1"
     private let networkMonitor: NetworkStatusMonitor
     private var cancellables = Set<AnyCancellable>()
 
@@ -28,9 +54,7 @@ final class AppStore: ObservableObject {
     ) {
         let resolvedConfiguration = configuration ?? AppConfiguration.live()
         let sessionStore = AuthSessionStore()
-        self.configuration = resolvedConfiguration
-        self.authSessionStore = sessionStore
-        self.authService = AuthService(
+        let authService = AuthService(
             sessionStore: sessionStore,
             fallbackToken: resolvedConfiguration.authToken,
             googleClientID: resolvedConfiguration.googleClientID,
@@ -38,31 +62,16 @@ final class AppStore: ObservableObject {
             supabaseURL: resolvedConfiguration.supabaseURL,
             supabaseAnonKey: resolvedConfiguration.supabaseAnonKey
         )
+        self.configuration = resolvedConfiguration
+        self.authSessionStore = sessionStore
+        self.authService = authService
         self.apiClient = APIClient(
             configuration: resolvedConfiguration,
             authTokenProvider: {
-                let hasSupabaseConfig =
-                    resolvedConfiguration.supabaseURL != nil &&
-                    !(resolvedConfiguration.supabaseAnonKey?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-
-                if let rawAccessToken = sessionStore.session?.accessToken {
-                    let accessToken = rawAccessToken.trimmingCharacters(in: .whitespacesAndNewlines)
-                    if !accessToken.isEmpty {
-                        if Self.isExpiredJWT(accessToken) {
-                            sessionStore.clear()
-                        } else if hasSupabaseConfig && accessToken.lowercased().hasPrefix("dev-") {
-                            // In Supabase mode, ignore persisted dev placeholder tokens.
-                        } else {
-                            return accessToken
-                        }
-                    }
-                }
-
-                if hasSupabaseConfig {
-                    return nil
-                }
-
-                return resolvedConfiguration.authToken
+                try await authService.validAccessToken()
+            },
+            authRecoveryHandler: {
+                await authService.handleUnauthorizedAndAttemptRecovery()
             }
         )
         let healthKitService = HealthKitService()
@@ -72,6 +81,9 @@ final class AppStore: ObservableObject {
         self.isOnboardingComplete = defaults.bool(forKey: onboardingKey)
         self.isNetworkReachable = true
         self.networkQualityHint = L10n.networkOnline
+        self.appearancePreference = AppearancePreference(
+            rawValue: defaults.string(forKey: appearancePreferenceKey) ?? ""
+        ) ?? .system
         self.healthAuthorizationState = healthKitService.authorizationState
         self.isHealthSyncEnabled = defaults.bool(forKey: healthSyncKey)
         if healthAuthorizationState != .authorized && isHealthSyncEnabled {
@@ -120,6 +132,15 @@ final class AppStore: ObservableObject {
                 }
             }
             .store(in: &cancellables)
+
+        if sessionStore.session?.refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            Task { [authService, weak self] in
+                await authService.restoreSessionIfPossible()
+                await MainActor.run { self?.isSessionRestored = true }
+            }
+        } else {
+            isSessionRestored = true
+        }
     }
 
     func markOnboardingComplete() {
@@ -169,6 +190,11 @@ final class AppStore: ObservableObject {
         defaults.set(effective, forKey: healthSyncKey)
     }
 
+    func setAppearancePreference(_ preference: AppearancePreference) {
+        appearancePreference = preference
+        defaults.set(preference.rawValue, forKey: appearancePreferenceKey)
+    }
+
     func syncNutritionToAppleHealth(totals: NutritionTotals, loggedAt: Date) async throws -> Bool {
         guard isHealthSyncEnabled else {
             return false
@@ -180,41 +206,22 @@ final class AppStore: ObservableObject {
         try await healthKitService.fetchBodyMassSamples(from: startDate, to: endDate)
     }
 
-    private static func isExpiredJWT(_ token: String) -> Bool {
-        let parts = token.split(separator: ".")
-        guard parts.count >= 2 else {
-            return false
-        }
+    func refreshHealthActivity() async {
+        guard isHealthSyncEnabled else { return }
+        do {
+            let steps = try await healthKitService.fetchTodayStepCount()
+            let energy = try await healthKitService.fetchTodayActiveEnergy()
+            todaySteps = steps
+            todayActiveEnergy = energy
 
-        guard let payloadData = decodeBase64URL(String(parts[1])),
-              let object = try? JSONSerialization.jsonObject(with: payloadData),
-              let claims = object as? [String: Any],
-              let exp = jwtExpiration(from: claims) else {
-            // Malformed JWT payload should be treated as expired.
-            return true
+            let formatter = DateFormatter()
+            formatter.dateFormat = "yyyy-MM-dd"
+            let todayString = formatter.string(from: Date())
+            let request = HealthActivityRequest(date: todayString, steps: steps, activeEnergyKcal: energy)
+            _ = try? await apiClient.postHealthActivity(request)
+        } catch {
+            // Silently ignore read failures — card will show stale or zero values
         }
-
-        return Date().timeIntervalSince1970 >= exp
-    }
-
-    private static func jwtExpiration(from claims: [String: Any]) -> TimeInterval? {
-        guard let rawExp = claims["exp"] else {
-            return nil
-        }
-
-        if let number = rawExp as? NSNumber {
-            return number.doubleValue
-        }
-        if let double = rawExp as? Double {
-            return double
-        }
-        if let int = rawExp as? Int {
-            return TimeInterval(int)
-        }
-        if let string = rawExp as? String {
-            return Double(string)
-        }
-        return nil
     }
 
     private static func isAuthTokenError(_ apiError: APIClientError) -> Bool {
@@ -240,14 +247,5 @@ final class AppStore: ObservableObject {
         default:
             return false
         }
-    }
-
-    private static func decodeBase64URL(_ input: String) -> Data? {
-        let normalized = input
-            .replacingOccurrences(of: "-", with: "+")
-            .replacingOccurrences(of: "_", with: "/")
-        let paddingLength = (4 - normalized.count % 4) % 4
-        let padded = normalized + String(repeating: "=", count: paddingLength)
-        return Data(base64Encoded: padded)
     }
 }

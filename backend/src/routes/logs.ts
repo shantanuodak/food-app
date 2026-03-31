@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { saveFoodLogStrict } from '../services/logService.js';
 import { getDaySummary } from '../services/daySummaryService.js';
+import { getDayLogs } from '../services/dayLogsService.js';
 import { getProgressSummary } from '../services/progressService.js';
 import { assertLoggedAtNotInFutureForUser } from '../services/dateIntegrityService.js';
 import { buildHealthSyncContract } from '../services/healthSyncContractService.js';
@@ -57,6 +58,7 @@ const saveLogSchema = z.object({
       fat: nonNegative
     }),
     sourcesUsed: z.array(z.enum(['cache', 'fatsecret', 'gemini', 'manual'])).max(10).optional(),
+    assumptions: z.array(z.string().max(500)).max(20).optional().default([]),
     items: z.array(itemSchema).max(100)
   })
 });
@@ -232,6 +234,7 @@ router.post('/', async (req, res, next) => {
         inputKind: body.parsedLog.inputKind,
         totals: body.parsedLog.totals,
         sourcesUsed: body.parsedLog.sourcesUsed,
+        assumptions: body.parsedLog.assumptions,
         items: body.parsedLog.items.map((item) => ({
           foodName: item.name,
           quantity: item.amount ?? item.quantity,
@@ -266,6 +269,17 @@ router.get('/day-summary', async (req, res, next) => {
     const userId = res.locals.auth.userId as string;
     const summary = await getDaySummary(userId, query.date, query.tz);
     res.status(200).json(summary);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/day-logs', async (req, res, next) => {
+  try {
+    const query = summaryQuerySchema.parse(req.query);
+    const userId = res.locals.auth.userId as string;
+    const logs = await getDayLogs(userId, query.date, query.tz);
+    res.status(200).json(logs);
   } catch (err) {
     next(err);
   }

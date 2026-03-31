@@ -20,6 +20,12 @@ const onboardingSchema = z.object({
   allergies: z.array(z.string().min(1).max(50)).max(30).default([]),
   units: z.enum(['metric', 'imperial']),
   activityLevel: z.enum(['low', 'moderate', 'high']),
+  age: z.number().int().min(13).max(90).optional(),
+  sex: z.enum(['female', 'male', 'other']).optional(),
+  heightCm: z.number().min(122).max(218).optional(),
+  weightKg: z.number().min(35).max(227).optional(),
+  pace: z.enum(['conservative', 'balanced', 'aggressive']).optional(),
+  activityDetail: z.enum(['mostlySitting', 'lightlyActive', 'moderatelyActive', 'veryActive']).optional(),
   timezone: z
     .string()
     .trim()
@@ -43,6 +49,12 @@ router.post('/', async (req, res, next) => {
       allergies: body.allergies,
       units: body.units,
       activityLevel: body.activityLevel,
+      age: body.age,
+      sex: body.sex,
+      heightCm: body.heightCm,
+      weightKg: body.weightKg,
+      pace: body.pace,
+      activityDetail: body.activityDetail,
       timezone: body.timezone
     });
 

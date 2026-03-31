@@ -6,6 +6,22 @@ export type GeminiUsage = {
   outputTokens: number;
 };
 
+export type GeminiFailureReason =
+  | 'gemini_timeout'
+  | 'gemini_rate_limited'
+  | 'gemini_http_error'
+  | 'gemini_empty_response'
+  | 'gemini_network_error';
+
+type GeminiFailure = {
+  failureReason: GeminiFailureReason;
+};
+
+type GeminiSuccess = {
+  jsonText: string;
+  usage: GeminiUsage;
+};
+
 type GenerateOptions = {
   model: string;
   prompt: string;
@@ -164,7 +180,7 @@ async function performGeminiJsonRequest(
   model: string,
   parts: MultimodalPart[],
   temperature = 0.1
-): Promise<{ jsonText: string; usage: GeminiUsage } | null> {
+): Promise<GeminiSuccess | GeminiFailure | null> {
   if (!config.geminiApiKey) {
     return null;
   }
@@ -208,6 +224,7 @@ async function performGeminiJsonRequest(
       if (!response.ok) {
         const body = await response.text().catch(() => '');
         const now = Date.now();
+        const failureReason: GeminiFailureReason = response.status === 429 ? 'gemini_rate_limited' : 'gemini_http_error';
         if (response.status === 429) {
           markRateLimitFailure(now);
         } else {
@@ -221,14 +238,14 @@ async function performGeminiJsonRequest(
           await sleep(delayMs);
           continue;
         }
-        return null;
+        return { failureReason };
       }
 
       const payload = (await response.json()) as GeminiResponse;
       const jsonText = extractCandidateText(payload);
       if (!jsonText) {
         console.warn('Gemini API returned no text candidate');
-        return null;
+        return { failureReason: 'gemini_empty_response' };
       }
 
       const usage = extractUsage(payload.usageMetadata);
@@ -243,6 +260,7 @@ async function performGeminiJsonRequest(
       };
     } catch (err) {
       clearRateLimitStreakOnNon429Failure();
+      const failureReason: GeminiFailureReason = isAbortLikeError(err) ? 'gemini_timeout' : 'gemini_network_error';
 
       if (attempt < maxAttempts) {
         const delayMs = computeRetryDelayMs(attempt);
@@ -261,7 +279,7 @@ async function performGeminiJsonRequest(
       }
 
       console.warn('Gemini API call failed; falling back', err);
-      return null;
+      return { failureReason };
     } finally {
       clearTimeout(timeout);
     }
@@ -270,14 +288,24 @@ async function performGeminiJsonRequest(
   return null;
 }
 
-export async function generateGeminiJson(options: GenerateOptions): Promise<{ jsonText: string; usage: GeminiUsage } | null> {
+export async function generateGeminiJson(
+  options: GenerateOptions
+): Promise<GeminiSuccess | null> {
+  const result = await performGeminiJsonRequest(options.model, [{ text: options.prompt }], options.temperature ?? 0.1);
+  return result && 'jsonText' in result ? result : null;
+}
+
+export async function generateGeminiJsonWithDiagnostics(
+  options: GenerateOptions
+): Promise<GeminiSuccess | GeminiFailure | null> {
   return performGeminiJsonRequest(options.model, [{ text: options.prompt }], options.temperature ?? 0.1);
 }
 
 export async function generateGeminiMultimodalJson(
   options: GenerateMultimodalOptions
-): Promise<{ jsonText: string; usage: GeminiUsage } | null> {
-  return performGeminiJsonRequest(options.model, options.parts, options.temperature ?? 0.1);
+): Promise<GeminiSuccess | null> {
+  const result = await performGeminiJsonRequest(options.model, options.parts, options.temperature ?? 0.1);
+  return result && 'jsonText' in result ? result : null;
 }
 
 export function isGeminiCircuitOpenForDiagnostics(nowMs = Date.now()): boolean {

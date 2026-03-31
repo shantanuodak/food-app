@@ -2,7 +2,10 @@ import { pool } from '../db.js';
 import { ensureUserExists } from './userService.js';
 import { createHash } from 'node:crypto';
 
-type OnboardingInput = {
+const ONBOARDING_PROVENANCE_MODE = 'computed_provenance_v1' as const;
+const ONBOARDING_CALCULATOR_VERSION = 'onboarding-target-calculator-v3' as const;
+
+export type OnboardingInput = {
   userId: string;
   authProvider?: string | null;
   userEmail?: string | null;
@@ -11,10 +14,14 @@ type OnboardingInput = {
   allergies: string[];
   units: 'metric' | 'imperial';
   activityLevel: 'low' | 'moderate' | 'high';
+  age?: number;
+  sex?: 'female' | 'male' | 'other';
+  heightCm?: number;
+  weightKg?: number;
+  pace?: 'conservative' | 'balanced' | 'aggressive';
+  activityDetail?: 'mostlySitting' | 'lightlyActive' | 'moderatelyActive' | 'veryActive';
   timezone: string;
 };
-
-const ONBOARDING_PROVENANCE_MODE = 'computed_provenance_v1' as const;
 
 export type OnboardingProvenance = {
   mode: string;
@@ -22,6 +29,16 @@ export type OnboardingProvenance = {
   calculatorVersion: string;
   computedAt: string;
   inputs: Record<string, unknown>;
+};
+
+export type OnboardingTargetCalculation = {
+  calorieTarget: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  calculatorVersion: string;
+  normalizedInputs: Record<string, unknown>;
+  calculationMode: 'biometric' | 'legacy';
 };
 
 export async function getOnboardingParsePreferences(userId: string): Promise<{ units: 'metric' | 'imperial' | null; timezone: string | null }> {
@@ -81,9 +98,9 @@ export async function getOnboardingProvenance(userId: string): Promise<Onboardin
 }
 
 function resolveMacroTargets(calorieTarget: number): { protein: number; carbs: number; fat: number } {
-  const desiredProtein = (calorieTarget * 0.25) / 4;
+  const desiredProtein = (calorieTarget * 0.30) / 4;
   const desiredCarbs = (calorieTarget * 0.4) / 4;
-  const desiredFat = (calorieTarget * 0.35) / 9;
+  const desiredFat = (calorieTarget * 0.30) / 9;
 
   const baseProtein = Math.max(0, Math.round(desiredProtein));
   const baseCarbs = Math.max(0, Math.round(desiredCarbs));
@@ -129,7 +146,111 @@ function resolveMacroTargets(calorieTarget: number): { protein: number; carbs: n
   };
 }
 
-function targetsFor(input: OnboardingInput): { calorieTarget: number; protein: number; carbs: number; fat: number } {
+function roundTo(value: number, digits: number): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+function hasBiometricInputs(
+  input: OnboardingInput
+): input is OnboardingInput & Required<Pick<OnboardingInput, 'age' | 'sex' | 'heightCm' | 'weightKg'>> {
+  return (
+    typeof input.age === 'number' &&
+    typeof input.heightCm === 'number' &&
+    typeof input.weightKg === 'number' &&
+    (input.sex === 'female' || input.sex === 'male' || input.sex === 'other')
+  );
+}
+
+function normalizeInputs(input: OnboardingInput): Record<string, unknown> {
+  return {
+    goal: input.goal,
+    dietPreference: input.dietPreference.trim(),
+    allergies: input.allergies.map((entry) => entry.trim()).filter(Boolean),
+    units: input.units,
+    activityLevel: input.activityLevel,
+    timezone: input.timezone.trim(),
+    age: input.age ?? null,
+    sex: input.sex ?? null,
+    heightCm: typeof input.heightCm === 'number' ? roundTo(input.heightCm, 2) : null,
+    weightKg: typeof input.weightKg === 'number' ? roundTo(input.weightKg, 2) : null,
+    pace: input.pace ?? null,
+    activityDetail: input.activityDetail ?? null
+  };
+}
+
+function resolveActivityAdjustment(input: OnboardingInput): number {
+  if (input.activityDetail) {
+    switch (input.activityDetail) {
+      case 'mostlySitting':
+        return -80;
+      case 'lightlyActive':
+        return 0;
+      case 'moderatelyActive':
+        return 120;
+      case 'veryActive':
+        return 240;
+    }
+  }
+
+  switch (input.activityLevel) {
+    case 'low':
+      return -80;
+    case 'moderate':
+      return 0;
+    case 'high':
+      return 240;
+  }
+}
+
+function resolvePaceAdjustment(pace?: OnboardingInput['pace']): number {
+  switch (pace) {
+    case 'conservative':
+      return 80;
+    case 'aggressive':
+      return -120;
+    case 'balanced':
+    default:
+      return 0;
+  }
+}
+
+export function calculateOnboardingTargets(input: OnboardingInput): OnboardingTargetCalculation {
+  const normalizedInputs = normalizeInputs(input);
+
+  if (hasBiometricInputs(input)) {
+    const sexOffset = input.sex === 'male' ? 5 : -161;
+    const bmr = (10 * input.weightKg) + (6.25 * input.heightCm) - (5 * input.age) + sexOffset;
+    const maintenance = Math.max(1200, Math.round(bmr * 1.2));
+    let calorieTarget = maintenance;
+
+    switch (input.goal) {
+      case 'lose':
+        calorieTarget -= 350;
+        break;
+      case 'gain':
+        calorieTarget += 280;
+        break;
+      case 'maintain':
+        break;
+    }
+
+    calorieTarget += resolveActivityAdjustment(input);
+    calorieTarget += resolvePaceAdjustment(input.pace);
+    calorieTarget = Math.max(1200, calorieTarget);
+
+    const macros = resolveMacroTargets(calorieTarget);
+    return {
+      calorieTarget,
+      protein: macros.protein,
+      carbs: macros.carbs,
+      fat: macros.fat,
+      calculatorVersion: ONBOARDING_CALCULATOR_VERSION,
+      normalizedInputs,
+      calculationMode: 'biometric'
+    };
+  }
+
   const base = input.activityLevel === 'high' ? 2500 : input.activityLevel === 'moderate' ? 2200 : 1900;
   const adjusted = input.goal === 'lose' ? base - 350 : input.goal === 'gain' ? base + 300 : base;
   const macros = resolveMacroTargets(adjusted);
@@ -138,22 +259,16 @@ function targetsFor(input: OnboardingInput): { calorieTarget: number; protein: n
     calorieTarget: adjusted,
     protein: macros.protein,
     carbs: macros.carbs,
-    fat: macros.fat
+    fat: macros.fat,
+    calculatorVersion: ONBOARDING_CALCULATOR_VERSION,
+    normalizedInputs,
+    calculationMode: 'legacy'
   };
 }
 
 export async function upsertOnboarding(input: OnboardingInput): Promise<{ calorieTarget: number; macroTargets: { protein: number; carbs: number; fat: number } }> {
-  const targets = targetsFor(input);
-  const normalizedInputs = {
-    goal: input.goal,
-    dietPreference: input.dietPreference.trim(),
-    allergies: input.allergies.map((entry) => entry.trim()).filter(Boolean),
-    units: input.units,
-    activityLevel: input.activityLevel,
-    timezone: input.timezone.trim()
-  };
-  const calculatorVersion = 'onboarding-target-calculator-v2';
-  const inputsHash = createHash('sha256').update(JSON.stringify(normalizedInputs)).digest('hex');
+  const targets = calculateOnboardingTargets(input);
+  const inputsHash = createHash('sha256').update(JSON.stringify(targets.normalizedInputs)).digest('hex');
 
   await ensureUserExists(input.userId, {
     authProvider: input.authProvider,
@@ -163,12 +278,12 @@ export async function upsertOnboarding(input: OnboardingInput): Promise<{ calori
   await pool.query(
     `
     INSERT INTO onboarding_profiles (
-      user_id, goal, diet_preference, allergies_json, units, activity_level, timezone,
+      user_id, goal, diet_preference, allergies_json, units, activity_level, timezone, age, sex, height_cm, weight_kg, pace, activity_detail,
       calorie_target, macro_target_protein, macro_target_carbs, macro_target_fat,
       onboarding_inputs_json, onboarding_inputs_hash, onboarding_calculator_version, onboarding_provenance_mode, onboarding_computed_at,
       created_at, updated_at
     )
-    VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12::jsonb,$13,$14,$15,NOW(),NOW(),NOW())
+    VALUES ($1,$2,$3,$4::jsonb,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18::jsonb,$19,$20,$21,NOW(),NOW(),NOW())
     ON CONFLICT (user_id)
     DO UPDATE SET
       goal = EXCLUDED.goal,
@@ -177,6 +292,12 @@ export async function upsertOnboarding(input: OnboardingInput): Promise<{ calori
       units = EXCLUDED.units,
       activity_level = EXCLUDED.activity_level,
       timezone = EXCLUDED.timezone,
+      age = EXCLUDED.age,
+      sex = EXCLUDED.sex,
+      height_cm = EXCLUDED.height_cm,
+      weight_kg = EXCLUDED.weight_kg,
+      pace = EXCLUDED.pace,
+      activity_detail = EXCLUDED.activity_detail,
       calorie_target = EXCLUDED.calorie_target,
       macro_target_protein = EXCLUDED.macro_target_protein,
       macro_target_carbs = EXCLUDED.macro_target_carbs,
@@ -196,13 +317,19 @@ export async function upsertOnboarding(input: OnboardingInput): Promise<{ calori
       input.units,
       input.activityLevel,
       input.timezone,
+      input.age ?? null,
+      input.sex ?? null,
+      typeof input.heightCm === 'number' ? roundTo(input.heightCm, 2) : null,
+      typeof input.weightKg === 'number' ? roundTo(input.weightKg, 2) : null,
+      input.pace ?? null,
+      input.activityDetail ?? null,
       targets.calorieTarget,
       targets.protein,
       targets.carbs,
       targets.fat,
-      JSON.stringify(normalizedInputs),
+      JSON.stringify(targets.normalizedInputs),
       inputsHash,
-      calculatorVersion,
+      targets.calculatorVersion,
       ONBOARDING_PROVENANCE_MODE
     ]
   );

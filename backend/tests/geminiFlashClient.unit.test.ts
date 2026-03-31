@@ -16,6 +16,8 @@ describe('gemini circuit breaker', () => {
     process.env.GEMINI_CIRCUIT_BREAKER_ENABLED = 'true';
     process.env.GEMINI_CIRCUIT_BREAKER_CONSECUTIVE_429 = '2';
     process.env.GEMINI_CIRCUIT_BREAKER_COOLDOWN_MS = '30000';
+    process.env.GEMINI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.GEMINI_ABORT_RETRY_COUNT = '0';
 
     let fetchCalls = 0;
     globalThis.fetch = vi.fn(async () => {
