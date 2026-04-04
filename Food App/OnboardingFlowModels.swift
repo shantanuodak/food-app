@@ -39,10 +39,13 @@ struct OnboardingDraft: Codable, Equatable {
     var weight: String = ""
     var units: UnitsOption? = .imperial
     var baselineTouchedAge = false
+    var baselineTouchedSex = false
     var baselineTouchedHeight = false
     var baselineTouchedWeight = false
     var activity: ActivityChoice?
     var pace: PaceChoice?
+    var experience: ExperienceChoice?
+    var challenge: ChallengeChoice?
     var preferences: Set<PreferenceChoice> = []
     var accountProvider: AccountProvider?
     var connectHealth = false
@@ -74,6 +77,7 @@ struct OnboardingDraft: Codable, Equatable {
     var isBaselineValid: Bool {
         hasBaselineValues &&
             baselineTouchedAge &&
+            baselineTouchedSex &&
             baselineTouchedHeight &&
             baselineTouchedWeight &&
             sex != nil &&
@@ -320,6 +324,7 @@ extension OnboardingDraft {
         case weight
         case units
         case baselineTouchedAge
+        case baselineTouchedSex
         case baselineTouchedHeight
         case baselineTouchedWeight
         case activity
@@ -339,6 +344,7 @@ extension OnboardingDraft {
         weight = try container.decodeIfPresent(String.self, forKey: .weight) ?? ""
         units = try container.decodeIfPresent(UnitsOption.self, forKey: .units) ?? .imperial
         baselineTouchedAge = try container.decodeIfPresent(Bool.self, forKey: .baselineTouchedAge) ?? false
+        baselineTouchedSex = try container.decodeIfPresent(Bool.self, forKey: .baselineTouchedSex) ?? false
         baselineTouchedHeight = try container.decodeIfPresent(Bool.self, forKey: .baselineTouchedHeight) ?? false
         baselineTouchedWeight = try container.decodeIfPresent(Bool.self, forKey: .baselineTouchedWeight) ?? false
         activity = try container.decodeIfPresent(ActivityChoice.self, forKey: .activity)
@@ -430,47 +436,58 @@ enum OnboardingCalculator {
         let height = draft.heightInCm
         let sexOffset = draft.sex == .male ? 5 : -161
         let bmr = (10 * weight) + (6.25 * height) - (5 * age) + Double(sexOffset)
-        return max(1200, Int((bmr * 1.2).rounded()))
+
+        // Activity multiplier (same scale as MyFitnessPal)
+        let activityMultiplier: Double
+        switch draft.activity {
+        case .mostlySitting:    activityMultiplier = 1.2
+        case .lightlyActive:    activityMultiplier = 1.375
+        case .moderatelyActive: activityMultiplier = 1.55
+        case .veryActive:       activityMultiplier = 1.725
+        case .none:             activityMultiplier = 1.2
+        }
+
+        let minFloor = draft.sex == .male ? 1500 : 1200
+        return max(minFloor, Int((bmr * activityMultiplier).rounded()))
+    }
+
+    /// Daily calorie deficit/surplus based on pace (matches MyFitnessPal model):
+    /// - Conservative: 0.5 lb/week = 250 cal/day
+    /// - Balanced:     1.0 lb/week = 500 cal/day
+    /// - Aggressive:   1.5 lb/week = 750 cal/day
+    private static func dailyDeficitForPace(_ pace: PaceChoice?) -> Int {
+        switch pace ?? .balanced {
+        case .conservative: return 250
+        case .balanced:     return 500
+        case .aggressive:   return 750
+        }
     }
 
     private static func targetKcal(from draft: OnboardingDraft, maintenance: Int) -> Int {
-        var target = maintenance
+        let deficit = dailyDeficitForPace(draft.pace)
 
-        if let goal = draft.goal {
-            switch goal {
-            case .lose: target -= 350
-            case .maintain: break
-            case .gain: target += 280
-            }
+        let target: Int
+        switch draft.goal ?? .maintain {
+        case .lose:     target = maintenance - deficit
+        case .maintain: target = maintenance
+        case .gain:     target = maintenance + deficit
         }
 
-        if let activity = draft.activity {
-            switch activity {
-            case .mostlySitting: target -= 80
-            case .lightlyActive: break
-            case .moderatelyActive: target += 120
-            case .veryActive: target += 240
-            }
-        }
-
-        if let pace = draft.pace {
-            switch pace {
-            case .conservative: target += 80
-            case .balanced: break
-            case .aggressive: target -= 120
-            }
-        }
-
-        return max(1200, target)
+        let minFloor = draft.sex == .male ? 1500 : 1200
+        return max(minFloor, target)
     }
 
+    /// Projected weeks based on a 10 lb (4.5 kg) goal using the pace's weekly rate.
     private static func projectedGoalDate(from draft: OnboardingDraft, now: Date) -> String {
-        let weeksToGoal: Int
+        let lbsPerWeek: Double
         switch draft.pace ?? .balanced {
-        case .conservative: weeksToGoal = 16
-        case .balanced: weeksToGoal = 12
-        case .aggressive: weeksToGoal = 8
+        case .conservative: lbsPerWeek = 0.5
+        case .balanced:     lbsPerWeek = 1.0
+        case .aggressive:   lbsPerWeek = 1.5
         }
+        // Assume a 10 lb goal if we can't compute actual delta
+        let targetLbs: Double = 10
+        let weeksToGoal = max(4, Int((targetLbs / lbsPerWeek).rounded(.up)))
         let date = Calendar.current.date(byAdding: .weekOfYear, value: weeksToGoal, to: now) ?? now
         return goalDateFormatter.string(from: date)
     }
@@ -526,6 +543,8 @@ extension OnboardingRoute {
             return "Log your food with less effort"
         case .goal:
             return "What’s your goal right now?"
+        case .age:
+            return "How young are you?"
         case .baseline:
             return "Let’s set your baseline"
         case .activity:
@@ -542,6 +561,18 @@ extension OnboardingRoute {
             return "Optional permissions"
         case .ready:
             return "You’re all set"
+        case .goalValidation:
+            return "Your plan is ready"
+        case .socialProof:
+            return "Food App provides long-term results"
+        case .challenge:
+            return "What's your biggest challenge?"
+        case .experience:
+            return "Have you tried calorie counting before?"
+        case .howItWorks:
+            return "Why Food App's approach works"
+        case .challengeInsight:
+            return ""
         }
     }
 
@@ -551,6 +582,8 @@ extension OnboardingRoute {
             return "Set up tracking in under 2 minutes."
         case .goal:
             return "We’ll use this to set your calorie and macro direction."
+        case .age:
+            return "We will use this to calulate BMI"
         case .baseline:
             return "Add your profile details so calorie estimates are personalized."
         case .activity:
@@ -567,13 +600,25 @@ extension OnboardingRoute {
             return "Health and reminders can be enabled now or later in Settings."
         case .ready:
             return "You’re ready to log your first meal."
+        case .goalValidation:
+            return "Based on your profile, here’s your starting target."
+        case .socialProof:
+            return ""
+        case .challenge:
+            return ""
+        case .experience:
+            return ""
+        case .howItWorks:
+            return ""
+        case .challengeInsight:
+            return ""
         }
     }
 }
 
 enum SexOption: String, CaseIterable, Identifiable, Codable {
-    case female
     case male
+    case female
     case other
 
     var id: String { rawValue }
@@ -663,8 +708,71 @@ enum PreferenceChoice: String, CaseIterable, Identifiable, Hashable, Codable {
     }
 }
 
+enum ExperienceChoice: String, CaseIterable, Identifiable, Codable {
+    case newToIt
+    case triedButQuit
+    case currentlyCounting
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .newToIt: return "I'm new to calorie counting"
+        case .triedButQuit: return "I've tried it before but quit"
+        case .currentlyCounting: return "I'm currently counting"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .newToIt: return "flame"
+        case .triedButQuit: return "arrow.uturn.backward.circle"
+        case .currentlyCounting: return "number.square"
+        }
+    }
+}
+
+enum ChallengeChoice: String, CaseIterable, Identifiable, Codable {
+    case portionControl
+    case snacking
+    case eatingOut
+    case inconsistentMeals
+    case emotionalEating
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .portionControl: return "Portion control"
+        case .snacking: return "Late-night snacking"
+        case .eatingOut: return "Eating out too often"
+        case .inconsistentMeals: return "Inconsistent meals"
+        case .emotionalEating: return "Emotional eating"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .portionControl: return "Hard to know the right serving size"
+        case .snacking: return "Cravings that undo my progress"
+        case .eatingOut: return "Restaurant meals are hard to track"
+        case .inconsistentMeals: return "I skip meals or eat at random times"
+        case .emotionalEating: return "I eat when stressed or bored"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .portionControl: return "chart.pie"
+        case .snacking: return "moon.stars"
+        case .eatingOut: return "fork.knife.circle"
+        case .inconsistentMeals: return "clock.arrow.2.circlepath"
+        case .emotionalEating: return "heart.circle"
+        }
+    }
+}
+
 enum AccountProvider: String, Codable {
     case apple
     case google
-    case email
 }

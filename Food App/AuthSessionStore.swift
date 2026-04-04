@@ -4,6 +4,8 @@ import Security
 
 struct AuthSession: Codable, Equatable {
     let accessToken: String
+    let refreshToken: String?
+    let expiresAt: Date?
     let provider: AccountProvider
     let userID: String?
     let email: String?

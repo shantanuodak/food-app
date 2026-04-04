@@ -4,16 +4,10 @@ struct OB08AccountScreen: View {
     let isLoading: Bool
     let prefersGooglePrimary: Bool
     let enableApple: Bool
-    let enableEmail: Bool
     let onSelectProvider: (AccountProvider) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Secure your setup and keep your progress synced across devices.")
-                .font(.footnote)
-                .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                .padding(.horizontal, 4)
-
             ForEach(providerOptions) { option in
                 accountButton(
                     option.title,
@@ -25,18 +19,8 @@ struct OB08AccountScreen: View {
                 .opacity(option.isEnabled ? 1 : 0.45)
             }
 
-            if !enableApple && !enableEmail {
-                Text("Google sign-in is enabled right now. Apple and email sign-in are coming soon.")
-                    .font(.caption)
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .padding(.horizontal, 4)
-            } else if !enableApple {
-                Text("Google and email sign-in are enabled right now. Apple sign-in is coming soon.")
-                    .font(.caption)
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .padding(.horizontal, 4)
-            } else if !enableEmail {
-                Text("Apple and Google sign-in are enabled right now. Email sign-in is coming soon.")
+            if !enableApple {
+                Text("Google sign-in is enabled right now. Apple sign-in is coming soon.")
                     .font(.caption)
                     .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .padding(.horizontal, 4)
@@ -72,15 +56,13 @@ struct OB08AccountScreen: View {
         if prefersGooglePrimary {
             return [
                 ProviderOption(title: "Continue with Google", icon: "globe", provider: .google, isPrimary: true, isEnabled: true),
-                ProviderOption(title: "Continue with Apple", icon: "apple.logo", provider: .apple, isPrimary: false, isEnabled: enableApple),
-                ProviderOption(title: "Use email instead", icon: "envelope.fill", provider: .email, isPrimary: false, isEnabled: enableEmail)
+                ProviderOption(title: "Continue with Apple", icon: "apple.logo", provider: .apple, isPrimary: false, isEnabled: enableApple)
             ]
         }
 
         return [
             ProviderOption(title: "Continue with Apple", icon: "apple.logo", provider: .apple, isPrimary: true, isEnabled: enableApple),
-            ProviderOption(title: "Continue with Google", icon: "globe", provider: .google, isPrimary: false, isEnabled: true),
-            ProviderOption(title: "Use email instead", icon: "envelope.fill", provider: .email, isPrimary: false, isEnabled: enableEmail)
+            ProviderOption(title: "Continue with Google", icon: "globe", provider: .google, isPrimary: false, isEnabled: true)
         ]
     }
 
@@ -91,7 +73,7 @@ struct OB08AccountScreen: View {
             HStack(spacing: 10) {
                 Image(systemName: icon)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isPrimary ? Color.black.opacity(0.82) : OnboardingGlassTheme.textPrimary)
+                    .foregroundStyle(isPrimary ? OnboardingGlassTheme.buttonPrimaryText.opacity(0.82) : OnboardingGlassTheme.textPrimary)
                 Text(title)
                 Spacer(minLength: 0)
             }

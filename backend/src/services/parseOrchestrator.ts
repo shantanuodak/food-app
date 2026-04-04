@@ -3,7 +3,7 @@ import { ApiError } from '../utils/errors.js';
 import { getBudgetSnapshotForUser, writeAiCostEvent } from './aiCostService.js';
 import { getEffectiveFeatureFlags } from './adminFeatureFlagsService.js';
 import { buildParseCacheDebugInfo, type ParseCacheDebugInfo } from './parseCacheService.js';
-import { runSegmentAwareParsePipeline } from './parsePipelineService.js';
+import { runSegmentAwareParsePipeline, runSegmentAwareParsePipelineStreaming } from './parsePipelineService.js';
 import { checkParseRateLimit } from './parseRateLimiterService.js';
 import { createParseRequest } from './parseRequestService.js';
 import type { ParseDecisionResult } from './parseDecisionTypes.js';
@@ -20,6 +20,11 @@ export type PrimaryParseOrchestratorInput = {
   requestId: string;
   auth: ParseAuthContext;
   locale?: string | null;
+};
+
+export type PrimaryParseStreamingInput = PrimaryParseOrchestratorInput & {
+  signal?: AbortSignal;
+  onItem: (item: Record<string, unknown>, index: number) => void;
 };
 
 export type PrimaryParseOrchestratorOutput = ParseDecisionResult & {
@@ -158,5 +163,87 @@ export async function executePrimaryParse(input: PrimaryParseOrchestratorInput):
       fallbackAllowed
     },
     cacheDebug
+  };
+}
+
+export async function executePrimaryParseStreaming(input: PrimaryParseStreamingInput): Promise<PrimaryParseOrchestratorOutput> {
+  const userId = input.auth.userId;
+  const rateLimit = checkParseRateLimit(userId);
+  if (!rateLimit.allowed) {
+    const error = new ApiError(429, 'RATE_LIMITED', 'Too many parse requests. Please retry shortly.');
+    (error as ApiError & { retryAfterSeconds?: number }).retryAfterSeconds = rateLimit.retryAfterSeconds;
+    throw error;
+  }
+
+  const budgetBefore = await getBudgetSnapshotForUser({
+    userId,
+    dailyBudgetUsd: config.aiDailyBudgetUsd,
+    userSoftCapUsd: config.aiUserSoftCapUsd
+  });
+  const featureFlags = await getEffectiveFeatureFlags(userId);
+  const fallbackAllowed = config.aiFallbackEnabled && featureFlags.geminiEnabled && canUseFallback(budgetBefore);
+  const preferences = await getOnboardingParsePreferences(userId);
+  const locale = normalizeLocale(input.locale);
+  const units = (preferences.units || 'unknown').toLowerCase();
+  const cacheScope = [
+    `user=${userId}`,
+    `cachev=${config.parseCacheSchemaVersion}`,
+    `parser=${config.parseVersion}`,
+    `routev=${config.parseProviderRouteVersion}`,
+    `prompt=${config.parsePromptVersion}`,
+    `locale=${locale}`,
+    `units=${units}`,
+    'primary'
+  ].join('|');
+
+  const pipeline = await runSegmentAwareParsePipelineStreaming(input.text, {
+    allowFallback: fallbackAllowed,
+    cacheScope,
+    featureFlags,
+    userId,
+    budget: budgetBefore,
+    signal: input.signal,
+    onItem: input.onItem
+  });
+
+  let budget = budgetBefore;
+  if (pipeline.fallbackUsed && pipeline.fallbackUsage) {
+    await writeAiCostEvent({
+      userId,
+      requestId: input.requestId,
+      feature: 'parse_fallback',
+      model: pipeline.fallbackUsage.model,
+      inputTokens: pipeline.fallbackUsage.inputTokens,
+      outputTokens: pipeline.fallbackUsage.outputTokens,
+      estimatedCostUsd: pipeline.fallbackUsage.estimatedCostUsd
+    });
+    budget = await getBudgetSnapshotForUser({
+      userId,
+      dailyBudgetUsd: config.aiDailyBudgetUsd,
+      userSoftCapUsd: config.aiUserSoftCapUsd
+    });
+  }
+
+  await createParseRequest({
+    requestId: input.requestId,
+    userId,
+    rawText: input.text,
+    needsClarification: pipeline.needsClarification,
+    cacheHit: pipeline.cacheHit,
+    primaryRoute: routeForPersistence(pipeline.route),
+    authProvider: normalizeAuthProvider(input.auth.authProvider),
+    email: input.auth.email
+  });
+
+  return {
+    ...pipeline,
+    budget: {
+      dailyLimitUsd: budget.dailyBudgetUsd,
+      dailyUsedTodayUsd: roundedUsd(budget.globalUsedTodayUsd),
+      userSoftCapUsd: budget.userSoftCapUsd,
+      userUsedTodayUsd: roundedUsd(budget.userUsedTodayUsd),
+      userSoftCapExceeded: budget.userSoftCapExceeded,
+      fallbackAllowed
+    }
   };
 }

@@ -35,6 +35,7 @@ All PRs should use:
 1. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/API_HANDOFF_IOS_MVP.md`
 2. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/IMPLEMENTATION_SPEC_MVP.md`
 3. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/PRD_MVP_Food_Logging.md`
+4. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/PRODUCT_COMPLETION_SUMMARY_2026-03-15.md`
 
 ## QA and Operations Docs
 

@@ -15,14 +15,23 @@ struct HomeGreetingChip: View {
 
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(.white.opacity(0.96))
                 .lineLimit(1)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 7)
         .background(
             Capsule(style: .continuous)
-                .fill(Color(red: 0.16, green: 0.64, blue: 0.98))
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.09, green: 0.43, blue: 0.74),
+                            Color(red: 0.16, green: 0.64, blue: 0.98)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
         .overlay(
             Capsule(style: .continuous)
@@ -44,9 +53,9 @@ struct HomeGreetingChip: View {
 
     private var title: String {
         guard let firstName, !firstName.isEmpty else {
-            return "Hey"
+            return "Hello"
         }
-        return "Hey \(firstName)"
+        return "Hey, \(firstName)"
     }
 
     private func applyWaveAnimation(isReducedMotion: Bool) {

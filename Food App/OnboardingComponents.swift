@@ -1,24 +1,140 @@
 import SwiftUI
 #if canImport(UIKit)
 import UIKit
+import CoreText
 #endif
 
 enum OnboardingGlassTheme {
     static let accentStart = Color(red: 1.00, green: 0.78, blue: 0.33)
     static let accentEnd = Color(red: 0.21, green: 0.86, blue: 0.73)
-    static let textPrimary = Color.white.opacity(0.98)
-    static let textSecondary = Color.white.opacity(0.84)
-    static let textMuted = Color.white.opacity(0.58)
+    static let textPrimary = adaptiveColor(
+        light: UIColor(red: 0.10, green: 0.12, blue: 0.16, alpha: 0.98),
+        dark: UIColor(white: 1.0, alpha: 0.98)
+    )
+    static let textSecondary = adaptiveColor(
+        light: UIColor(red: 0.23, green: 0.28, blue: 0.36, alpha: 0.84),
+        dark: UIColor(white: 1.0, alpha: 0.84)
+    )
+    static let textMuted = adaptiveColor(
+        light: UIColor(red: 0.33, green: 0.39, blue: 0.47, alpha: 0.70),
+        dark: UIColor(white: 1.0, alpha: 0.58)
+    )
     static let selectedSurface = Color(red: 1.00, green: 0.85, blue: 0.52).opacity(0.24)
     static let buttonPrimaryText = Color(red: 0.09, green: 0.09, blue: 0.10)
-    static let buttonSecondaryText = Color.white
-    static let panelFill = Color.white.opacity(0.07)
-    static let panelStroke = Color.white.opacity(0.14)
+    static let buttonSecondaryText = textPrimary
+    static let buttonShadow = adaptiveColor(
+        light: UIColor(red: 0.08, green: 0.10, blue: 0.14, alpha: 0.10),
+        dark: UIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.20)
+    )
+    static let selectionGlow = adaptiveColor(
+        light: UIColor(red: 0.96, green: 0.71, blue: 0.29, alpha: 0.18),
+        dark: UIColor(white: 1.0, alpha: 0.14)
+    )
+    static let panelFill = adaptiveColor(
+        light: UIColor(red: 1.0, green: 1.0, blue: 1.0, alpha: 0.58),
+        dark: UIColor(white: 1.0, alpha: 0.07)
+    )
+    static let panelStroke = adaptiveColor(
+        light: UIColor(red: 0.79, green: 0.84, blue: 0.90, alpha: 0.55),
+        dark: UIColor(white: 1.0, alpha: 0.14)
+    )
+    static let backgroundStart = adaptiveColor(
+        light: UIColor(red: 0.97, green: 0.98, blue: 0.995, alpha: 1.0),
+        dark: UIColor(red: 0.05, green: 0.08, blue: 0.11, alpha: 1.0)
+    )
+    static let backgroundEnd = adaptiveColor(
+        light: UIColor(red: 0.90, green: 0.94, blue: 0.98, alpha: 1.0),
+        dark: UIColor(red: 0.02, green: 0.03, blue: 0.05, alpha: 1.0)
+    )
+    static let dotOverlay = adaptiveColor(
+        light: UIColor(red: 0.09, green: 0.12, blue: 0.18, alpha: 0.08),
+        dark: UIColor(white: 1.0, alpha: 0.10)
+    )
+    static let noiseOverlay = adaptiveColor(
+        light: UIColor(red: 0.06, green: 0.08, blue: 0.12, alpha: 0.05),
+        dark: UIColor(white: 1.0, alpha: 0.03)
+    )
+
+    private static func adaptiveColor(light: UIColor, dark: UIColor) -> Color {
+        Color(
+            uiColor: UIColor { traits in
+                traits.userInterfaceStyle == .dark ? dark : light
+            }
+        )
+    }
 }
 
 enum OnboardingGlassMetrics {
     static let cornerRadius: CGFloat = 16
     static let innerCornerRadius: CGFloat = 12
+}
+
+enum OnboardingTypography {
+    enum InstrumentSerifStyle {
+        case regular
+        case italic
+
+        fileprivate var fileName: String {
+            switch self {
+            case .regular:
+                return "InstrumentSerif-Regular"
+            case .italic:
+                return "InstrumentSerif-Italic"
+            }
+        }
+    }
+
+    static func instrumentSerif(style: InstrumentSerifStyle, size: CGFloat) -> Font {
+#if canImport(UIKit)
+        if let postScriptName = resolvedPostScriptName(for: style) {
+            return .custom(postScriptName, size: size)
+        }
+#endif
+        switch style {
+        case .regular:
+            return .system(size: size, weight: .regular, design: .serif)
+        case .italic:
+            return .system(size: size, weight: .regular, design: .serif).italic()
+        }
+    }
+
+    static func onboardingHeadline(size: CGFloat = 28) -> Font {
+        instrumentSerif(style: .regular, size: size)
+    }
+
+#if canImport(UIKit)
+    private static var cachedPostScriptNames: [InstrumentSerifStyle: String] = [:]
+
+    private static func resolvedPostScriptName(for style: InstrumentSerifStyle) -> String? {
+        if let cached = cachedPostScriptNames[style] {
+            return cached
+        }
+
+        if let direct = UIFont(name: style.fileName, size: 16)?.fontName {
+            cachedPostScriptNames[style] = direct
+            return direct
+        }
+
+        let fontURL =
+            Bundle.main.url(forResource: style.fileName, withExtension: "ttf", subdirectory: "Fonts") ??
+            Bundle.main.url(forResource: style.fileName, withExtension: "ttf")
+
+        guard let url = fontURL else {
+            return nil
+        }
+
+        CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
+
+        guard let provider = CGDataProvider(url: url as CFURL),
+              let cgFont = CGFont(provider),
+              let postScriptName = cgFont.postScriptName as String? else {
+            return nil
+        }
+
+        cachedPostScriptNames[style] = postScriptName
+        return postScriptName
+    }
+#endif
 }
 
 private struct OnboardingGlassPanel: ViewModifier {
@@ -74,7 +190,7 @@ struct OnboardingGlassPrimaryButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: OnboardingGlassMetrics.cornerRadius, style: .continuous)
                     .strokeBorder(Color.white, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.2), radius: 8, y: 3)
+            .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
             .opacity(configuration.isPressed ? 0.92 : 1.0)
             .scaleEffect(configuration.isPressed ? 0.99 : 1.0)
             .animation(.easeOut(duration: 0.16), value: configuration.isPressed)
@@ -106,7 +222,7 @@ struct OnboardingPrimaryButton: View {
             HStack(spacing: 8) {
                 if isLoading {
                     ProgressView()
-                        .tint(.black)
+                        .tint(OnboardingGlassTheme.buttonPrimaryText)
                         .controlSize(.small)
                 }
                 Text(title)
@@ -248,7 +364,7 @@ struct OnboardingSelectableTiles<Option: Identifiable & Equatable>: View {
                         Spacer()
                         Image(systemName: "checkmark")
                             .font(.system(size: 14, weight: .bold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(OnboardingGlassTheme.buttonPrimaryText)
                             .padding(8)
                             .background(Color.white, in: Circle())
                             .opacity(isSelected ? 1 : 0)
@@ -260,7 +376,7 @@ struct OnboardingSelectableTiles<Option: Identifiable & Equatable>: View {
                         fillOpacity: isSelected ? 0.22 : 0.05,
                         strokeOpacity: 0.12
                     )
-                    .shadow(color: isSelected ? Color.white.opacity(0.14) : .clear, radius: 8, y: 2)
+                    .shadow(color: isSelected ? OnboardingGlassTheme.selectionGlow : .clear, radius: 8, y: 2)
                 }
                 .buttonStyle(.plain)
             }
@@ -303,7 +419,7 @@ struct OnboardingChipSelector: View {
 
                         Image(systemName: "checkmark")
                             .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(OnboardingGlassTheme.buttonPrimaryText)
                             .padding(4)
                             .background(Color.white, in: Circle())
                             .opacity(isSelected ? 1 : 0)
@@ -317,7 +433,7 @@ struct OnboardingChipSelector: View {
                         fillOpacity: isSelected ? 0.24 : 0.04,
                         strokeOpacity: isSelected ? 0.2 : 0.1
                     )
-                    .shadow(color: isSelected ? Color.white.opacity(0.12) : .clear, radius: 6, y: 2)
+                    .shadow(color: isSelected ? OnboardingGlassTheme.selectionGlow : .clear, radius: 6, y: 2)
                     .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
                 }
                 .buttonStyle(.plain)
@@ -399,7 +515,7 @@ struct OnboardingInputField: View {
                 fillOpacity: isEmphasized ? 0.16 : 0.08,
                 strokeOpacity: 0.12
             )
-            .shadow(color: isEmphasized ? Color.white.opacity(0.12) : .clear, radius: 6, y: 1)
+            .shadow(color: isEmphasized ? OnboardingGlassTheme.selectionGlow : .clear, radius: 6, y: 1)
         }
     }
 }

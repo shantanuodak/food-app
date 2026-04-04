@@ -9,22 +9,56 @@ enum AppFlowRoute: Equatable {
 enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
     case welcome = 1
     case goal = 2
-    case baseline = 3
-    case activity = 4
-    case pace = 5
-    case preferencesOptional = 6
-    case planPreview = 7
-    case account = 8
-    case permissions = 9
-    case ready = 10
+    case age = 3
+    case baseline = 4
+    case activity = 5
+    case pace = 6
+    case preferencesOptional = 7
+    case planPreview = 8
+    case account = 9
+    case permissions = 10
+    case ready = 11
+    case goalValidation = 12
+    case socialProof = 13
+    case challenge = 14
+    case experience = 15
+    case howItWorks = 16
+    case challengeInsight = 17
+
+    static let activeFlow: [OnboardingRoute] = [
+        .welcome,
+        .goal,
+        .socialProof,
+        .experience,
+        .howItWorks,
+        .challenge,
+        .challengeInsight,
+        .age,
+        .baseline,
+        .activity,
+        .pace,
+        .goalValidation,
+        .account,
+        .permissions,
+        .ready
+    ]
+
+    static let debugRoutes: [OnboardingRoute] = activeFlow
 
     var frameID: String {
         switch self {
         case .welcome: return "Welcome"
         case .goal: return "Goal"
+        case .age: return "Age"
         case .baseline: return "Baseline"
         case .activity: return "Activity"
         case .pace: return "Pace"
+        case .goalValidation: return "Goal Validation"
+        case .socialProof: return "Social Proof"
+        case .challenge: return "Challenge"
+        case .experience: return "Experience"
+        case .howItWorks: return "How It Works"
+        case .challengeInsight: return "Challenge Insight"
         case .preferencesOptional: return "Preferences"
         case .planPreview: return "Plan Preview"
         case .account: return "Account"
@@ -36,18 +70,18 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
     var progressStep: Int? {
         switch self {
         case .goal: return 1
-        case .baseline: return 2
-        case .activity: return 3
-        case .pace: return 4
-        case .preferencesOptional: return 5
-        case .planPreview: return 6
+        case .age: return 2
+        case .baseline: return 3
+        case .activity: return 4
+        case .pace: return 5
+        case .goalValidation: return 6
         default: return nil
         }
     }
 
     var hasBack: Bool {
         switch self {
-        case .welcome, .ready:
+        case .welcome:
             return false
         default:
             return true
@@ -55,17 +89,30 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
     }
 
     var previous: OnboardingRoute? {
-        guard let previous = OnboardingRoute(rawValue: rawValue - 1) else {
+        let flow = OnboardingRoute.activeFlow
+        guard let index = flow.firstIndex(of: normalizedForActiveFlow),
+              index > 0 else {
             return nil
         }
-        return previous
+        return flow[index - 1]
     }
 
     var next: OnboardingRoute? {
-        guard let next = OnboardingRoute(rawValue: rawValue + 1) else {
+        let flow = OnboardingRoute.activeFlow
+        guard let index = flow.firstIndex(of: normalizedForActiveFlow),
+              index < (flow.count - 1) else {
             return nil
         }
-        return next
+        return flow[index + 1]
+    }
+
+    var normalizedForActiveFlow: OnboardingRoute {
+        switch self {
+        case .preferencesOptional:
+            return .goalValidation
+        default:
+            return self
+        }
     }
 }
 
@@ -97,7 +144,7 @@ final class AppFlowCoordinator: ObservableObject {
 
     func moveToOnboarding(_ route: OnboardingRoute) {
         self.route = .onboarding
-        onboardingRoute = route
+        onboardingRoute = route.normalizedForActiveFlow
     }
 
     func moveNextOnboarding() {

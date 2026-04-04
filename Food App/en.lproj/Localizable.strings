@@ -127,6 +127,10 @@
 "main.error.save_missing_idempotency" = "Save request is missing idempotency key. Tap Save Log again.";
 "main.error.save_failure" = "Save failed.";
 "main.error.parse_network_failure" = "Network issue while parsing. Your note is safe. Reconnect and tap Parse Now.";
+"main.error.parse_rate_limited" = "Parsing is busy. Wait a few seconds and try again.";
+"main.parse.queued" = "Finishing current parse. New rows are queued.";
+"main.parse.queued_short" = "Queued";
+"main.parse.retry_short" = "Retry";
 "main.error.parse_failure" = "Parse failed.";
 "main.error.escalation_disabled_now" = "Escalation is disabled on backend right now.";
 "main.error.escalation_budget_exceeded" = "Escalation blocked: daily AI budget is exhausted.";

@@ -69,6 +69,11 @@ private struct NutritionChartPoint: Identifiable {
     var id: Date { date }
 }
 
+private struct NutritionChartSegment: Identifiable {
+    let id: String
+    let points: [NutritionChartPoint]
+}
+
 private struct WeightChartPoint: Identifiable {
     let date: Date
     let value: Double
@@ -189,27 +194,30 @@ struct ProgressSectionView: View {
                     .foregroundStyle(.secondary)
             } else {
                 let scale = calorieScale
+                let consumedSegments = segmentedLoggedPoints(from: caloriePoints)
                 Chart {
-                    ForEach(caloriePoints) { point in
-                        AreaMark(
-                            x: .value("Date", point.date),
-                            y: .value("Calories", scale.clamp(point.consumed))
-                        )
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color.green.opacity(0.35), Color.green.opacity(0.02)],
-                                startPoint: .top,
-                                endPoint: .bottom
+                    ForEach(consumedSegments) { segment in
+                        ForEach(segment.points) { point in
+                            AreaMark(
+                                x: .value("Date", point.date),
+                                y: .value("Calories", scale.clamp(point.consumed))
                             )
-                        )
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color.green.opacity(0.35), Color.green.opacity(0.02)],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
 
-                        LineMark(
-                            x: .value("Date", point.date),
-                            y: .value("Calories", scale.clamp(point.consumed))
-                        )
-                        .foregroundStyle(Color.green)
-                        .lineStyle(StrokeStyle(lineWidth: 2.2))
-                        .interpolationMethod(.linear)
+                            LineMark(
+                                x: .value("Date", point.date),
+                                y: .value("Calories", scale.clamp(point.consumed))
+                            )
+                            .foregroundStyle(Color.green)
+                            .lineStyle(StrokeStyle(lineWidth: 2.2))
+                            .interpolationMethod(.linear)
+                        }
                     }
 
                     ForEach(caloriePoints) { point in
@@ -331,16 +339,21 @@ struct ProgressSectionView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
+                let consumedSegments = segmentedLoggedPoints(from: points)
                 Chart {
-                    ForEach(points) { point in
-                        LineMark(
-                            x: .value("Date", point.date),
-                            y: .value("Consumed", scale.clamp(point.consumed))
-                        )
-                        .foregroundStyle(metric.color)
-                        .lineStyle(StrokeStyle(lineWidth: 2))
-                        .interpolationMethod(.linear)
+                    ForEach(consumedSegments) { segment in
+                        ForEach(segment.points) { point in
+                            LineMark(
+                                x: .value("Date", point.date),
+                                y: .value("Consumed", scale.clamp(point.consumed))
+                            )
+                            .foregroundStyle(metric.color)
+                            .lineStyle(StrokeStyle(lineWidth: 2))
+                            .interpolationMethod(.linear)
+                        }
+                    }
 
+                    ForEach(points) { point in
                         LineMark(
                             x: .value("Date", point.date),
                             y: .value("Target", scale.clamp(point.target))
@@ -885,6 +898,39 @@ struct ProgressSectionView: View {
         let cappedCeiling = min(hardCeiling, paddedRobustCeiling * 2.25)
         let upperBound = max(minimumUpperBound, max(cappedCeiling, p85))
         return ChartScale(minY: 0, maxY: upperBound)
+    }
+
+    private func segmentedLoggedPoints(from points: [NutritionChartPoint]) -> [NutritionChartSegment] {
+        var segments: [NutritionChartSegment] = []
+        var current: [NutritionChartPoint] = []
+
+        for point in points {
+            if point.hasLogs {
+                current.append(point)
+                continue
+            }
+
+            if !current.isEmpty {
+                segments.append(
+                    NutritionChartSegment(
+                        id: String(segments.count),
+                        points: current
+                    )
+                )
+                current.removeAll(keepingCapacity: true)
+            }
+        }
+
+        if !current.isEmpty {
+            segments.append(
+                NutritionChartSegment(
+                    id: String(segments.count),
+                    points: current
+                )
+            )
+        }
+
+        return segments
     }
 
     private func percentile(ofSorted sortedValues: [Double], p: Double) -> Double {

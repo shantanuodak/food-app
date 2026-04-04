@@ -32,21 +32,32 @@ enum LoadingRouteHint: String, Hashable {
     case unknown
 }
 
+enum RowParsePhase: Equatable {
+    case idle
+    case active(routeHint: LoadingRouteHint, startedAt: Date)
+    case queued
+    case failed
+    case unresolved
+}
+
 struct HomeLogRow: Identifiable, Equatable {
     let id: UUID
     var text: String
     var calories: Int?
     var calorieRangeText: String?
     var isApproximate: Bool
-    var isLoading: Bool
+    var parsePhase: RowParsePhase
     var parsedItem: ParsedFoodItem?
     var parsedItems: [ParsedFoodItem]
     var editableItemIndices: [Int]
     var normalizedTextAtParse: String?
-    var loadingRouteHint: LoadingRouteHint? = nil
-    var loadingStatusStartedAt: Date? = nil
     var imagePreviewData: Data?
     var imageRef: String?
+    /// True for rows that have already been saved to the backend.
+    /// Saved rows are read-only and appear above the active input (Apple Notes style).
+    var isSaved: Bool
+    /// Pre-formatted time string shown below a saved row (e.g. "7:48 AM").
+    var savedAt: String?
 
     static func empty() -> HomeLogRow {
         HomeLogRow(
@@ -55,16 +66,78 @@ struct HomeLogRow: Identifiable, Equatable {
             calories: nil,
             calorieRangeText: nil,
             isApproximate: false,
-            isLoading: false,
+            parsePhase: .idle,
             parsedItem: nil,
             parsedItems: [],
             editableItemIndices: [],
             normalizedTextAtParse: nil,
-            loadingRouteHint: nil,
-            loadingStatusStartedAt: nil,
             imagePreviewData: nil,
-            imageRef: nil
+            imageRef: nil,
+            isSaved: false,
+            savedAt: nil
         )
+    }
+
+    var isLoading: Bool {
+        if case .active = parsePhase {
+            return true
+        }
+        return false
+    }
+
+    var isQueued: Bool {
+        if case .queued = parsePhase {
+            return true
+        }
+        return false
+    }
+
+    var isFailed: Bool {
+        if case .failed = parsePhase {
+            return true
+        }
+        return false
+    }
+
+    var isUnresolved: Bool {
+        if case .unresolved = parsePhase {
+            return true
+        }
+        return false
+    }
+
+    var loadingRouteHint: LoadingRouteHint? {
+        if case let .active(routeHint, _) = parsePhase {
+            return routeHint
+        }
+        return nil
+    }
+
+    var loadingStatusStartedAt: Date? {
+        if case let .active(_, startedAt) = parsePhase {
+            return startedAt
+        }
+        return nil
+    }
+
+    mutating func setParseActive(routeHint: LoadingRouteHint, startedAt: Date = Date()) {
+        parsePhase = .active(routeHint: routeHint, startedAt: startedAt)
+    }
+
+    mutating func setParseQueued() {
+        parsePhase = .queued
+    }
+
+    mutating func clearParsePhase() {
+        parsePhase = .idle
+    }
+
+    mutating func setParseFailed() {
+        parsePhase = .failed
+    }
+
+    mutating func setParseUnresolved() {
+        parsePhase = .unresolved
     }
 
     static func predictedLoadingRouteHint(for rawText: String) -> LoadingRouteHint {
@@ -128,6 +201,7 @@ struct HM01LogComposerSection: View {
     let focusBinding: FocusState<Bool>.Binding
     let mode: HomeInputMode
     let inlineEstimateText: String?
+    let hasActiveParseRequest: Bool
     let minimalStyle: Bool
     let onInputTapped: () -> Void
     let onCaloriesTapped: (HomeLogRow) -> Void
@@ -139,6 +213,7 @@ struct HM01LogComposerSection: View {
         focusBinding: FocusState<Bool>.Binding,
         mode: HomeInputMode,
         inlineEstimateText: String?,
+        hasActiveParseRequest: Bool = false,
         minimalStyle: Bool = false,
         onInputTapped: @escaping () -> Void,
         onCaloriesTapped: @escaping (HomeLogRow) -> Void = { _ in },
@@ -148,6 +223,7 @@ struct HM01LogComposerSection: View {
         self.focusBinding = focusBinding
         self.mode = mode
         self.inlineEstimateText = inlineEstimateText
+        self.hasActiveParseRequest = hasActiveParseRequest
         self.minimalStyle = minimalStyle
         self.onInputTapped = onInputTapped
         self.onCaloriesTapped = onCaloriesTapped
@@ -181,31 +257,17 @@ struct HM01LogComposerSection: View {
             }
 
             if minimalStyle {
-                LazyVStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 8) {
                     ForEach(Array(rows.enumerated()), id: \.element.id) { index, row in
                         HStack(alignment: .top, spacing: 12) {
-                            ZStack(alignment: .topLeading) {
-                                if row.text.isEmpty {
-                                    if index == 0 {
-                                        TypewriterPlaceholderText(
-                                            phrases: [
-                                                "1 banana",
-                                                "2 eggs and toast",
-                                                "Greek yogurt with berries",
-                                                "Chicken salad bowl",
-                                                "Black coffee"
-                                            ]
-                                        )
-                                        .font(.system(size: 16))
-                                        .foregroundStyle(.secondary)
-                                        .allowsHitTesting(false)
-                                    } else {
-                                        Text("Add another item")
-                                            .font(.system(size: 16))
-                                            .foregroundStyle(.secondary)
-                                            .allowsHitTesting(false)
-                                    }
-                                }
+                            if row.isSaved {
+                                Text(row.text)
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(.primary)
+                                    .frame(maxWidth: .infinity, minHeight: 26, alignment: .topLeading)
+                            } else {
+                                let isFirst = rows.filter({ !$0.isSaved }).first?.id == row.id
+                                let placeholder = isFirst ? "1 banana" : "Add another item"
 
                                 MinimalRowTextEditor(
                                     text: bindingForRowText(row.id),
@@ -226,19 +288,17 @@ struct HM01LogComposerSection: View {
                                     },
                                     onDeleteBackwardWhenEmpty: {
                                         deleteCurrentEmptyRowAndFocusPrevious(rowID: row.id)
-                                    }
+                                    },
+                                    placeholder: placeholder
                                 )
-                                .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, minHeight: 26, alignment: .topLeading)
                                 .accessibilityLabel(Text(L10n.foodInputPrompt))
                                 .accessibilityHint(Text(L10n.foodInputHint))
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .layoutPriority(1)
-                            .contentShape(Rectangle())
-                            .onTapGesture {
-                                onInputTapped()
-                                setFocusedMinimalRowID(row.id)
+                                .contentShape(Rectangle())
+                                .onTapGesture {
+                                    onInputTapped()
+                                    setFocusedMinimalRowID(row.id)
+                                }
                             }
 
                             trailingCaloriesView(for: row)
@@ -303,13 +363,15 @@ struct HM01LogComposerSection: View {
                 calories: nil,
                 calorieRangeText: nil,
                 isApproximate: false,
-                isLoading: false,
+                parsePhase: .idle,
                 parsedItem: nil,
                 parsedItems: [],
                 editableItemIndices: [],
                 normalizedTextAtParse: nil,
                 imagePreviewData: nil,
-                imageRef: nil
+                imageRef: nil,
+                isSaved: false,
+                savedAt: nil
             )
         }
     }
@@ -333,9 +395,7 @@ struct HM01LogComposerSection: View {
                     rows[index].calories = nil
                     rows[index].calorieRangeText = nil
                     rows[index].isApproximate = false
-                    rows[index].isLoading = false
-                    rows[index].loadingRouteHint = nil
-                    rows[index].loadingStatusStartedAt = nil
+                    rows[index].clearParsePhase()
                     rows[index].parsedItem = nil
                     rows[index].parsedItems = []
                     rows[index].editableItemIndices = []
@@ -344,13 +404,14 @@ struct HM01LogComposerSection: View {
                     rows[index].imageRef = nil
                 } else {
                     // Preserve last resolved calories while user edits; replace only when a confident rematch arrives.
-                    if !rows[index].isLoading {
-                        rows[index].loadingStatusStartedAt = Date()
-                    }
-                    rows[index].isLoading = true
-                    rows[index].loadingRouteHint = HomeLogRow.predictedLoadingRouteHint(for: newValue)
-                    if rows[index].loadingStatusStartedAt == nil {
-                        rows[index].loadingStatusStartedAt = Date()
+                    if hasActiveParseRequest {
+                        rows[index].setParseQueued()
+                    } else {
+                        let startedAt = rows[index].loadingStatusStartedAt ?? Date()
+                        rows[index].setParseActive(
+                            routeHint: HomeLogRow.predictedLoadingRouteHint(for: newValue),
+                            startedAt: startedAt
+                        )
                     }
                     rows[index].parsedItem = nil
                     rows[index].parsedItems = []
@@ -406,6 +467,15 @@ struct HM01LogComposerSection: View {
                 startedAt: row.loadingStatusStartedAt
             )
             .padding(.top, 4)
+        } else if row.isQueued {
+            QueuedRowStatusView()
+                .padding(.top, 4)
+        } else if row.isUnresolved {
+            UnresolvedRowStatusView()
+                .padding(.top, 4)
+        } else if row.isFailed {
+            FailedRowStatusView()
+                .padding(.top, 4)
         } else if let calories = row.calories {
             Button {
                 onCaloriesTapped(row)
@@ -430,6 +500,123 @@ struct HM01LogComposerSection: View {
                 .frame(height: 1)
                 .frame(maxWidth: .infinity, alignment: .topTrailing)
         }
+    }
+}
+
+struct VoiceRecordingOverlay: View {
+    let transcribedText: String
+    let isListening: Bool
+    let onCancel: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
+
+    @State private var pulseScale: CGFloat = 1.0
+
+    var body: some View {
+        VStack(spacing: 16) {
+            // Pulsing mic indicator
+            ZStack {
+                Circle()
+                    .fill(Color.red.opacity(0.15))
+                    .frame(width: 80, height: 80)
+                    .scaleEffect(pulseScale)
+
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 28, weight: .semibold))
+                    .foregroundStyle(.red)
+            }
+            .onAppear {
+                withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                    pulseScale = 1.3
+                }
+            }
+
+            // Real-time transcription
+            if transcribedText.isEmpty {
+                Text("Listening...")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                Text(transcribedText)
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundStyle(.primary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(4)
+                    .padding(.horizontal, 20)
+            }
+
+            Button("Cancel") {
+                onCancel()
+            }
+            .font(.system(size: 15, weight: .semibold))
+            .foregroundStyle(.red)
+            .padding(.top, 4)
+        }
+        .padding(.vertical, 24)
+        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(.ultraThinMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    colorScheme == .dark
+                                        ? Color.white.opacity(0.18)
+                                        : Color.white.opacity(0.85),
+                                    colorScheme == .dark
+                                        ? Color.white.opacity(0.05)
+                                        : Color.black.opacity(0.04)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            )
+                        )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .stroke(
+                            colorScheme == .dark
+                                ? Color.white.opacity(0.25)
+                                : Color.white.opacity(0.6),
+                            lineWidth: 0.5
+                        )
+                )
+        )
+        .shadow(color: .black.opacity(colorScheme == .dark ? 0.30 : 0.12), radius: 20, y: -5)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 100)
+    }
+}
+
+private struct UnresolvedRowStatusView: View {
+    var body: some View {
+        Text("Edit & Retry")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.orange.opacity(0.95))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .topTrailing)
+    }
+}
+
+private struct FailedRowStatusView: View {
+    var body: some View {
+        Text(L10n.parseRetryShortLabel)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.red.opacity(0.95))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .topTrailing)
+    }
+}
+
+private struct QueuedRowStatusView: View {
+    var body: some View {
+        Text(L10n.parseQueuedShortLabel)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.secondary.opacity(0.95))
+            .lineLimit(1)
+            .frame(maxWidth: .infinity, alignment: .topTrailing)
     }
 }
 
@@ -515,191 +702,32 @@ private struct RowThoughtProcessStatusView: View {
     }
 }
 
-private struct TypewriterPlaceholderText: View {
-    let phrases: [String]
-    var typingSpeed: Double = 0.055
-    var deletingSpeed: Double = 0.03
-    var holdDuration: Double = 0.9
-    var gapDuration: Double = 0.25
-
-    @State private var startedAt = Date()
-
-    var body: some View {
-        TimelineView(.periodic(from: startedAt, by: 0.05)) { context in
-            let elapsed = context.date.timeIntervalSince(startedAt)
-            let text = currentText(elapsed: elapsed)
-
-            HStack(spacing: 0) {
-                Text(text)
-                Text(" |")
-                    .opacity(Int(elapsed * 2).isMultiple(of: 2) ? 0.75 : 0.25)
-            }
-        }
-    }
-
-    private func currentText(elapsed: Double) -> String {
-        guard !phrases.isEmpty else { return "" }
-
-        let cycle = totalCycleDuration
-        guard cycle > 0 else { return phrases[0] }
-        var t = elapsed.truncatingRemainder(dividingBy: cycle)
-
-        for phrase in phrases {
-            let count = phrase.count
-            let typeTime = Double(count) * typingSpeed
-            let deleteTime = Double(count) * deletingSpeed
-            let segment = typeTime + holdDuration + deleteTime + gapDuration
-
-            if t < segment {
-                if t < typeTime {
-                    let charCount = max(0, min(count, Int(floor(t / typingSpeed))))
-                    return String(phrase.prefix(charCount))
-                }
-                t -= typeTime
-
-                if t < holdDuration {
-                    return phrase
-                }
-                t -= holdDuration
-
-                if t < deleteTime {
-                    let removed = max(0, min(count, Int(floor(t / deletingSpeed))))
-                    return String(phrase.prefix(max(0, count - removed)))
-                }
-                return ""
-            }
-
-            t -= segment
-        }
-
-        return phrases[0]
-    }
-
-    private var totalCycleDuration: Double {
-        phrases.reduce(0) { partial, phrase in
-            partial + (Double(phrase.count) * typingSpeed) + holdDuration + (Double(phrase.count) * deletingSpeed) + gapDuration
-        }
-    }
-}
-
-private struct MinimalRowTextEditor: UIViewRepresentable {
+private struct MinimalRowTextEditor: View {
     @Binding var text: String
     let isFocused: Bool
     let onFocusChanged: (Bool) -> Void
     let onSubmit: () -> Void
     let onDeleteBackwardWhenEmpty: () -> Void
+    var placeholder: String = ""
 
-    func makeUIView(context: Context) -> BackspaceAwareTextView {
-        let view = BackspaceAwareTextView()
-        view.delegate = context.coordinator
-        view.backgroundColor = .clear
-        view.font = UIFont.systemFont(ofSize: 16, weight: .regular)
-        view.textContainerInset = .zero
-        view.textContainer.lineFragmentPadding = 0
-        view.textContainer.maximumNumberOfLines = 0
-        view.textContainer.widthTracksTextView = true
-        view.textContainer.lineBreakMode = .byWordWrapping
-        view.isScrollEnabled = false
-        view.autocapitalizationType = .words
-        view.autocorrectionType = .yes
-        view.returnKeyType = .next
-        view.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        view.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        view.setContentCompressionResistancePriority(.required, for: .vertical)
-        view.text = text
-        view.onDeleteBackwardWhenEmpty = onDeleteBackwardWhenEmpty
-        return view
-    }
+    @FocusState private var fieldFocused: Bool
 
-    func updateUIView(_ uiView: BackspaceAwareTextView, context: Context) {
-        context.coordinator.parent = self
-        if uiView.text != text {
-            uiView.text = text
-        }
-        uiView.onDeleteBackwardWhenEmpty = onDeleteBackwardWhenEmpty
-
-        if isFocused {
-            if !uiView.isFirstResponder {
-                uiView.becomeFirstResponder()
+    var body: some View {
+        TextField("What did you eat?", text: $text)
+            .font(.system(size: 16))
+            .textFieldStyle(.plain)
+            .focused($fieldFocused)
+            .onSubmit { onSubmit() }
+            .onChange(of: isFocused) { _, newValue in
+                fieldFocused = newValue
             }
-        } else if uiView.isFirstResponder {
-            uiView.resignFirstResponder()
-        }
-    }
-
-    func sizeThatFits(_ proposal: ProposedViewSize, uiView: BackspaceAwareTextView, context: Context) -> CGSize? {
-        let width = proposal.width ?? uiView.bounds.width
-        guard width > 0 else { return nil }
-        let fitted = uiView.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude))
-        return CGSize(width: width, height: max(26, fitted.height))
-    }
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-
-    final class Coordinator: NSObject, UITextViewDelegate {
-        var parent: MinimalRowTextEditor
-
-        init(parent: MinimalRowTextEditor) {
-            self.parent = parent
-        }
-
-        func textViewDidChange(_ textView: UITextView) {
-            parent.text = textView.text
-        }
-
-        func textViewDidBeginEditing(_ textView: UITextView) {
-            DispatchQueue.main.async {
-                self.parent.onFocusChanged(true)
+            .onChange(of: fieldFocused) { _, newValue in
+                onFocusChanged(newValue)
             }
-        }
-
-        func textViewDidEndEditing(_ textView: UITextView) {
-            DispatchQueue.main.async {
-                self.parent.onFocusChanged(false)
+            .frame(minHeight: 26)
+            .onAppear {
+                if isFocused { fieldFocused = true }
             }
-        }
-
-        func textView(
-            _ textView: UITextView,
-            shouldChangeTextIn range: NSRange,
-            replacementText replacement: String
-        ) -> Bool {
-            if replacement == "\n" {
-                parent.onSubmit()
-                return false
-            }
-            return true
-        }
-    }
-}
-
-private final class BackspaceAwareTextView: UITextView {
-    var onDeleteBackwardWhenEmpty: (() -> Void)?
-
-    override var contentSize: CGSize {
-        didSet {
-            if oldValue != contentSize {
-                invalidateIntrinsicContentSize()
-            }
-        }
-    }
-
-    override var intrinsicContentSize: CGSize {
-        CGSize(width: UIView.noIntrinsicMetric, height: contentSize.height)
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        textContainer.size = CGSize(width: bounds.width, height: .greatestFiniteMagnitude)
-    }
-
-    override func deleteBackward() {
-        if text.isEmpty {
-            onDeleteBackwardWhenEmpty?()
-        }
-        super.deleteBackward()
     }
 }
 

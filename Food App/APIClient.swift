@@ -74,6 +74,71 @@ final class APIClient {
         try await request(path: "/v1/logs/parse", method: "POST", body: requestBody, requiresAuth: true)
     }
 
+    /// Streaming parse — returns items one at a time via onItem callback as they arrive from the server.
+    /// The final ParseLogResponse is returned when the stream completes.
+    func parseLogStreaming(
+        _ requestBody: ParseLogRequest,
+        onItem: @escaping @Sendable (ParsedFoodItem) -> Void
+    ) async throws -> ParseLogResponse {
+        guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
+            throw APIClientError.invalidURL
+        }
+        components.path = "/v1/logs/parse"
+        guard let url = components.url else {
+            throw APIClientError.invalidURL
+        }
+
+        var extraHeaders = ["Accept": "text/event-stream"]
+        let bodyData = try JSONEncoder().encode(requestBody)
+        let request = try await makeRequest(
+            url: url,
+            method: "POST",
+            bodyData: bodyData,
+            requiresAuth: true,
+            extraHeaders: extraHeaders,
+            timeoutInterval: timeoutInterval(for: "/v1/logs/parse")
+        )
+
+        let (bytes, response) = try await session.bytes(for: request)
+
+        guard let httpResponse = response as? HTTPURLResponse,
+              (200...299).contains(httpResponse.statusCode) else {
+            let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw APIClientError.unexpectedStatus(statusCode)
+        }
+
+        var currentEvent = ""
+        var currentData = ""
+
+        for try await line in bytes.lines {
+            if line.hasPrefix("event: ") {
+                currentEvent = String(line.dropFirst(7))
+            } else if line.hasPrefix("data: ") {
+                currentData = String(line.dropFirst(6))
+            } else if line.isEmpty, !currentEvent.isEmpty {
+                switch currentEvent {
+                case "item":
+                    if let data = currentData.data(using: .utf8),
+                       let item = try? JSONDecoder().decode(ParsedFoodItem.self, from: data) {
+                        onItem(item)
+                    }
+                case "done":
+                    if let data = currentData.data(using: .utf8) {
+                        return try JSONDecoder().decode(ParseLogResponse.self, from: data)
+                    }
+                case "error":
+                    throw APIClientError.networkFailure(currentData)
+                default:
+                    break
+                }
+                currentEvent = ""
+                currentData = ""
+            }
+        }
+
+        throw APIClientError.networkFailure("Stream ended without done event")
+    }
+
     func parseImageLog(imageData: Data, mimeType: String, loggedAt: String?) async throws -> ParseLogResponse {
         let boundary = "Boundary-\(UUID().uuidString)"
         var body = Data()

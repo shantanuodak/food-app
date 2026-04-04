@@ -23,6 +23,11 @@
 	<string>Food App reads activity, nutrition, and body weight data to personalize your targets and show progress trends.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Food App writes calories and macro entries so your nutrition logs stay in sync with Apple Health.</string>
+	<key>UIAppFonts</key>
+	<array>
+		<string>Fonts/InstrumentSerif-Regular.ttf</string>
+		<string>Fonts/InstrumentSerif-Italic.ttf</string>
+	</array>
 	<key>SupabaseAnonKey</key>
 	<string>sb_publishable_PmQWhxR1aafmI_QgeXHhIQ_HRAgEJdD</string>
 	<key>SupabaseURL</key>

@@ -288,6 +288,194 @@ async function performGeminiJsonRequest(
   return null;
 }
 
+// ---------------------------------------------------------------------------
+// Streaming variant — uses streamGenerateContent + SSE from Google
+// ---------------------------------------------------------------------------
+
+export type StreamItemCallback = (itemJson: string, index: number) => void;
+
+/**
+ * Streams a Gemini JSON response, emitting each complete JSON object as it
+ * arrives. The full accumulated JSON text is returned at the end, identical
+ * to the non-streaming path.
+ */
+export async function streamGeminiJson(
+  options: GenerateOptions,
+  onItem: StreamItemCallback,
+  signal?: AbortSignal
+): Promise<GeminiSuccess | GeminiFailure | null> {
+  if (!config.geminiApiKey) return null;
+  if (isCircuitOpen(Date.now())) return null;
+
+  const model = options.model;
+  const endpoint = `${config.geminiApiBaseUrl}/models/${encodeURIComponent(model)}:streamGenerateContent?key=${encodeURIComponent(
+    config.geminiApiKey
+  )}&alt=sse`;
+
+  const timeoutMs = Math.max(1_000, config.geminiTimeoutMs);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  // Chain caller's abort signal if provided
+  if (signal) {
+    signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: options.prompt }] }],
+        generationConfig: {
+          temperature: options.temperature ?? 0.1,
+          responseMimeType: 'application/json'
+        }
+      }),
+      signal: controller.signal
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => '');
+      const now = Date.now();
+      if (response.status === 429) {
+        markRateLimitFailure(now);
+      } else {
+        clearRateLimitStreakOnNon429Failure();
+      }
+      console.warn('Gemini streaming request failed', response.status, body);
+      return { failureReason: response.status === 429 ? 'gemini_rate_limited' : 'gemini_http_error' };
+    }
+
+    // Read the SSE stream
+    const reader = response.body?.getReader();
+    if (!reader) {
+      return { failureReason: 'gemini_empty_response' };
+    }
+
+    const decoder = new TextDecoder();
+    let accumulated = '';
+    let emittedCount = 0;
+    let lastUsageMetadata: GeminiResponse['usageMetadata'] | undefined;
+
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Process complete SSE events (separated by double newlines)
+      const events = buffer.split('\n\n');
+      buffer = events.pop() ?? ''; // Keep incomplete last chunk
+
+      for (const event of events) {
+        const dataLine = event
+          .split('\n')
+          .find((line) => line.startsWith('data: '));
+        if (!dataLine) continue;
+
+        const jsonStr = dataLine.slice(6); // Remove 'data: ' prefix
+        try {
+          const chunk = JSON.parse(jsonStr) as GeminiResponse;
+
+          // Extract text from this chunk
+          const text = chunk.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+          accumulated += text;
+
+          // Track usage metadata (last chunk usually has it)
+          if (chunk.usageMetadata) {
+            lastUsageMetadata = chunk.usageMetadata;
+          }
+
+          // Try to extract complete JSON objects from accumulated text
+          const newItems = extractCompleteJsonObjects(accumulated, emittedCount);
+          for (const item of newItems) {
+            onItem(item.json, emittedCount);
+            emittedCount += 1;
+          }
+        } catch {
+          // Partial JSON or non-JSON line — skip
+        }
+      }
+    }
+
+    if (!accumulated) {
+      return { failureReason: 'gemini_empty_response' };
+    }
+
+    const usage = extractUsage(lastUsageMetadata);
+    resetCircuitBreakerAfterSuccess();
+
+    return {
+      jsonText: accumulated,
+      usage: { model, inputTokens: usage.inputTokens, outputTokens: usage.outputTokens }
+    };
+  } catch (err) {
+    clearRateLimitStreakOnNon429Failure();
+    if (signal?.aborted) return null; // Caller cancelled — not an error
+    const failureReason: GeminiFailureReason = isAbortLikeError(err) ? 'gemini_timeout' : 'gemini_network_error';
+    console.warn('Gemini streaming call failed', err);
+    return { failureReason };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
+ * Extract complete JSON objects from an accumulating JSON array string.
+ * Tracks brace depth to find boundaries of `{...}` objects within `[{...},{...}]`.
+ */
+function extractCompleteJsonObjects(
+  text: string,
+  alreadyEmitted: number
+): Array<{ json: string }> {
+  const results: Array<{ json: string }> = [];
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  let objectStart = -1;
+  let objectCount = 0;
+
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (ch === '\\' && inString) {
+      escape = true;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (ch === '{') {
+      if (depth === 0) objectStart = i;
+      depth += 1;
+    } else if (ch === '}') {
+      depth -= 1;
+      if (depth === 0 && objectStart >= 0) {
+        objectCount += 1;
+        if (objectCount > alreadyEmitted) {
+          results.push({ json: text.slice(objectStart, i + 1) });
+        }
+        objectStart = -1;
+      }
+    }
+  }
+
+  return results;
+}
+
 export async function generateGeminiJson(
   options: GenerateOptions
 ): Promise<GeminiSuccess | null> {

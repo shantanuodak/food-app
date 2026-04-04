@@ -3,6 +3,7 @@ import SwiftUI
 struct OnboardingView: View {
     @EnvironmentObject private var appStore: AppStore
     @ObservedObject var flow: AppFlowCoordinator
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var draft = OnboardingDraft()
     @State private var localError: String?
@@ -48,8 +49,22 @@ struct OnboardingView: View {
                     activityRouteView
                 } else if flow.onboardingRoute == .pace {
                     paceRouteView
+                } else if flow.onboardingRoute == .goalValidation {
+                    goalValidationRouteView
+                } else if flow.onboardingRoute == .socialProof {
+                    socialProofRouteView
+                } else if flow.onboardingRoute == .experience {
+                    experienceRouteView
+                } else if flow.onboardingRoute == .howItWorks {
+                    howItWorksRouteView
+                } else if flow.onboardingRoute == .challenge {
+                    challengeRouteView
+                } else if flow.onboardingRoute == .challengeInsight {
+                    challengeInsightRouteView
+                } else if flow.onboardingRoute == .ready {
+                    readyRouteView
                 } else {
-                    OnboardingAnimatedBackground()
+                    OnboardingStaticBackground()
 
                     VStack(alignment: .leading, spacing: 16) {
                         if let progressStep = flow.onboardingRoute.progressStep {
@@ -123,7 +138,7 @@ struct OnboardingView: View {
             persistDraft()
             syncScreenStateHooks()
         }
-        .onChange(of: flow.onboardingRoute) { _, _ in
+        .onChange(of: flow.onboardingRoute) { oldRoute, _ in
             if let pendingRouteError {
                 localError = pendingRouteError
                 self.pendingRouteError = nil
@@ -131,7 +146,7 @@ struct OnboardingView: View {
                 localError = nil
             }
             if flow.onboardingRoute == .baseline {
-                syncBaselineStepForCurrentDraft()
+                syncBaselineStepOnRouteChange(previousRoute: oldRoute)
             }
             persistDraft()
             syncScreenStateHooks()
@@ -143,33 +158,30 @@ struct OnboardingView: View {
     }
 
     private var shouldHideNavigationBar: Bool {
-        flow.onboardingRoute == .welcome ||
-            flow.onboardingRoute == .goal ||
-            flow.onboardingRoute == .age ||
-            flow.onboardingRoute == .baseline ||
-            flow.onboardingRoute == .activity ||
-            flow.onboardingRoute == .pace
+        true
     }
 
     private var goalRouteView: some View {
-        ZStack {
-            OnboardingAnimatedBackground()
+        let canContinue = canContinueCurrentScreen && !isSubmitting && !isAccountLoading
+
+        return ZStack {
+            OnboardingStaticBackground()
 
             VStack(spacing: 0) {
                 goalTopBar
                     .padding(.top, 12)
                     .padding(.horizontal, 16)
 
-                Spacer(minLength: 12)
+                Spacer()
 
                 OB02GoalScreen(selectedGoal: $draft.goal)
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 20)
 
                 if let localError {
                     Text(localError)
                         .font(.footnote)
                         .foregroundStyle(.red)
-                        .padding(.top, 20)
+                        .padding(.top, 16)
                         .padding(.horizontal, 24)
                         .multilineTextAlignment(.center)
                 }
@@ -179,16 +191,20 @@ struct OnboardingView: View {
                 Button {
                     flow.moveNextOnboarding()
                 } label: {
-                    Text("Continue")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 271, height: 55)
-                        .background(Color.black)
-                        .clipShape(Capsule())
+                    HStack(spacing: 8) {
+                        Text("Next")
+                            .font(.system(size: 16, weight: .bold))
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .bold))
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: 220, height: 60)
+                    .background(Color.black.opacity(canContinue ? 1 : 0.2))
+                    .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
-                .disabled(!canContinueCurrentScreen || isSubmitting || isAccountLoading)
-                .opacity((canContinueCurrentScreen && !isSubmitting && !isAccountLoading) ? 1 : 0.5)
+                .disabled(!canContinue)
+                .animation(.easeInOut(duration: 0.25), value: canContinue)
                 .padding(.bottom, 24)
             }
         }
@@ -225,6 +241,111 @@ struct OnboardingView: View {
             selectedPace: $draft.pace,
             onBack: { flow.moveBackOnboarding() },
             onContinue: { flow.moveNextOnboarding() }
+        )
+    }
+
+    private var howItWorksRouteView: some View {
+        OB02eHowItWorksScreen(
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: { flow.moveNextOnboarding() }
+        )
+    }
+
+    private var experienceRouteView: some View {
+        OB02dExperienceScreen(
+            selectedExperience: $draft.experience,
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: { flow.moveNextOnboarding() }
+        )
+    }
+
+    private var challengeRouteView: some View {
+        OB02cChallengeScreen(
+            selectedChallenge: $draft.challenge,
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: { flow.moveNextOnboarding() }
+        )
+    }
+
+    private var challengeInsightRouteView: some View {
+        OB02cChallengeInsightScreen(
+            challenge: draft.challenge ?? .portionControl,
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: { flow.moveNextOnboarding() }
+        )
+    }
+
+    private var readyRouteView: some View {
+        ZStack {
+            OnboardingStaticBackground()
+
+            VStack(spacing: 0) {
+                // Top bar with back button
+                ZStack {
+                    HStack {
+                        Button {
+                            flow.moveBackOnboarding()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(colorScheme == .dark ? .white : .black)
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    Circle()
+                                        .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.white)
+                                        .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSubmitting || isAccountLoading)
+                        Spacer()
+                    }
+                }
+                .frame(height: 44)
+                .padding(.top, 12)
+                .padding(.horizontal, 16)
+
+                OB10ReadyScreen(
+                    targetKcal: metrics.targetKcal,
+                    proteinTarget: metrics.proteinTarget,
+                    carbTarget: metrics.carbTarget,
+                    fatTarget: metrics.fatTarget,
+                    statusMessage: readyScreenStatusMessage,
+                    isError: currentScreenState.loadState == .error
+                )
+
+                // Action buttons
+                VStack(spacing: 10) {
+                    primaryButton("Start logging") {
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        finishOnboarding()
+                    }
+                    .disabled(isSubmitting)
+                    secondaryButton("Explore app") {
+                        finishOnboarding()
+                    }
+                    .disabled(isSubmitting)
+                }
+                .padding(.horizontal, 24)
+                .padding(.bottom, 24)
+            }
+        }
+    }
+
+    private var socialProofRouteView: some View {
+        OB02bSocialProofScreen(
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: { flow.moveNextOnboarding() }
+        )
+    }
+
+    private var goalValidationRouteView: some View {
+        OB05bGoalValidationScreen(
+            draft: draft,
+            metrics: metrics,
+            onBack: { flow.moveBackOnboarding() },
+            onContinue: { flow.moveNextOnboarding() },
+            onAdjustPlan: { flow.moveToOnboarding(.goal) }
         )
     }
 
@@ -314,15 +435,22 @@ struct OnboardingView: View {
             EmptyView()
         case .pace:
             EmptyView()
+        case .goalValidation:
+            EmptyView()
+        case .socialProof:
+            EmptyView()
+        case .challenge:
+            EmptyView()
+        case .challengeInsight:
+            EmptyView()
+        case .experience:
+            EmptyView()
+        case .howItWorks:
+            EmptyView()
         case .preferencesOptional:
             OB06PreferencesOptionalScreen(preferences: $draft.preferences)
         case .planPreview:
-            OB07PlanPreviewScreen(
-                targetKcal: metrics.targetKcal,
-                protein: metrics.proteinTarget,
-                carbs: metrics.carbTarget,
-                fat: metrics.fatTarget
-            )
+            EmptyView()
         case .account:
             OB08AccountScreen(
                 isLoading: isAccountLoading,
@@ -341,6 +469,10 @@ struct OnboardingView: View {
             )
         case .ready:
             OB10ReadyScreen(
+                targetKcal: metrics.targetKcal,
+                proteinTarget: metrics.proteinTarget,
+                carbTarget: metrics.carbTarget,
+                fatTarget: metrics.fatTarget,
                 statusMessage: readyScreenStatusMessage,
                 isError: currentScreenState.loadState == .error
             )
@@ -359,14 +491,17 @@ struct OnboardingView: View {
                     flow.moveToOnboarding(.account)
                 }
             }
-        case .goal, .age, .baseline, .activity, .pace:
-            primaryButton("Continue") {
+        case .goal, .age, .baseline, .activity, .pace, .socialProof, .experience, .howItWorks, .challenge, .challengeInsight:
+            primaryButton("Next") {
                 flow.moveNextOnboarding()
             }
             .disabled(!canContinueCurrentScreen)
+            .opacity(canContinueCurrentScreen ? 1 : 0.4)
+        case .goalValidation:
+            EmptyView()
         case .preferencesOptional:
             VStack(spacing: 10) {
-                primaryButton("Continue") {
+                primaryButton("Next") {
                     flow.moveNextOnboarding()
                 }
                 secondaryButton("Skip for now") {
@@ -375,24 +510,18 @@ struct OnboardingView: View {
                 }
             }
         case .planPreview:
-            VStack(spacing: 10) {
-                primaryButton("Looks good") {
-                    flow.moveNextOnboarding()
-                }
-                secondaryButton("Adjust plan") {
-                    flow.moveToOnboarding(.goal)
-                }
-            }
+            EmptyView()
         case .account:
             EmptyView()
         case .permissions:
-            primaryButton("Continue to app") {
+            primaryButton("Next") {
                 flow.moveNextOnboarding()
             }
             .disabled(isRequestingHealthPermission)
         case .ready:
             VStack(spacing: 10) {
-                primaryButton("Log first meal") {
+                primaryButton("Start logging") {
+                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
                     finishOnboarding()
                 }
                 .disabled(isSubmitting)
@@ -406,25 +535,35 @@ struct OnboardingView: View {
 
     private func primaryButton(_ label: String, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack {
-                Spacer()
-                if isSubmitting {
-                    ProgressView()
-                        .tint(.black)
-                } else {
+            if isSubmitting {
+                ProgressView()
+                    .tint(.white)
+                    .frame(width: 220, height: 60)
+            } else {
+                HStack(spacing: 8) {
                     Text(label)
+                        .font(.system(size: 16, weight: .bold))
+                    if label != "Start logging" && label != "Start" {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 14, weight: .bold))
+                    }
                 }
-                Spacer()
+                .foregroundStyle(.white)
+                .frame(width: 220, height: 60)
             }
         }
-        .buttonStyle(OnboardingGlassPrimaryButtonStyle())
+        .background(Color.black)
+        .clipShape(Capsule())
         .disabled(isSubmitting || isAccountLoading)
     }
 
     private func secondaryButton(_ label: String, action: @escaping () -> Void) -> some View {
-        Button(label, action: action)
-            .buttonStyle(OnboardingGlassSecondaryButtonStyle())
-            .disabled(isSubmitting || isAccountLoading)
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
+        }
+        .disabled(isSubmitting || isAccountLoading)
     }
 
     private var canContinueCurrentScreen: Bool {
@@ -440,6 +579,16 @@ struct OnboardingView: View {
             return draft.activity != nil
         case .pace:
             return draft.pace != nil
+        case .goalValidation:
+            return true
+        case .socialProof:
+            return true
+        case .challenge:
+            return draft.challenge != nil
+        case .experience:
+            return draft.experience != nil
+        case .howItWorks:
+            return true
         default:
             return true
         }
@@ -707,7 +856,7 @@ struct OnboardingView: View {
         appStore.setHealthSyncEnabled(draft.connectHealth)
         draft.connectHealth = appStore.isHealthSyncEnabled
         if restored.route == .preferencesOptional {
-            flow.moveToOnboarding(.planPreview)
+            flow.moveToOnboarding(.goalValidation)
         } else {
             flow.moveToOnboarding(restored.route)
         }
@@ -746,12 +895,21 @@ struct OnboardingView: View {
     }
 
     private func syncBaselineStepForCurrentDraft() {
-        if !draft.baselineTouchedSex {
-            baselineStep = .sex
-        } else if !draft.baselineTouchedHeight {
-            baselineStep = .height
-        } else {
+        // Always start at sex. The sub-step navigation (handleBaselineContinue/Back)
+        // handles forward/backward within the baseline screen.
+        // When coming back from activity, handleBaselineBack isn't called —
+        // the route just changes to .baseline, so we check if we're coming backward.
+    }
+
+    /// Called when the onboarding route changes TO .baseline.
+    /// Determines whether to show the first or last sub-step.
+    private func syncBaselineStepOnRouteChange(previousRoute: OnboardingRoute?) {
+        if previousRoute == .activity {
+            // Coming BACK from activity → show the last sub-step
             baselineStep = .weight
+        } else {
+            // Coming FORWARD from age → start at the first sub-step
+            baselineStep = .sex
         }
     }
 

@@ -7,6 +7,8 @@ struct MainLoggingShellView: View {
     @EnvironmentObject private var appStore: AppStore
     @Environment(\.colorScheme) private var colorScheme
 
+    @StateObject private var speechService = SpeechRecognitionService()
+    @State private var isVoiceOverlayPresented = false
     @State private var inputRows: [HomeLogRow] = [.empty()]
     @State private var parseInFlightCount = 0
     @State private var parseRequestSequence = 0
@@ -41,7 +43,10 @@ struct MainLoggingShellView: View {
     @State private var daySummaryError: String?
     @State private var dayLogs: DayLogsResponse?
     @State private var isLoadingDayLogs = false
-    @State private var dayLogsError: String?
+    /// In-memory cache for adjacent days — keyed by "yyyy-MM-dd" date string.
+    @State private var dayCacheSummary: [String: DaySummaryResponse] = [:]
+    @State private var dayCacheLogs: [String: DayLogsResponse] = [:]
+    @State private var prefetchTask: Task<Void, Never>?
     @FocusState private var isNoteEditorFocused: Bool
     @State private var flowStartedAt: Date?
     @State private var draftLoggedAt: Date?
@@ -61,6 +66,15 @@ struct MainLoggingShellView: View {
     @State private var pendingImageStorageRef: String?
     @State private var latestParseInputKind: String = "text"
     @State private var suppressDebouncedParseOnce = false
+    @State private var isCalendarPresented = false
+    /// Slide direction for day transitions: negative = slide left (going forward), positive = slide right (going back)
+    @State private var dayTransitionOffset: CGFloat = 0
+    /// Locks the swipe direction once determined — prevents fighting with ScrollView vertical scroll
+    @State private var swipeAxis: SwipeAxis = .undecided
+
+    private enum SwipeAxis {
+        case undecided, horizontal, vertical
+    }
     // Per-row parse results accumulated during a multi-row session.
     // Each entry stores the individual row rawText that was sent to the backend so
     // saveLog's rawText always matches the corresponding parse_requests record.
@@ -93,13 +107,48 @@ struct MainLoggingShellView: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    composeEntrySection
-                    todayLogsSection
+            VStack(spacing: 0) {
+                // Input area — fixed, outside ScrollView to avoid iOS 26 flattening bug
+                composeEntrySection
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 8)
+
+                // Scrollable content below
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .modifier(DaySwipeOffsetModifier(offset: dayTransitionOffset))
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
             }
+            .simultaneousGesture(
+                DragGesture(minimumDistance: 15, coordinateSpace: .local)
+                    .onChanged { value in
+                        let dx = abs(value.translation.width)
+                        let dy = abs(value.translation.height)
+
+                        // Lock axis on first meaningful movement
+                        if swipeAxis == .undecided && (dx > 8 || dy > 8) {
+                            swipeAxis = dx > dy ? .horizontal : .vertical
+                        }
+
+                        guard swipeAxis == .horizontal else { return }
+
+                        // Direct assignment — no animation wrapper needed during drag.
+                        // The DaySwipeOffsetModifier + drawingGroup handles smooth rendering.
+                        dayTransitionOffset = value.translation.width * 0.35
+                    }
+                    .onEnded { value in
+                        let axis = swipeAxis
+                        swipeAxis = .undecided
+
+                        guard axis == .horizontal else {
+                            dayTransitionOffset = 0
+                            return
+                        }
+                        handleSwipeTransition(value)
+                    }
+            )
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
@@ -107,6 +156,36 @@ struct MainLoggingShellView: View {
                 topHeaderStrip
                     .padding(.horizontal, 6)
                     .padding(.bottom, 8)
+            }
+            .sheet(isPresented: $isCalendarPresented) {
+                VStack(spacing: 16) {
+                    HStack {
+                        Text("Select Date")
+                            .font(.headline)
+                        Spacer()
+                        Button("Today") {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedSummaryDate = Calendar.current.startOfDay(for: Date())
+                            }
+                            isCalendarPresented = false
+                        }
+                        .fontWeight(.semibold)
+                    }
+                    .padding(.horizontal)
+                    .padding(.top, 16)
+
+                    DatePicker(
+                        "",
+                        selection: $selectedSummaryDate,
+                        in: ...Calendar.current.startOfDay(for: Date()),
+                        displayedComponents: .date
+                    )
+                    .datePickerStyle(.graphical)
+                    .labelsHidden()
+                    .padding(.horizontal)
+                }
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
             }
             .confirmationDialog(
                 "Add from",
@@ -142,6 +221,8 @@ struct MainLoggingShellView: View {
             .onChange(of: inputMode) { _, newMode in
                 if newMode == .camera {
                     isCameraSourceDialogPresented = true
+                } else if newMode == .voice {
+                    handleVoiceModeTapped()
                 }
             }
             .onChange(of: selectedSummaryDate) { _, _ in
@@ -159,6 +240,7 @@ struct MainLoggingShellView: View {
                     refreshDaySummary()
                     refreshDayLogs()
                     Task { await appStore.refreshHealthActivity() }
+                    prefetchAdjacentDays(around: selectedSummaryDate)
                 }
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
@@ -166,13 +248,20 @@ struct MainLoggingShellView: View {
                 refreshDaySummary()
                 refreshDayLogs()
                 Task { await appStore.refreshHealthActivity() }
+                prefetchAdjacentDays(around: selectedSummaryDate)
             }
             .onDisappear {
                 debounceTask?.cancel()
                 parseTask?.cancel()
                 autoSaveTask?.cancel()
+                prefetchTask?.cancel()
                 unresolvedRetryTask?.cancel()
                 clearParseSchedulerState()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openCameraFromTabBar)) { _ in
+                selectedCameraSource = nil
+                inputMode = .camera
+                isCameraSourceDialogPresented = true
             }
             .sheet(isPresented: $isDetailsDrawerPresented) {
                 detailsDrawer
@@ -194,14 +283,59 @@ struct MainLoggingShellView: View {
             .sheet(item: $selectedRowDetails) { details in
                 rowCalorieDetailsSheet(details)
             }
+            .overlay(alignment: .bottom) {
+                if isVoiceOverlayPresented {
+                    VoiceRecordingOverlay(
+                        transcribedText: speechService.transcribedText,
+                        isListening: speechService.isListening,
+                        onCancel: {
+                            speechService.stopListening()
+                            isVoiceOverlayPresented = false
+                            inputMode = .text
+                        }
+                    )
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
+                }
+            }
+            .onChange(of: speechService.isListening) { wasListening, isNowListening in
+                guard wasListening && !isNowListening && isVoiceOverlayPresented else { return }
+                let finalText = speechService.transcribedText
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                isVoiceOverlayPresented = false
+
+                guard !finalText.isEmpty else {
+                    parseInfoMessage = "No speech detected. Try again."
+                    inputMode = .text
+                    return
+                }
+                insertVoiceTranscription(finalText)
+            }
+            .onChange(of: speechService.error) { _, newError in
+                guard let newError else { return }
+                parseError = newError
+                isVoiceOverlayPresented = false
+                inputMode = .text
+            }
         }
     }
 
     private var topHeaderStrip: some View {
-        HStack(alignment: .center, spacing: 12) {
+        HStack(alignment: .center, spacing: 8) {
             HomeGreetingChip(firstName: loggedInFirstName)
 
             Spacer(minLength: 0)
+
+            Button {
+                inputMode = .voice
+            } label: {
+                Image(systemName: "mic.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.96) : Color.primary.opacity(0.80))
+                    .frame(width: 40, height: 32)
+            }
+            .buttonStyle(LiquidGlassCapsuleButtonStyle())
+            .accessibilityLabel(Text("Voice input"))
 
             Button {
                 selectedCameraSource = nil
@@ -211,30 +345,22 @@ struct MainLoggingShellView: View {
                 Image(systemName: "camera.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(colorScheme == .dark ? .white.opacity(0.96) : Color.primary.opacity(0.80))
-                    .frame(width: 44, height: 32)
+                    .frame(width: 40, height: 32)
             }
             .buttonStyle(LiquidGlassCapsuleButtonStyle())
             .accessibilityLabel(Text("Open camera"))
 
             Button {
-                withAnimation(.easeInOut(duration: 0.2)) {
-                    selectedSummaryDate = Calendar.current.startOfDay(for: Date())
-                }
+                isCalendarPresented = true
             } label: {
                 Text(todayPillTitle)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(colorScheme == .dark ? .white.opacity(0.96) : Color.primary.opacity(0.80))
             }
             .buttonStyle(LiquidGlassCapsuleButtonStyle())
-            .accessibilityLabel(Text("Select today"))
+            .accessibilityLabel(Text("Select date"))
         }
-        .contentShape(Rectangle())
-        .gesture(
-            DragGesture(minimumDistance: 20, coordinateSpace: .local)
-                .onEnded { value in
-                    handleTopHeaderSwipe(value)
-                }
-        )
+        .padding(.horizontal, 10)
     }
 
     private var todayPillTitle: String {
@@ -377,32 +503,59 @@ struct MainLoggingShellView: View {
         return nil
     }
 
-    private func handleTopHeaderSwipe(_ value: DragGesture.Value) {
+    private func handleSwipeTransition(_ value: DragGesture.Value) {
         let horizontal = value.translation.width
-        let vertical = value.translation.height
-        guard abs(horizontal) > abs(vertical), abs(horizontal) >= 40 else {
+        // Use both distance and velocity — a fast flick with short distance should also work
+        let velocity = value.predictedEndTranslation.width - value.translation.width
+
+        guard abs(horizontal) >= 30 || abs(velocity) > 200 else {
+            // Too small — snap back
+            withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
+                dayTransitionOffset = 0
+            }
             return
         }
 
-        if horizontal > 0 {
-            shiftSelectedSummaryDate(byDays: -1)
-        } else {
-            shiftSelectedSummaryDate(byDays: 1)
-        }
+        let days = horizontal > 0 ? -1 : 1
+        shiftSelectedSummaryDate(byDays: days)
     }
 
     private func shiftSelectedSummaryDate(byDays days: Int) {
         guard let moved = Calendar.current.date(byAdding: .day, value: days, to: selectedSummaryDate) else {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                dayTransitionOffset = 0
+            }
             return
         }
 
         let normalized = clampedSummaryDate(moved)
         guard !Calendar.current.isDate(normalized, inSameDayAs: selectedSummaryDate) else {
+            // Can't move (e.g. already on today, tried to go forward) — bounce back with a light tap
+            let rigidFeedback = UIImpactFeedbackGenerator(style: .rigid)
+            rigidFeedback.impactOccurred(intensity: 0.5)
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                dayTransitionOffset = 0
+            }
             return
         }
 
-        withAnimation(.easeInOut(duration: 0.2)) {
+        // Haptic tick for successful day change
+        let feedback = UIImpactFeedbackGenerator(style: .medium)
+        feedback.impactOccurred()
+
+        // Slide content out in swipe direction, then slide new content in from opposite side
+        let slideOut: CGFloat = days > 0 ? -120 : 120
+        withAnimation(.easeIn(duration: 0.12)) {
+            dayTransitionOffset = slideOut
+        }
+
+        // After a brief pause, update the date and slide content back from the opposite side
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
             selectedSummaryDate = normalized
+            dayTransitionOffset = -slideOut * 0.6
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
+                dayTransitionOffset = 0
+            }
         }
     }
 
@@ -443,108 +596,6 @@ struct MainLoggingShellView: View {
                 activityCard
             }
         }
-    }
-
-    @ViewBuilder
-    private var todayLogsSection: some View {
-        let entries = dayLogs?.logs ?? []
-        if isLoadingDayLogs && entries.isEmpty {
-            HStack {
-                ProgressView()
-                    .scaleEffect(0.8)
-                Text("Loading today's entries…")
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-            }
-            .padding(.horizontal, 16)
-        } else if let logsError = dayLogsError, entries.isEmpty {
-            HStack(spacing: 6) {
-                Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.red)
-                Text(logsError)
-                    .font(.system(size: 13))
-                    .foregroundStyle(.red)
-                Spacer()
-                Button("Retry") {
-                    refreshDayLogs()
-                }
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.red)
-            }
-            .padding(.horizontal, 16)
-        } else if !entries.isEmpty {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack {
-                    Text("Logged today")
-                        .font(.system(size: 16, weight: .semibold))
-                    Spacer()
-                    Text("\(Int(entries.reduce(0) { $0 + $1.totals.calories })) kcal total")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
-                }
-                .padding(.horizontal, 16)
-                ForEach(entries) { entry in
-                    logEntryCard(entry)
-                        .padding(.horizontal, 16)
-                }
-            }
-            .padding(.top, 4)
-            .padding(.bottom, 8)
-        }
-    }
-
-    private func logEntryCard(_ entry: DayLogEntry) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.rawText)
-                        .font(.system(size: 15, weight: .medium))
-                        .lineLimit(2)
-                    Text(formattedLogTime(entry.loggedAt))
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text("\(Int(entry.totals.calories)) kcal")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.133, green: 0.337, blue: 0.557))
-            }
-            if !entry.items.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    ForEach(entry.items) { item in
-                        HStack {
-                            Text("· \(item.foodName)")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                            Spacer()
-                            Text("\(Int(item.calories)) kcal")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-            }
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .fill(Color(.systemBackground))
-                .shadow(color: Color.black.opacity(0.06), radius: 8, y: 2)
-        )
-    }
-
-    private func formattedLogTime(_ loggedAt: String) -> String {
-        let iso = ISO8601DateFormatter()
-        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let date = iso.date(from: loggedAt)
-            ?? ISO8601DateFormatter().date(from: loggedAt)
-            ?? Date()
-        let formatter = DateFormatter()
-        formatter.dateFormat = "h:mm a"
-        formatter.locale = Locale.current
-        return formatter.string(from: date)
     }
 
     private var activityCard: some View {
@@ -612,7 +663,8 @@ struct MainLoggingShellView: View {
     }
 
     private var noteText: String {
-        inputRows.map(\.text).joined(separator: "\n")
+        // Only consider active (unsaved) rows for parsing — saved rows are read-only history
+        inputRows.filter { !$0.isSaved }.map(\.text).joined(separator: "\n")
     }
 
     private var trimmedNoteText: String {
@@ -620,7 +672,7 @@ struct MainLoggingShellView: View {
     }
 
     private var parseCandidateRows: [String] {
-        let normalized = inputRows.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let normalized = inputRows.filter { !$0.isSaved }.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
         var end = normalized.count
         while end > 0, normalized[end - 1].isEmpty {
             end -= 1
@@ -1036,9 +1088,6 @@ struct MainLoggingShellView: View {
                             )
                     )
 
-                    if shouldShowGeminiSourcesSection(liveDetails) {
-                        rowSourcesSection(liveDetails)
-                    }
 
                 }
                 .padding()
@@ -1827,6 +1876,58 @@ struct MainLoggingShellView: View {
         return fallback
     }
 
+    // MARK: - Voice Input
+
+    private func handleVoiceModeTapped() {
+        Task {
+            guard await speechService.requestAuthorization() else {
+                parseError = "Microphone or speech recognition permission was denied. Enable them in Settings."
+                inputMode = .text
+                return
+            }
+
+            do {
+                try speechService.startListening()
+                isVoiceOverlayPresented = true
+            } catch {
+                parseError = "Could not start voice recognition: \(error.localizedDescription)"
+                inputMode = .text
+            }
+        }
+    }
+
+    @MainActor
+    private func insertVoiceTranscription(_ text: String) {
+        // Find the first empty unsaved row, or append a new one
+        if let emptyIndex = inputRows.firstIndex(where: {
+            !$0.isSaved && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }) {
+            inputRows[emptyIndex].text = text
+        } else {
+            var newRow = HomeLogRow.empty()
+            newRow.text = text
+            inputRows.append(newRow)
+        }
+
+        // Track input source for save contract
+        latestParseInputKind = "voice"
+
+        // Switch back to text mode — rowTextSignature change triggers
+        // scheduleDebouncedParse automatically via the existing onChange observer
+        inputMode = .text
+
+        if flowStartedAt == nil {
+            let now = Date()
+            flowStartedAt = now
+            draftLoggedAt = now
+        }
+        if draftLoggedAt == nil {
+            draftLoggedAt = Date()
+        }
+    }
+
+    // MARK: - Camera Input
+
     private func handleCameraSourceSelection(_ source: CameraInputSource) {
         selectedCameraSource = source
         inputMode = .camera
@@ -2249,7 +2350,9 @@ struct MainLoggingShellView: View {
             completedRowParses = []
             autoSavedParseIDs = []
             clearParseSchedulerState()
-            inputRows = [HomeLogRow.empty()]
+            // Preserve saved (history) rows — only reset the active input row
+            let savedRows = inputRows.filter { $0.isSaved }
+            inputRows = savedRows + [HomeLogRow.empty()]
             clearImageContext()
             clearPendingSaveContext()
             return
@@ -3506,8 +3609,14 @@ struct MainLoggingShellView: View {
             if let parsedDate = Self.summaryRequestFormatter.date(from: savedDay) {
                 selectedSummaryDate = parsedDate
             }
-            await loadDaySummary(forcedDate: savedDay)
-            await loadDayLogs(forcedDate: savedDay)
+            // Clear the active (composing) rows — the reload below will add the newly
+            // saved entry as a history row alongside all previous ones.
+            let savedHistoryRows = inputRows.filter { $0.isSaved }
+            inputRows = savedHistoryRows + [HomeLogRow.empty()]
+            // Invalidate cache for the saved day so we get fresh data
+            invalidateDayCache(for: savedDay)
+            await loadDaySummary(forcedDate: savedDay, skipCache: true)
+            await loadDayLogs(forcedDate: savedDay, skipCache: true)
             NotificationCenter.default.post(
                 name: .nutritionProgressDidChange,
                 object: nil,
@@ -3694,62 +3803,115 @@ struct MainLoggingShellView: View {
     }
 
     private func refreshDayLogs() {
-        Task {
-            await loadDayLogs()
-        }
+        Task { await loadDayLogs() }
     }
 
-    private func loadDayLogs(forcedDate: String? = nil, isRetry: Bool = false) async {
-        isLoadingDayLogs = true
-        // Clear the error but keep any stale data visible while loading
-        dayLogsError = nil
-        defer { isLoadingDayLogs = false }
-
+    private func loadDayLogs(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
         let dateToLoad = forcedDate ?? summaryDateString
-        guard appStore.isNetworkReachable else {
-            dayLogsError = "No network connection."
+
+        if !skipCache, let cached = dayCacheLogs[dateToLoad] {
+            dayLogs = cached
+            syncInputRowsFromDayLogs(cached.logs)
             return
         }
 
+        isLoadingDayLogs = true
+        defer { isLoadingDayLogs = false }
+
+        guard appStore.isNetworkReachable else { return }
+
         do {
             let response = try await appStore.apiClient.getDayLogs(date: dateToLoad)
-            if dayLogs?.date != dateToLoad {
-                dayLogs = nil
-            }
             dayLogs = response
-            dayLogsError = nil
+            dayCacheLogs[dateToLoad] = response
+            syncInputRowsFromDayLogs(response.logs)
         } catch is CancellationError {
             // ignore
         } catch {
             handleAuthFailureIfNeeded(error)
-
-            // For transient network/timeout errors, retry once automatically
-            // (handles Render.com cold-start wakeup being slower than the first attempt)
             if !isRetry && isTransientLoadError(error) {
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s pause
-                await loadDayLogs(forcedDate: forcedDate, isRetry: true)
-                return
-            }
-
-            // Only wipe stale data if it belongs to a different date
-            if dayLogs?.date != dateToLoad {
-                dayLogs = nil
-            }
-            if let apiErr = error as? APIClientError {
-                dayLogsError = apiErr.errorDescription ?? error.localizedDescription
-            } else {
-                dayLogsError = error.localizedDescription
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await loadDayLogs(forcedDate: forcedDate, isRetry: true, skipCache: skipCache)
             }
         }
     }
 
-    private func loadDaySummary(forcedDate: String? = nil, isRetry: Bool = false) async {
+    private func syncInputRowsFromDayLogs(_ entries: [DayLogEntry]) {
+        let savedRows: [HomeLogRow] = entries.map { entry in
+            let items: [ParsedFoodItem] = entry.items.map { item in
+                ParsedFoodItem(
+                    name: item.foodName,
+                    quantity: item.quantity,
+                    unit: item.unit,
+                    grams: item.grams,
+                    calories: item.calories,
+                    protein: item.protein,
+                    carbs: item.carbs,
+                    fat: item.fat,
+                    nutritionSourceId: item.nutritionSourceId,
+                    sourceFamily: item.sourceFamily,
+                    matchConfidence: item.matchConfidence,
+                    unitNormalized: item.unitNormalized
+                )
+            }
+            let stableID = UUID(uuidString: entry.id) ?? UUID(uuid: stableUUID(from: entry.id))
+            return HomeLogRow(
+                id: stableID,
+                text: entry.rawText,
+                calories: Int(entry.totals.calories.rounded()),
+                calorieRangeText: nil,
+                isApproximate: false,
+                parsePhase: .idle,
+                parsedItem: items.first,
+                parsedItems: items,
+                editableItemIndices: [],
+                normalizedTextAtParse: nil,
+                imagePreviewData: nil,
+                imageRef: nil,
+                isSaved: true,
+                savedAt: nil
+            )
+        }
+        let activeRows = inputRows.filter { !$0.isSaved }
+        let newRows = savedRows + activeRows + (activeRows.isEmpty || activeRows.last?.isSaved == true ? [HomeLogRow.empty()] : [])
+        if newRows.map(\.id) != inputRows.map(\.id) || newRows.map(\.text) != inputRows.map(\.text) {
+            inputRows = newRows
+        }
+    }
+
+    private func stableUUID(from string: String) -> uuid_t {
+        var hash: UInt64 = 5381
+        for byte in string.utf8 { hash = ((hash &<< 5) &+ hash) &+ UInt64(byte) }
+        let h1 = hash
+        var hash2: UInt64 = 0x517cc1b727220a95
+        for byte in string.utf8 { hash2 = hash2 &* 0x100000001b3; hash2 ^= UInt64(byte) }
+        let h2 = hash2
+        return (
+            UInt8(truncatingIfNeeded: h1), UInt8(truncatingIfNeeded: h1 >> 8),
+            UInt8(truncatingIfNeeded: h1 >> 16), UInt8(truncatingIfNeeded: h1 >> 24),
+            UInt8(truncatingIfNeeded: h1 >> 32), UInt8(truncatingIfNeeded: h1 >> 40),
+            UInt8(truncatingIfNeeded: h1 >> 48), UInt8(truncatingIfNeeded: h1 >> 56),
+            UInt8(truncatingIfNeeded: h2), UInt8(truncatingIfNeeded: h2 >> 8),
+            UInt8(truncatingIfNeeded: h2 >> 16), UInt8(truncatingIfNeeded: h2 >> 24),
+            UInt8(truncatingIfNeeded: h2 >> 32), UInt8(truncatingIfNeeded: h2 >> 40),
+            UInt8(truncatingIfNeeded: h2 >> 48), UInt8(truncatingIfNeeded: h2 >> 56)
+        )
+    }
+
+    private func loadDaySummary(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
+        let dateToLoad = forcedDate ?? summaryDateString
+
+        // Serve from cache if available — instant, no loading spinner
+        if !skipCache, let cached = dayCacheSummary[dateToLoad] {
+            daySummary = cached
+            daySummaryError = nil
+            return
+        }
+
         isLoadingDaySummary = true
-        // Clear the error but keep any stale data visible while loading
         daySummaryError = nil
         defer { isLoadingDaySummary = false }
 
-        let dateToLoad = forcedDate ?? summaryDateString
         guard appStore.isNetworkReachable else {
             daySummaryError = L10n.noNetworkSummary
             return
@@ -3759,23 +3921,64 @@ struct MainLoggingShellView: View {
             let response = try await appStore.apiClient.getDaySummary(date: dateToLoad)
             daySummary = response
             daySummaryError = nil
+            dayCacheSummary[dateToLoad] = response
         } catch {
             handleAuthFailureIfNeeded(error)
 
-            // For transient network/timeout errors, retry once automatically
-            // (handles Render.com cold-start wakeup being slower than the first attempt)
             if !isRetry && isTransientLoadError(error) {
-                try? await Task.sleep(nanoseconds: 2_000_000_000) // 2s pause
-                await loadDaySummary(forcedDate: forcedDate, isRetry: true)
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await loadDaySummary(forcedDate: forcedDate, isRetry: true, skipCache: skipCache)
                 return
             }
 
             daySummaryError = userFriendlyDaySummaryError(error)
-            // Only wipe stale data if it belongs to a different date
             if daySummary?.date != dateToLoad {
                 daySummary = nil
             }
         }
+    }
+
+    /// Silently prefetch the previous 10 days in the background so swiping is instant.
+    /// Runs with low priority and doesn't show loading indicators or errors.
+    private func prefetchAdjacentDays(around date: Date, count: Int = 10) {
+        prefetchTask?.cancel()
+        prefetchTask = Task(priority: .utility) {
+            let calendar = Calendar.current
+            let formatter = Self.summaryRequestFormatter
+
+            for offset in 1...count {
+                guard !Task.isCancelled else { return }
+
+                let pastDate = calendar.date(byAdding: .day, value: -offset, to: date) ?? date
+                let dateStr = formatter.string(from: pastDate)
+
+                // Skip if already cached
+                guard dayCacheSummary[dateStr] == nil || dayCacheLogs[dateStr] == nil else { continue }
+
+                // Stagger requests slightly to avoid hammering the server
+                if offset > 1 {
+                    try? await Task.sleep(nanoseconds: 150_000_000)
+                }
+
+                guard !Task.isCancelled else { return }
+
+                async let summaryResult = try? appStore.apiClient.getDaySummary(date: dateStr)
+                async let logsResult = try? appStore.apiClient.getDayLogs(date: dateStr)
+
+                if let summary = await summaryResult {
+                    dayCacheSummary[dateStr] = summary
+                }
+                if let logs = await logsResult {
+                    dayCacheLogs[dateStr] = logs
+                }
+            }
+        }
+    }
+
+    /// Invalidate cache for a specific date (e.g. after saving a new log entry).
+    private func invalidateDayCache(for dateString: String) {
+        dayCacheSummary.removeValue(forKey: dateString)
+        dayCacheLogs.removeValue(forKey: dateString)
     }
 
     /// Returns true for errors that are transient and worth retrying automatically.
@@ -4129,6 +4332,25 @@ private struct HomeImagePicker: UIViewControllerRepresentable {
                 parent.onCancel()
             }
         }
+    }
+}
+
+/// Applies the swipe offset/opacity as a single GPU-composited layer.
+/// Without this, every frame of the swipe gesture forces SwiftUI to re-layout
+/// the entire child tree. `drawingGroup()` flattens it to a Metal texture first.
+private struct DaySwipeOffsetModifier: ViewModifier, Animatable {
+    var offset: CGFloat
+
+    var animatableData: CGFloat {
+        get { offset }
+        set { offset = newValue }
+    }
+
+    func body(content: Content) -> some View {
+        content
+            .offset(x: offset)
+            .opacity(1.0 - min(abs(offset) / 200, 0.4))
+            .drawingGroup(opaque: false)
     }
 }
 

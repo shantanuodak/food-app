@@ -22,12 +22,12 @@ enum ImageStorageServiceError: LocalizedError {
 
 final class ImageStorageService {
     private let configuration: AppConfiguration
-    private let authTokenProvider: () -> String?
+    private let authTokenProvider: () async throws -> String?
     private let session: URLSession
 
     init(
         configuration: AppConfiguration,
-        authTokenProvider: @escaping () -> String?,
+        authTokenProvider: @escaping () async throws -> String?,
         session: URLSession = .shared
     ) {
         self.configuration = configuration
@@ -42,7 +42,7 @@ final class ImageStorageService {
             throw ImageStorageServiceError.missingSupabaseConfiguration
         }
 
-        guard let accessToken = authTokenProvider()?.trimmingCharacters(in: .whitespacesAndNewlines), !accessToken.isEmpty else {
+        guard let accessToken = try await authTokenProvider()?.trimmingCharacters(in: .whitespacesAndNewlines), !accessToken.isEmpty else {
             throw ImageStorageServiceError.missingAuthToken
         }
 

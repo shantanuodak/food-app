@@ -44,6 +44,12 @@ struct OnboardingRequest: Encodable {
     let units: UnitsOption
     let activityLevel: ActivityLevelOption
     let timezone: String
+    let age: Int
+    let sex: String
+    let heightCm: Double
+    let weightKg: Double
+    let pace: String
+    let activityDetail: String?
 }
 
 struct OnboardingResponse: Decodable {
@@ -74,6 +80,8 @@ struct ParseLogResponse: Decodable {
     let budget: ParseBudget
     let needsClarification: Bool
     let clarificationQuestions: [String]
+    let reasonCodes: [String]?
+    let retryAfterSeconds: Int?
     let parseDurationMs: Double
     let loggedAt: String
     let confidence: Double
@@ -234,6 +242,7 @@ struct SaveLogBody: Codable {
     let confidence: Double
     let totals: NutritionTotals
     let sourcesUsed: [String]?
+    let assumptions: [String]?
     let items: [SaveParsedFoodItem]
 }
 
@@ -268,11 +277,56 @@ struct SaveLogResponse: Decodable {
     let status: String
 }
 
+struct HealthActivityRequest: Codable {
+    let date: String
+    let steps: Double
+    let activeEnergyKcal: Double
+}
+
+struct HealthActivityResponse: Decodable {
+    let date: String
+    let steps: Double
+    let activeEnergyKcal: Double
+}
+
 struct DaySummaryResponse: Decodable {
     let date: String
     let totals: NutritionTotals
     let targets: NutritionTotals
     let remaining: NutritionTotals
+}
+
+struct DayLogsResponse: Decodable {
+    let date: String
+    let timezone: String
+    let logs: [DayLogEntry]
+}
+
+struct DayLogEntry: Decodable, Identifiable {
+    let id: String
+    let loggedAt: String
+    let rawText: String
+    let inputKind: String
+    let confidence: Double
+    let totals: NutritionTotals
+    let items: [DayLogItem]
+}
+
+struct DayLogItem: Decodable, Identifiable {
+    let id: String
+    let foodName: String
+    let quantity: Double
+    let amount: Double
+    let unit: String
+    let unitNormalized: String?
+    let grams: Double
+    let calories: Double
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+    let nutritionSourceId: String
+    let sourceFamily: String?
+    let matchConfidence: Double
 }
 
 struct ProgressResponse: Decodable {

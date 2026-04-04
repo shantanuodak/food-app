@@ -5,8 +5,8 @@ struct OnboardingAnimatedBackground: View {
         ZStack {
             LinearGradient(
                 colors: [
-                    Color(red: 0.05, green: 0.08, blue: 0.11),
-                    Color(red: 0.02, green: 0.03, blue: 0.05)
+                    OnboardingGlassTheme.backgroundStart,
+                    OnboardingGlassTheme.backgroundEnd
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -21,6 +21,23 @@ struct OnboardingAnimatedBackground: View {
             NoiseOverlay()
                 .ignoresSafeArea()
         }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// Static gradient-only background for non-welcome onboarding screens.
+struct OnboardingStaticBackground: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                OnboardingGlassTheme.backgroundStart,
+                OnboardingGlassTheme.backgroundEnd
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+        .ignoresSafeArea()
         .allowsHitTesting(false)
         .accessibilityHidden(true)
     }
@@ -64,7 +81,7 @@ private struct DotMatrixOverlay: View {
         Canvas(rendersAsynchronously: true) { context, size in
             let spacing: CGFloat = 24
             let radius: CGFloat = 1.2
-            let dotColor = Color.white.opacity(0.10)
+            let dotColor = OnboardingGlassTheme.dotOverlay
 
             for x in stride(from: 0, through: size.width, by: spacing) {
                 for y in stride(from: 0, through: size.height, by: spacing) {
@@ -92,7 +109,7 @@ private struct NoiseOverlay: View {
                 let alpha = 0.008 + (pseudoRandom(i, salt: 91) * 0.018)
 
                 let pixel = CGRect(x: x, y: y, width: 1, height: 1)
-                context.fill(Path(pixel), with: .color(Color.white.opacity(alpha)))
+                context.fill(Path(pixel), with: .color(OnboardingGlassTheme.noiseOverlay.opacity(alpha / 0.03)))
             }
         }
         .opacity(0.03)

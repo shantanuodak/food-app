@@ -66,6 +66,9 @@ final class AuthService {
     private let googleServerClientID: String?
     private let supabaseURL: URL?
     private let supabaseAnonKey: String?
+    #if canImport(Supabase)
+    private let supabaseClient: SupabaseClient?
+    #endif
     @MainActor private var appleSignInDelegate: AppleSignInDelegate?
 
     init(
@@ -82,6 +85,22 @@ final class AuthService {
         self.googleServerClientID = googleServerClientID
         self.supabaseURL = supabaseURL
         self.supabaseAnonKey = supabaseAnonKey
+        #if canImport(Supabase)
+        let trimmedSupabaseAnonKey = supabaseAnonKey?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let supabaseURL, let supabaseAnonKey = trimmedSupabaseAnonKey, !supabaseAnonKey.isEmpty {
+            self.supabaseClient = SupabaseClient(
+                supabaseURL: supabaseURL,
+                supabaseKey: supabaseAnonKey,
+                options: SupabaseClientOptions(
+                    auth: SupabaseClientOptions.AuthOptions(
+                        emitLocalSessionAsInitialSession: true
+                    )
+                )
+            )
+        } else {
+            self.supabaseClient = nil
+        }
+        #endif
     }
 
     var currentSession: AuthSession? {
@@ -92,15 +111,134 @@ final class AuthService {
         sessionStore.session?.accessToken
     }
 
+    func restoreSessionIfPossible() async {
+        guard let storedSession = sessionStore.session else {
+            return
+        }
+
+        guard let refreshToken = nonEmpty(storedSession.refreshToken) else {
+            return
+        }
+
+        do {
+            _ = try await restoreSupabaseSession(
+                accessToken: storedSession.accessToken,
+                refreshToken: refreshToken,
+                metadata: storedSession
+            )
+        } catch {
+            if isInvalidSessionRecoveryError(error) {
+                await clearStoredSession()
+            }
+        }
+    }
+
+    func validAccessToken() async throws -> String? {
+        let hasSupabaseConfiguration =
+            supabaseURL != nil &&
+            nonEmpty(supabaseAnonKey) != nil
+
+        guard let storedSession = sessionStore.session else {
+            if hasSupabaseConfiguration {
+                return nil
+            }
+            return normalizedFallbackToken()
+        }
+
+        let accessToken = storedSession.accessToken.trimmingCharacters(in: .whitespacesAndNewlines)
+        if accessToken.isEmpty {
+            if hasSupabaseConfiguration {
+                return nil
+            }
+            return normalizedFallbackToken()
+        }
+
+        if hasSupabaseConfiguration && accessToken.lowercased().hasPrefix("dev-") {
+            return nil
+        }
+
+        guard hasSupabaseConfiguration else {
+            return accessToken
+        }
+
+        if sessionNeedsRefresh(storedSession) {
+            guard let refreshToken = nonEmpty(storedSession.refreshToken) else {
+                await clearStoredSession()
+                return nil
+            }
+
+            do {
+                let refreshedSession = try await restoreSupabaseSession(
+                    accessToken: accessToken,
+                    refreshToken: refreshToken,
+                    metadata: storedSession
+                )
+                return refreshedSession.accessToken
+            } catch {
+                if isInvalidSessionRecoveryError(error) {
+                    await clearStoredSession()
+                    return nil
+                }
+                throw error
+            }
+        }
+
+        return accessToken
+    }
+
+    func refreshSessionIfNeeded() async throws -> AuthSession? {
+        guard let storedSession = sessionStore.session else {
+            return nil
+        }
+
+        guard sessionNeedsRefresh(storedSession) else {
+            return storedSession
+        }
+
+        guard let refreshToken = nonEmpty(storedSession.refreshToken) else {
+            await clearStoredSession()
+            return nil
+        }
+
+        do {
+            return try await restoreSupabaseSession(
+                accessToken: storedSession.accessToken,
+                refreshToken: refreshToken,
+                metadata: storedSession
+            )
+        } catch {
+            if isInvalidSessionRecoveryError(error) {
+                await clearStoredSession()
+                return nil
+            }
+            throw error
+        }
+    }
+
+    func handleUnauthorizedAndAttemptRecovery() async -> Bool {
+        guard let storedSession = sessionStore.session,
+              let refreshToken = nonEmpty(storedSession.refreshToken) else {
+            await clearStoredSession()
+            return false
+        }
+
+        do {
+            _ = try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
+            return true
+        } catch {
+            if isInvalidSessionRecoveryError(error) {
+                await clearStoredSession()
+            }
+            return false
+        }
+    }
+
     func signIn(with provider: AccountProvider) async throws -> AuthSession {
         switch provider {
         case .apple:
             return try await signInWithApple()
         case .google:
             return try await signInWithGoogle()
-        case .email:
-            // TODO: replace with real email/password or magic-link flow.
-            return try signInWithFallback(provider: .email)
         }
     }
 
@@ -189,20 +327,14 @@ final class AuthService {
         email: String?,
         firstName: String?
     ) async throws -> AuthSession {
-        guard let supabaseURL, let supabaseAnonKey = nonEmpty(supabaseAnonKey) else {
+        guard supabaseURL != nil, nonEmpty(supabaseAnonKey) != nil else {
             throw AuthServiceError.missingSupabaseConfiguration
         }
 
 #if canImport(Supabase)
-        let supabaseClient = SupabaseClient(
-            supabaseURL: supabaseURL,
-            supabaseKey: supabaseAnonKey,
-            options: SupabaseClientOptions(
-                auth: SupabaseClientOptions.AuthOptions(
-                    emitLocalSessionAsInitialSession: true
-                )
-            )
-        )
+        guard let supabaseClient else {
+            throw AuthServiceError.missingSupabaseSDK
+        }
 
         do {
             let session = try await supabaseClient.auth.signInWithIdToken(
@@ -213,12 +345,18 @@ final class AuthService {
                 )
             )
 
-            let authSession = AuthSession(
-                accessToken: session.accessToken,
+            let authSession = makeAuthSession(
+                from: session,
                 provider: .apple,
-                userID: userID,
-                email: email,
-                firstName: firstName
+                existing: AuthSession(
+                    accessToken: session.accessToken,
+                    refreshToken: session.refreshToken,
+                    expiresAt: Date(timeIntervalSince1970: session.expiresAt),
+                    provider: .apple,
+                    userID: userID,
+                    email: email,
+                    firstName: firstName
+                )
             )
             return try persistSession(authSession)
         } catch {
@@ -330,21 +468,15 @@ final class AuthService {
         userID: String?,
         email: String?,
         firstName: String?
-        ) async throws -> AuthSession {
-        guard let supabaseURL, let supabaseAnonKey = nonEmpty(supabaseAnonKey) else {
+    ) async throws -> AuthSession {
+        guard supabaseURL != nil, nonEmpty(supabaseAnonKey) != nil else {
             throw AuthServiceError.missingSupabaseConfiguration
         }
 
 #if canImport(Supabase)
-        let supabaseClient = SupabaseClient(
-            supabaseURL: supabaseURL,
-            supabaseKey: supabaseAnonKey,
-            options: SupabaseClientOptions(
-                auth: SupabaseClientOptions.AuthOptions(
-                    emitLocalSessionAsInitialSession: true
-                )
-            )
-        )
+        guard let supabaseClient else {
+            throw AuthServiceError.missingSupabaseSDK
+        }
 
         do {
             let session: Session
@@ -371,12 +503,18 @@ final class AuthService {
                 }
             }
 
-            let authSession = AuthSession(
-                accessToken: session.accessToken,
+            let authSession = makeAuthSession(
+                from: session,
                 provider: .google,
-                userID: userID,
-                email: email,
-                firstName: firstName
+                existing: AuthSession(
+                    accessToken: session.accessToken,
+                    refreshToken: session.refreshToken,
+                    expiresAt: Date(timeIntervalSince1970: session.expiresAt),
+                    provider: .google,
+                    userID: userID,
+                    email: email,
+                    firstName: firstName
+                )
             )
             return try persistSession(authSession)
         } catch {
@@ -412,6 +550,8 @@ final class AuthService {
 
         let session = AuthSession(
             accessToken: token,
+            refreshToken: nil,
+            expiresAt: nil,
             provider: provider,
             userID: userID ?? derivedUserID,
             email: email,
@@ -434,6 +574,110 @@ final class AuthService {
             return nil
         }
         return trimmed
+    }
+
+    private func normalizedFallbackToken() -> String? {
+        guard let token = fallbackToken?.trimmingCharacters(in: .whitespacesAndNewlines), !token.isEmpty else {
+            return nil
+        }
+        return token
+    }
+
+    private func sessionNeedsRefresh(_ session: AuthSession) -> Bool {
+        if let expiresAt = session.expiresAt {
+            return expiresAt.timeIntervalSinceNow <= 30
+        }
+        return Self.isExpiredJWT(session.accessToken)
+    }
+
+    private func isInvalidSessionRecoveryError(_ error: Error) -> Bool {
+        let message = error.localizedDescription.lowercased()
+        return message.contains("refresh token") ||
+            message.contains("invalid grant") ||
+            message.contains("session missing") ||
+            message.contains("jwt expired") ||
+            message.contains("token has expired") ||
+            message.contains("already used") ||
+            message.contains("revoked")
+    }
+
+    private func clearStoredSession() async {
+        await MainActor.run {
+            sessionStore.clear()
+        }
+    }
+
+    #if canImport(Supabase)
+    private func restoreSupabaseSession(
+        accessToken: String,
+        refreshToken: String,
+        metadata: AuthSession
+    ) async throws -> AuthSession {
+        guard let supabaseClient else {
+            throw AuthServiceError.missingSupabaseSDK
+        }
+
+        let session = try await supabaseClient.auth.setSession(
+            accessToken: accessToken,
+            refreshToken: refreshToken
+        )
+
+        let authSession = makeAuthSession(from: session, provider: metadata.provider, existing: metadata)
+        return try await persistRecoveredSession(authSession)
+    }
+
+    private func refreshSupabaseSession(
+        refreshToken: String,
+        metadata: AuthSession
+    ) async throws -> AuthSession {
+        guard let supabaseClient else {
+            throw AuthServiceError.missingSupabaseSDK
+        }
+
+        let session = try await supabaseClient.auth.refreshSession(refreshToken: refreshToken)
+        let authSession = makeAuthSession(from: session, provider: metadata.provider, existing: metadata)
+        return try await persistRecoveredSession(authSession)
+    }
+
+    private func makeAuthSession(from session: Session, provider: AccountProvider, existing: AuthSession) -> AuthSession {
+        AuthSession(
+            accessToken: session.accessToken,
+            refreshToken: session.refreshToken,
+            expiresAt: Date(timeIntervalSince1970: session.expiresAt),
+            provider: provider,
+            userID: existing.userID ?? session.user.id.uuidString,
+            email: existing.email ?? session.user.email,
+            firstName: existing.firstName
+        )
+    }
+    #endif
+
+    #if !canImport(Supabase)
+    private func restoreSupabaseSession(
+        accessToken _: String,
+        refreshToken _: String,
+        metadata _: AuthSession
+    ) async throws -> AuthSession {
+        throw AuthServiceError.missingSupabaseSDK
+    }
+
+    private func refreshSupabaseSession(
+        refreshToken _: String,
+        metadata _: AuthSession
+    ) async throws -> AuthSession {
+        throw AuthServiceError.missingSupabaseSDK
+    }
+    #endif
+
+    private func persistRecoveredSession(_ session: AuthSession) async throws -> AuthSession {
+        do {
+            try await MainActor.run {
+                try sessionStore.store(session)
+            }
+        } catch {
+            throw AuthServiceError.failedToPersistSession(error.localizedDescription)
+        }
+        return session
     }
 
     @MainActor
@@ -550,6 +794,35 @@ final class AuthService {
         return claims
     }
 
+    private static func isExpiredJWT(_ token: String) -> Bool {
+        guard let claims = decodeJWTClaims(token),
+              let exp = jwtExpiration(from: claims) else {
+            return true
+        }
+
+        return Date().timeIntervalSince1970 >= exp - 30
+    }
+
+    private static func jwtExpiration(from claims: [String: Any]) -> TimeInterval? {
+        guard let rawExp = claims["exp"] else {
+            return nil
+        }
+
+        if let number = rawExp as? NSNumber {
+            return number.doubleValue
+        }
+        if let double = rawExp as? Double {
+            return double
+        }
+        if let int = rawExp as? Int {
+            return TimeInterval(int)
+        }
+        if let string = rawExp as? String {
+            return Double(string)
+        }
+        return nil
+    }
+
     private static func decodeBase64URL(_ input: String) -> Data? {
         let normalized = input
             .replacingOccurrences(of: "-", with: "+")
@@ -597,7 +870,18 @@ private final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDele
     }
 
     func presentationAnchor(for _: ASAuthorizationController) -> ASPresentationAnchor {
-        anchorProvider() ?? ASPresentationAnchor()
+        // Prefer a window from the provider, then fall back to the key window in any connected scene
+        let window = anchorProvider() ?? UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows)
+            .first(where: \.isKeyWindow)
+
+        if let windowScene = window?.windowScene {
+            return ASPresentationAnchor(windowScene: windowScene)
+        } else {
+            // Fallback for cases where we couldn't obtain a window scene
+            return ASPresentationAnchor()
+        }
     }
 
     func authorizationController(controller _: ASAuthorizationController, didCompleteWithAuthorization authorization: ASAuthorization) {

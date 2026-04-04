@@ -616,3 +616,128 @@ export async function runSegmentAwareParsePipeline(
 function shouldAcceptCachedResultPublic(result: ParseResult): boolean {
   return shouldAcceptCachedResult(result);
 }
+
+/**
+ * Streaming variant of the segment-aware pipeline.
+ * Emits each parsed item via onItem() as soon as it's available (cache or Gemini stream).
+ * Falls back to the non-streaming pipeline if streaming is not possible.
+ */
+export async function runSegmentAwareParsePipelineStreaming(
+  text: string,
+  options?: Parameters<typeof runPrimaryParsePipeline>[1] & {
+    signal?: AbortSignal;
+    onItem?: (item: Record<string, unknown>, index: number) => void;
+  }
+): Promise<ParsePipelineOutput> {
+  const onItem = options?.onItem;
+
+  // If no streaming callback, fall back to non-streaming
+  if (!onItem) {
+    return runSegmentAwareParsePipeline(text, options);
+  }
+
+  const segments = splitFoodTextSegments(text);
+
+  if (segments.length <= 1) {
+    // Single segment — run normal pipeline, emit items from result
+    const result = await runPrimaryParsePipeline(text, options);
+    let itemIndex = 0;
+    for (const item of result.result.items) {
+      if (options?.signal?.aborted) break;
+      onItem(item as unknown as Record<string, unknown>, itemIndex++);
+    }
+    return result;
+  }
+
+  const cacheScope = options?.cacheScope ?? 'global';
+
+  // Check cache per segment in parallel
+  const cacheChecks = await Promise.all(
+    segments.map(async (seg) => {
+      const cached = await getParseCache(seg, cacheScope);
+      if (cached && shouldAcceptCachedResultPublic(cached.result)) {
+        return { seg, result: cached.result, fromCache: true };
+      }
+      return { seg, result: null as ParseResult | null, fromCache: false };
+    })
+  );
+
+  // Emit cached items immediately
+  let itemIndex = 0;
+  for (const check of cacheChecks) {
+    if (check.fromCache && check.result) {
+      for (const item of check.result.items) {
+        if (options?.signal?.aborted) break;
+        onItem(item as unknown as Record<string, unknown>, itemIndex++);
+      }
+    }
+  }
+
+  const allCached = cacheChecks.every((c) => c.fromCache);
+  if (allCached) {
+    const combined = combineParseResults(cacheChecks.map((c) => c.result as ParseResult));
+    const clarification = computeClarificationState(text, combined);
+    return {
+      result: combined,
+      route: 'cache',
+      cacheHit: true,
+      sourcesUsed: collectSourcesUsed(combined.items, 'cache', true),
+      reasonCodes: [],
+      fallbackUsed: false,
+      fallbackModel: null,
+      fallbackUsage: null,
+      needsClarification: clarification.needsClarification,
+      clarificationQuestions: clarification.clarificationQuestions
+    };
+  }
+
+  // Parse uncached segments
+  const uncachedSegments = cacheChecks.filter((c) => !c.fromCache).map((c) => c.seg);
+  const uncachedText = uncachedSegments.join('\n');
+
+  const uncachedOutput = await runPrimaryParsePipeline(uncachedText, options);
+
+  // Emit freshly parsed items
+  for (const item of uncachedOutput.result.items) {
+    if (options?.signal?.aborted) break;
+    onItem(item as unknown as Record<string, unknown>, itemIndex++);
+  }
+
+  // Cache new segments
+  if (uncachedOutput.result.items.length > 0 && !uncachedOutput.cacheHit) {
+    for (const seg of uncachedSegments) {
+      const segItem = uncachedOutput.result.items.find(
+        (item) => item.name.toLowerCase().includes(seg.toLowerCase().replace(/^\d+\s*/, ''))
+      );
+      if (segItem) {
+        const segResult: ParseResult = {
+          confidence: segItem.matchConfidence,
+          assumptions: [],
+          items: [segItem],
+          totals: {
+            calories: segItem.calories,
+            protein: segItem.protein,
+            carbs: segItem.carbs,
+            fat: segItem.fat
+          }
+        };
+        setParseCache(seg, segResult, cacheScope).catch(() => {});
+      }
+    }
+  }
+
+  // Merge everything
+  const cachedResults = cacheChecks.filter((c) => c.fromCache).map((c) => c.result as ParseResult);
+  const merged = combineParseResults([...cachedResults, uncachedOutput.result]);
+  const clarification = computeClarificationState(text, merged);
+
+  return {
+    ...uncachedOutput,
+    result: merged,
+    route: cachedResults.length > 0 ? 'gemini' : uncachedOutput.route,
+    cacheHit: false,
+    sourcesUsed: collectSourcesUsed(merged.items, uncachedOutput.route, false),
+    needsClarification: clarification.needsClarification,
+    clarificationQuestions: clarification.clarificationQuestions
+  };
+}

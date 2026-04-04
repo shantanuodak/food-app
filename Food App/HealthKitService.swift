@@ -173,6 +173,64 @@ final class HealthKitService: ObservableObject {
 #endif
     }
 
+    func fetchTodayStepCount() async throws -> Double {
+#if canImport(HealthKit)
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw HealthKitServiceError.unavailable
+        }
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+            return 0
+        }
+
+        let now = Date()
+        let startOfDay = Calendar.current.startOfDay(for: now)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
+            let query = HKStatisticsQuery(quantityType: stepType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, statistics, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitServiceError.readFailed(error.localizedDescription))
+                    return
+                }
+                let sum = statistics?.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                continuation.resume(returning: sum)
+            }
+            self.store.execute(query)
+        }
+#else
+        throw HealthKitServiceError.unavailable
+#endif
+    }
+
+    func fetchTodayActiveEnergy() async throws -> Double {
+#if canImport(HealthKit)
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw HealthKitServiceError.unavailable
+        }
+        guard let energyType = HKObjectType.quantityType(forIdentifier: .activeEnergyBurned) else {
+            return 0
+        }
+
+        let now = Date()
+        let startOfDay = Calendar.current.startOfDay(for: now)
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let predicate = HKQuery.predicateForSamples(withStart: startOfDay, end: now, options: .strictStartDate)
+            let query = HKStatisticsQuery(quantityType: energyType, quantitySamplePredicate: predicate, options: .cumulativeSum) { _, statistics, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitServiceError.readFailed(error.localizedDescription))
+                    return
+                }
+                let sum = statistics?.sumQuantity()?.doubleValue(for: .kilocalorie()) ?? 0
+                continuation.resume(returning: sum)
+            }
+            self.store.execute(query)
+        }
+#else
+        throw HealthKitServiceError.unavailable
+#endif
+    }
+
     static func displayWeightValue(kilograms: Double, units: UnitsOption) -> Double {
         switch units {
         case .metric:

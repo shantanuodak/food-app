@@ -6,7 +6,7 @@ import { assertLoggedAtNotInFutureForUser } from '../services/dateIntegrityServi
 import { createParseRequest, getParseRequestForUser, isParseRequestStale } from '../services/parseRequestService.js';
 import { ApiError } from '../utils/errors.js';
 import { config } from '../config.js';
-import { executePrimaryParse } from '../services/parseOrchestrator.js';
+import { executePrimaryParse, executePrimaryParseStreaming } from '../services/parseOrchestrator.js';
 import { getGeminiCircuitRetryAfterSeconds } from '../services/geminiFlashClient.js';
 import { collectSourcesUsed } from '../services/parseContractService.js';
 import { parseImageWithGemini } from '../services/imageParseService.js';
@@ -174,6 +174,91 @@ router.post('/image', async (req, res, next) => {
 });
 
 router.post('/', async (req, res, next) => {
+  // SSE streaming path — when client sends Accept: text/event-stream
+  if (req.headers.accept?.includes('text/event-stream')) {
+    const startedAt = process.hrtime.bigint();
+    try {
+      const body = parseSchema.parse(req.body);
+      const loggedAt = new Date(body.loggedAt);
+      if (Number.isNaN(loggedAt.valueOf())) {
+        throw new ApiError(400, 'INVALID_INPUT', 'Invalid loggedAt timestamp');
+      }
+
+      const auth = res.locals.auth as { userId: string; authProvider?: string; email?: string | null };
+      await assertLoggedAtNotInFutureForUser(auth.userId, loggedAt);
+      const rawAcceptLanguage = req.header('accept-language');
+      const locale = rawAcceptLanguage ? rawAcceptLanguage.split(',')[0]?.trim() || null : null;
+      const parseRequestId = res.locals.requestId as string;
+
+      // Set up SSE headers
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
+      res.flushHeaders();
+
+      // Keep-alive ping every 15s to prevent proxy/client timeouts
+      const keepAlive = setInterval(() => {
+        if (!res.writableEnded) res.write(':ping\n\n');
+      }, 15_000);
+
+      // Detect client disconnect
+      const abortController = new AbortController();
+      req.on('close', () => abortController.abort());
+
+      const orchestrated = await executePrimaryParseStreaming({
+        text: body.text,
+        requestId: parseRequestId,
+        auth,
+        locale,
+        signal: abortController.signal,
+        onItem: (item, index) => {
+          if (!res.writableEnded && !abortController.signal.aborted) {
+            res.write(`event: item\ndata: ${JSON.stringify({ index, ...item })}\n\n`);
+          }
+        }
+      });
+
+      clearInterval(keepAlive);
+
+      if (abortController.signal.aborted || res.writableEnded) return;
+
+      const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      const roundedDurationMs = Math.round(parseDurationMs * 10) / 10;
+      const { result, route, cacheHit, fallbackUsed, fallbackModel, needsClarification, clarificationQuestions, budget, sourcesUsed, reasonCodes } = orchestrated;
+
+      res.write(`event: done\ndata: ${JSON.stringify({
+        requestId: parseRequestId,
+        parseRequestId,
+        parseVersion: config.parseVersion,
+        route,
+        cacheHit,
+        sourcesUsed,
+        fallbackUsed,
+        fallbackModel,
+        budget,
+        needsClarification,
+        clarificationQuestions,
+        reasonCodes,
+        parseDurationMs: roundedDurationMs,
+        loggedAt: loggedAt.toISOString(),
+        confidence: result.confidence,
+        totals: result.totals,
+        items: result.items,
+        assumptions: []
+      })}\n\n`);
+      res.end();
+    } catch (err) {
+      if (!res.writableEnded) {
+        const message = err instanceof Error ? err.message : 'Parse failed';
+        res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);
+        res.end();
+      }
+    }
+    return;
+  }
+
+  // Non-streaming path (unchanged)
   const startedAt = process.hrtime.bigint();
   try {
     const body = parseSchema.parse(req.body);
