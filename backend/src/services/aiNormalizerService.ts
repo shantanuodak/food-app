@@ -39,7 +39,7 @@ const parseItemSchema = z.object({
   nutritionSourceId: z.string(),
   needsClarification: z.boolean().optional(),
   manualOverride: z.boolean().optional(),
-  sourceFamily: z.enum(['cache', 'deterministic', 'fatsecret', 'gemini', 'manual']).optional(),
+  sourceFamily: z.enum(['cache', 'deterministic', 'gemini', 'manual']).optional(),
   originalNutritionSourceId: z.string().optional(),
   foodDescription: z.string().optional(),
   explanation: z.string().optional()

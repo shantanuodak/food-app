@@ -830,48 +830,50 @@ struct SmoothScrollPicker: View {
     var pickerWidth: CGFloat = 220
 
     @State private var dragStartValue: Int?
+    @State private var lastReportedStep: Int = 0
+    @State private var dragOffset: CGFloat = 0
 
     private let rowHeight: CGFloat = 68
+    private let stepSize: CGFloat = 50
 
     var body: some View {
         ZStack {
             // -2
             if value - 2 >= range.lowerBound {
                 Text("\(value - 2)")
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.black.opacity(0.15))
-                    .offset(y: -rowHeight * 2)
+                    .offset(y: -rowHeight * 2 + dragOffset)
             }
 
             // -1
             if value - 1 >= range.lowerBound {
                 Text("\(value - 1)")
-                    .font(.system(size: 40, weight: .bold))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.black.opacity(0.25))
-                    .offset(y: -rowHeight)
+                    .offset(y: -rowHeight + dragOffset)
             }
 
             // Selected (center)
             Text("\(value)")
-                .font(.system(size: 86, weight: .bold))
+                .font(.system(size: 86, weight: .bold, design: .rounded))
                 .foregroundStyle(.black)
-                .contentTransition(.numericText())
-                .animation(.spring(response: 0.35, dampingFraction: 0.8), value: value)
+                .offset(y: dragOffset)
 
             // +1
             if value + 1 <= range.upperBound {
                 Text("\(value + 1)")
-                    .font(.system(size: 40, weight: .bold))
+                    .font(.system(size: 40, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.black.opacity(0.25))
-                    .offset(y: rowHeight)
+                    .offset(y: rowHeight + dragOffset)
             }
 
             // +2
             if value + 2 <= range.upperBound {
                 Text("\(value + 2)")
-                    .font(.system(size: 30, weight: .bold))
+                    .font(.system(size: 30, weight: .bold, design: .rounded))
                     .foregroundStyle(Color.black.opacity(0.15))
-                    .offset(y: rowHeight * 2)
+                    .offset(y: rowHeight * 2 + dragOffset)
             }
         }
         .frame(width: pickerWidth, height: rowHeight * 5)
@@ -882,19 +884,32 @@ struct SmoothScrollPicker: View {
                 .onChanged { gesture in
                     if dragStartValue == nil {
                         dragStartValue = value
+                        lastReportedStep = 0
                     }
-                    let steps = Int(-gesture.translation.height / 35)
-                    let target = (dragStartValue ?? value) + steps
-                    let clamped = min(max(target, range.lowerBound), range.upperBound)
-                    if clamped != value {
-                        onSet(clamped)
-                        #if canImport(UIKit)
-                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                        #endif
+
+                    let rawSteps = -gesture.translation.height / stepSize
+                    let snappedStep = Int(rawSteps.rounded())
+                    let fractional = -gesture.translation.height - CGFloat(snappedStep) * stepSize
+
+                    // Smooth inter-step offset (clamped so it doesn't overshoot)
+                    dragOffset = min(max(fractional * 0.4, -rowHeight * 0.4), rowHeight * 0.4)
+
+                    if snappedStep != lastReportedStep {
+                        let target = (dragStartValue ?? value) + snappedStep
+                        let clamped = min(max(target, range.lowerBound), range.upperBound)
+                        if clamped != value {
+                            onSet(clamped)
+                            UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        }
+                        lastReportedStep = snappedStep
                     }
                 }
                 .onEnded { _ in
                     dragStartValue = nil
+                    lastReportedStep = 0
+                    withAnimation(.spring(response: 0.25, dampingFraction: 0.8)) {
+                        dragOffset = 0
+                    }
                 }
         )
     }

@@ -63,6 +63,10 @@ struct OnboardingView: View {
                     challengeInsightRouteView
                 } else if flow.onboardingRoute == .ready {
                     readyRouteView
+                } else if flow.onboardingRoute == .account {
+                    accountRouteView
+                } else if flow.onboardingRoute == .permissions {
+                    permissionsRouteView
                 } else {
                     OnboardingStaticBackground()
 
@@ -273,6 +277,117 @@ struct OnboardingView: View {
             onBack: { flow.moveBackOnboarding() },
             onContinue: { flow.moveNextOnboarding() }
         )
+    }
+
+    private var permissionsRouteView: some View {
+        ZStack {
+            OnboardingStaticBackground()
+
+            VStack(spacing: 0) {
+                // Headline
+                Text("Optional permissions")
+                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 32)
+
+                Text("Health and reminders can be enabled now or later in Settings.")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
+                    .padding(.horizontal, 24)
+
+                Spacer()
+
+                OB09PermissionsScreen(
+                    connectHealth: $draft.connectHealth,
+                    enableNotifications: $draft.enableNotifications,
+                    isRequestingHealthPermission: isRequestingHealthPermission,
+                    healthPermissionMessage: healthPermissionMessage,
+                    onConnectHealth: requestHealthAccess,
+                    onDisconnectHealth: disconnectHealthAccess
+                )
+                .padding(.horizontal, 20)
+
+                Spacer()
+
+                // Center-aligned Next button
+                primaryButton("Next") {
+                    flow.moveNextOnboarding()
+                }
+                .disabled(isRequestingHealthPermission)
+                .padding(.bottom, 24)
+            }
+        }
+    }
+
+    private var accountRouteView: some View {
+        ZStack {
+            OnboardingStaticBackground()
+
+            VStack(spacing: 0) {
+                // Top bar with back button
+                ZStack {
+                    HStack {
+                        Button {
+                            flow.moveBackOnboarding()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(colorScheme == .dark ? .white : .black)
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    Circle()
+                                        .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.white)
+                                        .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSubmitting || isAccountLoading)
+                        Spacer()
+                    }
+                }
+                .frame(height: 44)
+                .padding(.top, 12)
+                .padding(.horizontal, 16)
+
+                // Headline
+                Text("Save your setup")
+                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 20)
+
+                Text("Create or connect an account to keep your progress synced.")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 8)
+                    .padding(.horizontal, 24)
+
+                Spacer()
+
+                OB08AccountScreen(
+                    isLoading: isAccountLoading,
+                    prefersGooglePrimary: isSupabaseAuthMode,
+                    enableApple: true,
+                    onSelectProvider: continueAccount(provider:)
+                )
+                .padding(.horizontal, 20)
+
+                if let localError {
+                    Text(localError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .padding(.horizontal, 24)
+                        .padding(.top, 8)
+                        .multilineTextAlignment(.center)
+                }
+
+                Spacer()
+            }
+        }
     }
 
     private var readyRouteView: some View {

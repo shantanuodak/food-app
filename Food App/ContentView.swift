@@ -81,7 +81,6 @@ private struct HomeProfileScreen: View {
     @State private var isRestartOnboardingAlertPresented = false
     @State private var isAdmin = false
     @State private var adminGeminiEnabled = false
-    @State private var adminFatsecretEnabled = false
     @State private var isAdminFlagsLoading = false
 
     // Auto-save
@@ -505,20 +504,6 @@ private struct HomeProfileScreen: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
                 .onChange(of: adminGeminiEnabled) { _, _ in triggerAdminAutoSave() }
-
-                Divider().padding(.leading, 16)
-
-                Toggle(isOn: $adminFatsecretEnabled) {
-                    HStack(spacing: 8) {
-                        Image(systemName: "bolt.heart.fill")
-                            .foregroundStyle(.red)
-                        Text("Food Database")
-                            .font(.subheadline)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 12)
-                .onChange(of: adminFatsecretEnabled) { _, _ in triggerAdminAutoSave() }
             }
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
@@ -701,13 +686,11 @@ private struct HomeProfileScreen: View {
         Task {
             do {
                 let request = AdminFeatureFlagsUpdateRequest(
-                    geminiEnabled: adminGeminiEnabled,
-                    fatsecretEnabled: adminFatsecretEnabled
+                    geminiEnabled: adminGeminiEnabled
                 )
                 let response = try await appStore.apiClient.updateAdminFeatureFlags(request)
                 if let flags = response.flags {
                     adminGeminiEnabled = flags.geminiEnabled
-                    adminFatsecretEnabled = flags.fatsecretEnabled
                 }
             } catch {
                 _ = appStore.handleAuthFailureIfNeeded(error)
@@ -724,7 +707,6 @@ private struct HomeProfileScreen: View {
             isAdmin = response.isAdmin
             if let flags = response.flags, response.isAdmin {
                 adminGeminiEnabled = flags.geminiEnabled
-                adminFatsecretEnabled = flags.fatsecretEnabled
             }
         } catch {
             _ = appStore.handleAuthFailureIfNeeded(error)

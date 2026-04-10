@@ -116,7 +116,6 @@ enum L10n {
     static let deterministicEstimateLabel = tr("main.route.deterministic", "Deterministic estimate")
     static let aliasEstimateLabel = tr("main.route.alias", "Alias estimate")
     static let aiEstimateLabel = tr("main.route.ai", "AI estimate")
-    static let fatSecretEstimateLabel = tr("main.route.fatsecret", "Food Database estimate")
     static let unresolvedEstimateLabel = tr("main.route.unresolved", "Awaiting estimate")
     static let escalatedEstimateLabel = tr("main.route.escalated", "Escalated estimate")
     static let lowConfidenceLabel = tr("main.route.low_confidence", "Low confidence")
@@ -214,8 +213,6 @@ enum L10n {
             return deterministicEstimateLabel
         case "alias":
             return aliasEstimateLabel
-        case "fatsecret":
-            return fatSecretEstimateLabel
         case "gemini":
             return aiEstimateLabel
         case "unresolved":

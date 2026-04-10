@@ -49,6 +49,99 @@ function validateDate(date: string): void {
   }
 }
 
+export async function getDaySummaryRange(
+  userId: string,
+  from: string,
+  to: string,
+  timezoneOverride?: string
+): Promise<DaySummary[]> {
+  validateDate(from);
+  validateDate(to);
+
+  const targetResult = await pool.query<{
+    calorie_target: string;
+    macro_target_protein: string;
+    macro_target_carbs: string;
+    macro_target_fat: string;
+    timezone: string | null;
+  }>(
+    `SELECT calorie_target, macro_target_protein, macro_target_carbs, macro_target_fat, timezone
+     FROM onboarding_profiles WHERE user_id = $1`,
+    [userId]
+  );
+
+  if (!targetResult.rows[0]) {
+    throw new ApiError(404, 'PROFILE_NOT_FOUND', 'Onboarding profile not found');
+  }
+
+  const profileTimezone = normalizeTimezone(targetResult.rows[0].timezone);
+  const effectiveTimezone = normalizeTimezone(timezoneOverride || profileTimezone);
+  if (!isValidTimezone(effectiveTimezone)) {
+    throw new ApiError(400, 'INVALID_INPUT', 'Invalid timezone');
+  }
+
+  const targets: DayTotals = {
+    calories: round(toNumber(targetResult.rows[0].calorie_target)),
+    protein: round(toNumber(targetResult.rows[0].macro_target_protein)),
+    carbs: round(toNumber(targetResult.rows[0].macro_target_carbs)),
+    fat: round(toNumber(targetResult.rows[0].macro_target_fat))
+  };
+
+  const totalsResult = await pool.query<{
+    day_date: string;
+    total_calories: string;
+    total_protein: string;
+    total_carbs: string;
+    total_fat: string;
+  }>(
+    `SELECT
+       (logged_at AT TIME ZONE $2)::date::text AS day_date,
+       COALESCE(SUM(total_calories), 0) AS total_calories,
+       COALESCE(SUM(total_protein_g), 0) AS total_protein,
+       COALESCE(SUM(total_carbs_g), 0) AS total_carbs,
+       COALESCE(SUM(total_fat_g), 0) AS total_fat
+     FROM food_logs
+     WHERE user_id = $1
+       AND (logged_at AT TIME ZONE $2)::date >= $3::date
+       AND (logged_at AT TIME ZONE $2)::date <= $4::date
+     GROUP BY day_date
+     ORDER BY day_date`,
+    [userId, effectiveTimezone, from, to]
+  );
+
+  const totalsMap = new Map<string, { calories: number; protein: number; carbs: number; fat: number }>();
+  for (const row of totalsResult.rows) {
+    totalsMap.set(row.day_date, {
+      calories: round(toNumber(row.total_calories)),
+      protein: round(toNumber(row.total_protein)),
+      carbs: round(toNumber(row.total_carbs)),
+      fat: round(toNumber(row.total_fat))
+    });
+  }
+
+  const results: DaySummary[] = [];
+  const startDate = new Date(`${from}T00:00:00.000Z`);
+  const endDate = new Date(`${to}T00:00:00.000Z`);
+  for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+    const dateStr = d.toISOString().slice(0, 10);
+    const totals = totalsMap.get(dateStr) ?? { calories: 0, protein: 0, carbs: 0, fat: 0 };
+    results.push({
+      date: dateStr,
+      timezone: effectiveTimezone,
+      totals,
+      targets,
+      remaining: {
+        calories: round(targets.calories - totals.calories),
+        protein: round(targets.protein - totals.protein),
+        carbs: round(targets.carbs - totals.carbs),
+        fat: round(targets.fat - totals.fat)
+      }
+    });
+  }
+
+  return results;
+}
+
 export async function getDaySummary(userId: string, date: string, timezoneOverride?: string): Promise<DaySummary> {
   validateDate(date);
 

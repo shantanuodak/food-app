@@ -2,9 +2,9 @@ import type { ParseResult, ParsedItem } from './deterministicParser.js';
 import { sumNutrition } from './nutritionService.js';
 import type { ParsePipelineRoute } from './parsePipelineService.js';
 
-export type SourceFamily = 'cache' | 'deterministic' | 'fatsecret' | 'gemini' | 'manual';
+export type SourceFamily = 'cache' | 'deterministic' | 'gemini' | 'manual';
 
-const SOURCE_ORDER: SourceFamily[] = ['cache', 'deterministic', 'fatsecret', 'gemini', 'manual'];
+const SOURCE_ORDER: SourceFamily[] = ['cache', 'deterministic', 'gemini', 'manual'];
 
 const UNIT_ALIASES: Record<string, string> = {
   count: 'count',
@@ -63,9 +63,6 @@ function inferSourceFamily(item: ParsedItem, route: ParsePipelineRoute): SourceF
   }
 
   const sourceId = (item.nutritionSourceId || '').toLowerCase();
-  if (sourceId.includes('fatsecret')) {
-    return 'fatsecret';
-  }
   if (sourceId.includes('gemini')) {
     return 'gemini';
   }
@@ -80,7 +77,6 @@ function inferSourceFamily(item: ParsedItem, route: ParsePipelineRoute): SourceF
   }
 
   if (route === 'deterministic') return 'deterministic';
-  if (route === 'fatsecret') return 'fatsecret';
   if (route === 'gemini') return 'gemini';
   return 'cache';
 }

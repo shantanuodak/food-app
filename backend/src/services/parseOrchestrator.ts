@@ -51,8 +51,8 @@ function normalizeAuthProvider(value: string | undefined): 'dev' | 'supabase' | 
   return undefined;
 }
 
-function routeForPersistence(route: ParseDecisionResult['route']): 'cache' | 'fatsecret' | 'gemini' {
-  if (route === 'cache' || route === 'fatsecret' || route === 'gemini') {
+function routeForPersistence(route: ParseDecisionResult['route']): 'cache' | 'gemini' {
+  if (route === 'cache' || route === 'gemini') {
     return route;
   }
   return 'gemini';

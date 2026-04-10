@@ -755,8 +755,6 @@ struct MainLoggingShellView: View {
 
     private func sourceDisplayName(_ source: String) -> String {
         switch source.lowercased() {
-        case "fatsecret":
-            return "Food Database"
         case "gemini":
             return "Gemini"
         case "cache":
@@ -1328,9 +1326,6 @@ struct MainLoggingShellView: View {
         if normalized.contains("gemini") {
             return "Gemini nutrition estimate"
         }
-        if normalized.contains("fatsecret") {
-            return "Food Database nutrition match"
-        }
         if normalized.contains("cache") {
             return "Cached nutrition result"
         }
@@ -1824,9 +1819,6 @@ struct MainLoggingShellView: View {
         guard !trimmed.isEmpty else { return nil }
 
         let normalized = trimmed.lowercased()
-        if normalized.contains("fatsecret") {
-            return "Food Database"
-        }
         if normalized.contains("gemini") {
             return "Gemini"
         }
@@ -2533,15 +2525,13 @@ struct MainLoggingShellView: View {
             pendingFollowupRequested = !remainingDirtyRowIDs.isEmpty
             latestQueuedNoteText = remainingDirtyRowIDs.isEmpty ? nil : trimmedNoteText
 
+            // Always show accumulated results so the UI never goes blank while the queue drains.
+            parseResult = response
+            editableItems = completedRowParses.flatMap { $0.response.items }.map(EditableParsedItem.init(apiItem:))
+
             if remainingDirtyRowIDs.isEmpty {
-                parseResult = response
-                // Show items from ALL completed rows in the drawer, not just the last one.
-                editableItems = completedRowParses.flatMap { $0.response.items }.map(EditableParsedItem.init(apiItem:))
                 scheduleDetailsDrawer(for: response)
                 scheduleAutoSave()
-            } else {
-                parseResult = nil
-                editableItems = []
             }
         } catch {
             let durationMs = elapsedMs(since: startedAt)
@@ -3940,36 +3930,53 @@ struct MainLoggingShellView: View {
 
     /// Silently prefetch the previous 10 days in the background so swiping is instant.
     /// Runs with low priority and doesn't show loading indicators or errors.
-    private func prefetchAdjacentDays(around date: Date, count: Int = 10) {
+    private func prefetchAdjacentDays(around date: Date, count: Int = 15) {
         prefetchTask?.cancel()
         prefetchTask = Task(priority: .utility) {
             let calendar = Calendar.current
             let formatter = Self.summaryRequestFormatter
 
+            // Check if any days in the range need fetching
+            var needsFetch = false
             for offset in 1...count {
-                guard !Task.isCancelled else { return }
-
                 let pastDate = calendar.date(byAdding: .day, value: -offset, to: date) ?? date
                 let dateStr = formatter.string(from: pastDate)
-
-                // Skip if already cached
-                guard dayCacheSummary[dateStr] == nil || dayCacheLogs[dateStr] == nil else { continue }
-
-                // Stagger requests slightly to avoid hammering the server
-                if offset > 1 {
-                    try? await Task.sleep(nanoseconds: 150_000_000)
+                if dayCacheSummary[dateStr] == nil || dayCacheLogs[dateStr] == nil {
+                    needsFetch = true
+                    break
                 }
+            }
+            guard needsFetch, !Task.isCancelled else { return }
 
+            // Batch fetch: single request for the entire range
+            let toDate = calendar.date(byAdding: .day, value: -1, to: date) ?? date
+            let fromDate = calendar.date(byAdding: .day, value: -count, to: date) ?? date
+            let toStr = formatter.string(from: toDate)
+            let fromStr = formatter.string(from: fromDate)
+
+            guard !Task.isCancelled else { return }
+
+            do {
+                let range = try await appStore.apiClient.getDayRange(from: fromStr, to: toStr)
                 guard !Task.isCancelled else { return }
-
-                async let summaryResult = try? appStore.apiClient.getDaySummary(date: dateStr)
-                async let logsResult = try? appStore.apiClient.getDayLogs(date: dateStr)
-
-                if let summary = await summaryResult {
-                    dayCacheSummary[dateStr] = summary
+                for summary in range.summaries {
+                    dayCacheSummary[summary.date] = summary
                 }
-                if let logs = await logsResult {
-                    dayCacheLogs[dateStr] = logs
+                for logs in range.logs {
+                    dayCacheLogs[logs.date] = logs
+                }
+            } catch {
+                // Fallback: fetch individually if batch fails
+                for offset in 1...count {
+                    guard !Task.isCancelled else { return }
+                    let pastDate = calendar.date(byAdding: .day, value: -offset, to: date) ?? date
+                    let dateStr = formatter.string(from: pastDate)
+                    guard dayCacheSummary[dateStr] == nil || dayCacheLogs[dateStr] == nil else { continue }
+
+                    async let summaryResult = try? appStore.apiClient.getDaySummary(date: dateStr)
+                    async let logsResult = try? appStore.apiClient.getDayLogs(date: dateStr)
+                    if let summary = await summaryResult { dayCacheSummary[dateStr] = summary }
+                    if let logs = await logsResult { dayCacheLogs[dateStr] = logs }
                 }
             }
         }

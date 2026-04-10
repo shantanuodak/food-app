@@ -1,13 +1,12 @@
 import type { ParseResult } from './deterministicParser.js';
 import type { AICallUsage } from './aiNormalizerService.js';
 
-export type ParsePipelineRoute = 'cache' | 'deterministic' | 'gemini' | 'fatsecret' | 'unresolved';
+export type ParsePipelineRoute = 'cache' | 'deterministic' | 'gemini' | 'unresolved';
 
 export type ParseDecisionContext = {
   userId: string;
   featureFlags: {
     geminiEnabled: boolean;
-    fatsecretEnabled: boolean;
   };
   budget?: {
     dailyBudgetUsd: number;
@@ -24,7 +23,7 @@ export type ParseDecisionResult = {
   result: ParseResult;
   route: ParsePipelineRoute;
   cacheHit: boolean;
-  sourcesUsed: Array<'cache' | 'deterministic' | 'fatsecret' | 'gemini' | 'manual'>;
+  sourcesUsed: Array<'cache' | 'deterministic' | 'gemini' | 'manual'>;
   reasonCodes: string[];
   fallbackUsed: boolean;
   fallbackModel: string | null;
@@ -33,7 +32,7 @@ export type ParseDecisionResult = {
   clarificationQuestions: string[];
 };
 
-export type ParseProviderName = 'cache' | 'gemini' | 'fatsecret';
+export type ParseProviderName = 'cache' | 'gemini';
 
 export type ParseProviderInput = {
   text: string;

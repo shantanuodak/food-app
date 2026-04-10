@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { saveFoodLogStrict } from '../services/logService.js';
-import { getDaySummary } from '../services/daySummaryService.js';
-import { getDayLogs } from '../services/dayLogsService.js';
+import { getDaySummary, getDaySummaryRange } from '../services/daySummaryService.js';
+import { getDayLogs, getDayLogsRange } from '../services/dayLogsService.js';
 import { getProgressSummary } from '../services/progressService.js';
 import { assertLoggedAtNotInFutureForUser } from '../services/dateIntegrityService.js';
 import { buildHealthSyncContract } from '../services/healthSyncContractService.js';
@@ -35,7 +35,7 @@ const itemSchema = z.object({
   fat: nonNegative,
   nutritionSourceId: z.string().trim().min(1).max(120),
   originalNutritionSourceId: z.string().trim().min(1).max(120).optional(),
-  sourceFamily: z.enum(['cache', 'fatsecret', 'gemini', 'manual']).optional(),
+  sourceFamily: z.enum(['cache', 'gemini', 'manual']).optional(),
   matchConfidence: confidenceScore,
   needsClarification: z.boolean().optional(),
   manualOverride: z.union([z.boolean(), manualOverrideSchema]).optional()
@@ -57,7 +57,7 @@ const saveLogSchema = z.object({
       carbs: nonNegative,
       fat: nonNegative
     }),
-    sourcesUsed: z.array(z.enum(['cache', 'fatsecret', 'gemini', 'manual'])).max(10).optional(),
+    sourcesUsed: z.array(z.enum(['cache', 'gemini', 'manual'])).max(10).optional(),
     assumptions: z.array(z.string().max(500)).max(20).optional().default([]),
     items: z.array(itemSchema).max(100)
   })
@@ -280,6 +280,26 @@ router.get('/day-logs', async (req, res, next) => {
     const userId = res.locals.auth.userId as string;
     const logs = await getDayLogs(userId, query.date, query.tz);
     res.status(200).json(logs);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const dayRangeQuerySchema = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be in YYYY-MM-DD format'),
+  to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be in YYYY-MM-DD format'),
+  tz: z.string().trim().min(1).max(100).optional()
+});
+
+router.get('/day-range', async (req, res, next) => {
+  try {
+    const query = dayRangeQuerySchema.parse(req.query);
+    const userId = res.locals.auth.userId as string;
+    const [summaries, logs] = await Promise.all([
+      getDaySummaryRange(userId, query.from, query.to, query.tz),
+      getDayLogsRange(userId, query.from, query.to, query.tz)
+    ]);
+    res.status(200).json({ summaries, logs });
   } catch (err) {
     next(err);
   }

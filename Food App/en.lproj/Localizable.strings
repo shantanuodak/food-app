@@ -102,7 +102,6 @@
 "main.route.deterministic" = "Deterministic estimate";
 "main.route.alias" = "Alias estimate";
 "main.route.ai" = "AI estimate";
-"main.route.fatsecret" = "Food Database estimate";
 "main.route.escalated" = "Escalated estimate";
 "main.route.low_confidence" = "Low confidence";
 "main.route.parse_connectivity_issue" = "Can't reach backend";

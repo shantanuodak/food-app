@@ -77,6 +77,8 @@ function resultUsesRetiredProvider(result: ParseResult): boolean {
       sourceFamily === 'fatsecret' ||
       sourceFamily === 'deterministic'
     );
+    // Note: 'fatsecret' and 'deterministic' values are kept here intentionally
+    // so any cached entries from the legacy pipeline are invalidated and re-parsed.
   });
 }
 
@@ -94,14 +96,12 @@ function normalizeNutritionSourceId(rawSourceId: string, route: ParsePipelineRou
   const trimmed = rawSourceId.trim();
   if (!trimmed) {
     if (route === 'deterministic') return 'deterministic_estimate';
-    if (route === 'fatsecret') return 'fatsecret_estimate';
     if (route === 'gemini') return 'gemini_estimate';
     return 'cache_estimate';
   }
 
   const normalized = trimmed.toLowerCase();
   if (
-    normalized.includes('fatsecret') ||
     normalized.includes('gemini') ||
     normalized.includes('manual') ||
     normalized.includes('cache')
@@ -110,7 +110,6 @@ function normalizeNutritionSourceId(rawSourceId: string, route: ParsePipelineRou
   }
 
   if (route === 'deterministic') return 'deterministic_estimate';
-  if (route === 'fatsecret') return 'fatsecret_estimate';
   if (route === 'gemini') return 'gemini_estimate';
   return 'cache_estimate';
 }
@@ -203,8 +202,7 @@ function logUnresolvedRoute(text: string, context: ParseDecisionContext, reasons
       cacheScope: context.cacheScope,
       textHash: cacheDebug.textHash,
       segmentCount: splitFoodTextSegments(text).length,
-      geminiEnabled: context.featureFlags.geminiEnabled && context.allowFallback && config.aiFallbackEnabled,
-      fatsecretEnabled: context.featureFlags.fatsecretEnabled && config.fatsecretEnabled
+      geminiEnabled: context.featureFlags.geminiEnabled && context.allowFallback && config.aiFallbackEnabled
     })
   );
 }
@@ -213,7 +211,7 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
   result: ParseResult;
   route: ParsePipelineRoute;
   cacheHit: boolean;
-  sourcesUsed: Array<'cache' | 'deterministic' | 'fatsecret' | 'gemini' | 'manual'>;
+  sourcesUsed: Array<'cache' | 'deterministic' | 'gemini' | 'manual'>;
   reasonCodes: string[];
   fallbackUsed: boolean;
   fallbackModel: string | null;
@@ -420,7 +418,7 @@ export async function runPrimaryParsePipeline(
   options?: {
     allowFallback?: boolean;
     cacheScope?: string;
-    featureFlags?: { geminiEnabled?: boolean; fatsecretEnabled?: boolean };
+    featureFlags?: { geminiEnabled?: boolean };
     userId?: string;
     budget?: ParseDecisionContext['budget'];
   }
@@ -428,8 +426,7 @@ export async function runPrimaryParsePipeline(
   const context: ParseDecisionContext = {
     userId: options?.userId || 'unknown',
     featureFlags: {
-      geminiEnabled: options?.featureFlags?.geminiEnabled ?? Boolean(config.geminiApiKey),
-      fatsecretEnabled: options?.featureFlags?.fatsecretEnabled ?? true
+      geminiEnabled: options?.featureFlags?.geminiEnabled ?? Boolean(config.geminiApiKey)
     },
     budget: options?.budget,
     cacheScope: options?.cacheScope || 'global',

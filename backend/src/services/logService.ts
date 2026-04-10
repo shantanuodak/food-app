@@ -19,7 +19,7 @@ type LogItemInput = {
   fat: number;
   nutritionSourceId: string;
   originalNutritionSourceId?: string;
-  sourceFamily?: 'cache' | 'fatsecret' | 'gemini' | 'manual';
+  sourceFamily?: 'cache' | 'gemini' | 'manual';
   needsClarification?: boolean;
   manualOverrideMeta?: { enabled: boolean; reason?: string; editedFields: string[] } | null;
   matchConfidence: number;
@@ -41,7 +41,7 @@ type SaveLogInput = {
     carbs: number;
     fat: number;
   };
-  sourcesUsed?: Array<'cache' | 'fatsecret' | 'gemini' | 'manual'>;
+  sourcesUsed?: Array<'cache' | 'gemini' | 'manual'>;
   assumptions?: string[];
   items: LogItemInput[];
 };

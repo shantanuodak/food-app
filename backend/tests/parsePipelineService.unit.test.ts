@@ -75,7 +75,7 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
+      featureFlags: { geminiEnabled: true },
       userId: 'u1'
     });
 
@@ -90,15 +90,20 @@ describe('parse pipeline routing', () => {
   test('skips cached results sourced from retired providers and reparses with gemini', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
 
+    // This test verifies the retired-provider invalidation path: legacy cached
+    // results from FatSecret should be ignored and re-parsed with Gemini.
+    // The 'fatsecret' source family is no longer in the live type union,
+    // so we cast through unknown to construct the legacy shape.
     const getParseCache = vi.fn(async () => ({
       textHash: 'hash-cache',
       result: parseResult({
         items: [
-          buildItem({
+          {
+            ...buildItem(),
             nutritionSourceId: 'fatsecret_estimate',
-            sourceFamily: 'fatsecret',
+            sourceFamily: 'fatsecret' as unknown as 'cache',
             originalNutritionSourceId: 'fatsecret_estimate'
-          })
+          }
         ]
       })
     }));
@@ -138,7 +143,7 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
+      featureFlags: { geminiEnabled: true },
       userId: 'u1'
     });
 
@@ -188,7 +193,7 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
+      featureFlags: { geminiEnabled: true },
       userId: 'u1'
     });
 
@@ -230,7 +235,7 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs and toast', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
+      featureFlags: { geminiEnabled: true },
       userId: 'u1'
     });
 
@@ -274,7 +279,7 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('2 eggs and toast', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: false, geminiEnabled: true },
+      featureFlags: { geminiEnabled: true },
       userId: 'u1'
     });
 
@@ -321,7 +326,7 @@ describe('parse pipeline routing', () => {
     const output = await runPrimaryParsePipeline('vanilla icecream scoop', {
       cacheScope: 'user:v2:primary',
       allowFallback: true,
-      featureFlags: { fatsecretEnabled: false, geminiEnabled: false },
+      featureFlags: { geminiEnabled: false },
       userId: 'u1'
     });
 

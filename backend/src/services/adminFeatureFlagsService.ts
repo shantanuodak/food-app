@@ -4,7 +4,6 @@ import { config } from '../config.js';
 
 export type AdminFeatureFlags = {
   geminiEnabled: boolean;
-  fatsecretEnabled: boolean;
 };
 
 function normalizeEmail(email: string | null | undefined): string {
@@ -21,9 +20,7 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 
 export function defaultAdminFeatureFlags(): AdminFeatureFlags {
   const geminiEnabled = Boolean(config.geminiApiKey);
-  const fatsecretEnabled =
-    config.fatsecretEnabled && Boolean(config.fatsecretClientId) && Boolean(config.fatsecretClientSecret);
-  return { geminiEnabled, fatsecretEnabled };
+  return { geminiEnabled };
 }
 
 export async function getAdminFeatureFlagsForUser(
@@ -33,7 +30,7 @@ export async function getAdminFeatureFlagsForUser(
   const db = client || pool;
   const result = await db.query(
     `
-    SELECT gemini_enabled, fatsecret_enabled
+    SELECT gemini_enabled
     FROM admin_feature_flags
     WHERE user_id = $1
     `,
@@ -44,8 +41,7 @@ export async function getAdminFeatureFlagsForUser(
   }
   const row = result.rows[0];
   return {
-    geminiEnabled: Boolean(row.gemini_enabled),
-    fatsecretEnabled: Boolean(row.fatsecret_enabled)
+    geminiEnabled: Boolean(row.gemini_enabled)
   };
 }
 
@@ -66,22 +62,22 @@ export async function upsertAdminFeatureFlags(
   client?: PoolClient
 ): Promise<AdminFeatureFlags> {
   const db = client || pool;
+  // Note: fatsecret_enabled column is NOT NULL in the legacy schema, so we hardcode false.
+  // The column is no longer read or surfaced anywhere in the application.
   const result = await db.query(
     `
     INSERT INTO admin_feature_flags (user_id, gemini_enabled, fatsecret_enabled)
-    VALUES ($1, $2, $3)
+    VALUES ($1, $2, false)
     ON CONFLICT (user_id) DO UPDATE
     SET
       gemini_enabled = EXCLUDED.gemini_enabled,
-      fatsecret_enabled = EXCLUDED.fatsecret_enabled,
       updated_at = NOW()
-    RETURNING gemini_enabled, fatsecret_enabled
+    RETURNING gemini_enabled
     `,
-    [userId, flags.geminiEnabled, flags.fatsecretEnabled]
+    [userId, flags.geminiEnabled]
   );
   const row = result.rows[0];
   return {
-    geminiEnabled: Boolean(row.gemini_enabled),
-    fatsecretEnabled: Boolean(row.fatsecret_enabled)
+    geminiEnabled: Boolean(row.gemini_enabled)
   };
 }

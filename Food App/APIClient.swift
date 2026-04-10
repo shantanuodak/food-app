@@ -189,12 +189,25 @@ final class APIClient {
         )
     }
 
-    func getDaySummary(date: String) async throws -> DaySummaryResponse {
-        try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [URLQueryItem(name: "date", value: date)], requiresAuth: true)
+    func getDaySummary(date: String, timezone: String = TimeZone.current.identifier) async throws -> DaySummaryResponse {
+        try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [
+            URLQueryItem(name: "date", value: date),
+            URLQueryItem(name: "tz", value: timezone)
+        ], requiresAuth: true)
     }
 
-    func getDayLogs(date: String) async throws -> DayLogsResponse {
-        try await request(path: "/v1/logs/day-logs", method: "GET", queryItems: [URLQueryItem(name: "date", value: date)], requiresAuth: true)
+    func getDayLogs(date: String, timezone: String = TimeZone.current.identifier) async throws -> DayLogsResponse {
+        try await request(path: "/v1/logs/day-logs", method: "GET", queryItems: [
+            URLQueryItem(name: "date", value: date),
+            URLQueryItem(name: "tz", value: timezone)
+        ], requiresAuth: true)
+    }
+
+    func getDayRange(from: String, to: String) async throws -> DayRangeResponse {
+        try await request(path: "/v1/logs/day-range", method: "GET", queryItems: [
+            URLQueryItem(name: "from", value: from),
+            URLQueryItem(name: "to", value: to)
+        ], requiresAuth: true)
     }
 
     func postHealthActivity(_ requestBody: HealthActivityRequest) async throws -> HealthActivityResponse {
@@ -385,7 +398,7 @@ final class APIClient {
         case "/v1/logs/parse/image":
             return RequestTimeout.parseImage
         // These endpoints are hit at launch and after onboarding — allow time for cold starts.
-        case "/v1/onboarding", "/v1/logs/day-summary", "/v1/logs/day-logs":
+        case "/v1/onboarding", "/v1/logs/day-summary", "/v1/logs/day-logs", "/v1/logs/day-range":
             return RequestTimeout.coldStart
         default:
             return RequestTimeout.default

@@ -231,7 +231,6 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
       VALUES ($1, true, false)
       ON CONFLICT (user_id) DO UPDATE
       SET gemini_enabled = EXCLUDED.gemini_enabled,
-          fatsecret_enabled = EXCLUDED.fatsecret_enabled,
           updated_at = NOW()
       `,
       [userId]
@@ -278,7 +277,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
       });
 
     expect(parseResponse.status).toBe(200);
-    expect(['cache', 'gemini', 'fatsecret', 'unresolved']).toContain(parseResponse.body.route);
+    expect(['cache', 'gemini', 'unresolved']).toContain(parseResponse.body.route);
     expect(parseResponse.body.cacheHit).toBe(false);
     expect(parseResponse.body.parseRequestId).toBeTruthy();
     expect(parseResponse.body.parseVersion).toBe(expectedParseVersion);

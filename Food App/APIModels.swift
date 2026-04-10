@@ -329,6 +329,11 @@ struct DayLogItem: Decodable, Identifiable {
     let matchConfidence: Double
 }
 
+struct DayRangeResponse: Decodable {
+    let summaries: [DaySummaryResponse]
+    let logs: [DayLogsResponse]
+}
+
 struct ProgressResponse: Decodable {
     let from: String
     let to: String
@@ -378,7 +383,6 @@ struct ProgressMetricDelta: Decodable {
 
 struct AdminFeatureFlags: Codable {
     let geminiEnabled: Bool
-    let fatsecretEnabled: Bool
 }
 
 struct AdminFeatureFlagsResponse: Decodable {
@@ -388,5 +392,4 @@ struct AdminFeatureFlagsResponse: Decodable {
 
 struct AdminFeatureFlagsUpdateRequest: Encodable {
     let geminiEnabled: Bool
-    let fatsecretEnabled: Bool
 }

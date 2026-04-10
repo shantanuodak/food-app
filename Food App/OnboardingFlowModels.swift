@@ -285,7 +285,9 @@ struct OnboardingDraft: Codable, Equatable {
             let clamped = min(max(cm, OnboardingBaselineRange.heightCm.lowerBound), OnboardingBaselineRange.heightCm.upperBound)
             return Double(clamped)
         case .imperial:
-            return Double(parseTotalInchesOrDefault()) * 2.54
+            let cm = Double(parseTotalInchesOrDefault()) * 2.54
+            let clamped = min(max(Int(cm.rounded()), OnboardingBaselineRange.heightCm.lowerBound), OnboardingBaselineRange.heightCm.upperBound)
+            return Double(clamped)
         }
     }
 
