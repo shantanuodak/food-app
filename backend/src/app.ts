@@ -12,16 +12,18 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 export function createApp() {
   const app = express();
 
-  app.use(express.json({ limit: '32kb' }));
   app.use(requestIdMiddleware);
+
+  // 10mb accommodates base64-encoded photos (~4-8 MB raw).
+  // Individual routes enforce tighter limits via application-level validation
+  // (e.g. config.aiImageMaxBytes in the image parse handler).
+  app.use(express.json({ limit: '10mb' }));
 
   app.get('/health', (_req, res) => {
     res.json({ status: 'ok' });
   });
 
   app.use('/v1/onboarding', authRequired, onboardingRoutes);
-  // Image parse needs a larger body limit for base64-encoded photos (~1-8 MB)
-  app.use('/v1/logs/parse/image', express.json({ limit: '8mb' }), authRequired, parseRoutes);
   app.use('/v1/logs/parse', authRequired, parseRoutes);
   app.use('/v1/logs', authRequired, logsRoutes);
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
