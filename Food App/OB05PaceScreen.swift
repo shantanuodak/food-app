@@ -76,27 +76,31 @@ struct OB05PaceScreen: View {
 
                 Spacer()
 
-                // Pace name — hero text
+                // Pace name — hero text (fixed height to prevent layout shift on pace change)
                 VStack(spacing: 12) {
                     Image(systemName: paceIconName)
                         .font(.system(size: 36, weight: .medium))
                         .foregroundStyle(style.foreground)
                         .contentTransition(.symbolEffect(.replace))
                         .animation(.spring(response: 0.4, dampingFraction: 0.7), value: resolvedPace)
+                        .frame(height: 40)
 
                     Text(resolvedPace.title)
                         .font(.system(size: 42, weight: .bold, design: .rounded))
                         .foregroundStyle(style.foreground)
                         .contentTransition(.numericText())
                         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: resolvedPace)
+                        .frame(height: 50)
 
                     Text(paceDescription)
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
                         .multilineTextAlignment(.center)
+                        .frame(height: 40, alignment: .top)
                         .animation(.easeInOut(duration: 0.2), value: resolvedPace)
                 }
                 .padding(.horizontal, 32)
+                .frame(height: 160)
 
                 // Slider
                 paceSlider(style: style)

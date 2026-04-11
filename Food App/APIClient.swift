@@ -140,38 +140,21 @@ final class APIClient {
     }
 
     func parseImageLog(imageData: Data, mimeType: String, loggedAt: String?) async throws -> ParseLogResponse {
-        let boundary = "Boundary-\(UUID().uuidString)"
-        var body = Data()
-
-        func append(_ string: String) {
-            if let data = string.data(using: .utf8) {
-                body.append(data)
-            }
+        struct ImageParseBody: Encodable {
+            let imageBase64: String
+            let mimeType: String
+            let loggedAt: String?
         }
-
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"image\"; filename=\"meal.jpg\"\r\n")
-        append("Content-Type: \(mimeType)\r\n\r\n")
-        body.append(imageData)
-        append("\r\n")
-
-        if let loggedAt, !loggedAt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            append("--\(boundary)\r\n")
-            append("Content-Disposition: form-data; name=\"loggedAt\"\r\n\r\n")
-            append("\(loggedAt)\r\n")
-        }
-
-        append("--\(boundary)--\r\n")
-
-        return try await performRequest(
+        let body = ImageParseBody(
+            imageBase64: imageData.base64EncodedString(),
+            mimeType: mimeType,
+            loggedAt: loggedAt
+        )
+        return try await request(
             path: "/v1/logs/parse/image",
             method: "POST",
-            queryItems: [],
-            bodyData: body,
-            requiresAuth: true,
-            extraHeaders: [
-                "Content-Type": "multipart/form-data; boundary=\(boundary)"
-            ]
+            body: body,
+            requiresAuth: true
         )
     }
 

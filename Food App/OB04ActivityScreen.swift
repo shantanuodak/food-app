@@ -6,6 +6,7 @@ struct OB04ActivityScreen: View {
     let onContinue: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @State private var appeared = false
 
     var body: some View {
         let canContinue = selectedActivity != nil
@@ -25,15 +26,19 @@ struct OB04ActivityScreen: View {
                     .foregroundStyle(colorScheme == .dark ? .white : .black)
                     .multilineTextAlignment(.center)
                     .lineSpacing(2)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 12)
 
                 Text("Choose your typical day, not your best day.")
                     .font(.system(size: 15, weight: .regular))
                     .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.top, 10)
+                    .opacity(appeared ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4).delay(0.08), value: appeared)
 
                 VStack(spacing: 12) {
-                    ForEach(ActivityChoice.allCases) { choice in
+                    ForEach(Array(ActivityChoice.allCases.enumerated()), id: \.element.id) { idx, choice in
                         ActivityOptionCard(
                             choice: choice,
                             isSelected: choice == selectedActivity,
@@ -43,6 +48,9 @@ struct OB04ActivityScreen: View {
                                 }
                             }
                         )
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 16)
+                        .animation(.easeOut(duration: 0.45).delay(0.14 + Double(idx) * 0.07), value: appeared)
                     }
                 }
                 .padding(.top, 28)
@@ -65,12 +73,17 @@ struct OB04ActivityScreen: View {
                 .buttonStyle(.plain)
                 .disabled(!canContinue)
                 .animation(.easeInOut(duration: 0.25), value: canContinue)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.4).delay(0.48), value: appeared)
                 .padding(.bottom, 24)
             }
         }
         .onAppear {
             if selectedActivity == nil {
                 selectedActivity = .moderatelyActive
+            }
+            withAnimation(.easeOut(duration: 0.5)) {
+                appeared = true
             }
         }
     }

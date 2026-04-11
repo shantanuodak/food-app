@@ -6,45 +6,91 @@ struct OB08AccountScreen: View {
     let enableApple: Bool
     let onSelectProvider: (AccountProvider) -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var appeared = false
+
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            ForEach(providerOptions) { option in
-                accountButton(
-                    option.title,
-                    icon: option.icon,
-                    provider: option.provider,
-                    isPrimary: option.isPrimary
-                )
-                .disabled(isLoading || !option.isEnabled)
-                .opacity(option.isEnabled ? 1 : 0.45)
+        VStack(spacing: 0) {
+            // Provider buttons — side by side
+            HStack(spacing: 12) {
+                ForEach(Array(providerOptions.enumerated()), id: \.element.id) { idx, option in
+                    providerButton(for: option, animDelay: 0.18 + Double(idx) * 0.1)
+                        .disabled(isLoading || !option.isEnabled)
+                        .opacity(option.isEnabled ? 1 : 0.4)
+                }
             }
 
+            // Apple unavailable note
             if !enableApple {
                 Text("Google sign-in is enabled right now. Apple sign-in is coming soon.")
                     .font(.caption)
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .padding(.horizontal, 4)
+                    .foregroundStyle(OnboardingGlassTheme.textMuted)
+                    .multilineTextAlignment(.center)
+                    .padding(.top, 10)
+                    .opacity(appeared ? 1 : 0)
+                    .animation(.easeOut(duration: 0.5).delay(0.45), value: appeared)
             }
 
+            // Loading indicator
             if isLoading {
                 HStack(spacing: 8) {
                     ProgressView()
+                        .tint(OnboardingGlassTheme.textSecondary)
+                        .controlSize(.small)
                     Text("Connecting account...")
                         .font(.caption)
                         .foregroundStyle(OnboardingGlassTheme.textSecondary)
                 }
+                .padding(.top, 12)
             }
-
-            Text("No spam. No surprise emails. Just account essentials.")
-                .font(.caption)
-                .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                .padding(.horizontal, 4)
+        }
+        .onAppear {
+            appeared = true
         }
     }
 
+    // MARK: - Provider Buttons
+
+    @ViewBuilder
+    private func providerButton(for option: ProviderOption, animDelay: Double) -> some View {
+        Button {
+            onSelectProvider(option.provider)
+        } label: {
+            VStack(spacing: 12) {
+                providerIcon(provider: option.provider)
+                Text(option.shortTitle)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
+            }
+            .frame(maxWidth: .infinity)
+            .frame(height: 96)
+        }
+        .buttonStyle(SignInUnifiedButtonStyle())
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 20)
+        .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(animDelay), value: appeared)
+    }
+
+    @ViewBuilder
+    private func providerIcon(provider: AccountProvider) -> some View {
+        switch provider {
+        case .apple:
+            Image(systemName: "apple.logo")
+                .font(.system(size: 28, weight: .medium))
+                .foregroundStyle(OnboardingGlassTheme.textPrimary)
+        case .google:
+            Image("ios_light_rd_na")
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 36, height: 36)
+        }
+    }
+
+    // MARK: - Provider Options
+
     private struct ProviderOption: Identifiable {
-        let title: String
-        let icon: String
+        let shortTitle: String
         let provider: AccountProvider
         let isPrimary: Bool
         let isEnabled: Bool
@@ -55,30 +101,36 @@ struct OB08AccountScreen: View {
     private var providerOptions: [ProviderOption] {
         if prefersGooglePrimary {
             return [
-                ProviderOption(title: "Continue with Google", icon: "globe", provider: .google, isPrimary: true, isEnabled: true),
-                ProviderOption(title: "Continue with Apple", icon: "apple.logo", provider: .apple, isPrimary: false, isEnabled: enableApple)
+                ProviderOption(shortTitle: "Google", provider: .google, isPrimary: true, isEnabled: true),
+                ProviderOption(shortTitle: "Apple", provider: .apple, isPrimary: false, isEnabled: enableApple)
             ]
         }
-
         return [
-            ProviderOption(title: "Continue with Apple", icon: "apple.logo", provider: .apple, isPrimary: true, isEnabled: enableApple),
-            ProviderOption(title: "Continue with Google", icon: "globe", provider: .google, isPrimary: false, isEnabled: true)
+            ProviderOption(shortTitle: "Apple", provider: .apple, isPrimary: true, isEnabled: enableApple),
+            ProviderOption(shortTitle: "Google", provider: .google, isPrimary: false, isEnabled: true)
         ]
     }
+}
 
-    private func accountButton(_ title: String, icon: String, provider: AccountProvider, isPrimary: Bool) -> some View {
-        Button {
-            onSelectProvider(provider)
-        } label: {
-            HStack(spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isPrimary ? OnboardingGlassTheme.buttonPrimaryText.opacity(0.82) : OnboardingGlassTheme.textPrimary)
-                Text(title)
-                Spacer(minLength: 0)
-            }
-        }
-        .buttonStyle(isPrimary ? AnyButtonStyle(OnboardingGlassPrimaryButtonStyle()) : AnyButtonStyle(OnboardingGlassSecondaryButtonStyle()))
+// MARK: - Unified Button Style
+
+private struct SignInUnifiedButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .fill(OnboardingGlassTheme.panelFill)
+                    .background(.ultraThinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.07), radius: 10, y: 4)
+            .opacity(configuration.isPressed ? 0.86 : 1.0)
+            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
+            .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
 }
 

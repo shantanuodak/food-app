@@ -327,30 +327,6 @@ struct MainLoggingShellView: View {
             Spacer(minLength: 0)
 
             Button {
-                inputMode = .voice
-            } label: {
-                Image(systemName: "mic.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.96) : Color.primary.opacity(0.80))
-                    .frame(width: 40, height: 32)
-            }
-            .buttonStyle(LiquidGlassCapsuleButtonStyle())
-            .accessibilityLabel(Text("Voice input"))
-
-            Button {
-                selectedCameraSource = nil
-                inputMode = .camera
-                isCameraSourceDialogPresented = true
-            } label: {
-                Image(systemName: "camera.fill")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.96) : Color.primary.opacity(0.80))
-                    .frame(width: 40, height: 32)
-            }
-            .buttonStyle(LiquidGlassCapsuleButtonStyle())
-            .accessibilityLabel(Text("Open camera"))
-
-            Button {
                 isCalendarPresented = true
             } label: {
                 Text(todayPillTitle)
@@ -586,7 +562,7 @@ struct MainLoggingShellView: View {
     private var composeEntrySection: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("What did you eat today?")
-                .font(.system(size: 18, weight: .semibold))
+                .font(.custom("InstrumentSerif-Regular", size: 30))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             inputSection
@@ -3520,23 +3496,11 @@ struct MainLoggingShellView: View {
         var prepared = request
         let kind = normalizedInputKind(prepared.parsedLog.inputKind, fallback: latestParseInputKind)
 
-        if kind == "image" &&
-            (prepared.parsedLog.imageRef?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true),
-            let pendingImageData {
-            let storageService = ImageStorageService(
-                configuration: appStore.configuration,
-                authTokenProvider: { [appStore] in
-                    try await appStore.authService.validAccessToken()
-                }
-            )
-            let uploadedRef = try await storageService.uploadJPEG(pendingImageData)
-            pendingImageStorageRef = uploadedRef
-            prepared = requestWithImageRef(prepared, imageRef: uploadedRef)
-            for rowIndex in inputRows.indices where inputRows[rowIndex].imagePreviewData != nil {
-                inputRows[rowIndex].imageRef = uploadedRef
-            }
-        } else if kind == "image",
-                  let existingRef = pendingImageStorageRef ?? prepared.parsedLog.imageRef {
+        // Image storage is deferred — images are kept locally for now.
+        // If a storage ref already exists (e.g. from a retry), preserve it.
+        if kind == "image",
+           let existingRef = pendingImageStorageRef ?? prepared.parsedLog.imageRef,
+           !existingRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             prepared = requestWithImageRef(prepared, imageRef: existingRef)
         }
 

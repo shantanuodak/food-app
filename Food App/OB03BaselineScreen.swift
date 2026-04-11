@@ -155,6 +155,8 @@ struct OB03BaselineScreen: View {
         )
     }
 
+    @State private var appeared = false
+
     var body: some View {
         ZStack {
             OnboardingStaticBackground()
@@ -193,9 +195,16 @@ struct OB03BaselineScreen: View {
                 baselineFooter
                     .padding(.horizontal, 16)
                     .padding(.bottom, 24)
+                    .opacity(appeared ? 1 : 0)
+                    .animation(.easeOut(duration: 0.4).delay(0.28), value: appeared)
             }
         }
-        .onAppear(perform: hydrateCompatibilityDefaults)
+        .onAppear {
+            hydrateCompatibilityDefaults()
+            withAnimation(.easeOut(duration: 0.5)) {
+                appeared = true
+            }
+        }
         .onChange(of: draft.units) { _, _ in
             clampImperialHeightIfNeeded()
         }
@@ -213,18 +222,25 @@ struct OB03BaselineScreen: View {
                 .foregroundStyle(.black)
                 .multilineTextAlignment(.center)
                 .padding(.top, 20)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 12)
 
             Text(subtitle)
                 .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
                 .padding(.top, 8)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.4).delay(0.08), value: appeared)
 
             toggle()
                 .padding(.top, 16)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.4).delay(0.14), value: appeared)
 
             Spacer()
 
             content()
+                .opacity(appeared ? 1 : 0)
 
             Spacer()
         }

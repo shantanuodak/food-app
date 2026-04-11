@@ -20,6 +20,8 @@ export function createApp() {
   });
 
   app.use('/v1/onboarding', authRequired, onboardingRoutes);
+  // Image parse needs a larger body limit for base64-encoded photos (~1-8 MB)
+  app.use('/v1/logs/parse/image', express.json({ limit: '8mb' }), authRequired, parseRoutes);
   app.use('/v1/logs/parse', authRequired, parseRoutes);
   app.use('/v1/logs', authRequired, logsRoutes);
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);

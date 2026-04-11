@@ -16,6 +16,7 @@ struct OB02dExperienceScreen: View {
     let onContinue: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @State private var appeared = false
 
     var body: some View {
         let canContinue = selectedExperience != nil
@@ -35,9 +36,11 @@ struct OB02dExperienceScreen: View {
                     .foregroundStyle(colorScheme == .dark ? .white : .black)
                     .multilineTextAlignment(.center)
                     .lineSpacing(2)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 12)
 
                 VStack(spacing: 12) {
-                    ForEach(ExperienceChoice.allCases) { choice in
+                    ForEach(Array(ExperienceChoice.allCases.enumerated()), id: \.element.id) { idx, choice in
                         ExperienceOptionCard(
                             choice: choice,
                             isSelected: choice == selectedExperience,
@@ -47,6 +50,9 @@ struct OB02dExperienceScreen: View {
                                 }
                             }
                         )
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 16)
+                        .animation(.easeOut(duration: 0.45).delay(0.12 + Double(idx) * 0.08), value: appeared)
                     }
                 }
                 .padding(.top, 32)
@@ -69,12 +75,17 @@ struct OB02dExperienceScreen: View {
                 .buttonStyle(.plain)
                 .disabled(!canContinue)
                 .animation(.easeInOut(duration: 0.25), value: canContinue)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.4).delay(0.4), value: appeared)
                 .padding(.bottom, 24)
             }
         }
         .onAppear {
             if selectedExperience == nil {
                 selectedExperience = .newToIt
+            }
+            withAnimation(.easeOut(duration: 0.5)) {
+                appeared = true
             }
         }
     }

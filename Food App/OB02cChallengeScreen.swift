@@ -18,6 +18,7 @@ struct OB02cChallengeScreen: View {
     let onContinue: () -> Void
 
     @Environment(\.colorScheme) private var colorScheme
+    @State private var appeared = false
 
     var body: some View {
         let canContinue = selectedChallenge != nil
@@ -37,9 +38,11 @@ struct OB02cChallengeScreen: View {
                     .foregroundStyle(colorScheme == .dark ? .white : .black)
                     .multilineTextAlignment(.center)
                     .lineSpacing(2)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 12)
 
                 VStack(spacing: 12) {
-                    ForEach(ChallengeChoice.allCases) { choice in
+                    ForEach(Array(ChallengeChoice.allCases.enumerated()), id: \.element.id) { idx, choice in
                         ChallengeOptionCard(
                             choice: choice,
                             isSelected: choice == selectedChallenge,
@@ -49,6 +52,9 @@ struct OB02cChallengeScreen: View {
                                 }
                             }
                         )
+                        .opacity(appeared ? 1 : 0)
+                        .offset(y: appeared ? 0 : 16)
+                        .animation(.easeOut(duration: 0.45).delay(0.12 + Double(idx) * 0.07), value: appeared)
                     }
                 }
                 .padding(.top, 28)
@@ -71,12 +77,17 @@ struct OB02cChallengeScreen: View {
                 .buttonStyle(.plain)
                 .disabled(!canContinue)
                 .animation(.easeInOut(duration: 0.25), value: canContinue)
+                .opacity(appeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.4).delay(0.45), value: appeared)
                 .padding(.bottom, 24)
             }
         }
         .onAppear {
             if selectedChallenge == nil {
                 selectedChallenge = .portionControl
+            }
+            withAnimation(.easeOut(duration: 0.5)) {
+                appeared = true
             }
         }
     }
