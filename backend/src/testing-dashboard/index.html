@@ -678,7 +678,8 @@ async function loadOverview() {
   try {
     const data = await api('/overview');
     const m = data.metrics;
-    const a = data.alerts;
+    // alerts endpoint returns {generatedAt, hasActiveAlerts, alerts: [...]}
+    const alertItems = Array.isArray(data.alerts) ? data.alerts : (data.alerts?.alerts ?? []);
 
     document.getElementById('ov-parses-today').textContent = fmt(data.todayParses);
     document.getElementById('ov-cache').textContent = fmtPct(m.cache_hit_ratio);
@@ -696,18 +697,28 @@ async function loadOverview() {
     // Alerts
     const alertList = document.getElementById('alert-list');
     alertList.innerHTML = '';
-    for (const alert of a) {
-      const dot = `<div class="alert-dot ${alert.state}"></div>`;
-      const badge = alert.state === 'ok'
+    if (!alertItems.length) {
+      alertList.innerHTML = '<div class="text-muted">No alert rules configured.</div>';
+    }
+    for (const alert of alertItems) {
+      const state = alert.state || (alert.triggered ? 'alert' : 'ok');
+      const dot = `<div class="alert-dot ${state}"></div>`;
+      const badge = state === 'ok'
         ? '<span class="badge badge-green">OK</span>'
-        : alert.state === 'alert'
+        : state === 'alert'
           ? '<span class="badge badge-red">ALERT</span>'
           : '<span class="badge badge-yellow">NO DATA</span>';
+      const name = alert.title || alert.rule || alert.key || 'Unnamed rule';
+      const value = alert.value;
+      const threshold = alert.threshold;
+      const valText = (value !== undefined && value !== null && threshold !== undefined)
+        ? `${fmt(value * 100, 1)}% / threshold ${fmt(threshold * 100, 1)}%`
+        : '—';
       alertList.innerHTML += `
         <div class="alert-item">
           ${dot}
-          <div class="alert-name">${alert.rule}</div>
-          <div class="alert-value">${alert.value !== undefined ? fmt(alert.value * 100, 1) + '% / threshold ' + fmt(alert.threshold * 100, 1) + '%' : '—'}</div>
+          <div class="alert-name">${name}</div>
+          <div class="alert-value">${valText}</div>
           ${badge}
         </div>`;
     }
