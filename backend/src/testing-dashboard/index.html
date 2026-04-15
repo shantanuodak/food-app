@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Nutrition Parser · Testing Dashboard</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #22263a;
+      --border: #2e3350;
+      --text: #e2e4f0;
+      --muted: #7b80a0;
+      --accent: #6366f1;
+      --accent2: #818cf8;
+      --green: #22c55e;
+      --yellow: #eab308;
+      --red: #ef4444;
+      --orange: #f97316;
+      --font-mono: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      min-height: 100vh;
+    }
+
+    /* ---- Auth gate ---- */
+    #auth-gate {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .auth-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 40px;
+      width: 380px;
+      text-align: center;
+    }
+    .auth-card h1 { font-size: 20px; margin-bottom: 8px; }
+    .auth-card p { color: var(--muted); margin-bottom: 24px; font-size: 13px; }
+    .auth-card input {
+      width: 100%;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 14px;
+      font-family: var(--font-mono);
+      margin-bottom: 12px;
+      outline: none;
+    }
+    .auth-card input:focus { border-color: var(--accent); }
+    #auth-error { color: var(--red); font-size: 13px; margin-bottom: 8px; display: none; }
+
+    /* ---- Layout ---- */
+    #app { display: none; min-height: 100vh; }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      display: flex;
+      align-items: center;
+      gap: 24px;
+      height: 52px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    header .logo {
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--accent2);
+      white-space: nowrap;
+    }
+    header .logo span { color: var(--muted); font-weight: 400; }
+
+    nav { display: flex; gap: 2px; flex: 1; }
+    nav button {
+      background: none;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+    nav button:hover { color: var(--text); background: var(--surface2); }
+    nav button.active { color: var(--text); background: var(--surface2); }
+
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+    .refresh-info { color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
+
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ---- Common components ---- */
+    h2 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+    h3 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase;
+         letter-spacing: 0.06em; margin-bottom: 12px; }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+    }
+
+    .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+    .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
+    .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; margin-bottom: 20px; }
+
+    @media (max-width: 900px) {
+      .grid-4 { grid-template-columns: repeat(2, 1fr); }
+      .grid-3 { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 600px) {
+      .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+    .stat-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 6px; }
+    .stat-value { font-size: 26px; font-weight: 700; font-family: var(--font-mono); line-height: 1; }
+    .stat-sub { font-size: 11px; color: var(--muted); margin-top: 4px; font-family: var(--font-mono); }
+
+    /* ---- Buttons ---- */
+    button.btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 8px; border: none;
+      font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.15s;
+    }
+    button.btn-primary { background: var(--accent); color: #fff; }
+    button.btn-primary:hover { background: var(--accent2); }
+    button.btn-primary:disabled { background: var(--surface2); color: var(--muted); cursor: not-allowed; }
+    button.btn-ghost { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+    button.btn-ghost:hover { border-color: var(--accent); color: var(--accent2); }
+
+    /* ---- Badges ---- */
+    .badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+    }
+    .badge-green { background: rgba(34,197,94,0.15); color: var(--green); }
+    .badge-red { background: rgba(239,68,68,0.15); color: var(--red); }
+    .badge-yellow { background: rgba(234,179,8,0.15); color: var(--yellow); }
+    .badge-blue { background: rgba(99,102,241,0.15); color: var(--accent2); }
+    .badge-muted { background: var(--surface2); color: var(--muted); }
+
+    /* ---- Tables ---- */
+    .table-wrap { overflow-x: auto; border-radius: 10px; border: 1px solid var(--border); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th {
+      background: var(--surface);
+      color: var(--muted);
+      font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.06em;
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+    tbody tr { border-bottom: 1px solid var(--border); transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: var(--surface2); }
+    tbody td { padding: 10px 14px; vertical-align: middle; }
+    .mono { font-family: var(--font-mono); }
+
+    /* ---- Progress bar ---- */
+    .progress-bar { height: 6px; background: var(--surface2); border-radius: 3px; overflow: hidden; }
+    .progress-bar-fill { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+
+    /* ---- Alert pills ---- */
+    .alert-row { display: flex; flex-direction: column; gap: 8px; }
+    .alert-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .alert-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .alert-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .alert-dot.alert { background: var(--red); box-shadow: 0 0 6px var(--red); animation: pulse 1.5s infinite; }
+    .alert-dot.insufficient_data { background: var(--yellow); }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
+    .alert-name { font-weight: 600; flex: 1; }
+    .alert-value { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+
+    /* ---- Eval result summary ---- */
+    .eval-summary {
+      display: flex; align-items: center; gap: 16px;
+      padding: 16px 20px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      margin-bottom: 16px;
+    }
+    .pass-rate-big { font-size: 36px; font-weight: 800; font-family: var(--font-mono); }
+    .pass-rate-big.good { color: var(--green); }
+    .pass-rate-big.warn { color: var(--yellow); }
+    .pass-rate-big.bad { color: var(--red); }
+
+    /* ---- Loading ---- */
+    .spinner {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.2);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .empty-state {
+      text-align: center; padding: 48px 24px;
+      color: var(--muted); font-size: 13px;
+    }
+    .empty-state .icon { font-size: 32px; margin-bottom: 12px; }
+
+    /* ---- Confidence color tiers ---- */
+    .conf-high { color: var(--green); }
+    .conf-mid  { color: var(--yellow); }
+    .conf-low  { color: var(--red); }
+
+    /* ---- History expandable ---- */
+    .history-detail { display: none; padding: 12px 14px; background: var(--bg); border-top: 1px solid var(--border); }
+    .history-detail.open { display: block; }
+
+    /* ---- Cuisine breakdown ---- */
+    .cuisine-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 8px; margin-top: 12px; }
+    .cuisine-row { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+    .cuisine-name { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+    .cuisine-sub { font-size: 11px; color: var(--muted); margin-top: 3px; }
+
+    /* ---- Misc ---- */
+    .section { margin-bottom: 28px; }
+    .row-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+    .text-muted { color: var(--muted); }
+    .text-green { color: var(--green); }
+    .text-red { color: var(--red); }
+    .text-yellow { color: var(--yellow); }
+    hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+    .truncate { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  </style>
+</head>
+<body>
+
+<!-- ====================================================================== -->
+<!-- AUTH GATE -->
+<!-- ====================================================================== -->
+<div id="auth-gate">
+  <div class="auth-card">
+    <h1>🍱 Testing Dashboard</h1>
+    <p>Enter your <code>INTERNAL_METRICS_KEY</code> to continue</p>
+    <div id="auth-error">Invalid key — please try again</div>
+    <input type="password" id="key-input" placeholder="Paste your metrics key…" autocomplete="off" />
+    <button class="btn btn-primary" style="width:100%" onclick="submitKey()">Unlock Dashboard</button>
+  </div>
+</div>
+
+<!-- ====================================================================== -->
+<!-- MAIN APP -->
+<!-- ====================================================================== -->
+<div id="app">
+  <header>
+    <div class="logo">🍱 Testing Dashboard <span>/ Nutrition Parser</span></div>
+    <nav>
+      <button class="active" onclick="switchTab('overview', this)">Overview</button>
+      <button onclick="switchTab('eval-runner', this)">Eval Runner</button>
+      <button onclick="switchTab('eval-history', this)">Eval History</button>
+      <button onclick="switchTab('recent-parses', this)">Recent Parses</button>
+      <button onclick="switchTab('costs', this)">Cost Tracker</button>
+      <button onclick="switchTab('cache', this)">Cache</button>
+    </nav>
+    <div class="header-actions">
+      <span class="refresh-info" id="last-refresh">—</span>
+      <button class="btn btn-ghost" onclick="logOut()">Log out</button>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ==================== OVERVIEW ==================== -->
+    <div id="tab-overview" class="tab-panel active">
+      <div class="grid-4" id="overview-stats">
+        <div class="stat-card"><div class="stat-label">Parses Today</div><div class="stat-value" id="ov-parses-today">—</div></div>
+        <div class="stat-card"><div class="stat-label">Cache Hit Ratio</div><div class="stat-value" id="ov-cache">—</div><div class="stat-sub">all time</div></div>
+        <div class="stat-card"><div class="stat-label">AI Cost Today</div><div class="stat-value" id="ov-cost">—</div><div class="stat-sub" id="ov-budget">of $0.50 budget</div></div>
+        <div class="stat-card"><div class="stat-label">Latest Eval Score</div><div class="stat-value" id="ov-eval">—</div><div class="stat-sub" id="ov-eval-sub">run an eval to populate</div></div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card section">
+          <h3>Alert Status</h3>
+          <div class="alert-row" id="alert-list">
+            <div class="text-muted">Loading…</div>
+          </div>
+        </div>
+        <div class="card section">
+          <h3>All-Time Metrics</h3>
+          <div id="ov-alltime">
+            <div class="text-muted">Loading…</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== EVAL RUNNER ==================== -->
+    <div id="tab-eval-runner" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <h2 style="margin:0">Golden Set Eval — 57 Cases</h2>
+          <button class="btn btn-primary" id="run-eval-btn" onclick="runEval()">
+            ▶ Run Eval
+          </button>
+          <span id="eval-running-msg" style="display:none; color:var(--muted); font-size:13px;">
+            <span class="spinner"></span>&nbsp;Running 57 cases… this takes ~30–90s
+          </span>
+        </div>
+        <p class="text-muted" style="font-size:13px; margin-bottom:16px;">
+          Runs all 57 golden cases through the live parse pipeline (Gemini + cache + deterministic). Results are saved to history.
+        </p>
+      </div>
+
+      <div id="eval-result-area" style="display:none">
+        <!-- Summary bar -->
+        <div class="eval-summary" id="eval-summary-bar">
+          <div>
+            <div class="pass-rate-big" id="eval-pass-rate-big">—</div>
+            <div style="font-size:13px; color:var(--muted); margin-top:2px;" id="eval-pass-count">—</div>
+          </div>
+          <div style="flex:1">
+            <div class="progress-bar" style="height:8px">
+              <div class="progress-bar-fill" id="eval-progress-fill" style="width:0%; background:var(--green)"></div>
+            </div>
+          </div>
+          <div style="text-align:right; font-size:12px; color:var(--muted); font-family:var(--font-mono)">
+            <div id="eval-duration">—</div>
+            <div id="eval-route-summary">—</div>
+          </div>
+        </div>
+
+        <!-- Cuisine breakdown -->
+        <div class="card section">
+          <h3>Pass Rate by Cuisine</h3>
+          <div class="cuisine-grid" id="cuisine-breakdown"></div>
+        </div>
+
+        <!-- Per-case table -->
+        <div class="section">
+          <h3>Case-Level Results</h3>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cuisine</th>
+                  <th>Input</th>
+                  <th>Route</th>
+                  <th>Expected Cal</th>
+                  <th>Actual Cal</th>
+                  <th>Confidence</th>
+                  <th>Keywords</th>
+                  <th>Calories</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="eval-cases-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== EVAL HISTORY ==================== -->
+    <div id="tab-eval-history" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <h2 style="margin:0">Eval Run History</h2>
+          <button class="btn btn-ghost" onclick="loadEvalHistory()">↻ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date / Time</th>
+                <th>Type</th>
+                <th>Cases</th>
+                <th>Passed</th>
+                <th>Failed</th>
+                <th>Pass Rate</th>
+                <th>Duration</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="history-tbody">
+              <tr><td colspan="8" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== RECENT PARSES ==================== -->
+    <div id="tab-recent-parses" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <h2 style="margin:0">Recent Parse Requests</h2>
+          <select id="conf-filter" onchange="filterParses()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;cursor:pointer;">
+            <option value="all">All confidence levels</option>
+            <option value="high">High (&gt;0.8)</option>
+            <option value="mid">Medium (0.5–0.8)</option>
+            <option value="low">Low (&lt;0.5)</option>
+          </select>
+          <button class="btn btn-ghost" onclick="loadRecentParses()">↻ Refresh</button>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Input</th>
+                <th>Cal</th>
+                <th>P (g)</th>
+                <th>C (g)</th>
+                <th>F (g)</th>
+                <th>Confidence</th>
+                <th>Clarification?</th>
+              </tr>
+            </thead>
+            <tbody id="parses-tbody">
+              <tr><td colspan="8" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== COSTS ==================== -->
+    <div id="tab-costs" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <h2 style="margin:0">AI Cost Tracker — Last 7 Days</h2>
+          <button class="btn btn-ghost" onclick="loadCosts()">↻ Refresh</button>
+        </div>
+        <div class="grid-3" id="cost-summary-cards">
+          <div class="stat-card"><div class="stat-label">Today's Cost</div><div class="stat-value" id="cost-today">—</div></div>
+          <div class="stat-card"><div class="stat-label">Daily Budget</div><div class="stat-value" id="cost-budget">—</div></div>
+          <div class="stat-card"><div class="stat-label">Budget Used</div><div class="stat-value" id="cost-pct">—</div>
+            <div class="progress-bar" style="margin-top:8px">
+              <div class="progress-bar-fill" id="cost-bar" style="width:0%;background:var(--accent)"></div>
+            </div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Feature</th>
+                <th>Requests</th>
+                <th>Input Tokens</th>
+                <th>Output Tokens</th>
+                <th>Total Cost (USD)</th>
+                <th>Cost / Request</th>
+              </tr>
+            </thead>
+            <tbody id="cost-tbody">
+              <tr><td colspan="7" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== CACHE ==================== -->
+    <div id="tab-cache" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <h2 style="margin:0">Cache Inspector</h2>
+          <button class="btn btn-ghost" onclick="loadCache()">↻ Refresh</button>
+        </div>
+        <div class="grid-4" id="cache-stat-cards">
+          <div class="stat-card"><div class="stat-label">Total Entries</div><div class="stat-value" id="cache-total">—</div></div>
+          <div class="stat-card"><div class="stat-label">Avg Confidence</div><div class="stat-value" id="cache-conf">—</div></div>
+          <div class="stat-card"><div class="stat-label">Total Cache Hits</div><div class="stat-value" id="cache-hits">—</div></div>
+          <div class="stat-card"><div class="stat-label">Active Last 24h</div><div class="stat-value" id="cache-active">—</div></div>
+        </div>
+        <h3>Top 10 Most-Hit Cache Entries</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Food Name</th>
+                <th>Calories</th>
+                <th>Scope</th>
+                <th>Confidence</th>
+                <th>Hit Count</th>
+                <th>Last Used</th>
+                <th>Created</th>
+              </tr>
+            </thead>
+            <tbody id="cache-tbody">
+              <tr><td colspan="7" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+/* ====================================================================== */
+/* AUTH */
+/* ====================================================================== */
+let API_KEY = sessionStorage.getItem('metricsKey') || '';
+const BASE = '/v1/internal/dashboard';
+
+function submitKey() {
+  const val = document.getElementById('key-input').value.trim();
+  if (!val) return;
+  API_KEY = val;
+  // Quick validation: try to hit the overview endpoint
+  api('/overview').then(() => {
+    sessionStorage.setItem('metricsKey', API_KEY);
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    init();
+  }).catch(() => {
+    document.getElementById('auth-error').style.display = 'block';
+    API_KEY = '';
+  });
+}
+
+document.getElementById('key-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') submitKey();
+});
+
+function logOut() {
+  sessionStorage.removeItem('metricsKey');
+  location.reload();
+}
+
+// Auto-unlock if key already stored
+if (API_KEY) {
+  api('/overview').then(() => {
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    init();
+  }).catch(() => {
+    API_KEY = '';
+    sessionStorage.removeItem('metricsKey');
+  });
+}
+
+/* ====================================================================== */
+/* API */
+/* ====================================================================== */
+async function api(path, opts = {}) {
+  const res = await fetch(BASE + path, {
+    ...opts,
+    headers: {
+      'Content-Type': 'application/json',
+      'x-internal-metrics-key': API_KEY,
+      ...(opts.headers || {})
+    }
+  });
+  if (res.status === 401 || res.status === 403) {
+    sessionStorage.removeItem('metricsKey');
+    location.reload();
+    throw new Error('Unauthorized');
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+/* ====================================================================== */
+/* TAB SWITCHING */
+/* ====================================================================== */
+let currentTab = 'overview';
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  currentTab = name;
+  if (name === 'eval-history') loadEvalHistory();
+  if (name === 'recent-parses') loadRecentParses();
+  if (name === 'costs') loadCosts();
+  if (name === 'cache') loadCache();
+}
+
+/* ====================================================================== */
+/* INIT & AUTO-REFRESH */
+/* ====================================================================== */
+let refreshInterval;
+function init() {
+  loadOverview();
+  refreshInterval = setInterval(() => {
+    if (currentTab === 'overview') loadOverview();
+  }, 30000);
+}
+
+function setRefreshTime() {
+  document.getElementById('last-refresh').textContent =
+    'Updated ' + new Date().toLocaleTimeString();
+}
+
+/* ====================================================================== */
+/* HELPERS */
+/* ====================================================================== */
+function fmt(n, digits = 0) {
+  if (n === null || n === undefined) return '—';
+  return Number(n).toLocaleString(undefined, { maximumFractionDigits: digits });
+}
+function fmtPct(n) {
+  if (n === null || n === undefined) return '—';
+  return (Number(n) * 100).toFixed(1) + '%';
+}
+function fmtUsd(n) {
+  if (n === null || n === undefined) return '—';
+  return '$' + Number(n).toFixed(6);
+}
+function fmtUsdShort(n) {
+  if (n === null || n === undefined) return '—';
+  return '$' + Number(n).toFixed(4);
+}
+function fmtTime(iso) {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleString();
+}
+function fmtDuration(ms) {
+  if (!ms) return '—';
+  if (ms < 1000) return ms + 'ms';
+  return (ms / 1000).toFixed(1) + 's';
+}
+function confClass(v) {
+  if (v === null || v === undefined) return '';
+  if (v > 0.8) return 'conf-high';
+  if (v >= 0.5) return 'conf-mid';
+  return 'conf-low';
+}
+function passrateBg(r) {
+  if (r >= 0.85) return 'var(--green)';
+  if (r >= 0.65) return 'var(--yellow)';
+  return 'var(--red)';
+}
+function passrateClass(r) {
+  if (r >= 0.85) return 'good';
+  if (r >= 0.65) return 'warn';
+  return 'bad';
+}
+function routeBadge(r) {
+  const map = { gemini:'badge-blue', cache:'badge-green', deterministic:'badge-muted', unresolved:'badge-red', error:'badge-red' };
+  return `<span class="badge ${map[r] || 'badge-muted'}">${r || '—'}</span>`;
+}
+
+/* ====================================================================== */
+/* OVERVIEW */
+/* ====================================================================== */
+async function loadOverview() {
+  try {
+    const data = await api('/overview');
+    const m = data.metrics;
+    const a = data.alerts;
+
+    document.getElementById('ov-parses-today').textContent = fmt(data.todayParses);
+    document.getElementById('ov-cache').textContent = fmtPct(m.cache_hit_ratio);
+    document.getElementById('ov-cost').textContent = '$' + Number(data.todayCostUsd).toFixed(4);
+    const budgetPct = ((data.todayCostUsd / 0.5) * 100).toFixed(1);
+    document.getElementById('ov-budget').textContent = `${budgetPct}% of $0.50 budget`;
+
+    if (data.latestEval) {
+      const e = data.latestEval;
+      document.getElementById('ov-eval').textContent = fmtPct(e.passRate);
+      document.getElementById('ov-eval-sub').textContent =
+        `${e.passed}/${e.totalCases} cases · ${fmtTime(e.runAt)}`;
+    }
+
+    // Alerts
+    const alertList = document.getElementById('alert-list');
+    alertList.innerHTML = '';
+    for (const alert of a) {
+      const dot = `<div class="alert-dot ${alert.state}"></div>`;
+      const badge = alert.state === 'ok'
+        ? '<span class="badge badge-green">OK</span>'
+        : alert.state === 'alert'
+          ? '<span class="badge badge-red">ALERT</span>'
+          : '<span class="badge badge-yellow">NO DATA</span>';
+      alertList.innerHTML += `
+        <div class="alert-item">
+          ${dot}
+          <div class="alert-name">${alert.rule}</div>
+          <div class="alert-value">${alert.value !== undefined ? fmt(alert.value * 100, 1) + '% / threshold ' + fmt(alert.threshold * 100, 1) + '%' : '—'}</div>
+          ${badge}
+        </div>`;
+    }
+
+    // All-time metrics
+    document.getElementById('ov-alltime').innerHTML = `
+      <table style="width:100%; font-size:13px;">
+        <tr><td class="text-muted" style="padding:5px 0">Total parse requests</td><td class="mono" style="text-align:right">${fmt(m.parse_requests_total)}</td></tr>
+        <tr><td class="text-muted" style="padding:5px 0">Fallback calls</td><td class="mono" style="text-align:right">${fmt(m.parse_fallback_total)}</td></tr>
+        <tr><td class="text-muted" style="padding:5px 0">Escalations</td><td class="mono" style="text-align:right">${fmt(m.parse_escalation_total)}</td></tr>
+        <tr><td class="text-muted" style="padding:5px 0">Clarifications needed</td><td class="mono" style="text-align:right">${fmt(m.parse_clarification_total)}</td></tr>
+        <tr><td class="text-muted" style="padding:5px 0">AI input tokens</td><td class="mono" style="text-align:right">${fmt(m.ai_tokens_input_total)}</td></tr>
+        <tr><td class="text-muted" style="padding:5px 0">AI output tokens</td><td class="mono" style="text-align:right">${fmt(m.ai_tokens_output_total)}</td></tr>
+        <tr><td class="text-muted" style="padding:5px 0">Total AI cost</td><td class="mono" style="text-align:right">${fmtUsd(m.ai_estimated_cost_usd_total)}</td></tr>
+      </table>`;
+
+    setRefreshTime();
+  } catch (e) {
+    console.error('Overview load failed', e);
+  }
+}
+
+/* ====================================================================== */
+/* EVAL RUNNER */
+/* ====================================================================== */
+let lastEvalResult = null;
+let allParsesData = [];
+
+async function runEval() {
+  const btn = document.getElementById('run-eval-btn');
+  const msg = document.getElementById('eval-running-msg');
+  btn.disabled = true;
+  msg.style.display = 'inline-flex';
+
+  try {
+    const data = await api('/evals/run', { method: 'POST', body: JSON.stringify({ runType: 'golden_set' }) });
+    lastEvalResult = data.result;
+    renderEvalResult(data.result);
+    document.getElementById('eval-result-area').style.display = 'block';
+  } catch (e) {
+    alert('Eval failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    msg.style.display = 'none';
+  }
+}
+
+function renderEvalResult(result) {
+  const pct = (result.passRate * 100).toFixed(1);
+  const prClass = passrateClass(result.passRate);
+  document.getElementById('eval-pass-rate-big').className = 'pass-rate-big ' + prClass;
+  document.getElementById('eval-pass-rate-big').textContent = pct + '%';
+  document.getElementById('eval-pass-count').textContent =
+    `${result.passed} passed · ${result.failed} failed · ${result.totalCases} total`;
+  document.getElementById('eval-progress-fill').style.width = pct + '%';
+  document.getElementById('eval-progress-fill').style.background = passrateBg(result.passRate);
+  document.getElementById('eval-duration').textContent = 'Duration: ' + fmtDuration(result.durationMs);
+
+  const routeStr = Object.entries(result.byRoute)
+    .map(([k, v]) => `${k}: ${v}`).join(' · ');
+  document.getElementById('eval-route-summary').textContent = routeStr;
+
+  // Cuisine breakdown
+  const cuisineGrid = document.getElementById('cuisine-breakdown');
+  cuisineGrid.innerHTML = '';
+  for (const [cuisine, stats] of Object.entries(result.byCategory)) {
+    const r = stats.passed / stats.total;
+    cuisineGrid.innerHTML += `
+      <div class="cuisine-row">
+        <div class="cuisine-name">${cuisine}</div>
+        <div class="progress-bar" style="margin: 6px 0">
+          <div class="progress-bar-fill" style="width:${(r*100).toFixed(0)}%; background:${passrateBg(r)}"></div>
+        </div>
+        <div class="cuisine-sub">${stats.passed}/${stats.total} passed (${(r*100).toFixed(0)}%)</div>
+      </div>`;
+  }
+
+  // Per-case table
+  const tbody = document.getElementById('eval-cases-tbody');
+  tbody.innerHTML = '';
+  for (const c of result.cases) {
+    const statusBadge = c.pass
+      ? '<span class="badge badge-green">PASS</span>'
+      : '<span class="badge badge-red">FAIL</span>';
+    const kwBadge = c.passKeywords
+      ? '<span class="badge badge-green">✓</span>'
+      : '<span class="badge badge-red">✗</span>';
+    const calBadge = c.passCalories
+      ? '<span class="badge badge-green">✓</span>'
+      : '<span class="badge badge-red">✗</span>';
+    const calRange = c.expectedCaloriesMax < 99999
+      ? `${c.expectedCaloriesMin}–${c.expectedCaloriesMax}`
+      : '—';
+    tbody.innerHTML += `
+      <tr>
+        <td><span class="badge badge-muted">${c.cuisine}</span></td>
+        <td class="truncate" title="${c.input}">${c.input}</td>
+        <td>${routeBadge(c.route)}</td>
+        <td class="mono text-muted">${calRange}</td>
+        <td class="mono">${fmt(c.actualCalories)}</td>
+        <td class="mono ${confClass(c.confidence)}">${fmt(c.confidence, 2)}</td>
+        <td>${kwBadge}</td>
+        <td>${calBadge}</td>
+        <td>${statusBadge}</td>
+      </tr>`;
+  }
+}
+
+/* ====================================================================== */
+/* EVAL HISTORY */
+/* ====================================================================== */
+async function loadEvalHistory() {
+  const tbody = document.getElementById('history-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
+  try {
+    const data = await api('/evals/history');
+    if (!data.history.length) {
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="icon">📭</div>No eval runs yet — go to Eval Runner and click Run.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    for (const run of data.history) {
+      const prClass = passrateClass(run.passRate);
+      tbody.innerHTML += `
+        <tr style="cursor:pointer" onclick="toggleHistoryDetail('${run.id}')">
+          <td class="mono">${fmtTime(run.runAt)}</td>
+          <td><span class="badge badge-muted">${run.runType}</span></td>
+          <td class="mono">${run.totalCases}</td>
+          <td class="mono text-green">${run.passed}</td>
+          <td class="mono text-red">${run.failed}</td>
+          <td><span class="${prClass}">${fmtPct(run.passRate)}</span></td>
+          <td class="mono text-muted">${fmtDuration(run.durationMs)}</td>
+          <td class="text-muted" style="font-size:11px">▼ expand</td>
+        </tr>
+        <tr id="detail-row-${run.id}" style="display:none">
+          <td colspan="8" style="padding:0">
+            <div class="history-detail" id="detail-${run.id}">
+              <div class="text-muted" style="font-size:13px">Loading…</div>
+            </div>
+          </td>
+        </tr>`;
+    }
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+async function toggleHistoryDetail(runId) {
+  const row = document.getElementById('detail-row-' + runId);
+  const panel = document.getElementById('detail-' + runId);
+  const isOpen = row.style.display !== 'none';
+  row.style.display = isOpen ? 'none' : 'table-row';
+  if (!isOpen && panel.dataset.loaded !== '1') {
+    panel.dataset.loaded = '1';
+    try {
+      const data = await api('/evals/' + runId);
+      const r = data.result;
+      let html = `<div style="margin-bottom:12px; display:flex; gap:16px; flex-wrap:wrap">
+        <span class="mono ${passrateClass(r.passRate)}">${fmtPct(r.passRate)} pass rate</span>
+        <span class="text-muted mono">${r.passed}/${r.totalCases} passed</span>
+        <span class="text-muted mono">${fmtDuration(r.durationMs)}</span>
+      </div>
+      <div class="table-wrap"><table>
+        <thead><tr><th>Cuisine</th><th>Input</th><th>Route</th><th>Actual Cal</th><th>Confidence</th><th>Status</th></tr></thead>
+        <tbody>`;
+      for (const c of r.cases) {
+        const s = c.pass ? '<span class="badge badge-green">PASS</span>' : '<span class="badge badge-red">FAIL</span>';
+        html += `<tr><td><span class="badge badge-muted">${c.cuisine}</span></td>
+          <td class="truncate">${c.input}</td>
+          <td>${routeBadge(c.route)}</td>
+          <td class="mono">${fmt(c.actualCalories)}</td>
+          <td class="mono ${confClass(c.confidence)}">${fmt(c.confidence, 2)}</td>
+          <td>${s}</td></tr>`;
+      }
+      html += '</tbody></table></div>';
+      panel.innerHTML = html;
+    } catch (e) {
+      panel.innerHTML = `<span class="text-red">${e.message}</span>`;
+    }
+  }
+}
+
+/* ====================================================================== */
+/* RECENT PARSES */
+/* ====================================================================== */
+async function loadRecentParses() {
+  const tbody = document.getElementById('parses-tbody');
+  tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
+  try {
+    const data = await api('/recent-parses');
+    allParsesData = data.parses;
+    renderParses(allParsesData);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+function filterParses() {
+  const filter = document.getElementById('conf-filter').value;
+  let filtered = allParsesData;
+  if (filter === 'high') filtered = allParsesData.filter(p => p.confidence !== null && p.confidence > 0.8);
+  else if (filter === 'mid') filtered = allParsesData.filter(p => p.confidence !== null && p.confidence >= 0.5 && p.confidence <= 0.8);
+  else if (filter === 'low') filtered = allParsesData.filter(p => p.confidence !== null && p.confidence < 0.5);
+  renderParses(filtered);
+}
+
+function renderParses(parses) {
+  const tbody = document.getElementById('parses-tbody');
+  if (!parses.length) {
+    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="icon">📭</div>No parse requests found.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = '';
+  for (const p of parses) {
+    const confCell = p.confidence !== null
+      ? `<span class="mono ${confClass(p.confidence)}">${fmt(p.confidence, 2)}</span>`
+      : '<span class="text-muted">—</span>';
+    const clarBadge = p.needsClarification
+      ? '<span class="badge badge-yellow">Yes</span>'
+      : '<span class="badge badge-muted">No</span>';
+    const time = new Date(p.createdAt).toLocaleTimeString() + ' ' + new Date(p.createdAt).toLocaleDateString();
+    tbody.innerHTML += `
+      <tr>
+        <td class="mono text-muted" style="font-size:12px; white-space:nowrap">${time}</td>
+        <td class="truncate" title="${escHtml(p.rawText)}">${escHtml(p.rawText)}</td>
+        <td class="mono">${p.calories !== null ? fmt(p.calories) : '—'}</td>
+        <td class="mono">${p.proteinG !== null ? fmt(p.proteinG, 1) : '—'}</td>
+        <td class="mono">${p.carbsG !== null ? fmt(p.carbsG, 1) : '—'}</td>
+        <td class="mono">${p.fatG !== null ? fmt(p.fatG, 1) : '—'}</td>
+        <td>${confCell}</td>
+        <td>${clarBadge}</td>
+      </tr>`;
+  }
+}
+
+/* ====================================================================== */
+/* COSTS */
+/* ====================================================================== */
+async function loadCosts() {
+  try {
+    const data = await api('/cost-breakdown');
+    const pct = Math.min(100, (data.todayCostUsd / data.dailyBudgetUsd) * 100);
+    document.getElementById('cost-today').textContent = '$' + Number(data.todayCostUsd).toFixed(4);
+    document.getElementById('cost-budget').textContent = '$' + Number(data.dailyBudgetUsd).toFixed(2);
+    document.getElementById('cost-pct').textContent = pct.toFixed(1) + '%';
+    document.getElementById('cost-bar').style.width = pct + '%';
+    document.getElementById('cost-bar').style.background = pct > 80 ? 'var(--red)' : pct > 50 ? 'var(--yellow)' : 'var(--green)';
+
+    const tbody = document.getElementById('cost-tbody');
+    if (!data.breakdown.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">💸</div>No AI cost events in the last 7 days.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    for (const row of data.breakdown) {
+      const cpr = row.requestCount > 0 ? (row.totalCostUsd / row.requestCount) : 0;
+      tbody.innerHTML += `
+        <tr>
+          <td class="mono">${row.day}</td>
+          <td><span class="badge badge-blue">${row.feature}</span></td>
+          <td class="mono">${fmt(row.requestCount)}</td>
+          <td class="mono">${fmt(row.inputTokens)}</td>
+          <td class="mono">${fmt(row.outputTokens)}</td>
+          <td class="mono">${fmtUsd(row.totalCostUsd)}</td>
+          <td class="mono text-muted">${fmtUsd(cpr)}</td>
+        </tr>`;
+    }
+  } catch (e) {
+    document.getElementById('cost-tbody').innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+/* ====================================================================== */
+/* CACHE */
+/* ====================================================================== */
+async function loadCache() {
+  try {
+    const data = await api('/cache-stats');
+    document.getElementById('cache-total').textContent = fmt(data.totalEntries);
+    document.getElementById('cache-conf').textContent = fmtPct(data.avgConfidence);
+    document.getElementById('cache-hits').textContent = fmt(data.totalHits);
+    document.getElementById('cache-active').textContent = fmt(data.entriesLast24h);
+
+    const tbody = document.getElementById('cache-tbody');
+    if (!data.topEntries.length) {
+      tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">📭</div>Cache is empty.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    for (const e of data.topEntries) {
+      tbody.innerHTML += `
+        <tr>
+          <td>${escHtml(e.foodName) || '<span class="text-muted">—</span>'}</td>
+          <td class="mono">${fmt(e.calories)}</td>
+          <td><span class="badge badge-muted">${e.cacheScope || '—'}</span></td>
+          <td class="mono ${confClass(e.confidence)}">${fmt(e.confidence, 2)}</td>
+          <td class="mono text-green">${fmt(e.hitCount)}</td>
+          <td class="mono text-muted" style="font-size:12px">${fmtTime(e.lastUsedAt)}</td>
+          <td class="mono text-muted" style="font-size:12px">${fmtTime(e.createdAt)}</td>
+        </tr>`;
+    }
+  } catch (e) {
+    document.getElementById('cache-tbody').innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+/* ====================================================================== */
+/* UTILS */
+/* ====================================================================== */
+function escHtml(str) {
+  if (!str) return '';
+  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>

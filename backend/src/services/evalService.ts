@@ -1,0 +1,279 @@
+import { performance } from 'node:perf_hooks';
+import { runPrimaryParsePipeline } from './parsePipelineService.js';
+import { pool } from '../db.js';
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export type EvalCaseResult = {
+  cuisine: string;
+  input: string;
+  route: string;
+  actualCalories: number;
+  expectedCaloriesMin: number;
+  expectedCaloriesMax: number;
+  detectedItems: string;
+  passKeywords: boolean;
+  passCalories: boolean;
+  pass: boolean;
+  confidence: number;
+  latencyMs: number;
+};
+
+export type EvalRunResult = {
+  totalCases: number;
+  passed: number;
+  failed: number;
+  passRate: number;
+  byCategory: Record<string, { total: number; passed: number }>;
+  byRoute: Record<string, number>;
+  cases: EvalCaseResult[];
+  durationMs: number;
+};
+
+export type EvalRunSummary = {
+  id: string;
+  runType: string;
+  runAt: string;
+  totalCases: number;
+  passed: number;
+  failed: number;
+  passRate: number;
+  durationMs: number;
+};
+
+// ---------------------------------------------------------------------------
+// Golden case definitions (57 cases across 12 cuisines)
+// Sourced from goldenSetEval.ts
+// ---------------------------------------------------------------------------
+
+type GoldenCase = {
+  cuisine: string;
+  text: string;
+  expectedKeywords: string[];
+  caloriesRange?: { min: number; max: number };
+};
+
+const GOLDEN_CASES: GoldenCase[] = [
+  { cuisine: 'American', text: 'Black Coffee 1 Cup', expectedKeywords: ['coffee'], caloriesRange: { min: 0, max: 15 } },
+  { cuisine: 'American', text: 'Coke 8oz', expectedKeywords: ['coke', 'cola', 'soft drink', 'soda'], caloriesRange: { min: 60, max: 120 } },
+  { cuisine: 'American', text: 'Cheeseburger 1 burger', expectedKeywords: ['cheeseburger', 'burger'], caloriesRange: { min: 250, max: 900 } },
+  { cuisine: 'American', text: 'Pepperoni Pizza 2 slices', expectedKeywords: ['pizza', 'pepperoni'], caloriesRange: { min: 300, max: 900 } },
+  { cuisine: 'American', text: 'Caesar Salad with Chicken', expectedKeywords: ['caesar', 'salad', 'chicken'], caloriesRange: { min: 180, max: 800 } },
+  { cuisine: 'American', text: 'Buffalo Wings 6 pieces', expectedKeywords: ['wing', 'buffalo'], caloriesRange: { min: 250, max: 1000 } },
+  { cuisine: 'American', text: 'Chocolate Milkshake 12 oz', expectedKeywords: ['milkshake', 'chocolate'], caloriesRange: { min: 180, max: 800 } },
+  { cuisine: 'Indian', text: 'Chicken Tikka Masala 1 cup', expectedKeywords: ['chicken', 'tikka', 'masala'], caloriesRange: { min: 180, max: 750 } },
+  { cuisine: 'Indian', text: 'Dal Tadka 1 bowl', expectedKeywords: ['dal', 'lentil', 'tadka'], caloriesRange: { min: 120, max: 550 } },
+  { cuisine: 'Indian', text: 'Chole Bhature 1 plate', expectedKeywords: ['chole', 'bhature', 'chickpea'], caloriesRange: { min: 350, max: 1300 } },
+  { cuisine: 'Indian', text: 'Pav Bhaji 1 plate', expectedKeywords: ['pav', 'bhaji'], caloriesRange: { min: 180, max: 900 } },
+  { cuisine: 'Indian', text: 'Samosa 2 pieces', expectedKeywords: ['samosa'], caloriesRange: { min: 140, max: 700 } },
+  { cuisine: 'Indian', text: 'Aloo Paratha with Butter', expectedKeywords: ['aloo', 'paratha'], caloriesRange: { min: 220, max: 900 } },
+  { cuisine: 'Indian', text: 'Idli 3 pieces with Sambar', expectedKeywords: ['idli', 'sambar'], caloriesRange: { min: 120, max: 700 } },
+  { cuisine: 'Indian', text: 'Masala Dosa 1 dosa', expectedKeywords: ['dosa', 'masala'], caloriesRange: { min: 180, max: 850 } },
+  { cuisine: 'Indian', text: 'Rajma Chawal 1 bowl', expectedKeywords: ['rajma', 'rice', 'chawal'], caloriesRange: { min: 220, max: 900 } },
+  { cuisine: 'Indian', text: 'Palak Paneer 1 cup', expectedKeywords: ['palak', 'paneer'], caloriesRange: { min: 160, max: 700 } },
+  { cuisine: 'Italian', text: 'Spaghetti Bolognese 1 plate', expectedKeywords: ['spaghetti', 'bolognese', 'pasta'], caloriesRange: { min: 220, max: 1100 } },
+  { cuisine: 'Italian', text: 'Penne Alfredo 1 bowl', expectedKeywords: ['penne', 'alfredo', 'pasta'], caloriesRange: { min: 250, max: 1200 } },
+  { cuisine: 'Italian', text: 'Margherita Pizza 3 slices', expectedKeywords: ['pizza', 'margherita'], caloriesRange: { min: 250, max: 1100 } },
+  { cuisine: 'Italian', text: 'Lasagna 1 serving', expectedKeywords: ['lasagna'], caloriesRange: { min: 220, max: 1000 } },
+  { cuisine: 'Italian', text: 'Minestrone Soup 1 bowl', expectedKeywords: ['minestrone', 'soup'], caloriesRange: { min: 70, max: 450 } },
+  { cuisine: 'Italian', text: 'Risotto Mushroom 1 cup', expectedKeywords: ['risotto', 'mushroom'], caloriesRange: { min: 180, max: 800 } },
+  { cuisine: 'Italian', text: 'Tiramisu 1 slice', expectedKeywords: ['tiramisu'], caloriesRange: { min: 180, max: 700 } },
+  { cuisine: 'Mexican', text: 'Chicken Burrito 1 burrito', expectedKeywords: ['burrito', 'chicken'], caloriesRange: { min: 250, max: 1200 } },
+  { cuisine: 'Mexican', text: 'Beef Tacos 3 tacos', expectedKeywords: ['taco', 'beef'], caloriesRange: { min: 220, max: 1200 } },
+  { cuisine: 'Mexican', text: 'Quesadilla Cheese 1 piece', expectedKeywords: ['quesadilla', 'cheese'], caloriesRange: { min: 180, max: 900 } },
+  { cuisine: 'Mexican', text: 'Nachos with Salsa', expectedKeywords: ['nachos', 'salsa'], caloriesRange: { min: 140, max: 1000 } },
+  { cuisine: 'Mexican', text: 'Chicken Fajitas 1 plate', expectedKeywords: ['fajita', 'chicken'], caloriesRange: { min: 180, max: 1000 } },
+  { cuisine: 'Mexican', text: 'Guacamole 1 cup', expectedKeywords: ['guacamole', 'avocado'], caloriesRange: { min: 120, max: 700 } },
+  { cuisine: 'Chinese', text: 'Kung Pao Chicken 1 bowl', expectedKeywords: ['kung pao', 'chicken'], caloriesRange: { min: 200, max: 950 } },
+  { cuisine: 'Chinese', text: 'Vegetable Fried Rice 1 bowl', expectedKeywords: ['fried rice', 'vegetable', 'rice'], caloriesRange: { min: 180, max: 950 } },
+  { cuisine: 'Chinese', text: 'Chow Mein 1 plate', expectedKeywords: ['chow mein', 'noodle'], caloriesRange: { min: 180, max: 950 } },
+  { cuisine: 'Chinese', text: 'Sweet and Sour Pork 1 serving', expectedKeywords: ['sweet', 'sour', 'pork'], caloriesRange: { min: 220, max: 950 } },
+  { cuisine: 'Chinese', text: 'Dim Sum 6 pieces', expectedKeywords: ['dim sum', 'dumpling'], caloriesRange: { min: 150, max: 900 } },
+  { cuisine: 'Chinese', text: 'Hot and Sour Soup 1 bowl', expectedKeywords: ['hot', 'sour', 'soup'], caloriesRange: { min: 70, max: 450 } },
+  { cuisine: 'Japanese', text: 'Salmon Sushi 8 pieces', expectedKeywords: ['salmon', 'sushi'], caloriesRange: { min: 180, max: 700 } },
+  { cuisine: 'Japanese', text: 'Chicken Teriyaki with Rice', expectedKeywords: ['teriyaki', 'chicken', 'rice'], caloriesRange: { min: 220, max: 1000 } },
+  { cuisine: 'Japanese', text: 'Ramen Tonkotsu 1 bowl', expectedKeywords: ['ramen', 'tonkotsu'], caloriesRange: { min: 250, max: 1200 } },
+  { cuisine: 'Japanese', text: 'Miso Soup 1 cup', expectedKeywords: ['miso', 'soup'], caloriesRange: { min: 20, max: 250 } },
+  { cuisine: 'Japanese', text: 'Tempura Shrimp 5 pieces', expectedKeywords: ['tempura', 'shrimp'], caloriesRange: { min: 160, max: 900 } },
+  { cuisine: 'Middle Eastern', text: 'Chicken Shawarma Wrap', expectedKeywords: ['shawarma', 'chicken', 'wrap'], caloriesRange: { min: 220, max: 950 } },
+  { cuisine: 'Middle Eastern', text: 'Falafel 6 pieces', expectedKeywords: ['falafel'], caloriesRange: { min: 180, max: 900 } },
+  { cuisine: 'Middle Eastern', text: 'Hummus 1 cup with Pita', expectedKeywords: ['hummus', 'pita'], caloriesRange: { min: 180, max: 1000 } },
+  { cuisine: 'Middle Eastern', text: 'Lamb Kebab 2 skewers', expectedKeywords: ['lamb', 'kebab'], caloriesRange: { min: 220, max: 1000 } },
+  { cuisine: 'Middle Eastern', text: 'Tabbouleh Salad 1 bowl', expectedKeywords: ['tabbouleh', 'salad'], caloriesRange: { min: 80, max: 500 } },
+  { cuisine: 'Thai', text: 'Pad Thai Shrimp 1 plate', expectedKeywords: ['pad thai', 'shrimp'], caloriesRange: { min: 220, max: 1100 } },
+  { cuisine: 'Thai', text: 'Green Curry Chicken 1 bowl', expectedKeywords: ['green curry', 'chicken'], caloriesRange: { min: 220, max: 1000 } },
+  { cuisine: 'Thai', text: 'Tom Yum Soup 1 bowl', expectedKeywords: ['tom yum', 'soup'], caloriesRange: { min: 50, max: 450 } },
+  { cuisine: 'Vietnamese', text: 'Pho Beef 1 bowl', expectedKeywords: ['pho', 'beef', 'noodle'], caloriesRange: { min: 180, max: 900 } },
+  { cuisine: 'Vietnamese', text: 'Spring Rolls 2 rolls', expectedKeywords: ['spring roll'], caloriesRange: { min: 120, max: 700 } },
+  { cuisine: 'Korean', text: 'Bibimbap 1 bowl', expectedKeywords: ['bibimbap', 'rice'], caloriesRange: { min: 220, max: 1000 } },
+  { cuisine: 'Korean', text: 'Kimchi Fried Rice 1 bowl', expectedKeywords: ['kimchi', 'fried rice'], caloriesRange: { min: 180, max: 950 } },
+  { cuisine: 'Korean', text: 'Bulgogi Beef 1 serving', expectedKeywords: ['bulgogi', 'beef'], caloriesRange: { min: 180, max: 900 } },
+  { cuisine: 'Mediterranean', text: 'Greek Salad with Feta', expectedKeywords: ['greek', 'salad', 'feta'], caloriesRange: { min: 120, max: 700 } },
+  { cuisine: 'Mediterranean', text: 'Avocado Toast 2 slices', expectedKeywords: ['avocado', 'toast'], caloriesRange: { min: 180, max: 800 } },
+  { cuisine: 'Dessert', text: 'Vanilla Ice Cream 1 scoop', expectedKeywords: ['vanilla', 'ice cream'], caloriesRange: { min: 80, max: 450 } },
+  { cuisine: 'Dessert', text: 'Brownie 1 piece', expectedKeywords: ['brownie'], caloriesRange: { min: 120, max: 650 } },
+  { cuisine: 'Dessert', text: 'Banana Pudding 1 cup', expectedKeywords: ['banana', 'pudding'], caloriesRange: { min: 120, max: 700 } }
+];
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function normalizeText(text: string): string {
+  return text.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function includesAnyKeyword(resultNames: string, keywords: string[]): boolean {
+  return keywords.some((kw) => normalizeText(resultNames).includes(normalizeText(kw)));
+}
+
+function round(value: number, digits = 3): number {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+// ---------------------------------------------------------------------------
+// Core eval runner
+// ---------------------------------------------------------------------------
+
+export async function runGoldenSetEval(): Promise<EvalRunResult> {
+  const runStart = performance.now();
+  const cases: EvalCaseResult[] = [];
+  const byCategory: Record<string, { total: number; passed: number }> = {};
+  const byRoute: Record<string, number> = {};
+
+  for (const testCase of GOLDEN_CASES) {
+    const caseStart = performance.now();
+
+    let output;
+    try {
+      output = await runPrimaryParsePipeline(testCase.text, { allowFallback: true });
+    } catch {
+      // If the pipeline throws (e.g. no DB connection in eval env), record as failed
+      cases.push({
+        cuisine: testCase.cuisine,
+        input: testCase.text,
+        route: 'error',
+        actualCalories: 0,
+        expectedCaloriesMin: testCase.caloriesRange?.min ?? 0,
+        expectedCaloriesMax: testCase.caloriesRange?.max ?? 99999,
+        detectedItems: '',
+        passKeywords: false,
+        passCalories: false,
+        pass: false,
+        confidence: 0,
+        latencyMs: round(performance.now() - caseStart)
+      });
+      continue;
+    }
+
+    const latencyMs = round(performance.now() - caseStart);
+    const names = output.result.items.map((item) => item.name).join(' | ');
+    const totalCalories = output.result.totals.calories;
+    const passKeywords = includesAnyKeyword(names, testCase.expectedKeywords);
+    const passCalories = testCase.caloriesRange
+      ? totalCalories >= testCase.caloriesRange.min && totalCalories <= testCase.caloriesRange.max
+      : true;
+    const pass = passKeywords && passCalories;
+
+    // Track by cuisine
+    if (!byCategory[testCase.cuisine]) byCategory[testCase.cuisine] = { total: 0, passed: 0 };
+    byCategory[testCase.cuisine].total++;
+    if (pass) byCategory[testCase.cuisine].passed++;
+
+    // Track by route
+    byRoute[output.route] = (byRoute[output.route] ?? 0) + 1;
+
+    cases.push({
+      cuisine: testCase.cuisine,
+      input: testCase.text,
+      route: output.route,
+      actualCalories: round(totalCalories),
+      expectedCaloriesMin: testCase.caloriesRange?.min ?? 0,
+      expectedCaloriesMax: testCase.caloriesRange?.max ?? 99999,
+      detectedItems: names,
+      passKeywords,
+      passCalories,
+      pass,
+      confidence: round(output.result.confidence),
+      latencyMs
+    });
+  }
+
+  const passed = cases.filter((c) => c.pass).length;
+  const failed = cases.length - passed;
+  const durationMs = round(performance.now() - runStart);
+
+  return {
+    totalCases: cases.length,
+    passed,
+    failed,
+    passRate: cases.length > 0 ? round(passed / cases.length, 4) : 0,
+    byCategory,
+    byRoute,
+    cases,
+    durationMs
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Persistence
+// ---------------------------------------------------------------------------
+
+export async function saveEvalRun(result: EvalRunResult, runType = 'golden_set'): Promise<string> {
+  const { rows } = await pool.query<{ id: string }>(
+    `INSERT INTO eval_runs (run_type, total_cases, passed, failed, pass_rate, duration_ms, results_json)
+     VALUES ($1, $2, $3, $4, $5, $6, $7)
+     RETURNING id`,
+    [
+      runType,
+      result.totalCases,
+      result.passed,
+      result.failed,
+      result.passRate,
+      Math.round(result.durationMs),
+      JSON.stringify(result)
+    ]
+  );
+  return rows[0]!.id;
+}
+
+export async function getEvalRunHistory(limit = 20): Promise<EvalRunSummary[]> {
+  const { rows } = await pool.query<{
+    id: string;
+    run_type: string;
+    run_at: Date;
+    total_cases: number;
+    passed: number;
+    failed: number;
+    pass_rate: number;
+    duration_ms: number;
+  }>(
+    `SELECT id, run_type, run_at, total_cases, passed, failed, pass_rate, duration_ms
+     FROM eval_runs
+     ORDER BY run_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+
+  return rows.map((r) => ({
+    id: r.id,
+    runType: r.run_type,
+    runAt: r.run_at.toISOString(),
+    totalCases: r.total_cases,
+    passed: r.passed,
+    failed: r.failed,
+    passRate: r.pass_rate,
+    durationMs: r.duration_ms
+  }));
+}
+
+export async function getEvalRunById(id: string): Promise<EvalRunResult | null> {
+  const { rows } = await pool.query<{ results_json: EvalRunResult }>(
+    `SELECT results_json FROM eval_runs WHERE id = $1`,
+    [id]
+  );
+  return rows[0]?.results_json ?? null;
+}
