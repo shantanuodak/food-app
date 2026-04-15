@@ -752,11 +752,21 @@ async function runEval() {
   const msg = document.getElementById('eval-running-msg');
   btn.disabled = true;
   msg.style.display = 'inline-flex';
+  msg.innerHTML = '<span class="spinner"></span>&nbsp;Starting eval run…';
 
   try {
-    const data = await api('/evals/run', { method: 'POST', body: JSON.stringify({ runType: 'golden_set' }) });
-    lastEvalResult = data.result;
-    renderEvalResult(data.result);
+    // Kick off the run (returns 202 immediately)
+    await api('/evals/run', { method: 'POST', body: JSON.stringify({ runType: 'golden_set' }) });
+
+    // Poll every 3s until it finishes
+    msg.innerHTML = '<span class="spinner"></span>&nbsp;Running 57 cases in background… polling every 3s';
+    const runId = await pollEvalStatus();
+
+    // Fetch the full result
+    msg.innerHTML = '<span class="spinner"></span>&nbsp;Fetching results…';
+    const detail = await api('/evals/' + runId);
+    lastEvalResult = detail.result;
+    renderEvalResult(detail.result);
     document.getElementById('eval-result-area').style.display = 'block';
   } catch (e) {
     alert('Eval failed: ' + e.message);
@@ -764,6 +774,19 @@ async function runEval() {
     btn.disabled = false;
     msg.style.display = 'none';
   }
+}
+
+async function pollEvalStatus() {
+  const maxWaitMs = 5 * 60 * 1000; // 5 minutes cap
+  const start = Date.now();
+  while (Date.now() - start < maxWaitMs) {
+    await new Promise(r => setTimeout(r, 3000));
+    const status = await api('/evals/status');
+    if (status.state === 'complete' && status.runId) return status.runId;
+    if (status.state === 'error') throw new Error(status.error || 'Eval run failed');
+    // else 'running' or 'idle' — keep polling
+  }
+  throw new Error('Eval timed out after 5 minutes');
 }
 
 function renderEvalResult(result) {

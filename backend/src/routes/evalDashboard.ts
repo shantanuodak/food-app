@@ -90,15 +90,81 @@ router.get('/overview', async (req, res, next) => {
 
 // ---------------------------------------------------------------------------
 // POST /v1/internal/dashboard/evals/run
-// Trigger a golden set eval run (synchronous — may take 10-60s)
+// Triggers a golden set eval run in the background (free-tier Render drops
+// HTTP connections on long requests, so we fire-and-forget and persist the
+// result to the eval_runs table when done). The dashboard polls
+// /evals/status to see progress.
 // ---------------------------------------------------------------------------
+
+type EvalRunStatus = {
+  state: 'idle' | 'running' | 'complete' | 'error';
+  startedAt: string | null;
+  finishedAt: string | null;
+  runId: string | null;
+  error: string | null;
+  totalCases: number;
+  casesDone: number;
+};
+
+const evalStatus: EvalRunStatus = {
+  state: 'idle',
+  startedAt: null,
+  finishedAt: null,
+  runId: null,
+  error: null,
+  totalCases: 0,
+  casesDone: 0
+};
 
 router.post('/evals/run', async (req, res, next) => {
   try {
     requireInternalKey(req.header('x-internal-metrics-key'));
-    const result = await runGoldenSetEval();
-    const runId = await saveEvalRun(result);
-    res.json({ runId, result });
+
+    if (evalStatus.state === 'running') {
+      res.status(409).json({
+        error: { code: 'EVAL_ALREADY_RUNNING', message: 'An eval run is already in progress' },
+        status: evalStatus
+      });
+      return;
+    }
+
+    // Reset status and respond immediately; don't block the request
+    evalStatus.state = 'running';
+    evalStatus.startedAt = new Date().toISOString();
+    evalStatus.finishedAt = null;
+    evalStatus.runId = null;
+    evalStatus.error = null;
+    evalStatus.totalCases = 57;
+    evalStatus.casesDone = 0;
+
+    // Fire and forget
+    (async () => {
+      try {
+        const result = await runGoldenSetEval();
+        const runId = await saveEvalRun(result);
+        evalStatus.state = 'complete';
+        evalStatus.finishedAt = new Date().toISOString();
+        evalStatus.runId = runId;
+        evalStatus.casesDone = result.totalCases;
+      } catch (err) {
+        evalStatus.state = 'error';
+        evalStatus.finishedAt = new Date().toISOString();
+        evalStatus.error = err instanceof Error ? err.message : String(err);
+        console.error('[eval_run_failed]', err);
+      }
+    })();
+
+    res.status(202).json({ started: true, status: evalStatus });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Poll this endpoint to see if the background eval is done
+router.get('/evals/status', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    res.json(evalStatus);
   } catch (err) {
     next(err);
   }
