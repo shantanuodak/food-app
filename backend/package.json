@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && mkdir -p dist/testing-dashboard && cp src/testing-dashboard/index.html dist/testing-dashboard/index.html",
     "start": "node dist/index.js",
     "migrate": "tsx src/scripts/migrate.ts",
     "benchmark:replay": "tsx src/scripts/replayBenchmark.ts",
