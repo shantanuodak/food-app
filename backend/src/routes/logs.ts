@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { saveFoodLogStrict } from '../services/logService.js';
+import { saveFoodLogStrict, updateFoodLog } from '../services/logService.js';
 import { getDaySummary, getDaySummaryRange } from '../services/daySummaryService.js';
 import { getDayLogs, getDayLogsRange } from '../services/dayLogsService.js';
 import { getProgressSummary } from '../services/progressService.js';
@@ -50,6 +50,33 @@ const saveLogSchema = z.object({
     mealType: z.string().trim().min(1).max(40).optional(),
     confidence: confidenceScore,
     imageRef: z.string().trim().min(1).max(500).optional(),
+    inputKind: z.enum(['text', 'image', 'voice', 'manual']).optional(),
+    totals: z.object({
+      calories: nonNegative,
+      protein: nonNegative,
+      carbs: nonNegative,
+      fat: nonNegative
+    }),
+    sourcesUsed: z.array(z.enum(['cache', 'gemini', 'manual'])).max(10).optional(),
+    assumptions: z.array(z.string().max(500)).max(20).optional().default([]),
+    items: z.array(itemSchema).max(100)
+  })
+});
+
+/// PATCH body — used when the client edits an existing food_log in place
+/// (e.g. the quantity fast path). Omits `parseRequestId`/`parseVersion` by
+/// default since no new parse was involved; accepts them when the edit
+/// *does* include a re-parse so the backend can keep parse provenance in
+/// sync.
+const patchLogSchema = z.object({
+  parseRequestId: z.string().trim().min(1).max(120).optional(),
+  parseVersion: z.string().trim().min(1).max(20).optional(),
+  parsedLog: z.object({
+    rawText: z.string().trim().min(1).max(500),
+    loggedAt: z.string().datetime().optional(),
+    mealType: z.string().trim().min(1).max(40).optional(),
+    confidence: confidenceScore,
+    imageRef: z.string().trim().min(1).max(500).nullable().optional(),
     inputKind: z.enum(['text', 'image', 'voice', 'manual']).optional(),
     totals: z.object({
       calories: nonNegative,
@@ -258,6 +285,112 @@ router.post('/', async (req, res, next) => {
     });
 
     res.status(200).json(saved);
+  } catch (err) {
+    next(err);
+  }
+});
+
+const logIdParamSchema = z.object({
+  id: z.string().uuid('id must be a UUID')
+});
+
+router.patch('/:id', async (req, res, next) => {
+  try {
+    const { id: logId } = logIdParamSchema.parse(req.params);
+    const body = patchLogSchema.parse(req.body);
+    const auth = res.locals.auth as { userId: string };
+    const userId = auth.userId;
+
+    // If the caller supplied parse references, validate them the same way
+    // POST does. For pure client-side edits (quantity fast path) these are
+    // omitted and we skip straight to totals validation + persistence.
+    if (body.parseRequestId && body.parseVersion) {
+      if (body.parseVersion !== config.parseVersion) {
+        throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'parseVersion does not match current parser version');
+      }
+      const parseRequest = await getParseRequestForUser(userId, body.parseRequestId);
+      if (!parseRequest) {
+        throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'Unknown parseRequestId');
+      }
+      if (isParseRequestStale(parseRequest)) {
+        throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'Stale parseRequestId');
+      }
+      if (parseRequest.parseVersion !== body.parseVersion) {
+        throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'parseRequestId parseVersion mismatch');
+      }
+      if (normalizeRawText(parseRequest.rawText) !== normalizeRawText(body.parsedLog.rawText)) {
+        throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'parsedLog rawText does not match parseRequest');
+      }
+    }
+
+    if (body.parsedLog.loggedAt) {
+      const loggedAt = new Date(body.parsedLog.loggedAt);
+      await assertLoggedAtNotInFutureForUser(userId, loggedAt);
+    }
+
+    const unresolvedItems = body.parsedLog.items.filter(
+      (item) => item.needsClarification === true && !hasManualOverride(item)
+    );
+    if (unresolvedItems.length > 0) {
+      throw new ApiError(422, 'NEEDS_CLARIFICATION', 'One or more items require clarification before save.');
+    }
+
+    const invalidManualOverrides = body.parsedLog.items.filter((item) => {
+      const manual = normalizeManualOverride(item);
+      if (!manual?.enabled) {
+        return false;
+      }
+      return !((item.originalNutritionSourceId || item.nutritionSourceId || '').trim());
+    });
+    if (invalidManualOverrides.length > 0) {
+      throw new ApiError(422, 'INVALID_MANUAL_OVERRIDE', 'Manual override items must include original source provenance.');
+    }
+
+    const computedTotals = totalsFromItems(body.parsedLog.items);
+    const providedTotals = body.parsedLog.totals;
+    if (
+      roundOneDecimal(providedTotals.calories) !== computedTotals.calories ||
+      roundOneDecimal(providedTotals.protein) !== computedTotals.protein ||
+      roundOneDecimal(providedTotals.carbs) !== computedTotals.carbs ||
+      roundOneDecimal(providedTotals.fat) !== computedTotals.fat
+    ) {
+      throw new ApiError(422, 'TOTALS_MISMATCH', 'parsedLog totals must equal the sum of item nutrition values.');
+    }
+
+    const updated = await updateFoodLog({
+      logId,
+      userId,
+      rawText: body.parsedLog.rawText,
+      loggedAt: body.parsedLog.loggedAt,
+      mealType: body.parsedLog.mealType,
+      imageRef: body.parsedLog.imageRef ?? undefined,
+      inputKind: body.parsedLog.inputKind,
+      confidence: body.parsedLog.confidence,
+      totals: body.parsedLog.totals,
+      sourcesUsed: body.parsedLog.sourcesUsed,
+      assumptions: body.parsedLog.assumptions,
+      items: body.parsedLog.items.map((item) => ({
+        foodName: item.name,
+        quantity: item.amount ?? item.quantity,
+        amount: item.amount ?? item.quantity,
+        unit: item.unit,
+        unitNormalized: item.unitNormalized ?? item.unit,
+        grams: item.grams,
+        gramsPerUnit: item.gramsPerUnit ?? ((item.amount ?? item.quantity) > 0 ? item.grams / (item.amount ?? item.quantity) : null),
+        calories: item.calories,
+        protein: item.protein,
+        carbs: item.carbs,
+        fat: item.fat,
+        nutritionSourceId: item.nutritionSourceId,
+        originalNutritionSourceId: item.originalNutritionSourceId || item.nutritionSourceId,
+        sourceFamily: item.sourceFamily ?? (hasManualOverride(item) ? 'manual' : undefined),
+        needsClarification: item.needsClarification ?? false,
+        manualOverrideMeta: normalizeManualOverride(item),
+        matchConfidence: item.matchConfidence
+      }))
+    });
+
+    res.status(200).json(updated);
   } catch (err) {
     next(err);
   }

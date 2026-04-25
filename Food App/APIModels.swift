@@ -277,6 +277,29 @@ struct SaveLogResponse: Decodable {
     let status: String
 }
 
+/// PATCH /v1/logs/:id — parse references are optional so the client-side
+/// quantity fast path (no new parse) can reuse the same schema.
+struct PatchLogRequest: Codable {
+    let parseRequestId: String?
+    let parseVersion: String?
+    let parsedLog: PatchLogBody
+}
+
+/// Mirrors `SaveLogBody` but with `loggedAt` optional — when editing an
+/// existing food_log we want the backend to preserve the original timestamp
+/// instead of overwriting it with "now".
+struct PatchLogBody: Codable {
+    let rawText: String
+    let loggedAt: String?
+    let inputKind: String?
+    let imageRef: String?
+    let confidence: Double
+    let totals: NutritionTotals
+    let sourcesUsed: [String]?
+    let assumptions: [String]?
+    let items: [SaveParsedFoodItem]
+}
+
 struct HealthActivityRequest: Codable {
     let date: String
     let steps: Double
@@ -296,13 +319,13 @@ struct DaySummaryResponse: Decodable {
     let remaining: NutritionTotals
 }
 
-struct DayLogsResponse: Decodable {
+struct DayLogsResponse: Codable {
     let date: String
     let timezone: String
     let logs: [DayLogEntry]
 }
 
-struct DayLogEntry: Decodable, Identifiable {
+struct DayLogEntry: Codable, Identifiable {
     let id: String
     let loggedAt: String
     let rawText: String
@@ -312,7 +335,7 @@ struct DayLogEntry: Decodable, Identifiable {
     let items: [DayLogItem]
 }
 
-struct DayLogItem: Decodable, Identifiable {
+struct DayLogItem: Codable, Identifiable {
     let id: String
     let foodName: String
     let quantity: Double
@@ -392,4 +415,22 @@ struct AdminFeatureFlagsResponse: Decodable {
 
 struct AdminFeatureFlagsUpdateRequest: Encodable {
     let geminiEnabled: Bool
+}
+
+// MARK: - Tracking Accuracy
+
+struct TrackingAccuracyResponse: Decodable {
+    let period: String
+    let entryCount: Int
+    let averageConfidence: Double
+    let tier: String
+    let lowConfidenceEntries: [LowConfidenceEntry]
+}
+
+struct LowConfidenceEntry: Decodable, Identifiable {
+    var id: String { rawText + loggedAt }
+    let rawText: String
+    let confidence: Double
+    let loggedAt: String
+    let suggestion: String
 }

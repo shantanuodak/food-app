@@ -111,9 +111,9 @@ struct OB05bGoalValidationScreen: View {
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 14, weight: .bold))
                         }
-                        .foregroundStyle(.white)
+                        .foregroundStyle(OnboardingGlassTheme.ctaForeground)
                         .frame(width: 220, height: 60)
-                        .background(Color.black)
+                        .background(OnboardingGlassTheme.ctaBackground)
                         .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
@@ -417,7 +417,7 @@ private struct GoalValidationDonutChart: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(Color.white.opacity(0.12), lineWidth: 16)
+                .stroke(OnboardingGlassTheme.panelStroke.opacity(0.6), lineWidth: 16)
 
             ForEach(Array(slices.enumerated()), id: \.element.id) { index, slice in
                 let start = startFraction(at: index)

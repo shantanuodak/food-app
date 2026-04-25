@@ -36,7 +36,7 @@ struct OB02bSocialProofScreen: View {
                     .padding(.top, 32)
                     .padding(.horizontal, 36)
                     .opacity(appeared ? 1 : 0)
-                    .offset(y: floating ? -4 : 4)
+                    .offset(y: floating ? -8 : 8)
 
                 // Research stat
                 researchStat
@@ -55,9 +55,9 @@ struct OB02bSocialProofScreen: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .bold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingGlassTheme.ctaForeground)
                     .frame(width: 220, height: 60)
-                    .background(Color.black, in: Capsule())
+                    .background(OnboardingGlassTheme.ctaBackground, in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .padding(.bottom, 24)
@@ -67,13 +67,16 @@ struct OB02bSocialProofScreen: View {
             withAnimation(.easeOut(duration: 0.5)) {
                 appeared = true
             }
-            withAnimation(.easeOut(duration: 2.0).delay(0.4)) {
+            // Plot the curve slowly, after the screen has settled in.
+            withAnimation(.easeInOut(duration: 3.0).delay(0.6)) {
                 graphProgress = 1.0
             }
-            withAnimation(.easeOut(duration: 0.4).delay(1.6)) {
+            // Stat arrives just as the curve completes.
+            withAnimation(.easeOut(duration: 0.5).delay(3.0)) {
                 statVisible = true
             }
-            withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true).delay(0.6)) {
+            // Gentle, noticeable float — starts after the graph finishes drawing.
+            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true).delay(3.6)) {
                 floating = true
             }
         }
@@ -113,7 +116,7 @@ struct OB02bSocialProofScreen: View {
                     ForEach(0..<4, id: \.self) { _ in
                         Spacer()
                         Rectangle()
-                            .fill(Color.black.opacity(0.04))
+                            .fill(OnboardingGlassTheme.textPrimary.opacity(0.08))
                             .frame(height: 1)
                     }
                     Spacer()

@@ -22,6 +22,37 @@ enum OnboardingGlassTheme {
     static let selectedSurface = Color(red: 1.00, green: 0.85, blue: 0.52).opacity(0.24)
     static let buttonPrimaryText = Color(red: 0.09, green: 0.09, blue: 0.10)
     static let buttonSecondaryText = textPrimary
+
+    /// Primary CTA fill — black in light mode, white in dark mode.
+    /// Use together with `ctaForeground` so the button text inverts too.
+    static let ctaBackground = adaptiveColor(
+        light: UIColor.black,
+        dark: UIColor.white
+    )
+    /// Text/icon color to pair with `ctaBackground`.
+    static let ctaForeground = adaptiveColor(
+        light: UIColor.white,
+        dark: UIColor.black
+    )
+
+    // MARK: - Dynamic UIColors for UIKit pickers
+
+    /// Selected row text color for UIPickerView wheels.
+    static let pickerSelectedTextUI = UIColor { trait in
+        trait.userInterfaceStyle == .dark ? .white : .black
+    }
+    /// Text color for rows immediately adjacent to the selected row.
+    static let pickerAdjacentTextUI = UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.55)
+            : UIColor(red: 0.62, green: 0.62, blue: 0.62, alpha: 1)
+    }
+    /// Text color for rows further from the selected row.
+    static let pickerDistantTextUI = UIColor { trait in
+        trait.userInterfaceStyle == .dark
+            ? UIColor(white: 1, alpha: 0.30)
+            : UIColor(red: 0.81, green: 0.81, blue: 0.81, alpha: 1)
+    }
     static let buttonShadow = adaptiveColor(
         light: UIColor(red: 0.08, green: 0.10, blue: 0.14, alpha: 0.10),
         dark: UIColor(red: 0.0, green: 0.0, blue: 0.0, alpha: 0.20)

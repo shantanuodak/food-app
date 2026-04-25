@@ -69,9 +69,9 @@ struct OB02cChallengeScreen: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .bold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingGlassTheme.ctaForeground)
                     .frame(width: 220, height: 60)
-                    .background(Color.black.opacity(canContinue ? 1 : 0.2))
+                    .background(OnboardingGlassTheme.ctaBackground.opacity(canContinue ? 1 : 0.2))
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)

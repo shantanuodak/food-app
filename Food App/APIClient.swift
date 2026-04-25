@@ -172,6 +172,19 @@ final class APIClient {
         )
     }
 
+    /// Updates an existing food_log in place — used for in-row edits (the
+    /// quantity fast path) so we don't create duplicate entries on the
+    /// backend. Parse references in the body are optional: required only
+    /// when the edit involved a fresh parse.
+    func patchLog(id: String, request requestBody: PatchLogRequest) async throws -> SaveLogResponse {
+        try await request(
+            path: "/v1/logs/\(id)",
+            method: "PATCH",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
     func getDaySummary(date: String, timezone: String = TimeZone.current.identifier) async throws -> DaySummaryResponse {
         try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [
             URLQueryItem(name: "date", value: date),
@@ -216,6 +229,18 @@ final class APIClient {
 
     func updateAdminFeatureFlags(_ requestBody: AdminFeatureFlagsUpdateRequest) async throws -> AdminFeatureFlagsResponse {
         try await request(path: "/v1/admin/feature-flags", method: "PUT", body: requestBody, requiresAuth: true)
+    }
+
+    func getTrackingAccuracy(date: String, timezone: String) async throws -> TrackingAccuracyResponse {
+        try await request(
+            path: "/v1/profile/tracking-accuracy",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "date", value: date),
+                URLQueryItem(name: "tz", value: timezone)
+            ],
+            requiresAuth: true
+        )
     }
 
     private func request<Response: Decodable>(

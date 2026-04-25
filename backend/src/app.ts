@@ -10,6 +10,7 @@ import internalMetricsRoutes from './routes/internalMetrics.js';
 import evalDashboardRoutes from './routes/evalDashboard.js';
 import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js';
 import healthRoutes from './routes/health.js';
+import trackingAccuracyRoutes from './routes/trackingAccuracy.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -38,6 +39,7 @@ export function createApp() {
   app.use('/v1/logs', authRequired, logsRoutes);
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
   app.use('/v1/health', authRequired, healthRoutes);
+  app.use('/v1/profile', authRequired, trackingAccuracyRoutes);
   app.use('/v1/internal', internalMetricsRoutes);
   app.use('/v1/internal/dashboard', evalDashboardRoutes);
 

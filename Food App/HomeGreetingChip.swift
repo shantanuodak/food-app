@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeGreetingChip: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var handRotation = 0.0
 
@@ -15,29 +16,16 @@ struct HomeGreetingChip: View {
 
             Text(title)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.96))
+                .foregroundStyle(colorScheme == .dark ? .white.opacity(0.96) : Color.primary.opacity(0.80))
                 .lineLimit(1)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
         .background(
             Capsule(style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.09, green: 0.43, blue: 0.74),
-                            Color(red: 0.16, green: 0.64, blue: 0.98)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color(red: 1.00, green: 0.78, blue: 0.33).opacity(0.12))
         )
-        .overlay(
-            Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.22), lineWidth: 1)
-        )
-        .shadow(color: Color.black.opacity(0.18), radius: 6, x: 0, y: 2)
+        .glassEffect(.regular.interactive(), in: .capsule)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Greeting: \(title)"))
         .onAppear {

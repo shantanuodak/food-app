@@ -47,6 +47,13 @@ struct MainLoggingShellView: View {
     @State private var dayCacheSummary: [String: DaySummaryResponse] = [:]
     @State private var dayCacheLogs: [String: DayLogsResponse] = [:]
     @State private var prefetchTask: Task<Void, Never>?
+    /// Per-row debounced PATCH task. A key is added when the client-side
+    /// quantity fast path scales a row that already has a `serverLogId`; the
+    /// task fires after `patchDebounceNs` and issues a `PATCH /v1/logs/:id`
+    /// with the row's current items. Cancelled & replaced on each keystroke
+    /// so a user adjusting 3 → 4 → 5 → 6 only results in one network call.
+    @State private var pendingPatchTasks: [UUID: Task<Void, Never>] = [:]
+    private let patchDebounceNs: UInt64 = 1_500_000_000
     @FocusState private var isNoteEditorFocused: Bool
     @State private var flowStartedAt: Date?
     @State private var draftLoggedAt: Date?
@@ -67,10 +74,15 @@ struct MainLoggingShellView: View {
     @State private var latestParseInputKind: String = "text"
     @State private var suppressDebouncedParseOnce = false
     @State private var isCalendarPresented = false
+    @State private var isProfilePresented = false
     /// Slide direction for day transitions: negative = slide left (going forward), positive = slide right (going back)
     @State private var dayTransitionOffset: CGFloat = 0
     /// Locks the swipe direction once determined — prevents fighting with ScrollView vertical scroll
     @State private var swipeAxis: SwipeAxis = .undecided
+    @State private var isCustomCameraPresented = false
+    @State private var cameraDrawerState: CameraDrawerState = .idle
+    @State private var cameraDrawerImage: UIImage?
+    @State private var isCameraAnalysisSheetPresented = false
 
     private enum SwipeAxis {
         case undecided, horizontal, vertical
@@ -78,11 +90,18 @@ struct MainLoggingShellView: View {
     // Per-row parse results accumulated during a multi-row session.
     // Each entry stores the individual row rawText that was sent to the backend so
     // saveLog's rawText always matches the corresponding parse_requests record.
-    @State private var completedRowParses: [(rowID: UUID, parseRequestId: String, parseVersion: String, rawText: String, response: ParseLogResponse)] = []
+    // `rowItems` is the row-specific subset of `response.items`, captured at the
+    // moment the parse response is applied. When multiple rows are typed before
+    // the debounced parse fires, the backend receives the joined text and
+    // returns items for ALL of them; saving `response.items` blindly would
+    // attach every item to every row's food_log and inflate totals. Keeping
+    // `rowItems` separate preserves the per-row mapping that applyRowParseResult
+    // already computed.
+    @State private var completedRowParses: [(rowID: UUID, parseRequestId: String, parseVersion: String, rawText: String, response: ParseLogResponse, rowItems: [ParsedFoodItem])] = []
     // parseRequestIDs that have already been dispatched to auto-save (prevents re-saves).
     @State private var autoSavedParseIDs: Set<String> = []
     private let defaults = UserDefaults.standard
-    private let autoSaveDelayNs: UInt64 = 10_000_000_000
+    private let autoSaveDelayNs: UInt64 = 1_500_000_000
     private let autoSaveMinConfidence = 0.70
 
     private enum DetailsDrawerMode {
@@ -107,19 +126,21 @@ struct MainLoggingShellView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Input area — fixed, outside ScrollView to avoid iOS 26 flattening bug
-                composeEntrySection
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 8)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Title stays fixed — doesn't move during day swipe
+                    Text("What did you eat today?")
+                        .font(.custom("InstrumentSerif-Regular", size: 28))
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, 12)
 
-                // Scrollable content below
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .modifier(DaySwipeOffsetModifier(offset: dayTransitionOffset))
+                    // Food rows + status slide with the swipe animation
+                    composeEntryContent
+                        .modifier(DaySwipeOffsetModifier(offset: dayTransitionOffset))
                 }
+                .padding(.horizontal, 16)
+                .padding(.top, 4)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 15, coordinateSpace: .local)
@@ -187,6 +208,13 @@ struct MainLoggingShellView: View {
                 .presentationDetents([.medium])
                 .presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $isProfilePresented) {
+                NavigationStack {
+                    HomeProfileScreen()
+                        .environmentObject(appStore)
+                }
+            }
+            .padding()
             .confirmationDialog(
                 "Add from",
                 isPresented: $isCameraSourceDialogPresented,
@@ -204,7 +232,6 @@ struct MainLoggingShellView: View {
             } message: {
                 Text("Choose how you want to add food.")
             }
-            .padding()
             .onChange(of: rowTextSignature) { _, _ in
                 if suppressDebouncedParseOnce {
                     suppressDebouncedParseOnce = false
@@ -225,18 +252,30 @@ struct MainLoggingShellView: View {
                     handleVoiceModeTapped()
                 }
             }
-            .onChange(of: selectedSummaryDate) { _, _ in
-                let clamped = clampedSummaryDate(selectedSummaryDate)
-                if !Calendar.current.isDate(clamped, inSameDayAs: selectedSummaryDate) {
+            .onChange(of: selectedSummaryDate) { oldValue, newValue in
+                let clamped = clampedSummaryDate(newValue)
+                if !Calendar.current.isDate(clamped, inSameDayAs: newValue) {
                     selectedSummaryDate = clamped
                     return
+                }
+                // Only reset parse state when actually moving to a different calendar day
+                if !Calendar.current.isDate(oldValue, inSameDayAs: newValue) {
+                    resetActiveParseStateForDateChange()
                 }
                 refreshDaySummary()
                 refreshDayLogs()
             }
             .onAppear {
                 restorePendingSaveContextIfNeeded()
+                // Load cached day logs from disk instantly (no network wait)
+                let todayStr = summaryDateString
+                if dayLogs == nil, let cached = loadDayLogsFromCache(date: todayStr) {
+                    dayLogs = cached
+                    dayCacheLogs[todayStr] = cached
+                    syncInputRowsFromDayLogs(cached.logs, for: cached.date)
+                }
                 if appStore.isSessionRestored {
+                    submitRestoredPendingSaveIfPossible()
                     refreshDaySummary()
                     refreshDayLogs()
                     Task { await appStore.refreshHealthActivity() }
@@ -245,8 +284,16 @@ struct MainLoggingShellView: View {
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
                 guard ready else { return }
+                // Also try disk cache here in case onAppear ran before session was ready
+                let todayStr = summaryDateString
+                if dayLogs == nil, let cached = loadDayLogsFromCache(date: todayStr) {
+                    dayLogs = cached
+                    dayCacheLogs[todayStr] = cached
+                    syncInputRowsFromDayLogs(cached.logs, for: cached.date)
+                }
                 refreshDaySummary()
                 refreshDayLogs()
+                submitRestoredPendingSaveIfPossible()
                 Task { await appStore.refreshHealthActivity() }
                 prefetchAdjacentDays(around: selectedSummaryDate)
             }
@@ -256,12 +303,19 @@ struct MainLoggingShellView: View {
                 autoSaveTask?.cancel()
                 prefetchTask?.cancel()
                 unresolvedRetryTask?.cancel()
+                // Drop any pending PATCH tasks; inputRows state is cleared
+                // on the next load anyway.
+                for task in pendingPatchTasks.values { task.cancel() }
+                pendingPatchTasks.removeAll()
                 clearParseSchedulerState()
             }
             .onReceive(NotificationCenter.default.publisher(for: .openCameraFromTabBar)) { _ in
                 selectedCameraSource = nil
                 inputMode = .camera
                 isCameraSourceDialogPresented = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openVoiceFromTabBar)) { _ in
+                inputMode = .voice
             }
             .sheet(isPresented: $isDetailsDrawerPresented) {
                 detailsDrawer
@@ -280,18 +334,74 @@ struct MainLoggingShellView: View {
                     }
                 )
             }
+            .fullScreenCover(isPresented: $isCustomCameraPresented) {
+                CameraView(
+                    onImageCaptured: { image in
+                        isCustomCameraPresented = false
+                        inputMode = .text
+                        selectedCameraSource = nil
+                        cameraDrawerImage = image
+                        cameraDrawerState = .analyzing(image)
+                        isCameraAnalysisSheetPresented = true
+                        Task { await parseAndUpdateDrawer(image) }
+                    },
+                    onOpenPhotoLibrary: {
+                        // After camera dismisses, open photo library
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                            handleCameraSourceSelection(.photo)
+                        }
+                    }
+                )
+                .ignoresSafeArea()
+            }
             .sheet(item: $selectedRowDetails) { details in
                 rowCalorieDetailsSheet(details)
+            }
+            .sheet(isPresented: $isCameraAnalysisSheetPresented, onDismiss: {
+                cameraDrawerState = .idle
+                cameraDrawerImage = nil
+            }) {
+                CameraResultDrawerView(
+                    state: cameraDrawerState,
+                    onLogIt: {
+                        handleDrawerLogIt()
+                    },
+                    onDiscard: {
+                        isCameraAnalysisSheetPresented = false
+                    },
+                    onRetry: {
+                        if let image = cameraDrawerImage {
+                            cameraDrawerState = .analyzing(image)
+                            Task { await parseAndUpdateDrawer(image) }
+                        }
+                    }
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(24)
             }
             .overlay(alignment: .bottom) {
                 if isVoiceOverlayPresented {
                     VoiceRecordingOverlay(
                         transcribedText: speechService.transcribedText,
                         isListening: speechService.isListening,
+                        audioLevel: speechService.audioLevel,
                         onCancel: {
                             speechService.stopListening()
-                            isVoiceOverlayPresented = false
+                            setVoiceOverlayPresented(false)
                             inputMode = .text
+                        },
+                        onSilenceTimeout: {
+                            speechService.stopListening()
+                            setVoiceOverlayPresented(false)
+                            inputMode = .text
+                            parseInfoMessage = "No speech detected. Try again."
+                            Task { @MainActor in
+                                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                                if parseInfoMessage == "No speech detected. Try again." {
+                                    withAnimation { parseInfoMessage = nil }
+                                }
+                            }
                         }
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -302,19 +412,29 @@ struct MainLoggingShellView: View {
                 guard wasListening && !isNowListening && isVoiceOverlayPresented else { return }
                 let finalText = speechService.transcribedText
                     .trimmingCharacters(in: .whitespacesAndNewlines)
-                isVoiceOverlayPresented = false
+                setVoiceOverlayPresented(false)
 
                 guard !finalText.isEmpty else {
                     parseInfoMessage = "No speech detected. Try again."
                     inputMode = .text
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        if parseInfoMessage == "No speech detected. Try again." {
+                            withAnimation { parseInfoMessage = nil }
+                        }
+                    }
                     return
                 }
                 insertVoiceTranscription(finalText)
             }
+            .onChange(of: speechService.audioLevel) { _, newLevel in
+                guard isVoiceOverlayPresented else { return }
+                handleVoiceHaptic(level: newLevel)
+            }
             .onChange(of: speechService.error) { _, newError in
                 guard let newError else { return }
                 parseError = newError
-                isVoiceOverlayPresented = false
+                setVoiceOverlayPresented(false)
                 inputMode = .text
             }
         }
@@ -322,7 +442,13 @@ struct MainLoggingShellView: View {
 
     private var topHeaderStrip: some View {
         HStack(alignment: .center, spacing: 8) {
-            HomeGreetingChip(firstName: loggedInFirstName)
+            Button {
+                isProfilePresented = true
+            } label: {
+                HomeGreetingChip(firstName: loggedInFirstName)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Open profile"))
 
             Spacer(minLength: 0)
 
@@ -519,20 +645,67 @@ struct MainLoggingShellView: View {
         let feedback = UIImpactFeedbackGenerator(style: .medium)
         feedback.impactOccurred()
 
-        // Slide content out in swipe direction, then slide new content in from opposite side
-        let slideOut: CGFloat = days > 0 ? -120 : 120
-        withAnimation(.easeIn(duration: 0.12)) {
-            dayTransitionOffset = slideOut
-        }
+        // Flush any pending save for the current day BEFORE leaving it, so typed
+        // entries don't get lost when the user swipes away mid-debounce.
+        Task { @MainActor in
+            await flushPendingAutoSaveIfEligible()
 
-        // After a brief pause, update the date and slide content back from the opposite side
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+            // Reset transient parse/flow state so it doesn't leak across days.
+            resetActiveParseStateForDateChange()
+
+            // Slide content out in swipe direction, then slide new content in from opposite side
+            let slideOut: CGFloat = days > 0 ? -120 : 120
+            withAnimation(.easeIn(duration: 0.12)) {
+                dayTransitionOffset = slideOut
+            }
+
+            // After a brief pause, update the date and slide content back from the opposite side
+            try? await Task.sleep(nanoseconds: 120_000_000)
+
+            // Pre-apply cached data to prevent flicker during transition
+            let dateStr = Self.summaryRequestFormatter.string(from: normalized)
+            if let cachedLogs = dayCacheLogs[dateStr] {
+                dayLogs = cachedLogs
+                syncInputRowsFromDayLogs(cachedLogs.logs, for: cachedLogs.date)
+            }
+            if let cachedSummary = dayCacheSummary[dateStr] {
+                daySummary = cachedSummary
+                daySummaryError = nil
+            }
+
             selectedSummaryDate = normalized
             dayTransitionOffset = -slideOut * 0.6
             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                 dayTransitionOffset = 0
             }
         }
+    }
+
+    private func draftTimestampForSelectedDate(reference: Date = Date()) -> Date {
+        let calendar = Calendar.current
+        let selectedDay = calendar.startOfDay(for: selectedSummaryDate)
+        let time = calendar.dateComponents([.hour, .minute, .second, .nanosecond], from: reference)
+        var components = calendar.dateComponents([.year, .month, .day], from: selectedDay)
+        components.hour = time.hour
+        components.minute = time.minute
+        components.second = time.second
+        components.nanosecond = time.nanosecond
+        let timestamp = calendar.date(from: components) ?? selectedDay
+        return min(timestamp, reference)
+    }
+
+    private func ensureDraftTimingStarted() {
+        let now = Date()
+        if flowStartedAt == nil {
+            flowStartedAt = now
+        }
+        if draftLoggedAt == nil {
+            draftLoggedAt = draftTimestampForSelectedDate(reference: now)
+        }
+    }
+
+    private func draftDayString() -> String? {
+        draftLoggedAt.map { Self.summaryRequestFormatter.string(from: $0) }
     }
 
     private func clampedSummaryDate(_ date: Date) -> Date {
@@ -559,17 +732,18 @@ struct MainLoggingShellView: View {
         !orderedDirtyRowIDsForCurrentInput().isEmpty
     }
 
-    private var composeEntrySection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("What did you eat today?")
-                .font(.custom("InstrumentSerif-Regular", size: 30))
-                .frame(maxWidth: .infinity, alignment: .leading)
-
+    /// The scrollable food rows + status strip. The title "What did you eat today?"
+    /// is rendered separately in the body so it stays pinned during day-swipe animations.
+    private var composeEntryContent: some View {
+        VStack(alignment: .leading, spacing: 0) {
             inputSection
+
             homeStatusStrip
+                .padding(.top, 8)
 
             if appStore.isHealthSyncEnabled && appStore.healthAuthorizationState == .authorized {
                 activityCard
+                    .padding(.top, 16)
             }
         }
     }
@@ -634,6 +808,9 @@ struct MainLoggingShellView: View {
             },
             onFocusedRowChanged: { rowID in
                 activeEditingRowID = rowID
+            },
+            onQuantityFastPathUpdated: { rowID in
+                handleQuantityFastPathUpdate(rowID: rowID)
             }
         )
     }
@@ -1856,7 +2033,7 @@ struct MainLoggingShellView: View {
 
             do {
                 try speechService.startListening()
-                isVoiceOverlayPresented = true
+                setVoiceOverlayPresented(true)
             } catch {
                 parseError = "Could not start voice recognition: \(error.localizedDescription)"
                 inputMode = .text
@@ -1871,9 +2048,11 @@ struct MainLoggingShellView: View {
             !$0.isSaved && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }) {
             inputRows[emptyIndex].text = text
+            inputRows[emptyIndex].showInsertShimmer = true
         } else {
             var newRow = HomeLogRow.empty()
             newRow.text = text
+            newRow.showInsertShimmer = true
             inputRows.append(newRow)
         }
 
@@ -1884,14 +2063,29 @@ struct MainLoggingShellView: View {
         // scheduleDebouncedParse automatically via the existing onChange observer
         inputMode = .text
 
-        if flowStartedAt == nil {
-            let now = Date()
-            flowStartedAt = now
-            draftLoggedAt = now
-        }
-        if draftLoggedAt == nil {
-            draftLoggedAt = Date()
-        }
+        ensureDraftTimingStarted()
+    }
+
+    // MARK: - Voice Helpers
+
+    private func setVoiceOverlayPresented(_ presented: Bool) {
+        isVoiceOverlayPresented = presented
+        NotificationCenter.default.post(
+            name: .voiceRecordingStateChanged,
+            object: nil,
+            userInfo: ["isRecording": presented]
+        )
+    }
+
+    private static let voiceHapticGenerator = UIImpactFeedbackGenerator(style: .soft)
+    @State private var lastHapticTime: Date = .distantPast
+
+    private func handleVoiceHaptic(level: Float) {
+        guard level > 0.3 else { return }
+        let now = Date()
+        guard now.timeIntervalSince(lastHapticTime) > 0.3 else { return }
+        lastHapticTime = now
+        Self.voiceHapticGenerator.impactOccurred(intensity: CGFloat(min(level, 1.0)))
     }
 
     // MARK: - Camera Input
@@ -1901,16 +2095,97 @@ struct MainLoggingShellView: View {
         inputMode = .camera
         switch source {
         case .takePicture:
-            guard UIImagePickerController.isSourceTypeAvailable(.camera) else {
-                parseError = "Camera is unavailable on this device."
-                inputMode = .text
-                return
-            }
-            imagePickerSourceType = .camera
+            isCustomCameraPresented = true
         case .photo:
             imagePickerSourceType = .photoLibrary
+            isImagePickerPresented = true
         }
-        isImagePickerPresented = true
+    }
+
+    // MARK: - Custom Camera Drawer Flow
+
+    @MainActor
+    private func parseAndUpdateDrawer(_ image: UIImage) async {
+        guard let prepared = prepareImagePayload(from: image) else {
+            withAnimation {
+                cameraDrawerState = .error("Unable to process this image.", image)
+            }
+            return
+        }
+
+        ensureDraftTimingStarted()
+
+        do {
+            let response = try await appStore.apiClient.parseImageLog(
+                imageData: prepared.uploadData,
+                mimeType: prepared.mimeType,
+                loggedAt: Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+            )
+
+            // Store the parse result and prepared data for when the user confirms
+            parseResult = response
+            pendingImageData = prepared.uploadData
+            pendingImagePreviewData = prepared.previewData
+            pendingImageMimeType = prepared.mimeType
+            pendingImageStorageRef = nil
+            latestParseInputKind = "image"
+
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) {
+                cameraDrawerState = .parsed(image, response.items, response.totals)
+            }
+        } catch {
+            handleAuthFailureIfNeeded(error)
+            withAnimation {
+                cameraDrawerState = .error(userFriendlyParseError(error), image)
+            }
+        }
+    }
+
+    @MainActor
+    private func handleDrawerLogIt() {
+        guard case .parsed(_, let items, _) = cameraDrawerState,
+              let response = parseResult else { return }
+
+        // Populate the input row with a short display name.
+        // Full detail (brand, protein content, flavor, etc.) lives in the items
+        // and is shown in the details drawer — the home screen just needs a readable label.
+        var rowText = shortenedFoodLabel(items: items, extractedText: response.extractedText)
+
+        var row = HomeLogRow.empty()
+        row.text = rowText
+        row.imagePreviewData = pendingImagePreviewData
+        row.imageRef = pendingImageStorageRef
+        suppressDebouncedParseOnce = true
+
+        // Preserve existing rows (both saved history and unsaved drafts the user typed)
+        // instead of wiping them. Insert the camera row before the trailing empty row.
+        let savedRows = inputRows.filter { $0.isSaved }
+        let unsavedNonEmpty = inputRows.filter {
+            !$0.isSaved && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+        inputRows = savedRows + unsavedNonEmpty + [row]
+        clearParseSchedulerState()
+
+        latestParseInputKind = normalizedInputKind(response.inputKind, fallback: "image")
+        editableItems = response.items.map(EditableParsedItem.init(apiItem:))
+
+        // Find the camera row we just inserted (the one with the image data)
+        let cameraRowIndex = inputRows.lastIndex(where: { $0.id == row.id })
+        let cameraRowIDSet: Set<UUID> = [row.id]
+        applyRowParseResult(response, targetRowIDs: cameraRowIDSet)
+        if let idx = cameraRowIndex {
+            inputRows[idx].imagePreviewData = pendingImagePreviewData
+            inputRows[idx].imageRef = pendingImageStorageRef
+        }
+
+        parseInfoMessage = nil
+        parseError = nil
+        saveError = nil
+        appStore.setError(nil)
+        scheduleAutoSave()
+
+        // Dismiss the sheet — food appears on home screen
+        isCameraAnalysisSheetPresented = false
     }
 
     @MainActor
@@ -1928,14 +2203,7 @@ struct MainLoggingShellView: View {
             return
         }
 
-        if flowStartedAt == nil {
-            let now = Date()
-            flowStartedAt = now
-            draftLoggedAt = now
-        }
-        if draftLoggedAt == nil {
-            draftLoggedAt = Date()
-        }
+        ensureDraftTimingStarted()
 
         pendingImageData = prepared.uploadData
         pendingImagePreviewData = prepared.previewData
@@ -1967,7 +2235,7 @@ struct MainLoggingShellView: View {
             let response = try await appStore.apiClient.parseImageLog(
                 imageData: prepared.uploadData,
                 mimeType: prepared.mimeType,
-                loggedAt: Self.loggedAtFormatter.string(from: draftLoggedAt ?? Date())
+                loggedAt: Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
             )
             let durationMs = elapsedMs(since: startedAt)
 
@@ -2298,13 +2566,14 @@ struct MainLoggingShellView: View {
         debounceTask?.cancel()
         autoSaveTask?.cancel()
         unresolvedRetryTask?.cancel()
-        unresolvedRetryCount = 0
-        parseError = nil
-        parseInfoMessage = nil
-        saveError = nil
-        escalationError = nil
-        escalationInfoMessage = nil
-        escalationBlockedCode = nil
+        // Only mutate @State if the value is actually changing — avoids unnecessary re-renders
+        if unresolvedRetryCount != 0 { unresolvedRetryCount = 0 }
+        if parseError != nil { parseError = nil }
+        if parseInfoMessage != nil { parseInfoMessage = nil }
+        if saveError != nil { saveError = nil }
+        if escalationError != nil { escalationError = nil }
+        if escalationInfoMessage != nil { escalationInfoMessage = nil }
+        if escalationBlockedCode != nil { escalationBlockedCode = nil }
 
         let trimmed = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
@@ -2326,17 +2595,12 @@ struct MainLoggingShellView: View {
             return
         }
 
-        if flowStartedAt == nil {
-            let now = Date()
-            flowStartedAt = now
-            draftLoggedAt = now
-        }
-        if draftLoggedAt == nil {
-            draftLoggedAt = Date()
-        }
+        ensureDraftTimingStarted()
 
         if shouldDeferDebouncedParse(for: newValue) {
-            synchronizeParseOwnership()
+            // Defer ownership sync to after debounce — running it per-keystroke
+            // iterates all rows, calls predictedLoadingRouteHint (regex), and
+            // mutates parsePhase on every row, which tanks typing performance.
             return
         }
 
@@ -2348,7 +2612,7 @@ struct MainLoggingShellView: View {
                 queuedParseRowIDs = []
                 latestQueuedNoteText = nil
                 pendingFollowupRequested = false
-                synchronizeParseOwnership()
+                // Defer synchronizeParseOwnership to debounce callback
             }
             return
         }
@@ -2359,7 +2623,7 @@ struct MainLoggingShellView: View {
         } else {
             queuedParseRowIDs = dirtyRowIDs.filter { $0 != activeParseRowID }
         }
-        synchronizeParseOwnership()
+        // Defer synchronizeParseOwnership to debounce callback
         let nonEmptyRowCount = inputRows.filter {
             !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }.count
@@ -2380,14 +2644,7 @@ struct MainLoggingShellView: View {
         unresolvedRetryTask?.cancel()
         let trimmed = trimmedNoteText
         guard !trimmed.isEmpty else { return }
-        if flowStartedAt == nil {
-            let now = Date()
-            flowStartedAt = now
-            draftLoggedAt = now
-        }
-        if draftLoggedAt == nil {
-            draftLoggedAt = Date()
-        }
+        ensureDraftTimingStarted()
 
         let dirtyRowIDs = orderedDirtyRowIDsForCurrentInput()
         guard !dirtyRowIDs.isEmpty else {
@@ -2443,12 +2700,42 @@ struct MainLoggingShellView: View {
 
         let request = ParseLogRequest(
             text: text,
-            loggedAt: Self.loggedAtFormatter.string(from: draftLoggedAt ?? Date())
+            loggedAt: Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
         )
 
         do {
             let response = try await appStore.apiClient.parseLog(request)
             let durationMs = elapsedMs(since: startedAt)
+
+            // Guard: if the target row no longer exists (e.g. user swiped to a different
+            // day while the parse was in flight), silently discard the response instead
+            // of applying it to some other day's data.
+            guard inputRows.contains(where: { $0.id == snapshot.activeRowID }) else {
+                shouldAdvanceToNextRow = false
+                return
+            }
+
+            // Staleness guard: the user may have edited the row's text while
+            // this parse was in flight (e.g. typed "chicken tenders", then
+            // edited to "3 pieces chicken tenders" before the response came
+            // back). Applying the stale response would map 1-piece calories
+            // onto the new text AND stamp normalizedTextAtParse with the new
+            // text, making the row look fresh — so `rowNeedsFreshParse` would
+            // return false and no follow-up parse would fire. Instead, discard
+            // the response here and let the deferred
+            // `processNextQueuedParseIfNeeded()` (via shouldAdvanceToNextRow)
+            // dispatch a fresh parse against the edited text.
+            if let currentRow = inputRows.first(where: { $0.id == snapshot.activeRowID }) {
+                let normalizedSent = normalizedRowText(snapshot.text)
+                let normalizedCurrent = normalizedRowText(currentRow.text)
+                if !normalizedSent.isEmpty && normalizedSent != normalizedCurrent {
+                    // Leave the row marked dirty (we deliberately don't touch
+                    // calories/parsedItems/normalizedTextAtParse) and let the
+                    // defer block re-dispatch against the new text.
+                    emitParseTelemetrySuccess(response: response, durationMs: durationMs, uiApplied: false)
+                    return
+                }
+            }
 #if DEBUG
             if let cacheDebug = response.cacheDebug {
                 let reasonSummary = (response.reasonCodes ?? []).joined(separator: ",")
@@ -2488,7 +2775,23 @@ struct MainLoggingShellView: View {
             // Store this row's result with the rawText that was actually sent to the backend.
             // This is the fix for the 422 rawText mismatch: buildSaveDraftRequest/autoSaveIfNeeded
             // will use completedRowParses[n].rawText instead of trimmedNoteText.
-            let rowEntry = (rowID: snapshot.activeRowID, parseRequestId: response.parseRequestId, parseVersion: response.parseVersion, rawText: text, response: response)
+            //
+            // Also snapshot the row's per-row parsedItems (computed by
+            // applyRowParseResult immediately above). When multiple rows are
+            // parsed together, response.items contains ALL items but the row's
+            // parsedItems is already filtered to just this row's item(s). The
+            // save path uses this snapshot so one row's food_log doesn't end up
+            // carrying another row's macros.
+            let rowItemsSnapshot = inputRows.first(where: { $0.id == snapshot.activeRowID })?.parsedItems
+                ?? response.items
+            let rowEntry = (
+                rowID: snapshot.activeRowID,
+                parseRequestId: response.parseRequestId,
+                parseVersion: response.parseVersion,
+                rawText: text,
+                response: response,
+                rowItems: rowItemsSnapshot
+            )
             if let idx = completedRowParses.firstIndex(where: { $0.rowID == snapshot.activeRowID }) {
                 completedRowParses[idx] = rowEntry
             } else {
@@ -2503,7 +2806,10 @@ struct MainLoggingShellView: View {
 
             // Always show accumulated results so the UI never goes blank while the queue drains.
             parseResult = response
-            editableItems = completedRowParses.flatMap { $0.response.items }.map(EditableParsedItem.init(apiItem:))
+            // Use each entry's row-specific items (not the full response.items)
+            // so items from a combined multi-row parse aren't duplicated in the
+            // details drawer once the individual rows have their own entries.
+            editableItems = completedRowParses.flatMap { $0.rowItems }.map(EditableParsedItem.init(apiItem:))
 
             if remainingDirtyRowIDs.isEmpty {
                 scheduleDetailsDrawer(for: response)
@@ -2666,25 +2972,83 @@ struct MainLoggingShellView: View {
         synchronizeParseOwnership()
     }
 
+    /// Clears ALL per-day transient parse state. Called when the user changes the
+    /// selected date (swipe or calendar pick) so parse spinners / partial results
+    /// from the previous day don't leak onto the new day's view.
+    private func resetActiveParseStateForDateChange() {
+        // Cancel in-flight tasks first so their completion handlers bail out
+        parseTask?.cancel()
+        debounceTask?.cancel()
+        autoSaveTask?.cancel()
+        unresolvedRetryTask?.cancel()
+
+        // Clear transient parse METADATA only — do NOT touch inputRows here.
+        // syncInputRowsFromDayLogs will atomically replace the rows with the
+        // new day's data when it arrives. Clearing rows here causes a visible
+        // flicker (empty → populated) because the API response hasn't arrived yet.
+        if parseResult != nil { parseResult = nil }
+        if !editableItems.isEmpty { editableItems = [] }
+        if activeParseRowID != nil { activeParseRowID = nil }
+        if !queuedParseRowIDs.isEmpty { queuedParseRowIDs = [] }
+        if inFlightParseSnapshot != nil { inFlightParseSnapshot = nil }
+        if !completedRowParses.isEmpty { completedRowParses = [] }
+        if !autoSavedParseIDs.isEmpty { autoSavedParseIDs = [] }
+        if parseInFlightCount != 0 { parseInFlightCount = 0 }
+        if unresolvedRetryCount != 0 { unresolvedRetryCount = 0 }
+
+        // Clear transient error/info messages
+        if parseError != nil { parseError = nil }
+        if parseInfoMessage != nil { parseInfoMessage = nil }
+        if saveError != nil { saveError = nil }
+        if escalationError != nil { escalationError = nil }
+        if escalationInfoMessage != nil { escalationInfoMessage = nil }
+        if escalationBlockedCode != nil { escalationBlockedCode = nil }
+        if saveSuccessMessage != nil { saveSuccessMessage = nil }
+
+        // Reset flow tracking (new day = new flow)
+        if flowStartedAt != nil { flowStartedAt = nil }
+        if draftLoggedAt != nil { draftLoggedAt = nil }
+        if lastTimeToLogMs != nil { lastTimeToLogMs = nil }
+        if lastAutoSavedContentFingerprint != nil { lastAutoSavedContentFingerprint = nil }
+
+        // Clear image-related @State vars (but NOT inputRows image data —
+        // that gets replaced when syncInputRowsFromDayLogs runs)
+        pendingImageData = nil
+        pendingImagePreviewData = nil
+        pendingImageMimeType = nil
+        pendingImageStorageRef = nil
+        latestParseInputKind = "text"
+        selectedCameraSource = nil
+    }
+
     private func synchronizeParseOwnership() {
         let queuedSet = Set(queuedParseRowIDs)
         for index in inputRows.indices {
             let rowID = inputRows[index].id
             if hasActiveParseRequest, rowID == activeParseRowID {
-                let startedAt = inputRows[index].loadingStatusStartedAt ?? Date()
-                inputRows[index].setParseActive(
-                    routeHint: HomeLogRow.predictedLoadingRouteHint(for: inputRows[index].text),
-                    startedAt: startedAt
-                )
+                // Only mutate if not already in .active state to avoid re-rendering
+                if !inputRows[index].isLoading {
+                    let startedAt = inputRows[index].loadingStatusStartedAt ?? Date()
+                    inputRows[index].setParseActive(
+                        routeHint: HomeLogRow.predictedLoadingRouteHint(for: inputRows[index].text),
+                        startedAt: startedAt
+                    )
+                }
             } else if !hasActiveParseRequest, rowID == activeParseRowID, parseError != nil {
-                inputRows[index].setParseFailed()
+                if !inputRows[index].isFailed {
+                    inputRows[index].setParseFailed()
+                }
             } else if queuedSet.contains(rowID) {
-                inputRows[index].setParseQueued()
+                if !inputRows[index].isQueued {
+                    inputRows[index].setParseQueued()
+                }
             } else if inputRows[index].isUnresolved {
                 // Preserve "Edit & Retry" — user needs to act on this row
                 continue
             } else {
-                inputRows[index].clearParsePhase()
+                if inputRows[index].parsePhase != .idle {
+                    inputRows[index].clearParsePhase()
+                }
             }
         }
         updateParseQueueInfoMessage()
@@ -2867,6 +3231,10 @@ struct MainLoggingShellView: View {
             if let mapped = mappedCaloriesByRow[rowIndex] {
                 if lockedRowIndices.contains(rowIndex) {
                     continue
+                }
+                // Trigger calorie reveal shimmer when calories appear for the first time
+                if inputRows[rowIndex].calories == nil && mapped > 0 {
+                    inputRows[rowIndex].showCalorieRevealShimmer = true
                 }
                 inputRows[rowIndex].calories = mapped
                 inputRows[rowIndex].isApproximate = approximateDisplay
@@ -3223,7 +3591,7 @@ struct MainLoggingShellView: View {
             rawText = trimmedNoteText
         }
         guard !rawText.isEmpty else { return nil }
-        let effectiveLoggedAt = Self.loggedAtFormatter.string(from: draftLoggedAt ?? Date())
+        let effectiveLoggedAt = Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
         let inputKind = normalizedInputKind(parseResult.inputKind, fallback: latestParseInputKind)
         let currentImageRef = pendingImageStorageRef ??
             inputRows.compactMap(\.imageRef).first
@@ -3293,6 +3661,192 @@ struct MainLoggingShellView: View {
         }
     }
 
+    // MARK: - Quantity Fast-Path Persistence
+
+    /// Called from the composer after the client-side quantity fast path
+    /// rescales a row's items. Routes persistence based on whether the row
+    /// was loaded from the server (serverLogId present → PATCH) or is a
+    /// newly-composed row the user is still typing (serverLogId nil → let
+    /// the existing auto-save/POST flow pick up the scaled items via
+    /// buildRowSaveRequest).
+    private func handleQuantityFastPathUpdate(rowID: UUID) {
+        guard let row = inputRows.first(where: { $0.id == rowID }) else { return }
+
+        if let serverLogId = row.serverLogId {
+            schedulePatchUpdate(rowID: rowID, serverLogId: serverLogId)
+        } else {
+            // New row, not yet saved server-side. The existing auto-save
+            // loop reads inputRows[rowID].parsedItems when building the save
+            // request, so the scaled items will be persisted on the next
+            // auto-save tick. Nudge the timer so the edit doesn't sit idle.
+            if completedRowParses.contains(where: { $0.rowID == rowID }) {
+                scheduleAutoSave()
+            }
+        }
+    }
+
+    /// Debounced PATCH scheduler for edits to server-backed rows. If the
+    /// user keeps adjusting the number, each keystroke cancels the previous
+    /// task and restarts the timer — so one sustained edit session becomes
+    /// one network call.
+    private func schedulePatchUpdate(rowID: UUID, serverLogId: String) {
+        pendingPatchTasks[rowID]?.cancel()
+        let task = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: patchDebounceNs)
+            guard !Task.isCancelled else { return }
+            await performPatchUpdate(rowID: rowID, serverLogId: serverLogId)
+        }
+        pendingPatchTasks[rowID] = task
+    }
+
+    /// Build and dispatch the PATCH. Reads the row's CURRENT state at call
+    /// time so we always persist the latest scaled values even if multiple
+    /// edits were debounced together.
+    private func performPatchUpdate(rowID: UUID, serverLogId: String) async {
+        guard appStore.isNetworkReachable else { return }
+        guard let row = inputRows.first(where: { $0.id == rowID }),
+              !row.parsedItems.isEmpty else { return }
+
+        let items: [SaveParsedFoodItem] = row.parsedItems.map { item in
+            SaveParsedFoodItem(
+                name: item.name,
+                quantity: item.amount ?? item.quantity,
+                amount: item.amount ?? item.quantity,
+                unit: item.unitNormalized ?? item.unit,
+                unitNormalized: item.unitNormalized ?? item.unit,
+                grams: item.grams,
+                gramsPerUnit: item.gramsPerUnit,
+                calories: item.calories,
+                protein: item.protein,
+                carbs: item.carbs,
+                fat: item.fat,
+                nutritionSourceId: item.nutritionSourceId,
+                originalNutritionSourceId: item.originalNutritionSourceId,
+                sourceFamily: item.sourceFamily,
+                matchConfidence: item.matchConfidence,
+                needsClarification: item.needsClarification,
+                manualOverride: (item.manualOverride == true)
+                    ? SaveManualOverride(enabled: true, reason: nil, editedFields: [])
+                    : nil
+            )
+        }
+
+        // Recompute totals from items so server validation passes.
+        let totals = NutritionTotals(
+            calories: row.parsedItems.reduce(0) { $0 + $1.calories },
+            protein: row.parsedItems.reduce(0) { $0 + $1.protein },
+            carbs: row.parsedItems.reduce(0) { $0 + $1.carbs },
+            fat: row.parsedItems.reduce(0) { $0 + $1.fat }
+        )
+
+        // Intentionally pass loggedAt: nil so the backend preserves the
+        // original food_logs.logged_at — a quantity fast-path edit shouldn't
+        // "move" the entry to today just because the user adjusted a number.
+        let body = PatchLogBody(
+            rawText: row.text.trimmingCharacters(in: .whitespacesAndNewlines),
+            loggedAt: nil,
+            inputKind: "text",
+            imageRef: row.imageRef,
+            confidence: row.parsedItem.map { $0.matchConfidence } ?? 0.85,
+            totals: totals,
+            sourcesUsed: nil,
+            assumptions: nil,
+            items: items
+        )
+        let request = PatchLogRequest(
+            parseRequestId: nil,
+            parseVersion: nil,
+            parsedLog: body
+        )
+
+        do {
+            _ = try await appStore.apiClient.patchLog(id: serverLogId, request: request)
+            // Re-mark the row as saved and invalidate the day cache so the
+            // next refresh reads the updated totals. Use serverLoggedAt —
+            // the original day — so we don't accidentally invalidate today's
+            // cache for an edit to yesterday's entry.
+            if let idx = inputRows.firstIndex(where: { $0.id == rowID }) {
+                inputRows[idx].isSaved = true
+            }
+            let savedDay = String((row.serverLoggedAt ?? summaryDateString).prefix(10))
+            invalidateDayCache(for: savedDay)
+            await loadDaySummary(forcedDate: savedDay, skipCache: true)
+            await loadDayLogs(forcedDate: savedDay, skipCache: true)
+            NotificationCenter.default.post(
+                name: .nutritionProgressDidChange,
+                object: nil,
+                userInfo: ["savedDay": savedDay]
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            handleAuthFailureIfNeeded(error)
+            // Keep the row editable so the user can try again; surface a
+            // lightweight error without blocking the flow.
+            saveError = userFriendlySaveError(error)
+        }
+        pendingPatchTasks[rowID] = nil
+    }
+
+    /// Convert a SaveLogRequest (POST-flavored) into a PatchLogRequest and
+    /// send it to the backend. Preserves the parseRequestId/parseVersion
+    /// from the save request since the edit did go through a fresh parse
+    /// (the client-side fast path uses `performPatchUpdate` instead, which
+    /// omits parse references).
+    private func submitRowPatch(
+        serverLogId: String,
+        saveRequest: SaveLogRequest,
+        rowID: UUID
+    ) async {
+        guard appStore.isNetworkReachable else { return }
+
+        // Copy the SaveLogBody into a PatchLogBody, dropping loggedAt so the
+        // backend keeps the original. A text-change edit with re-parse
+        // shouldn't bump the entry forward in time.
+        let src = saveRequest.parsedLog
+        let patchBody = PatchLogBody(
+            rawText: src.rawText,
+            loggedAt: nil,
+            inputKind: src.inputKind,
+            imageRef: src.imageRef,
+            confidence: src.confidence,
+            totals: src.totals,
+            sourcesUsed: src.sourcesUsed,
+            assumptions: src.assumptions,
+            items: src.items
+        )
+        let patchRequest = PatchLogRequest(
+            parseRequestId: saveRequest.parseRequestId,
+            parseVersion: saveRequest.parseVersion,
+            parsedLog: patchBody
+        )
+
+        do {
+            _ = try await appStore.apiClient.patchLog(id: serverLogId, request: patchRequest)
+            // Prefer the row's original loggedAt (the day the entry actually
+            // belongs to) over the save request's loggedAt (which reflects
+            // when the re-parse fired).
+            let originalDay = inputRows.first(where: { $0.id == rowID })?.serverLoggedAt
+            let savedDay = String((originalDay ?? saveRequest.parsedLog.loggedAt).prefix(10))
+            if let idx = inputRows.firstIndex(where: { $0.id == rowID }) {
+                inputRows[idx].isSaved = true
+            }
+            invalidateDayCache(for: savedDay)
+            await loadDaySummary(forcedDate: savedDay, skipCache: true)
+            await loadDayLogs(forcedDate: savedDay, skipCache: true)
+            NotificationCenter.default.post(
+                name: .nutritionProgressDidChange,
+                object: nil,
+                userInfo: ["savedDay": savedDay]
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            handleAuthFailureIfNeeded(error)
+            saveError = userFriendlySaveError(error)
+        }
+    }
+
     private func retryLastSave() {
         guard appStore.isNetworkReachable else {
             saveError = L10n.noNetworkRetry
@@ -3355,6 +3909,23 @@ struct MainLoggingShellView: View {
         for entry in rowsToSave {
             guard let request = buildRowSaveRequest(for: entry) else { continue }
 
+            // If the row was loaded from the server (has a serverLogId),
+            // this is an EDIT — not a new entry. Route through PATCH so the
+            // backend updates the existing food_log instead of POSTing a
+            // duplicate. Covers the case where the user opens a saved row,
+            // changes more than just the quantity (triggering a full
+            // re-parse), and the standard auto-save fires.
+            if let row = inputRows.first(where: { $0.id == entry.rowID }),
+               let serverLogId = row.serverLogId {
+                autoSavedParseIDs.insert(entry.parseRequestId)
+                await submitRowPatch(
+                    serverLogId: serverLogId,
+                    saveRequest: request,
+                    rowID: entry.rowID
+                )
+                continue
+            }
+
             let idempotencyKey = UUID()
             pendingSaveFingerprint = saveRequestFingerprint(request)
             pendingSaveRequest = request
@@ -3392,14 +3963,63 @@ struct MainLoggingShellView: View {
         }
     }
 
+    /// Forces a pending auto-save to fire RIGHT NOW instead of waiting for the
+    /// 10-second debounce. Called before a date change so typed entries aren't
+    /// lost when the user swipes away mid-debounce. Safe to call even if nothing
+    /// is eligible — it just returns quickly.
+    private func flushPendingAutoSaveIfEligible() async {
+        // Bail early if nothing to save
+        let hasCompletedRow = completedRowParses.contains { entry in
+            entry.response.confidence >= autoSaveMinConfidence &&
+            entry.response.needsClarification != true &&
+            !entry.response.items.isEmpty &&
+            !autoSavedParseIDs.contains(entry.parseRequestId)
+        }
+        let hasLegacyParse = completedRowParses.isEmpty &&
+            parseResult != nil &&
+            (parseResult?.needsClarification != true) &&
+            (parseResult?.confidence ?? 0) >= autoSaveMinConfidence
+
+        guard hasCompletedRow || hasLegacyParse else { return }
+
+        // Cancel the debounced auto-save task and run immediately
+        autoSaveTask?.cancel()
+        autoSaveTask = nil
+        await autoSaveIfNeeded()
+    }
+
     /// Build a save request for one completed row using that row's individual rawText.
+    ///
+    /// Item source priority:
+    /// 1. The row's current `parsedItems` — captures any client-side scaling
+    ///    from the quantity fast path (e.g. user changed "3" to "4" after the
+    ///    parse landed). This is the authoritative UI state.
+    /// 2. `entry.rowItems` — the snapshot captured when the parse response
+    ///    was applied. Used when the row is no longer in `inputRows` (e.g.
+    ///    cleared between save-loop iterations).
+    /// 3. `response.items` — last resort. Only correct for single-row parses.
     private func buildRowSaveRequest(
-        for entry: (rowID: UUID, parseRequestId: String, parseVersion: String, rawText: String, response: ParseLogResponse)
+        for entry: (rowID: UUID, parseRequestId: String, parseVersion: String, rawText: String, response: ParseLogResponse, rowItems: [ParsedFoodItem])
     ) -> SaveLogRequest? {
         let response = entry.response
-        guard !response.items.isEmpty else { return nil }
-        let effectiveLoggedAt = Self.loggedAtFormatter.string(from: draftLoggedAt ?? Date())
-        let items: [SaveParsedFoodItem] = response.items.map { item in
+        let sourceItems: [ParsedFoodItem]
+        let mustRecomputeTotals: Bool
+        if let row = inputRows.first(where: { $0.id == entry.rowID }),
+           !row.parsedItems.isEmpty {
+            sourceItems = row.parsedItems
+            // Row items may have been scaled client-side, so response.totals
+            // is stale even if item counts match.
+            mustRecomputeTotals = true
+        } else if !entry.rowItems.isEmpty {
+            sourceItems = entry.rowItems
+            mustRecomputeTotals = entry.rowItems.count != response.items.count
+        } else {
+            sourceItems = response.items
+            mustRecomputeTotals = false
+        }
+        guard !sourceItems.isEmpty else { return nil }
+        let effectiveLoggedAt = Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+        let items: [SaveParsedFoodItem] = sourceItems.map { item in
             SaveParsedFoodItem(
                 name: item.name,
                 quantity: item.amount ?? item.quantity,
@@ -3422,6 +4042,21 @@ struct MainLoggingShellView: View {
                     : nil
             )
         }
+        // Totals: recompute from sourceItems whenever they came from the live
+        // row (client-side scaling may have changed them) or when they're a
+        // subset of response.items. Otherwise keep response.totals verbatim
+        // since it carries backend rounding/unit handling.
+        let rowTotals: NutritionTotals
+        if mustRecomputeTotals {
+            rowTotals = NutritionTotals(
+                calories: sourceItems.reduce(0) { $0 + $1.calories },
+                protein: sourceItems.reduce(0) { $0 + $1.protein },
+                carbs: sourceItems.reduce(0) { $0 + $1.carbs },
+                fat: sourceItems.reduce(0) { $0 + $1.fat }
+            )
+        } else {
+            rowTotals = response.totals
+        }
         return SaveLogRequest(
             parseRequestId: entry.parseRequestId,
             parseVersion: entry.parseVersion,
@@ -3431,7 +4066,7 @@ struct MainLoggingShellView: View {
                 inputKind: normalizedInputKind(response.inputKind, fallback: "text"),
                 imageRef: nil,
                 confidence: response.confidence,
-                totals: response.totals,
+                totals: rowTotals,
                 sourcesUsed: response.sourcesUsed,
                 assumptions: response.assumptions,
                 items: items
@@ -3556,6 +4191,7 @@ struct MainLoggingShellView: View {
                 logId: response.logId,
                 timeToLogMs: timeToLogMs
             )
+            clearPendingSaveContext()
             if intent != .auto {
                 flowStartedAt = nil
                 draftLoggedAt = nil
@@ -3567,7 +4203,8 @@ struct MainLoggingShellView: View {
             // saved entry as a history row alongside all previous ones.
             let savedHistoryRows = inputRows.filter { $0.isSaved }
             inputRows = savedHistoryRows + [HomeLogRow.empty()]
-            // Invalidate cache for the saved day so we get fresh data
+            // Cancel prefetch to prevent it from re-populating cache with stale data
+            prefetchTask?.cancel()
             invalidateDayCache(for: savedDay)
             await loadDaySummary(forcedDate: savedDay, skipCache: true)
             await loadDayLogs(forcedDate: savedDay, skipCache: true)
@@ -3751,21 +4388,47 @@ struct MainLoggingShellView: View {
     }
 
     private func refreshDaySummary() {
+        // Stale-while-revalidate: paint any cached summary instantly, THEN
+        // always hit the network so stale cache (e.g. from a prior save whose
+        // reload failed silently, or entries made in another session) gets
+        // corrected. Previously this function never hit the network if the
+        // cache was populated — leaving users with stale totals.
         Task {
-            await loadDaySummary()
+            let dateToLoad = summaryDateString
+            if let cached = dayCacheSummary[dateToLoad] {
+                daySummary = cached
+                daySummaryError = nil
+            }
+            await loadDaySummary(skipCache: true)
         }
     }
 
     private func refreshDayLogs() {
-        Task { await loadDayLogs() }
+        // Stale-while-revalidate: same rationale as refreshDaySummary. Paint
+        // any cached logs instantly, then always hit the network so rows
+        // saved on another device — or any save whose post-reload failed —
+        // become visible.
+        Task {
+            let dateToLoad = summaryDateString
+            if let cached = dayCacheLogs[dateToLoad], cached.date == dateToLoad {
+                dayLogs = cached
+                syncInputRowsFromDayLogs(cached.logs, for: cached.date)
+            }
+            await loadDayLogs(skipCache: true)
+        }
     }
 
     private func loadDayLogs(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
         let dateToLoad = forcedDate ?? summaryDateString
 
-        if !skipCache, let cached = dayCacheLogs[dateToLoad] {
+        // Serve from cache only if the date still matches what the user is viewing.
+        // This prevents stale cache from a prefetch or a race condition from showing
+        // wrong data.
+        if !skipCache, let cached = dayCacheLogs[dateToLoad], cached.date == dateToLoad {
+            // Double-check the user hasn't swiped to a different day while we were loading
+            guard summaryDateString == dateToLoad || forcedDate != nil else { return }
             dayLogs = cached
-            syncInputRowsFromDayLogs(cached.logs)
+            syncInputRowsFromDayLogs(cached.logs, for: cached.date)
             return
         }
 
@@ -3776,9 +4439,24 @@ struct MainLoggingShellView: View {
 
         do {
             let response = try await appStore.apiClient.getDayLogs(date: dateToLoad)
+
+            // Validate the response is for the date we requested
+            guard response.date == dateToLoad else {
+                print("[loadDayLogs] date mismatch: requested=\(dateToLoad) got=\(response.date) — discarding")
+                return
+            }
+            // Verify user is still viewing this date (they may have swiped during the network call)
+            guard summaryDateString == dateToLoad || forcedDate != nil else {
+                // Still cache it for when they come back
+                dayCacheLogs[dateToLoad] = response
+                persistDayLogsToCache(response, date: dateToLoad)
+                return
+            }
+
             dayLogs = response
             dayCacheLogs[dateToLoad] = response
-            syncInputRowsFromDayLogs(response.logs)
+            persistDayLogsToCache(response, date: dateToLoad)
+            syncInputRowsFromDayLogs(response.logs, for: response.date)
         } catch is CancellationError {
             // ignore
         } catch {
@@ -3790,7 +4468,25 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func syncInputRowsFromDayLogs(_ entries: [DayLogEntry]) {
+    // MARK: - Day Logs Disk Cache
+
+    private static let dayLogsCacheKeyPrefix = "app.daylogs.cache.v1."
+
+    private func persistDayLogsToCache(_ response: DayLogsResponse, date: String) {
+        guard let data = try? JSONEncoder().encode(response) else { return }
+        defaults.set(data, forKey: Self.dayLogsCacheKeyPrefix + date)
+    }
+
+    private func loadDayLogsFromCache(date: String) -> DayLogsResponse? {
+        guard let data = defaults.data(forKey: Self.dayLogsCacheKeyPrefix + date) else { return nil }
+        return try? JSONDecoder().decode(DayLogsResponse.self, from: data)
+    }
+
+    private func removeDayLogsCacheEntry(date: String) {
+        defaults.removeObject(forKey: Self.dayLogsCacheKeyPrefix + date)
+    }
+
+    private func syncInputRowsFromDayLogs(_ entries: [DayLogEntry], for dateString: String) {
         let savedRows: [HomeLogRow] = entries.map { entry in
             let items: [ParsedFoodItem] = entry.items.map { item in
                 ParsedFoodItem(
@@ -3819,17 +4515,35 @@ struct MainLoggingShellView: View {
                 parsedItem: items.first,
                 parsedItems: items,
                 editableItemIndices: [],
-                normalizedTextAtParse: nil,
+                // Stamp with the server's rawText so subsequent edits compare
+                // against the text that was actually parsed. Without this,
+                // `rowNeedsFreshParse` would see nil and treat any quantity
+                // edit as a brand-new parse, bypassing the client-side fast
+                // path.
+                normalizedTextAtParse: normalizedRowText(entry.rawText),
                 imagePreviewData: nil,
                 imageRef: nil,
                 isSaved: true,
-                savedAt: nil
+                savedAt: nil,
+                serverLogId: entry.id,
+                serverLoggedAt: entry.loggedAt
             )
         }
-        let activeRows = inputRows.filter { !$0.isSaved }
-        let newRows = savedRows + activeRows + (activeRows.isEmpty || activeRows.last?.isSaved == true ? [HomeLogRow.empty()] : [])
-        if newRows.map(\.id) != inputRows.map(\.id) || newRows.map(\.text) != inputRows.map(\.text) {
-            inputRows = newRows
+
+        // Full replace: remove ALL old saved rows and replace with the requested
+        // day's entries. Keep active drafts only when their draft timestamp belongs
+        // to the same day; otherwise a today draft visually leaks into yesterday.
+        let activeRows: [HomeLogRow]
+        if draftDayString() == dateString {
+            activeRows = inputRows.filter { !$0.isSaved }
+        } else {
+            activeRows = []
+        }
+        inputRows = savedRows + activeRows
+
+        // Ensure there's always at least one empty active row for input
+        if inputRows.allSatisfy({ $0.isSaved }) {
+            inputRows.append(.empty())
         }
     }
 
@@ -3928,6 +4642,7 @@ struct MainLoggingShellView: View {
                 }
                 for logs in range.logs {
                     dayCacheLogs[logs.date] = logs
+                    persistDayLogsToCache(logs, date: logs.date)
                 }
             } catch {
                 // Fallback: fetch individually if batch fails
@@ -3940,7 +4655,10 @@ struct MainLoggingShellView: View {
                     async let summaryResult = try? appStore.apiClient.getDaySummary(date: dateStr)
                     async let logsResult = try? appStore.apiClient.getDayLogs(date: dateStr)
                     if let summary = await summaryResult { dayCacheSummary[dateStr] = summary }
-                    if let logs = await logsResult { dayCacheLogs[dateStr] = logs }
+                    if let logs = await logsResult {
+                        dayCacheLogs[dateStr] = logs
+                        persistDayLogsToCache(logs, date: dateStr)
+                    }
                 }
             }
         }
@@ -3950,6 +4668,7 @@ struct MainLoggingShellView: View {
     private func invalidateDayCache(for dateString: String) {
         dayCacheSummary.removeValue(forKey: dateString)
         dayCacheLogs.removeValue(forKey: dateString)
+        removeDayLogsCacheEntry(date: dateString)
     }
 
     /// Returns true for errors that are transient and worth retrying automatically.
@@ -4051,6 +4770,52 @@ struct MainLoggingShellView: View {
         default:
             return apiError.errorDescription ?? L10n.saveFailure
         }
+    }
+
+    /// Produces a short, readable label from parsed food items for the home screen row.
+    /// Example: "Chobani Complete 20g Protein Zero Added Sugar Mixed Berry..." → "Chobani Protein Drink"
+    /// Full detail lives in the parsedItems and is shown in the details drawer.
+    private func shortenedFoodLabel(items: [ParsedFoodItem], extractedText: String?) -> String {
+        if items.isEmpty {
+            let fallback = (extractedText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+            return fallback.isEmpty ? "Photo meal" : truncateLabel(fallback, maxWords: 4)
+        }
+
+        if items.count == 1 {
+            return truncateLabel(items[0].name, maxWords: 4)
+        }
+
+        // Multiple items — take the first 3 words of each, join with ", "
+        let shortened = items.prefix(3).map { truncateLabel($0.name, maxWords: 3) }
+        let label = shortened.joined(separator: ", ")
+        if items.count > 3 {
+            return "\(label) + \(items.count - 3) more"
+        }
+        return label
+    }
+
+    /// Keeps only the first N words of a string. Strips noise words like "g", "oz", "added", "zero".
+    private func truncateLabel(_ text: String, maxWords: Int) -> String {
+        let noise: Set<String> = ["g", "oz", "ml", "mg", "added", "zero", "sugar", "free", "with", "no", "of"]
+        let words = text
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ")
+            .map(String.init)
+
+        // Keep meaningful words only, up to maxWords
+        var kept: [String] = []
+        for word in words {
+            // Skip pure numbers with units like "20g", "0g", "12oz"
+            let lowered = word.lowercased().trimmingCharacters(in: .punctuationCharacters)
+            if lowered.isEmpty { continue }
+            let isNumericUnit = lowered.allSatisfy({ $0.isNumber || $0 == "." }) || noise.contains(lowered)
+            if isNumericUnit && !kept.isEmpty { continue } // allow first word even if numeric (e.g. "2% Milk")
+
+            kept.append(word)
+            if kept.count >= maxWords { break }
+        }
+
+        return kept.isEmpty ? text.prefix(30).trimmingCharacters(in: .whitespacesAndNewlines) : kept.joined(separator: " ")
     }
 
     private func userFriendlyParseError(_ error: Error) -> String {
@@ -4167,6 +4932,20 @@ struct MainLoggingShellView: View {
         pendingSaveRequest = draft.request
         pendingSaveFingerprint = draft.fingerprint
         pendingSaveIdempotencyKey = key
+    }
+
+    private func submitRestoredPendingSaveIfPossible() {
+        guard appStore.isNetworkReachable, !isSaving else { return }
+        guard let pendingSaveRequest, let pendingSaveIdempotencyKey else { return }
+
+        Task { @MainActor in
+            await submitSave(
+                request: pendingSaveRequest,
+                idempotencyKey: pendingSaveIdempotencyKey,
+                isRetry: true,
+                intent: .auto
+            )
+        }
     }
 
     private func saveDraftPreviewJSON() -> String {
@@ -4321,61 +5100,15 @@ private struct DaySwipeOffsetModifier: ViewModifier, Animatable {
         content
             .offset(x: offset)
             .opacity(1.0 - min(abs(offset) / 200, 0.4))
-            .drawingGroup(opaque: false)
     }
 }
 
 private struct LiquidGlassCapsuleButtonStyle: ButtonStyle {
-    @Environment(\.colorScheme) private var colorScheme
-
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background {
-                Capsule(style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        colorScheme == .dark
-                                            ? Color.white.opacity(configuration.isPressed ? 0.14 : 0.26)
-                                            : Color.white.opacity(configuration.isPressed ? 0.78 : 0.92),
-                                        colorScheme == .dark
-                                            ? Color.white.opacity(configuration.isPressed ? 0.04 : 0.09)
-                                            : Color.black.opacity(configuration.isPressed ? 0.03 : 0.06)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                )
-                            )
-                    )
-                    .overlay(
-                        Capsule(style: .continuous)
-                            .stroke(
-                                LinearGradient(
-                                    colors: [
-                                        colorScheme == .dark
-                                            ? Color.white.opacity(configuration.isPressed ? 0.52 : 0.68)
-                                            : Color.white.opacity(configuration.isPressed ? 0.85 : 0.95),
-                                        colorScheme == .dark
-                                            ? Color.white.opacity(configuration.isPressed ? 0.16 : 0.28)
-                                            : Color.black.opacity(configuration.isPressed ? 0.08 : 0.12)
-                                    ],
-                                    startPoint: .topLeading,
-                                    endPoint: .bottomTrailing
-                                ),
-                                lineWidth: 1
-                            )
-                    )
-            }
-            .shadow(
-                color: Color.black.opacity(configuration.isPressed ? 0.06 : (colorScheme == .dark ? 0.20 : 0.12)),
-                radius: 10,
-                y: 5
-            )
+            .glassEffect(.regular.interactive(), in: .capsule)
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }

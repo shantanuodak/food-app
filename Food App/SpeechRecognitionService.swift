@@ -31,6 +31,7 @@ final class SpeechRecognitionService: ObservableObject {
     @Published private(set) var transcribedText: String = ""
     @Published private(set) var isListening: Bool = false
     @Published private(set) var error: String?
+    @Published private(set) var audioLevel: Float = 0
 
     // MARK: - Private Properties
 
@@ -110,6 +111,19 @@ final class SpeechRecognitionService: ObservableObject {
         let recordingFormat = inputNode.outputFormat(forBus: 0)
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
+
+            // Compute RMS audio level for visualization
+            guard let channelData = buffer.floatChannelData?[0] else { return }
+            let frameLength = Int(buffer.frameLength)
+            var sum: Float = 0
+            for i in 0..<frameLength { sum += channelData[i] * channelData[i] }
+            let rms = sqrtf(sum / Float(max(frameLength, 1)))
+            let db = 20 * log10f(max(rms, 1e-6))
+            // Map -60dB...0dB → 0...1
+            let normalized = max(0, min(1, (db + 60) / 60))
+            Task { @MainActor [weak self] in
+                self?.audioLevel = normalized
+            }
         }
 
         // Start audio engine
@@ -185,6 +199,7 @@ final class SpeechRecognitionService: ObservableObject {
         recognitionTask = nil
 
         isListening = false
+        audioLevel = 0
 
         // Deactivate audio session (non-fatal if it fails)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)

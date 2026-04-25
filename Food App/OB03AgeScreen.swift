@@ -41,7 +41,7 @@ struct OB03AgeScreen: View {
 
                 Text("We'll use this to personalize your plan")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .opacity(appeared ? 1 : 0)
                     .padding(.top, 8)
 
@@ -62,9 +62,9 @@ struct OB03AgeScreen: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .bold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingGlassTheme.ctaForeground)
                     .frame(width: 220, height: 60)
-                    .background(Color.black)
+                    .background(OnboardingGlassTheme.ctaBackground)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -205,16 +205,13 @@ private struct AgeWheelPickerRepresentable: UIViewRepresentable {
 
             if value == parent.selection {
                 label.font = .systemFont(ofSize: 54, weight: .bold)
-                label.textColor = .black
+                label.textColor = OnboardingGlassTheme.pickerSelectedTextUI
             } else if abs(value - parent.selection) == 1 {
                 label.font = .systemFont(ofSize: 40, weight: .bold)
-                label.textColor = UIColor(red: 0.55, green: 0.55, blue: 0.55, alpha: 1)
-            } else if abs(value - parent.selection) == 2 {
-                label.font = .systemFont(ofSize: 32, weight: .bold)
-                label.textColor = UIColor(red: 0.75, green: 0.75, blue: 0.75, alpha: 1)
+                label.textColor = OnboardingGlassTheme.pickerAdjacentTextUI
             } else {
-                label.font = .systemFont(ofSize: 26, weight: .bold)
-                label.textColor = UIColor(red: 0.85, green: 0.85, blue: 0.85, alpha: 1)
+                label.font = .systemFont(ofSize: abs(value - parent.selection) == 2 ? 32 : 26, weight: .bold)
+                label.textColor = OnboardingGlassTheme.pickerDistantTextUI
             }
 
             return label

@@ -1,4 +1,5 @@
 import SwiftUI
+import Combine
 
 struct OnboardingView: View {
     @EnvironmentObject private var appStore: AppStore
@@ -14,6 +15,7 @@ struct OnboardingView: View {
     @State private var hasRestored = false
     @State private var pendingRouteError: String?
     @State private var baselineStep: BaselineScreenStep = .sex
+    @State private var accountScreenAppeared = false
     @State private var screenStates: [OnboardingRoute: OnboardingScreenState] = {
         OnboardingRoute.allCases.reduce(into: [OnboardingRoute: OnboardingScreenState]()) { result, route in
             result[route] = OnboardingScreenState()
@@ -39,34 +41,49 @@ struct OnboardingView: View {
                             flow.moveToOnboarding(.account)
                         }
                     )
+                    .transition(.obScreen)
                 } else if flow.onboardingRoute == .goal {
                     goalRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .age {
                     ageRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .baseline {
                     baselineRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .activity {
                     activityRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .pace {
                     paceRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .goalValidation {
                     goalValidationRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .socialProof {
                     socialProofRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .experience {
                     experienceRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .howItWorks {
                     howItWorksRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .challenge {
                     challengeRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .challengeInsight {
                     challengeInsightRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .ready {
                     readyRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .account {
                     accountRouteView
+                        .transition(.obScreen)
                 } else if flow.onboardingRoute == .permissions {
                     permissionsRouteView
+                        .transition(.obScreen)
                 } else {
                     OnboardingStaticBackground()
 
@@ -95,8 +112,10 @@ struct OnboardingView: View {
                         actionBlock
                     }
                     .padding()
+                    .transition(.obScreen)
                 }
             }
+            .animation(.easeOut(duration: 0.38), value: flow.onboardingRoute)
             .navigationTitle(shouldHideNavigationBar ? "" : (flow.onboardingRoute == .welcome ? "" : flow.onboardingRoute.headline))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar(shouldHideNavigationBar ? .hidden : .visible, for: .navigationBar)
@@ -324,7 +343,7 @@ struct OnboardingView: View {
 
     private var accountRouteView: some View {
         ZStack {
-            OnboardingStaticBackground()
+            OnboardingAnimatedBackground()
 
             VStack(spacing: 0) {
                 // Top bar with back button
@@ -353,41 +372,251 @@ struct OnboardingView: View {
                 .padding(.horizontal, 16)
 
                 // Headline
-                Text("Save your setup")
-                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
-                    .foregroundStyle(colorScheme == .dark ? .white : .black)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 20)
+                VStack(spacing: 8) {
+                    Text("Almost \(Text("there").font(OnboardingTypography.instrumentSerif(style: .italic, size: 38)))")
+                        .font(OnboardingTypography.instrumentSerif(style: .regular, size: 38))
+                        .foregroundStyle(colorScheme == .dark ? .white : .black)
+                        .multilineTextAlignment(.center)
 
-                Text("Create or connect an account to keep your progress synced.")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                    .padding(.horizontal, 24)
-
-                Spacer()
-
-                OB08AccountScreen(
-                    isLoading: isAccountLoading,
-                    prefersGooglePrimary: isSupabaseAuthMode,
-                    enableApple: true,
-                    onSelectProvider: continueAccount(provider:)
-                )
-                .padding(.horizontal, 20)
-
-                if let localError {
-                    Text(localError)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 24)
-                        .padding(.top, 8)
+                    Text("Save your progress to unlock\nyour personalized plan.")
+                        .font(.system(size: 15, weight: .medium))
+                        .foregroundStyle(OnboardingGlassTheme.textSecondary)
                         .multilineTextAlignment(.center)
                 }
+                .padding(.top, 14)
+                .padding(.horizontal, 24)
+                .opacity(accountScreenAppeared ? 1 : 0)
+                .offset(y: accountScreenAppeared ? 0 : 16)
+                .animation(.easeOut(duration: 0.5).delay(0.08), value: accountScreenAppeared)
 
-                Spacer()
+                // Auto-rotating carousel
+                AccountCarouselView()
+                    .padding(.top, 20)
+                    .padding(.horizontal, 20)
+                    .opacity(accountScreenAppeared ? 1 : 0)
+                    .offset(y: accountScreenAppeared ? 0 : 20)
+                    .animation(.easeOut(duration: 0.55).delay(0.14), value: accountScreenAppeared)
+
+                // Feature benefits card
+                accountBenefitsCard
+                    .padding(.top, 16)
+                    .padding(.horizontal, 24)
+
+                Spacer(minLength: 12)
+
+                // Bottom: social proof + sign-in buttons
+                VStack(spacing: 12) {
+                    accountSocialProofBadge
+                        .opacity(accountScreenAppeared ? 1 : 0)
+                        .offset(y: accountScreenAppeared ? 0 : 12)
+                        .animation(.easeOut(duration: 0.45).delay(0.5), value: accountScreenAppeared)
+
+                    OB08AccountScreen(
+                        isLoading: isAccountLoading,
+                        prefersGooglePrimary: isSupabaseAuthMode,
+                        enableApple: true,
+                        onSelectProvider: continueAccount(provider:)
+                    )
+
+                    if let localError {
+                        Text(localError)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .multilineTextAlignment(.center)
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, 28)
             }
         }
+        .onAppear {
+            accountScreenAppeared = true
+        }
+        .onDisappear {
+            accountScreenAppeared = false
+        }
+    }
+
+    private var accountSocialProofBadge: some View {
+        HStack(spacing: 10) {
+            HStack(spacing: 3) {
+                ForEach(0..<5, id: \.self) { _ in
+                    Image(systemName: "star.fill")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(OnboardingGlassTheme.accentStart)
+                }
+            }
+            Rectangle()
+                .fill(OnboardingGlassTheme.panelStroke)
+                .frame(width: 1, height: 14)
+            Text("5,000+ people eating smarter")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity)
+        .onboardingGlassPanel(cornerRadius: 14, fillOpacity: 0.06, strokeOpacity: 0.14)
+    }
+
+    private var accountBenefitsCard: some View {
+        VStack(spacing: 0) {
+            accountBenefitRow(
+                icon: "wand.and.stars",
+                title: "AI-powered logging",
+                subtitle: "Snap, scan, or speak — tracked instantly",
+                delay: 0.22
+            )
+            accountCardDivider(delay: 0.32)
+            accountBenefitRow(
+                icon: "chart.line.uptrend.xyaxis",
+                title: "Progress that adapts",
+                subtitle: "Your plan updates as your results do",
+                delay: 0.34
+            )
+            accountCardDivider(delay: 0.44)
+            accountBenefitRow(
+                icon: "lock.shield.fill",
+                title: "Private & secure",
+                subtitle: "Your data is encrypted and only yours",
+                delay: 0.46
+            )
+        }
+        .padding(.vertical, 6)
+        // Rich layered glass background
+        .background(
+            ZStack {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(.ultraThinMaterial)
+                // Accent colour wash — gold top-left, teal bottom-right
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            stops: [
+                                .init(color: OnboardingGlassTheme.accentStart.opacity(0.09), location: 0),
+                                .init(color: Color.clear, location: 0.5),
+                                .init(color: OnboardingGlassTheme.accentEnd.opacity(0.06), location: 1)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                // Top-edge inner highlight for depth
+                VStack {
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [Color.white.opacity(0.22), Color.clear],
+                                startPoint: .top,
+                                endPoint: .center
+                            )
+                        )
+                        .frame(height: 48)
+                    Spacer()
+                }
+                .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+                .allowsHitTesting(false)
+            }
+        )
+        // Gradient border: accent colours fade to neutral
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .strokeBorder(
+                    LinearGradient(
+                        stops: [
+                            .init(color: OnboardingGlassTheme.accentStart.opacity(0.65), location: 0),
+                            .init(color: OnboardingGlassTheme.accentEnd.opacity(0.40), location: 0.45),
+                            .init(color: OnboardingGlassTheme.panelStroke.opacity(0.55), location: 0.75),
+                            .init(color: OnboardingGlassTheme.panelStroke.opacity(0.20), location: 1)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1.5
+                )
+        )
+        // Layered shadows: accent glow + depth
+        .shadow(color: OnboardingGlassTheme.accentStart.opacity(0.18), radius: 20, y: 6)
+        .shadow(color: Color.black.opacity(0.10), radius: 8, y: 3)
+        .opacity(accountScreenAppeared ? 1 : 0)
+        .scaleEffect(accountScreenAppeared ? 1 : 0.96)
+        .animation(.spring(response: 0.55, dampingFraction: 0.82).delay(0.18), value: accountScreenAppeared)
+    }
+
+    private func accountCardDivider(delay: Double) -> some View {
+        // Gradient separator: accent tint fades to transparent at edges
+        Rectangle()
+            .fill(
+                LinearGradient(
+                    stops: [
+                        .init(color: Color.clear, location: 0),
+                        .init(color: OnboardingGlassTheme.accentStart.opacity(0.25), location: 0.3),
+                        .init(color: OnboardingGlassTheme.accentEnd.opacity(0.20), location: 0.7),
+                        .init(color: Color.clear, location: 1)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+            )
+            .frame(height: 1)
+            .padding(.leading, 54)
+            .opacity(accountScreenAppeared ? 1 : 0)
+            .animation(.easeOut(duration: 0.5).delay(delay), value: accountScreenAppeared)
+    }
+
+    private func accountBenefitRow(icon: String, title: String, subtitle: String, delay: Double) -> some View {
+        HStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                OnboardingGlassTheme.accentStart.opacity(0.22),
+                                OnboardingGlassTheme.accentEnd.opacity(0.22)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 40, height: 40)
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(
+                        LinearGradient(
+                            colors: [
+                                OnboardingGlassTheme.accentStart.opacity(0.35),
+                                OnboardingGlassTheme.accentEnd.opacity(0.20)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 1
+                    )
+                    .frame(width: 40, height: 40)
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
+                Text(subtitle)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(OnboardingGlassTheme.textMuted)
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 16)
+        .opacity(accountScreenAppeared ? 1 : 0)
+        .offset(x: accountScreenAppeared ? 0 : -14)
+        .animation(.spring(response: 0.5, dampingFraction: 0.82).delay(delay), value: accountScreenAppeared)
     }
 
     private var readyRouteView: some View {
@@ -466,10 +695,6 @@ struct OnboardingView: View {
 
     private var goalTopBar: some View {
         ZStack {
-            Text("Set Your Goal")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(.black)
-
             HStack {
                 Button {
                     flow.moveBackOnboarding()
@@ -1058,6 +1283,146 @@ struct OnboardingView: View {
             guard draft.isBaselineValid else { return }
             flow.moveNextOnboarding()
         }
+    }
+}
+
+// MARK: - Screen Transition
+
+private extension AnyTransition {
+    /// Consistent enter/exit transition applied to every onboarding screen.
+    /// Enter: fade in + slide up 22pt.  Exit: fade out only (no slide, avoids clash with entering screen).
+    static var obScreen: AnyTransition {
+        .asymmetric(
+            insertion: .opacity.combined(with: .offset(y: 22)),
+            removal:   .opacity
+        )
+    }
+}
+
+// MARK: - Account Screen Carousel
+
+private struct AccountCarouselView: View {
+    @State private var currentIndex = 0
+
+    private let slides: [CarouselSlideData] = [
+        CarouselSlideData(
+            gradientColors: [
+                Color(red: 1.00, green: 0.78, blue: 0.33),
+                Color(red: 0.97, green: 0.50, blue: 0.20)
+            ],
+            icon: "fork.knife.circle.fill",
+            headline: "Log meals in seconds",
+            subline: "Snap a photo, say it aloud, or just type it"
+        ),
+        CarouselSlideData(
+            gradientColors: [
+                Color(red: 0.21, green: 0.86, blue: 0.73),
+                Color(red: 0.10, green: 0.58, blue: 0.82)
+            ],
+            icon: "chart.bar.fill",
+            headline: "Watch your progress",
+            subline: "Your nutrition story, day by day"
+        ),
+        CarouselSlideData(
+            gradientColors: [
+                Color(red: 0.62, green: 0.38, blue: 0.98),
+                Color(red: 0.94, green: 0.36, blue: 0.76)
+            ],
+            icon: "sparkles",
+            headline: "AI that gets you",
+            subline: "Smarter, more personal every day"
+        )
+    ]
+
+    var body: some View {
+        VStack(spacing: 10) {
+            TabView(selection: $currentIndex) {
+                ForEach(slides.indices, id: \.self) { i in
+                    CarouselCard(slide: slides[i])
+                        .tag(i)
+                        .padding(.horizontal, 2)
+                }
+            }
+            .tabViewStyle(.page(indexDisplayMode: .never))
+            .frame(height: 190)
+
+            // Dot indicators
+            HStack(spacing: 6) {
+                ForEach(slides.indices, id: \.self) { i in
+                    Capsule()
+                        .fill(
+                            i == currentIndex
+                                ? OnboardingGlassTheme.textPrimary
+                                : OnboardingGlassTheme.textMuted.opacity(0.35)
+                        )
+                        .frame(width: i == currentIndex ? 20 : 6, height: 6)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.7), value: currentIndex)
+                }
+            }
+        }
+        .onReceive(
+            Timer.publish(every: 3.2, on: .main, in: .common).autoconnect()
+        ) { _ in
+            withAnimation(.easeInOut(duration: 0.65)) {
+                currentIndex = (currentIndex + 1) % slides.count
+            }
+        }
+    }
+}
+
+private struct CarouselSlideData {
+    let gradientColors: [Color]
+    let icon: String
+    let headline: String
+    let subline: String
+}
+
+private struct CarouselCard: View {
+    let slide: CarouselSlideData
+
+    var body: some View {
+        ZStack {
+            // Gradient background
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: slide.gradientColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+
+            // Subtle inner highlight
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [Color.white.opacity(0.18), Color.clear],
+                        startPoint: .top,
+                        endPoint: .center
+                    )
+                )
+
+            // Content
+            VStack(spacing: 14) {
+                Image(systemName: slide.icon)
+                    .font(.system(size: 48, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.95))
+                    .shadow(color: .black.opacity(0.18), radius: 8, y: 4)
+
+                VStack(spacing: 5) {
+                    Text(slide.headline)
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text(slide.subline)
+                        .font(.system(size: 14, weight: .regular))
+                        .foregroundStyle(.white.opacity(0.82))
+                        .multilineTextAlignment(.center)
+                }
+            }
+            .padding(.horizontal, 28)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .shadow(color: slide.gradientColors.first?.opacity(0.35) ?? .clear, radius: 16, y: 6)
     }
 }
 

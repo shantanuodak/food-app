@@ -70,7 +70,7 @@ struct OB05PaceScreen: View {
 
                 Text("Consistency beats speed")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .opacity(appeared ? 1 : 0)
                     .padding(.top, 8)
 
@@ -130,9 +130,9 @@ struct OB05PaceScreen: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .bold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingGlassTheme.ctaForeground)
                     .frame(width: 220, height: 60)
-                    .background(Color.black)
+                    .background(OnboardingGlassTheme.ctaBackground)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)

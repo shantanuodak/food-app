@@ -55,9 +55,9 @@ struct OB02eHowItWorksScreen: View {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .bold))
                     }
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingGlassTheme.ctaForeground)
                     .frame(width: 220, height: 60)
-                    .background(Color.black)
+                    .background(OnboardingGlassTheme.ctaBackground)
                     .clipShape(Capsule())
                 }
                 .buttonStyle(.plain)
@@ -138,7 +138,7 @@ struct OB02eHowItWorksScreen: View {
 /// 2. A brief "thinking" shimmer appears on the right
 /// 3. The calorie estimate fades in
 /// 4. Pauses, then resets and loops with a new food item
-private struct LoggingDemoAnimation: View {
+struct LoggingDemoAnimation: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private let items: [(text: String, calories: String)] = [
@@ -177,13 +177,13 @@ private struct LoggingDemoAnimation: View {
                 HStack(spacing: 0) {
                     Text(displayedText)
                         .font(.system(size: 14))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     if phase == .typing || phase == .idle {
                         Text("|")
                             .font(.system(size: 14, weight: .light))
-                            .foregroundStyle(Color.black.opacity(0.4))
+                            .foregroundStyle(Color.primary.opacity(0.4))
                             .opacity(phase == .typing ? 1 : 0.4)
                     }
                 }
@@ -210,7 +210,7 @@ private struct LoggingDemoAnimation: View {
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.black.opacity(0.04), lineWidth: 1)
+                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
             )
         }
         .onAppear { startAnimation() }

@@ -219,7 +219,7 @@ struct OB03BaselineScreen: View {
         VStack(spacing: 0) {
             Text(headline)
                 .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
-                .foregroundStyle(.black)
+                .foregroundStyle(OnboardingGlassTheme.textPrimary)
                 .multilineTextAlignment(.center)
                 .padding(.top, 20)
                 .opacity(appeared ? 1 : 0)
@@ -227,7 +227,7 @@ struct OB03BaselineScreen: View {
 
             Text(subtitle)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
                 .padding(.top, 8)
                 .opacity(appeared ? 1 : 0)
                 .animation(.easeOut(duration: 0.4).delay(0.08), value: appeared)
@@ -253,12 +253,12 @@ struct OB03BaselineScreen: View {
                 Button(action: onBack) {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(OnboardingGlassTheme.textPrimary)
                         .frame(width: 44, height: 44)
                         .background(
                             Circle()
-                                .fill(Color.white)
-                                .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
+                                .fill(OnboardingGlassTheme.panelFill)
+                                .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 20, y: 10)
                         )
                 }
                 .buttonStyle(.plain)
@@ -271,12 +271,12 @@ struct OB03BaselineScreen: View {
 
     private var mascot: some View {
         Circle()
-            .stroke(Color.black, lineWidth: 1)
+            .stroke(OnboardingGlassTheme.textPrimary, lineWidth: 1)
             .frame(width: 153, height: 153)
             .overlay(
                 Text("MASCOT")
                     .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
             )
     }
 
@@ -330,7 +330,7 @@ struct OB03BaselineScreen: View {
 
             Text("cm")
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
                 .padding(.top, 4)
         }
     }
@@ -349,7 +349,7 @@ struct OB03BaselineScreen: View {
 
                 Text("ft")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .padding(.top, 4)
             }
 
@@ -363,7 +363,7 @@ struct OB03BaselineScreen: View {
 
                 Text("in")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .padding(.top, 4)
             }
         }
@@ -423,7 +423,7 @@ struct OB03BaselineScreen: View {
                         VStack(alignment: .leading, spacing: 3) {
                             Text(option.title)
                                 .font(.system(size: 16, weight: .semibold))
-                                .foregroundStyle(.black)
+                                .foregroundStyle(OnboardingGlassTheme.textPrimary)
 
                             Text(theme.subtitle)
                                 .font(.system(size: 13, weight: .regular))
@@ -457,12 +457,12 @@ struct OB03BaselineScreen: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .stroke(
-                                isSelected ? theme.accent : Color.black.opacity(0.08),
+                                isSelected ? theme.accent : OnboardingGlassTheme.panelStroke,
                                 lineWidth: isSelected ? 2 : 1
                             )
                     )
                     .shadow(
-                        color: isSelected ? theme.accent.opacity(0.15) : Color.black.opacity(0.03),
+                        color: isSelected ? theme.accent.opacity(0.15) : OnboardingGlassTheme.buttonShadow.opacity(0.3),
                         radius: isSelected ? 10 : 3,
                         y: isSelected ? 3 : 1
                     )
@@ -528,7 +528,7 @@ struct OB03BaselineScreen: View {
 
             Text(unitLabel)
                 .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
                 .padding(.top, 4)
         }
     }
@@ -541,9 +541,9 @@ struct OB03BaselineScreen: View {
                 Image(systemName: "chevron.right")
                     .font(.system(size: 14, weight: .bold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(OnboardingGlassTheme.ctaForeground)
             .frame(width: 220, height: 60)
-            .background(Color.black.opacity(canContinueStep ? 1 : 0.2))
+            .background(OnboardingGlassTheme.ctaBackground.opacity(canContinueStep ? 1 : 0.2))
             .clipShape(Capsule())
         }
         .buttonStyle(.plain)
@@ -579,7 +579,7 @@ struct OB03BaselineScreen: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 20 / 1.5, weight: isSelected ? .semibold : .medium))
-                .foregroundStyle(.black)
+                .foregroundStyle(OnboardingGlassTheme.textPrimary)
                 .frame(maxWidth: .infinity)
                 .frame(height: 36)
                 .background(
@@ -736,7 +736,7 @@ private struct BaselineDoubleWheelPicker: View {
 
             Text(suffix)
                 .font(.system(size: 24, weight: .bold))
-                .foregroundStyle(.black)
+                .foregroundStyle(OnboardingGlassTheme.textPrimary)
                 .frame(minWidth: suffix == "inch" ? 54 : 30, alignment: .leading)
         }
         .frame(maxWidth: .infinity)
@@ -822,13 +822,13 @@ private struct BaselineWheelPickerRepresentable: UIViewRepresentable {
 
             if value == parent.selection {
                 label.font = .systemFont(ofSize: 48, weight: .bold)
-                label.textColor = .black
+                label.textColor = OnboardingGlassTheme.pickerSelectedTextUI
             } else if abs(value - parent.selection) == 1 {
                 label.font = .systemFont(ofSize: 38, weight: .bold)
-                label.textColor = UIColor(red: 0.62, green: 0.62, blue: 0.62, alpha: 1)
+                label.textColor = OnboardingGlassTheme.pickerAdjacentTextUI
             } else {
                 label.font = .systemFont(ofSize: 30, weight: .bold)
-                label.textColor = UIColor(red: 0.81, green: 0.81, blue: 0.81, alpha: 1)
+                label.textColor = OnboardingGlassTheme.pickerDistantTextUI
             }
 
             return label
@@ -858,7 +858,7 @@ struct SmoothScrollPicker: View {
             if value - 2 >= range.lowerBound {
                 Text("\(value - 2)")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.black.opacity(0.15))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary.opacity(0.15))
                     .offset(y: -rowHeight * 2 + dragOffset)
             }
 
@@ -866,21 +866,21 @@ struct SmoothScrollPicker: View {
             if value - 1 >= range.lowerBound {
                 Text("\(value - 1)")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.black.opacity(0.25))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary.opacity(0.3))
                     .offset(y: -rowHeight + dragOffset)
             }
 
             // Selected (center)
             Text("\(value)")
                 .font(.system(size: 86, weight: .bold, design: .rounded))
-                .foregroundStyle(.black)
+                .foregroundStyle(OnboardingGlassTheme.textPrimary)
                 .offset(y: dragOffset)
 
             // +1
             if value + 1 <= range.upperBound {
                 Text("\(value + 1)")
                     .font(.system(size: 40, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.black.opacity(0.25))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary.opacity(0.3))
                     .offset(y: rowHeight + dragOffset)
             }
 
@@ -888,7 +888,7 @@ struct SmoothScrollPicker: View {
             if value + 2 <= range.upperBound {
                 Text("\(value + 2)")
                     .font(.system(size: 30, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color.black.opacity(0.15))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary.opacity(0.15))
                     .offset(y: rowHeight * 2 + dragOffset)
             }
         }
@@ -966,12 +966,12 @@ private struct UnitToggle: View {
         } label: {
             Text(label)
                 .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(selection == tag ? .white : .primary)
+                .foregroundStyle(selection == tag ? OnboardingGlassTheme.ctaForeground : .primary)
                 .frame(width: width, height: 34)
                 .background {
                     if selection == tag {
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(Color.black)
+                            .fill(OnboardingGlassTheme.ctaBackground)
                             .matchedGeometryEffect(id: "unit-pill", in: toggleNamespace)
                     }
                 }

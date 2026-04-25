@@ -272,3 +272,138 @@ export async function saveFoodLogStrict(input: {
     client.release();
   }
 }
+
+type UpdateLogInput = {
+  logId: string;
+  userId: string;
+  rawText: string;
+  loggedAt?: string;
+  mealType?: string;
+  imageRef?: string | null;
+  inputKind?: 'text' | 'image' | 'voice' | 'manual';
+  confidence: number;
+  totals: {
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  sourcesUsed?: Array<'cache' | 'gemini' | 'manual'>;
+  assumptions?: string[];
+  items: LogItemInput[];
+};
+
+type UpdateLogResponse = { logId: string; status: 'updated'; healthSync: HealthSyncContract };
+
+/**
+ * Replace the items and totals of an existing food_log. Used by PATCH
+ * /v1/logs/:id to persist in-place edits (e.g. the client-side quantity
+ * fast path). The caller must have already verified the log belongs to the
+ * user.
+ *
+ * The update deletes all existing food_log_items and re-inserts the new set
+ * inside a transaction; daily totals on `food_logs` are overwritten from
+ * `input.totals`. `loggedAt` is only updated when provided (quantity edits
+ * typically keep the original timestamp).
+ */
+export async function updateFoodLog(input: UpdateLogInput): Promise<UpdateLogResponse> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Verify ownership and existence in the same transaction.
+    const ownerCheck = await client.query<{ id: string }>(
+      `SELECT id FROM food_logs WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [input.logId, input.userId]
+    );
+    if (ownerCheck.rowCount === 0) {
+      throw new ApiError(404, 'LOG_NOT_FOUND', 'Food log not found');
+    }
+
+    // Overwrite the header row.
+    await client.query(
+      `
+      UPDATE food_logs SET
+        raw_text = $1,
+        total_calories = $2,
+        total_protein_g = $3,
+        total_carbs_g = $4,
+        total_fat_g = $5,
+        parse_confidence = $6,
+        parse_sources_used_json = $7::jsonb,
+        assumptions_json = $8::jsonb,
+        image_ref = COALESCE($9, image_ref),
+        input_kind = COALESCE($10, input_kind),
+        meal_type = COALESCE($11, meal_type),
+        logged_at = COALESCE($12::timestamptz, logged_at),
+        updated_at = NOW()
+      WHERE id = $13 AND user_id = $14
+      `,
+      [
+        input.rawText,
+        input.totals.calories,
+        input.totals.protein,
+        input.totals.carbs,
+        input.totals.fat,
+        input.confidence,
+        JSON.stringify(input.sourcesUsed || []),
+        JSON.stringify(input.assumptions || []),
+        input.imageRef ?? null,
+        input.inputKind ?? null,
+        input.mealType ?? null,
+        input.loggedAt ?? null,
+        input.logId,
+        input.userId
+      ]
+    );
+
+    // Replace items wholesale — simpler and safer than diffing.
+    await client.query(`DELETE FROM food_log_items WHERE food_log_id = $1`, [input.logId]);
+
+    for (const item of input.items) {
+      await client.query(
+        `
+        INSERT INTO food_log_items (
+          food_log_id, food_name, quantity, amount, unit, unit_normalized, grams, grams_per_unit,
+          calories, protein_g, carbs_g, fat_g,
+          nutrition_source_id, original_nutrition_source_id, source_family,
+          needs_clarification, manual_override_json, match_confidence
+        )
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18)
+        `,
+        [
+          input.logId,
+          item.foodName,
+          item.quantity,
+          item.amount ?? item.quantity,
+          item.unit,
+          item.unitNormalized ?? item.unit,
+          item.grams,
+          item.gramsPerUnit ?? null,
+          item.calories,
+          item.protein,
+          item.carbs,
+          item.fat,
+          item.nutritionSourceId,
+          item.originalNutritionSourceId ?? item.nutritionSourceId,
+          item.sourceFamily ?? null,
+          item.needsClarification ?? false,
+          item.manualOverrideMeta ? JSON.stringify(item.manualOverrideMeta) : null,
+          item.matchConfidence
+        ]
+      );
+    }
+
+    await client.query('COMMIT');
+    return {
+      logId: input.logId,
+      status: 'updated',
+      healthSync: buildHealthSyncContract(input.userId, input.logId)
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
