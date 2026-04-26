@@ -178,10 +178,10 @@ struct OB09PermissionsScreen: View {
     private var headline: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("link to")
-                .font(.system(size: 44, weight: .heavy))
+                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 44))
                 .foregroundStyle(OnboardingGlassTheme.textPrimary)
             Text("Apple Health")
-                .font(.system(size: 44, weight: .heavy))
+                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 44))
                 .foregroundStyle(appleHealthAccent)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -193,7 +193,6 @@ struct OB09PermissionsScreen: View {
             .foregroundStyle(OnboardingGlassTheme.textSecondary)
             .multilineTextAlignment(.leading)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, -8) // align with headline since headline has 24pt outer pad
     }
 
     // MARK: - Privacy block
@@ -226,22 +225,20 @@ struct OB09PermissionsScreen: View {
                 if isRequestingHealthPermission {
                     HStack(spacing: 8) {
                         ProgressView()
-                            .tint(.black)
+                            .tint(OnboardingGlassTheme.ctaForeground)
                             .controlSize(.small)
                         Text("Connecting…")
                             .font(.system(size: 17, weight: .semibold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(OnboardingGlassTheme.ctaForeground)
                     }
                 } else {
                     Text(connectHealth ? "Continue" : "Connect")
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.black)
+                        .foregroundStyle(OnboardingGlassTheme.ctaForeground)
                 }
             }
             .frame(width: 280, height: 56)
-            .background(Color.white)
-            .clipShape(Capsule())
-            .shadow(color: Color.black.opacity(0.08), radius: 18, y: 6)
+            .background(OnboardingGlassTheme.ctaBackground, in: Capsule())
         }
         .buttonStyle(.plain)
         .disabled(isRequestingHealthPermission)
