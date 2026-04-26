@@ -3257,8 +3257,17 @@ struct MainLoggingShellView: View {
             }
         }
 
-        if targetRowIDs == nil,
-           candidateRowIndices.count == 1,
+        // Multi-item-to-single-row override: when only one row is being
+        // parsed (whether because the caller scoped via `targetRowIDs` or
+        // because we're parsing the full input and only one row has text),
+        // ALL parser items belong to that row. Without this branch, the
+        // per-row loop above would assign just one item and silently drop
+        // the rest — the canonical bug where typing
+        // "2 naan, butter paneer masala, rice bowl" yielded only Naan.
+        // The original code restricted this to `targetRowIDs == nil`, but
+        // typing into a specific row sets `targetRowIDs = [thatRowID]`,
+        // which is exactly the case that needs the multi-item assignment.
+        if candidateRowIndices.count == 1,
            let normalizedTotalsCalories = normalizedRowCalories(from: response.totals.calories, response: response) {
             let onlyRowIndex = candidateRowIndices[0]
             if rowsNeedingFreshMapping.contains(onlyRowIndex) {
@@ -4211,10 +4220,35 @@ struct MainLoggingShellView: View {
             if let parsedDate = HomeLoggingDateUtils.summaryRequestFormatter.date(from: savedDay) {
                 selectedSummaryDate = parsedDate
             }
-            // Clear the active (composing) rows — the reload below will add the newly
-            // saved entry as a history row alongside all previous ones.
-            let savedHistoryRows = inputRows.filter { $0.isSaved }
-            inputRows = savedHistoryRows + [HomeLogRow.empty()]
+            // Optimistically promote the active (composing) rows to "saved"
+            // state with the new server logId so the just-saved entry stays
+            // visible during the day-logs fetch roundtrip. Without this
+            // optimistic step, there's a 200–500 ms gap (and longer if the
+            // backend has read-after-write lag) where the entry is in
+            // neither `inputRows` nor `dayLogs` — the user sees the row
+            // disappear and the flagged-card not slide up until they
+            // navigate away and back. The reload below reconciles by
+            // replacing these rows with the canonical server entries via
+            // `syncInputRowsFromDayLogs` once the fetch returns.
+            //
+            // Multi-row case: when several active rows are saved as one log
+            // they all share the same `serverLogId` here. SwiftUI rendering
+            // is fine for the brief reconciliation window; the server fetch
+            // will collapse them to the single canonical entry.
+            for idx in inputRows.indices where !inputRows[idx].isSaved {
+                inputRows[idx].isSaved = true
+                inputRows[idx].serverLogId = response.logId
+                inputRows[idx].serverLoggedAt = effectiveRequest.parsedLog.loggedAt
+                inputRows[idx].parsePhase = .idle
+                // `savedAt` left at its existing value (nil-by-default for
+                // active rows, matching the convention used by
+                // `syncInputRowsFromDayLogs` when it materialises rows from
+                // the server response).
+            }
+            // Always leave a fresh empty row at the end so the composer is ready.
+            if inputRows.allSatisfy({ $0.isSaved }) {
+                inputRows.append(.empty())
+            }
             // Cancel prefetch to prevent it from re-populating cache with stale data
             prefetchTask?.cancel()
             invalidateDayCache(for: savedDay)

@@ -26,6 +26,46 @@ export type ParsePipelineOutput = ParseDecisionResult;
 export type { ParseDecisionContext, ParseProvider };
 
 const inFlightParses = new Map<string, Promise<ParsePipelineOutput>>();
+
+/**
+ * Marker source id for items the parser couldn't resolve. iOS detects
+ * this (in addition to `needsClarification: true`) to render the row's
+ * red exclamation badge and the per-item Retry button inside the
+ * details drawer.
+ */
+export const UNRESOLVED_PLACEHOLDER_SOURCE_ID = 'unresolved_placeholder';
+
+/**
+ * Build a zero-nutrition placeholder for a segment Gemini couldn't
+ * parse. Carries the original segment text as `name` so iOS can
+ * (a) show the user what it failed on and (b) feed the same text
+ * back into a Retry call.
+ */
+function createUnresolvedPlaceholderResult(segment: string): ParseResult {
+  return {
+    confidence: 0,
+    assumptions: [],
+    items: [
+      {
+        name: segment,
+        quantity: 0,
+        unit: '',
+        grams: 0,
+        calories: 0,
+        protein: 0,
+        carbs: 0,
+        fat: 0,
+        matchConfidence: 0,
+        nutritionSourceId: UNRESOLVED_PLACEHOLDER_SOURCE_ID,
+        sourceFamily: 'gemini',
+        originalNutritionSourceId: UNRESOLVED_PLACEHOLDER_SOURCE_ID,
+        explanation: "Couldn't parse this — tap Retry or edit the text.",
+        needsClarification: true
+      }
+    ],
+    totals: { calories: 0, protein: 0, carbs: 0, fat: 0 }
+  };
+}
 type UnresolvedReason =
   | 'gemini_not_executed'
   | 'gemini_request_failed'
@@ -332,6 +372,12 @@ export async function runSegmentAwareParsePipeline(
   let firstFallbackUsage: AICallUsage | null = null;
   const aggregatedReasonCodes = new Set<string>();
   let routeForResponse: ParsePipelineRoute = 'gemini';
+  // Each entry is the result we'll merge into the final response —
+  // either the fresh per-segment ParseResult (when Gemini returned >=1 item)
+  // or a zero-nutrition placeholder so the segment doesn't get silently
+  // dropped from the user's view.
+  const freshResults: ParseResult[] = [];
+  let placeholderCount = 0;
 
   for (const { seg, output } of perSegmentOutputs) {
     if (output.fallbackUsed) {
@@ -348,10 +394,21 @@ export async function runSegmentAwareParsePipeline(
       routeForResponse = 'unresolved';
     }
 
-    // Cache successful per-segment results so a repeat of the same food
-    // is free next time the user types it.
-    if (output.result.items.length > 0 && !output.cacheHit) {
+    if (output.result.items.length === 0) {
+      // Gemini returned nothing for this segment (typo, ambiguous, or
+      // out-of-vocabulary). Surface the failure as a placeholder so iOS
+      // can render a Retry button instead of dropping the food.
+      freshResults.push(createUnresolvedPlaceholderResult(seg));
+      placeholderCount += 1;
+      // Don't cache placeholders — we want a future identical input to
+      // trigger a fresh Gemini call, not lock in the failure state.
+    } else if (!output.cacheHit) {
+      // Cache successful per-segment results so a repeat of the same
+      // food is free next time the user types it.
+      freshResults.push(output.result);
       setParseCache(seg, output.result, cacheScope).catch(() => {});
+    } else {
+      freshResults.push(output.result);
     }
 
     console.info(
@@ -363,14 +420,14 @@ export async function runSegmentAwareParsePipeline(
         items: output.result.items.length,
         route: output.route,
         fallbackUsed: output.fallbackUsed,
-        reasonCodes: output.reasonCodes
+        reasonCodes: output.reasonCodes,
+        placeholderEmitted: output.result.items.length === 0
       })
     );
   }
 
-  // Merge cached segment results with freshly-parsed ones.
+  // Merge cached segment results with freshly-parsed ones (incl. placeholders).
   const cachedResults = cacheChecks.filter((c) => c.fromCache).map((c) => c.result as ParseResult);
-  const freshResults = perSegmentOutputs.map((p) => p.output.result);
   const merged = combineParseResults([...cachedResults, ...freshResults]);
   const clarification = computeClarificationState(text, merged);
 

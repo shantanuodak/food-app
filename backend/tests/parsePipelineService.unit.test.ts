@@ -436,6 +436,100 @@ describe('runSegmentAwareParsePipeline — multi-segment routing', () => {
     expect(itemNames.some((n) => n.includes('paneer'))).toBe(true);
   });
 
+  test('emits placeholder items for segments Gemini cannot parse so iOS can render Retry', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+
+    const getParseCache = vi.fn(async () => null);
+    const setParseCache = vi.fn(async () => {});
+
+    // Gemini stub: succeeds for "1 cup chicken tikka masala", returns
+    // null (no items) for the typo'd segments. Mirrors the real failure
+    // mode the user observed on production.
+    const tryCheapAIFallback = vi.fn(async (text: string) => {
+      const lower = text.toLowerCase();
+      if (lower.includes('chicken tikka masala')) {
+        return {
+          result: parseResult({
+            items: [buildItem({ name: 'Chicken tikka masala', calories: 400 })],
+            totals: { calories: 400, protein: 30, carbs: 20, fat: 25 }
+          }),
+          usage: { model: 'gemini-2.5-flash', inputTokens: 20, outputTokens: 40, estimatedCostUsd: 0.001 }
+        };
+      }
+      return null; // typos / unknown → Gemini gives up
+    });
+
+    vi.doMock('../src/services/parseCacheService.js', () => ({
+      getParseCache,
+      setParseCache,
+      buildParseCacheDebugInfo: (text: string, scope: string) => ({
+        scope,
+        normalizedText: text.trim().toLowerCase(),
+        textHash: `${scope}:${text.trim().toLowerCase()}`
+      })
+    }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallback,
+      tryCheapAIFallbackDetailed: async (...args: Parameters<typeof tryCheapAIFallback>) => ({
+        output: await tryCheapAIFallback(...args)
+      })
+    }));
+    vi.doMock('../src/services/clarificationService.js', () => ({
+      buildClarificationQuestions: () => []
+    }));
+
+    const { runSegmentAwareParsePipeline, UNRESOLVED_PLACEHOLDER_SOURCE_ID } = await import(
+      '../src/services/parsePipelineService.js'
+    );
+    const output = await runSegmentAwareParsePipeline(
+      '3 naans, 1 glass buttermil, 1 cup chicken tikka masala and frid rice 1 cup',
+      {
+        cacheScope: 'user:v2:primary',
+        allowFallback: true,
+        featureFlags: { geminiEnabled: true },
+        userId: 'u1'
+      }
+    );
+
+    // We expect one item per segment — successful ones with real
+    // nutrition, failed ones with the unresolved-placeholder marker.
+    expect(output.result.items.length).toBe(4);
+
+    const placeholders = output.result.items.filter(
+      (it) => it.nutritionSourceId === UNRESOLVED_PLACEHOLDER_SOURCE_ID
+    );
+    const real = output.result.items.filter(
+      (it) => it.nutritionSourceId !== UNRESOLVED_PLACEHOLDER_SOURCE_ID
+    );
+
+    // 3 segments failed (naans, buttermil typo, frid rice typo) → 3 placeholders
+    expect(placeholders.length).toBe(3);
+    expect(real.length).toBe(1);
+    expect(real[0].name.toLowerCase()).toContain('chicken tikka masala');
+
+    // Placeholder items carry the original segment text as their name
+    // so the iOS retry call can re-parse exactly that text.
+    const placeholderNames = placeholders.map((p) => p.name);
+    expect(placeholderNames).toContain('3 naans');
+    expect(placeholderNames).toContain('1 glass buttermil');
+    expect(placeholderNames).toContain('frid rice 1 cup');
+
+    // All placeholders have zero nutrition + needsClarification flag
+    // so iOS knows to show the retry affordance, not log them as 0-cal foods.
+    for (const p of placeholders) {
+      expect(p.calories).toBe(0);
+      expect(p.needsClarification).toBe(true);
+    }
+
+    // Placeholders must NOT be cached — caching the failure would mean
+    // a future identical input never gets a fresh Gemini retry.
+    const cacheCalls = setParseCache.mock.calls;
+    for (const call of cacheCalls) {
+      const [text] = call as [string, ...unknown[]];
+      expect(['3 naans', '1 glass buttermil', 'frid rice 1 cup']).not.toContain(text);
+    }
+  });
+
   test('all-cache-hit short-circuit still returns one item per segment without calling Gemini', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
 
