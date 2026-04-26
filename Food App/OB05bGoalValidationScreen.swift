@@ -187,15 +187,28 @@ struct OB05bGoalValidationScreen: View {
     // MARK: - Kcal hero
 
     private var kcalHero: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: 6) {
             Text("DAILY TARGET")
                 .font(.system(size: 11, weight: .semibold, design: .monospaced))
                 .foregroundStyle(OnboardingGlassTheme.textMuted)
 
-            HStack(alignment: .lastTextBaseline, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                // Subtle flame — same orange gradient used by the camera-drawer hero
+                // so the calorie pattern reads consistently across the app.
+                Image(systemName: "flame.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [.orange, Color(red: 1, green: 0.45, blue: 0.1)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                    .padding(.bottom, 2)
+
                 RollingNumberText(value: kcalAnimatedValue, fractionDigits: 0)
-                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 46))
-                    .foregroundStyle(accentGradient)
+                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 48))
+                    .foregroundStyle(.primary)
 
                 Text("kcal")
                     .font(.system(size: 18, weight: .medium))
@@ -208,29 +221,55 @@ struct OB05bGoalValidationScreen: View {
         .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Macro pills
+    // MARK: - Macro cards (camera-drawer parity)
 
     private var macroPillsRow: some View {
         HStack(spacing: 10) {
-            macroPill(label: "Protein", grams: metrics.proteinTarget, index: 0)
-            macroPill(label: "Carbs", grams: metrics.carbTarget, index: 1)
-            macroPill(label: "Fat", grams: metrics.fatTarget, index: 2)
+            macroCard(
+                icon: "bolt.fill",
+                value: metrics.proteinTarget,
+                label: "Protein",
+                color: Color(red: 0.380, green: 0.333, blue: 0.961),
+                index: 0
+            )
+            macroCard(
+                icon: "leaf.fill",
+                value: metrics.carbTarget,
+                label: "Carbs",
+                color: .green,
+                index: 1
+            )
+            macroCard(
+                icon: "drop.fill",
+                value: metrics.fatTarget,
+                label: "Fat",
+                color: .blue,
+                index: 2
+            )
         }
     }
 
-    private func macroPill(label: String, grams: Int, index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label.uppercased())
-                .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                .foregroundStyle(OnboardingGlassTheme.textMuted)
-            Text("\(grams)g")
-                .font(.system(size: 15, weight: .semibold))
+    /// Mirrors the `macroCard(...)` shape used by `CameraResultDrawerView`
+    /// so the macro vocabulary (icon glyph + color + value + label layout)
+    /// is identical between the camera-drawer summary and the onboarding
+    /// preview.
+    private func macroCard(icon: String, value: Int, label: String, color: Color, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(color)
+
+            Text("\(value)g")
+                .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(OnboardingGlassTheme.textPrimary)
+
+            Text(label)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .onboardingGlassPanel(cornerRadius: 12, fillOpacity: 0.10, strokeOpacity: 0.14)
+        .padding(14)
+        .onboardingGlassPanel(cornerRadius: 14, fillOpacity: 0.10, strokeOpacity: 0.14)
         .opacity(macrosVisible ? 1 : 0)
         .offset(y: macrosVisible ? 0 : 6)
         .animation(
@@ -238,7 +277,7 @@ struct OB05bGoalValidationScreen: View {
             value: macrosVisible
         )
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(label): \(grams) grams"))
+        .accessibilityLabel(Text("\(label): \(value) grams"))
     }
 
     // MARK: - Action buttons
