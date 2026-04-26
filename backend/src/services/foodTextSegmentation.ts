@@ -72,12 +72,28 @@ function shouldSplitConjunctionBalanced(segment: string, parts: string[]): boole
   if (containsProtectedPhrase(segment)) {
     return false;
   }
+
+  // Multiple parts with explicit quantities → unambiguous list, split.
+  // This intentionally runs BEFORE the dish-hint guard: a dish-hint word
+  // can appear as a *side* in the list (e.g. "1 naan and 1 cup chicken
+  // fried rice and salad onion" — "salad" is part of the third item, not
+  // a marker that the whole string is one dish). The explicit "1 naan"
+  // and "1 cup" quantities trump that ambiguity.
+  const partsWithAmount = parts.filter((part) => hasQuantityOrUnit(part)).length;
+  if (partsWithAmount >= 2) {
+    return true;
+  }
+
+  // No clear list signal — fall back to the conservative dish-hint guard.
+  // E.g. "chicken caesar salad" (single part) won't trigger this, but
+  // "chicken caesar salad and breadsticks" (no quantities, dish hint) will,
+  // and we keep it as one segment.
   if (hasDishHint(segment)) {
     return false;
   }
 
-  const explicitAmountInPart = parts.some((part) => hasQuantityOrUnit(part));
-  if (explicitAmountInPart) {
+  // Some parts have a quantity → likely list.
+  if (partsWithAmount >= 1) {
     return true;
   }
 

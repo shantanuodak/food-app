@@ -31,4 +31,26 @@ describe('food text segmentation', () => {
     const segments = splitFoodTextSegments('2 eggs and toast, black coffee');
     expect(segments).toEqual(['2 eggs', 'toast', 'black coffee']);
   });
+
+  test('splits multi-quantity lists even when a dish-hint word appears in one part', () => {
+    // Regression: this used to collapse to a single segment because
+    // "salad" is a dish-hint token. With ≥2 explicit quantities in the
+    // parts, the user is clearly giving a list — the dish-hint guard
+    // should not block the split.
+    const segments = splitFoodTextSegments(
+      '1 naan and 1 cup chicken fried rice and salad onion'
+    );
+    expect(segments).toEqual([
+      '1 naan',
+      '1 cup chicken fried rice',
+      'salad onion'
+    ]);
+  });
+
+  test('still keeps a single composed-dish phrase unsplit when no quantities', () => {
+    // Sanity check that the dish-hint guard still applies in the
+    // ambiguous case (no explicit quantities, dish-hint word present).
+    const segments = splitFoodTextSegments('chicken caesar salad and breadsticks');
+    expect(segments).toEqual(['chicken caesar salad and breadsticks']);
+  });
 });
