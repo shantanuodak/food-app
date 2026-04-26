@@ -42,8 +42,8 @@
 | IOS-E2E-06 | Day summary updates after save | summary | iOS | Manual | PASS | FE-010 flow verified after saved-day sync patch |
 | IOS-E2E-07 | API auth failure surfaced in UI | auth failure | iOS | Manual | PENDING | Run with invalid/missing bearer token in debug environment |
 | IOS-E2E-08 | Invalid input error surfaced in UI | validation failure | iOS | Manual | PENDING | Run with malformed/oversized parse payload via debug path |
-| IOS-E2E-09 | Offline save recovery with idempotent retry | flaky network + retry behavior | iOS | Manual | PENDING | Validate `/docs/IOS_E2E002_OFFLINE_RETRY.md` scenario |
-| IOS-E2E-10 | Accessibility + localization baseline | a11y + i18n baseline | iOS | Manual | PENDING | Validate `/docs/IOS_E2E004_ACCESSIBILITY_LOCALIZATION.md` checklist |
+| IOS-E2E-09 | Offline save recovery with idempotent retry | flaky network + retry behavior | iOS | Manual | PENDING | Validate `/_dump/cleanup-2026-04-25/docs-archive/IOS_E2E002_OFFLINE_RETRY.md` scenario |
+| IOS-E2E-10 | Accessibility + localization baseline | a11y + i18n baseline | iOS | Manual | PENDING | Validate `/_dump/cleanup-2026-04-25/docs-archive/IOS_E2E004_ACCESSIBILITY_LOCALIZATION.md` checklist |
 | IOS-E2E-11 | Beta release readiness + TestFlight handoff | release operational readiness | iOS/Backend | Manual | PENDING | Validate `/docs/IOS_E2E005_BETA_READINESS.md` checklist |
 | PERF-E2E-01 | Common flow API performance (<10s target) | performance baseline | Backend | Automated | PASS | `/docs/E2E_PERFORMANCE_MVP.md` and benchmark artifact |
 

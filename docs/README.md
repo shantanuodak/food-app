@@ -35,10 +35,15 @@ All PRs should use:
 1. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/API_HANDOFF_IOS_MVP.md`
 2. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/IMPLEMENTATION_SPEC_MVP.md`
 3. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/PRD_MVP_Food_Logging.md`
-4. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/PRODUCT_COMPLETION_SUMMARY_2026-03-15.md`
 
 ## QA and Operations Docs
 
 1. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/E2E_QA_MATRIX_MVP.md`
 2. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/ALERT_RUNBOOK_MVP.md`
 3. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/KNOWN_LIMITATIONS_MVP.md`
+
+## Archived Cleanup Docs
+
+Old sprint, Jira, brainstorm, wrap-up, and future-enhancement docs were moved to:
+
+1. `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/_dump/cleanup-2026-04-25/docs-archive`
