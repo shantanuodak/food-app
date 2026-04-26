@@ -1,10 +1,18 @@
 import type { ParseResult } from './deterministicParser.js';
 import { buildParseCacheDebugInfo, getParseCache, setParseCache } from './parseCacheService.js';
-import { tryCheapAIFallbackDetailed, type AICallUsage, type AIFallbackFailureReason } from './aiNormalizerService.js';
+import type { AICallUsage, AIFallbackFailureReason } from './aiNormalizerService.js';
 import { isGeminiCircuitOpenForDiagnostics } from './geminiFlashClient.js';
-import { buildClarificationQuestions } from './clarificationService.js';
 import { splitFoodTextSegments } from './foodTextSegmentation.js';
 import { collectSourcesUsed, normalizeParseResultContract } from './parseContractService.js';
+import { computeClarificationState } from './parseClarificationState.js';
+import { createDefaultParseProviders } from './parsePipelineProviders.js';
+import {
+  combineParseResults,
+  createEmptyParseResult,
+  ensureItemExplanations,
+  sanitizeResultSources,
+  shouldAcceptCachedResult
+} from './parsePipelineResultUtils.js';
 import type {
   ParseDecisionContext,
   ParseDecisionResult,
@@ -28,169 +36,6 @@ type UnresolvedReason =
   | 'gemini_empty_response'
   | 'gemini_network_error'
   | 'gemini_invalid_response';
-
-function createEmptyParseResult(_text: string): ParseResult {
-  return {
-    confidence: 0,
-    assumptions: [],
-    items: [],
-    totals: {
-      calories: 0,
-      protein: 0,
-      carbs: 0,
-      fat: 0
-    }
-  };
-}
-
-function isValidParseResultShape(value: unknown): value is ParseResult {
-  if (!value || typeof value !== 'object') {
-    return false;
-  }
-  const candidate = value as Partial<ParseResult>;
-  return (
-    typeof candidate.confidence === 'number' &&
-    Number.isFinite(candidate.confidence) &&
-    Array.isArray(candidate.items) &&
-    Array.isArray(candidate.assumptions) &&
-    Boolean(candidate.totals) &&
-    typeof candidate.totals?.calories === 'number' &&
-    typeof candidate.totals?.protein === 'number' &&
-    typeof candidate.totals?.carbs === 'number' &&
-    typeof candidate.totals?.fat === 'number'
-  );
-}
-
-function resultUsesRetiredProvider(result: ParseResult): boolean {
-  return result.items.some((item) => {
-    const nutritionSourceId = item.nutritionSourceId.trim().toLowerCase();
-    const originalNutritionSourceId = (item.originalNutritionSourceId || '').trim().toLowerCase();
-    const sourceFamily = (item.sourceFamily || '').trim().toLowerCase();
-
-    return (
-      nutritionSourceId.includes('fatsecret') ||
-      nutritionSourceId.includes('deterministic') ||
-      nutritionSourceId.includes('seed_') ||
-      originalNutritionSourceId.includes('fatsecret') ||
-      originalNutritionSourceId.includes('deterministic') ||
-      originalNutritionSourceId.includes('seed_') ||
-      sourceFamily === 'fatsecret' ||
-      sourceFamily === 'deterministic'
-    );
-    // Note: 'fatsecret' and 'deterministic' values are kept here intentionally
-    // so any cached entries from the legacy pipeline are invalidated and re-parsed.
-  });
-}
-
-function hasUnresolvedSignal(text: string, result: ParseResult): boolean {
-  if (result.items.length === 0) {
-    return true;
-  }
-
-  const segmentCount = splitFoodTextSegments(text).length;
-  const coverageGap = segmentCount > 0 && result.items.length < segmentCount;
-  return coverageGap;
-}
-
-function normalizeNutritionSourceId(rawSourceId: string, route: ParsePipelineRoute): string {
-  const trimmed = rawSourceId.trim();
-  if (!trimmed) {
-    if (route === 'deterministic') return 'deterministic_estimate';
-    if (route === 'gemini') return 'gemini_estimate';
-    return 'cache_estimate';
-  }
-
-  const normalized = trimmed.toLowerCase();
-  if (
-    normalized.includes('gemini') ||
-    normalized.includes('manual') ||
-    normalized.includes('cache')
-  ) {
-    return trimmed;
-  }
-
-  if (route === 'deterministic') return 'deterministic_estimate';
-  if (route === 'gemini') return 'gemini_estimate';
-  return 'cache_estimate';
-}
-
-function sanitizeResultSources(result: ParseResult, route: ParsePipelineRoute): ParseResult {
-  if (result.items.length === 0) {
-    return result;
-  }
-
-  return {
-    ...result,
-    items: result.items.map((item) => ({
-      ...item,
-      nutritionSourceId: normalizeNutritionSourceId(item.nutritionSourceId, route)
-    }))
-  };
-}
-
-function ensureItemExplanations(result: ParseResult, route: ParsePipelineRoute): ParseResult {
-  if (result.items.length === 0) {
-    return result;
-  }
-
-  const fallbackExplanation =
-    route === 'gemini'
-      ? 'AI estimate provided based on the entered text.'
-      : 'Nutrition estimate provided based on the matched data source.';
-
-  return {
-    ...result,
-    items: result.items.map((item) => {
-      const foodDescription = item.foodDescription && item.foodDescription.trim().length > 0 ? item.foodDescription : item.name;
-      const explanation = item.explanation && item.explanation.trim().length > 0 ? item.explanation : fallbackExplanation;
-      return {
-        ...item,
-        foodDescription,
-        explanation
-      };
-    })
-  };
-}
-
-function computeClarificationState(text: string, result: ParseResult): { needsClarification: boolean; clarificationQuestions: string[] } {
-  const itemNeedsClarification = result.items.filter((item) => item.needsClarification === true);
-  const unresolved = hasUnresolvedSignal(text, result);
-  const needsClarification =
-    itemNeedsClarification.length > 0 ||
-    result.items.length === 0 ||
-    result.confidence < config.aiFallbackConfidenceMin ||
-    (unresolved && result.confidence < config.aiFallbackConfidenceMax);
-
-  if (!needsClarification) {
-    return { needsClarification: false, clarificationQuestions: [] };
-  }
-
-  const questions = buildClarificationQuestions(text, result);
-  if (questions.length > 0) {
-    if (itemNeedsClarification.length > 0) {
-      const itemLabel = itemNeedsClarification
-        .map((item) => item.name.trim())
-        .filter(Boolean)
-        .slice(0, 3)
-        .join(', ');
-      questions.unshift(
-        itemLabel
-          ? `Please confirm quantity or serving details for: ${itemLabel}.`
-          : 'Please confirm quantity or serving details for unresolved items.'
-      );
-    }
-    return { needsClarification: true, clarificationQuestions: Array.from(new Set(questions)) };
-  }
-
-  return {
-    needsClarification: true,
-    clarificationQuestions: ['Please list each food with quantity, for example: "2 eggs, 1 slice toast".']
-  };
-}
-
-function shouldAcceptCachedResult(result: ParseResult): boolean {
-  return result.items.length > 0 || result.confidence >= config.parseCacheMinConfidence;
-}
 
 function logUnresolvedRoute(text: string, context: ParseDecisionContext, reasons: UnresolvedReason[]): void {
   const cacheDebug = buildParseCacheDebugInfo(text, context.cacheScope);
@@ -322,97 +167,6 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
   };
 }
 
-function createCacheProvider(): ParseProvider {
-  return {
-    name: 'cache',
-    isEnabled: () => true,
-    async parse({ text, context }) {
-      try {
-        const cached = await getParseCache(text, context.cacheScope);
-        if (!cached) {
-          return null;
-        }
-
-        if (!isValidParseResultShape(cached.result)) {
-          console.warn(
-            '[parse_cache_skip]',
-            JSON.stringify({
-              reason: 'invalid_cached_result_shape',
-              cacheScope: context.cacheScope,
-              textHash: cached.textHash
-            })
-          );
-          return null;
-        }
-
-        if (resultUsesRetiredProvider(cached.result)) {
-          console.info(
-            '[parse_cache_skip]',
-            JSON.stringify({
-              reason: 'retired_provider_cached_result',
-              cacheScope: context.cacheScope,
-              textHash: cached.textHash
-            })
-          );
-          return null;
-        }
-
-        if (!shouldAcceptCachedResult(cached.result)) {
-          console.info(
-            '[parse_cache_skip]',
-            JSON.stringify({
-              reason: 'low_quality_cached_result',
-              confidence: cached.result.confidence,
-              itemCount: cached.result.items.length,
-              cacheScope: context.cacheScope,
-              minConfidence: config.parseCacheMinConfidence
-            })
-          );
-          return null;
-        }
-
-        return {
-          result: cached.result,
-          accepted: true,
-          cacheHit: true
-        };
-      } catch (err) {
-        console.warn('Parse cache read failed; continuing without cache', err);
-        return null;
-      }
-    }
-  };
-}
-
-function createGeminiProvider(): ParseProvider {
-  return {
-    name: 'gemini',
-    isEnabled: (context) => context.featureFlags.geminiEnabled && context.allowFallback && config.aiFallbackEnabled,
-    async parse({ text, baseline }) {
-      const fallbackAttempt = await tryCheapAIFallbackDetailed(text, baseline);
-      if (!fallbackAttempt.output) {
-        return {
-          result: baseline,
-          accepted: false,
-          rejectionReason: fallbackAttempt.failureReason
-        };
-      }
-
-      return {
-        result: fallbackAttempt.output.result,
-        accepted: true,
-        fallbackUsed: true,
-        fallbackModel: fallbackAttempt.output.usage.model,
-        fallbackUsage: fallbackAttempt.output.usage
-      };
-    }
-  };
-}
-
-export function createDefaultParseProviders(): ParseProvider[] {
-  return [createCacheProvider(), createGeminiProvider()];
-}
-
 export async function runPrimaryParsePipeline(
   text: string,
   options?: {
@@ -491,18 +245,6 @@ export async function runPrimaryParsePipeline(
   }
 }
 
-function combineParseResults(results: ParseResult[]): ParseResult {
-  const items = results.flatMap((r) => r.items);
-  const confidence = results.length > 0 ? Math.min(...results.map((r) => r.confidence)) : 0;
-  const totals = {
-    calories: Math.round(items.reduce((s, i) => s + i.calories, 0) * 10) / 10,
-    protein: Math.round(items.reduce((s, i) => s + i.protein, 0) * 10) / 10,
-    carbs: Math.round(items.reduce((s, i) => s + i.carbs, 0) * 10) / 10,
-    fat: Math.round(items.reduce((s, i) => s + i.fat, 0) * 10) / 10
-  };
-  return { confidence, assumptions: [], items, totals };
-}
-
 /**
  * Segment-aware pipeline: checks cache per segment, calls Gemini only
  * for segments that are not cached, then merges everything together.
@@ -524,7 +266,7 @@ export async function runSegmentAwareParsePipeline(
   const cacheChecks = await Promise.all(
     segments.map(async (seg) => {
       const cached = await getParseCache(seg, cacheScope);
-      if (cached && shouldAcceptCachedResultPublic(cached.result)) {
+      if (cached && shouldAcceptCachedResult(cached.result)) {
         return { seg, result: cached.result, fromCache: true };
       }
       return { seg, result: null as ParseResult | null, fromCache: false };
@@ -609,11 +351,6 @@ export async function runSegmentAwareParsePipeline(
   };
 }
 
-// Expose shouldAcceptCachedResult for use in segment pipeline
-function shouldAcceptCachedResultPublic(result: ParseResult): boolean {
-  return shouldAcceptCachedResult(result);
-}
-
 /**
  * Streaming variant of the segment-aware pipeline.
  * Emits each parsed item via onItem() as soon as it's available (cache or Gemini stream).
@@ -652,7 +389,7 @@ export async function runSegmentAwareParsePipelineStreaming(
   const cacheChecks = await Promise.all(
     segments.map(async (seg) => {
       const cached = await getParseCache(seg, cacheScope);
-      if (cached && shouldAcceptCachedResultPublic(cached.result)) {
+      if (cached && shouldAcceptCachedResult(cached.result)) {
         return { seg, result: cached.result, fromCache: true };
       }
       return { seg, result: null as ParseResult | null, fromCache: false };

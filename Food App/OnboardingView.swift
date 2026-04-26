@@ -1064,7 +1064,6 @@ struct OnboardingView: View {
             // Retry up to 2 times for network/timeout failures (handles Render.com cold starts).
             // On the first transient failure, show a warm-up message and retry automatically.
             let maxAttempts = 2
-            var lastError: Error?
 
             for attempt in 1...maxAttempts {
                 do {
@@ -1088,7 +1087,6 @@ struct OnboardingView: View {
                         return
                     }
 
-                    lastError = error
                     let isTransient = isTransientNetworkError(error)
 
                     if isTransient && attempt < maxAttempts {

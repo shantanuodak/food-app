@@ -57,10 +57,14 @@ final class TelemetryClient {
     func emit(_ event: TelemetryEvent) {
         guard let data = try? encoder.encode(event),
               let json = String(data: data, encoding: .utf8) else {
+#if DEBUG
             print("[telemetry] failed_to_encode_event eventName=\(event.eventName)")
+#endif
             return
         }
+#if DEBUG
         print("[telemetry] \(json)")
+#endif
     }
 
     func nowISO8601() -> String {

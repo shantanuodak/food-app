@@ -469,7 +469,7 @@ struct MainLoggingShellView: View {
         if Calendar.current.isDateInToday(selectedSummaryDate) {
             return "Today"
         }
-        return Self.topDateFormatter.string(from: selectedSummaryDate)
+        return HomeLoggingDateUtils.topDateFormatter.string(from: selectedSummaryDate)
     }
 
     private var loggedInFirstName: String? {
@@ -663,7 +663,7 @@ struct MainLoggingShellView: View {
             try? await Task.sleep(nanoseconds: 120_000_000)
 
             // Pre-apply cached data to prevent flicker during transition
-            let dateStr = Self.summaryRequestFormatter.string(from: normalized)
+            let dateStr = HomeLoggingDateUtils.summaryRequestFormatter.string(from: normalized)
             if let cachedLogs = dayCacheLogs[dateStr] {
                 dayLogs = cachedLogs
                 syncInputRowsFromDayLogs(cachedLogs.logs, for: cachedLogs.date)
@@ -682,16 +682,7 @@ struct MainLoggingShellView: View {
     }
 
     private func draftTimestampForSelectedDate(reference: Date = Date()) -> Date {
-        let calendar = Calendar.current
-        let selectedDay = calendar.startOfDay(for: selectedSummaryDate)
-        let time = calendar.dateComponents([.hour, .minute, .second, .nanosecond], from: reference)
-        var components = calendar.dateComponents([.year, .month, .day], from: selectedDay)
-        components.hour = time.hour
-        components.minute = time.minute
-        components.second = time.second
-        components.nanosecond = time.nanosecond
-        let timestamp = calendar.date(from: components) ?? selectedDay
-        return min(timestamp, reference)
+        HomeLoggingDateUtils.draftTimestamp(for: selectedSummaryDate, reference: reference)
     }
 
     private func ensureDraftTimingStarted() {
@@ -705,13 +696,11 @@ struct MainLoggingShellView: View {
     }
 
     private func draftDayString() -> String? {
-        draftLoggedAt.map { Self.summaryRequestFormatter.string(from: $0) }
+        draftLoggedAt.map { HomeLoggingDateUtils.summaryRequestFormatter.string(from: $0) }
     }
 
     private func clampedSummaryDate(_ date: Date) -> Date {
-        let normalized = Calendar.current.startOfDay(for: date)
-        let today = Calendar.current.startOfDay(for: Date())
-        return min(normalized, today)
+        HomeLoggingDateUtils.clampedSummaryDate(date)
     }
 
     private var isEmptyHomeState: Bool {
@@ -2119,7 +2108,7 @@ struct MainLoggingShellView: View {
             let response = try await appStore.apiClient.parseImageLog(
                 imageData: prepared.uploadData,
                 mimeType: prepared.mimeType,
-                loggedAt: Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+                loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
             )
 
             // Store the parse result and prepared data for when the user confirms
@@ -2149,7 +2138,7 @@ struct MainLoggingShellView: View {
         // Populate the input row with a short display name.
         // Full detail (brand, protein content, flavor, etc.) lives in the items
         // and is shown in the details drawer — the home screen just needs a readable label.
-        var rowText = shortenedFoodLabel(items: items, extractedText: response.extractedText)
+        let rowText = shortenedFoodLabel(items: items, extractedText: response.extractedText)
 
         var row = HomeLogRow.empty()
         row.text = rowText
@@ -2235,7 +2224,7 @@ struct MainLoggingShellView: View {
             let response = try await appStore.apiClient.parseImageLog(
                 imageData: prepared.uploadData,
                 mimeType: prepared.mimeType,
-                loggedAt: Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+                loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
             )
             let durationMs = elapsedMs(since: startedAt)
 
@@ -2700,7 +2689,7 @@ struct MainLoggingShellView: View {
 
         let request = ParseLogRequest(
             text: text,
-            loggedAt: Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+            loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
         )
 
         do {
@@ -2865,6 +2854,7 @@ struct MainLoggingShellView: View {
     }
 
     private func logUnresolvedParseDiagnostics(_ response: ParseLogResponse) {
+#if DEBUG
         let reasonSummary = (response.reasonCodes ?? []).joined(separator: ",")
         let retryAfterSummary = response.retryAfterSeconds.map(String.init) ?? "nil"
         print(
@@ -2872,6 +2862,7 @@ struct MainLoggingShellView: View {
                 "needsClarification=\(response.needsClarification) reasonCodes=\(reasonSummary) " +
                 "retryAfterSeconds=\(retryAfterSummary) confidence=\(response.confidence)"
         )
+#endif
     }
 
     private func shouldDeferDebouncedParse(for rawText: String) -> Bool {
@@ -2982,10 +2973,12 @@ struct MainLoggingShellView: View {
         autoSaveTask?.cancel()
         unresolvedRetryTask?.cancel()
 
-        // Clear transient parse METADATA only — do NOT touch inputRows here.
-        // syncInputRowsFromDayLogs will atomically replace the rows with the
-        // new day's data when it arrives. Clearing rows here causes a visible
-        // flicker (empty → populated) because the API response hasn't arrived yet.
+        // Drop active draft rows immediately on date changes so a draft from
+        // one day cannot follow the user into another day while the network
+        // reload is still in flight.
+        let savedRows = inputRows.filter { $0.isSaved }
+        inputRows = savedRows.isEmpty ? [HomeLogRow.empty()] : savedRows
+
         if parseResult != nil { parseResult = nil }
         if !editableItems.isEmpty { editableItems = [] }
         if activeParseRowID != nil { activeParseRowID = nil }
@@ -3591,7 +3584,7 @@ struct MainLoggingShellView: View {
             rawText = trimmedNoteText
         }
         guard !rawText.isEmpty else { return nil }
-        let effectiveLoggedAt = Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+        let effectiveLoggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
         let inputKind = normalizedInputKind(parseResult.inputKind, fallback: latestParseInputKind)
         let currentImageRef = pendingImageStorageRef ??
             inputRows.compactMap(\.imageRef).first
@@ -4018,7 +4011,7 @@ struct MainLoggingShellView: View {
             mustRecomputeTotals = false
         }
         guard !sourceItems.isEmpty else { return nil }
-        let effectiveLoggedAt = Self.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+        let effectiveLoggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
         let items: [SaveParsedFoodItem] = sourceItems.map { item in
             SaveParsedFoodItem(
                 name: item.name,
@@ -4196,7 +4189,7 @@ struct MainLoggingShellView: View {
                 flowStartedAt = nil
                 draftLoggedAt = nil
             }
-            if let parsedDate = Self.summaryRequestFormatter.date(from: savedDay) {
+            if let parsedDate = HomeLoggingDateUtils.summaryRequestFormatter.date(from: savedDay) {
                 selectedSummaryDate = parsedDate
             }
             // Clear the active (composing) rows — the reload below will add the newly
@@ -4236,7 +4229,7 @@ struct MainLoggingShellView: View {
     private func syncSavedLogToAppleHealthIfEnabled(_ request: SaveLogRequest) async -> Bool {
         guard appStore.isHealthSyncEnabled else { return false }
 
-        let loggedAtDate = Self.loggedAtFormatter.date(from: request.parsedLog.loggedAt) ??
+        let loggedAtDate = HomeLoggingDateUtils.loggedAtFormatter.date(from: request.parsedLog.loggedAt) ??
             ISO8601DateFormatter().date(from: request.parsedLog.loggedAt) ??
             Date()
         do {
@@ -4442,7 +4435,9 @@ struct MainLoggingShellView: View {
 
             // Validate the response is for the date we requested
             guard response.date == dateToLoad else {
+#if DEBUG
                 print("[loadDayLogs] date mismatch: requested=\(dateToLoad) got=\(response.date) — discarding")
+#endif
                 return
             }
             // Verify user is still viewing this date (they may have swiped during the network call)
@@ -4470,20 +4465,16 @@ struct MainLoggingShellView: View {
 
     // MARK: - Day Logs Disk Cache
 
-    private static let dayLogsCacheKeyPrefix = "app.daylogs.cache.v1."
-
     private func persistDayLogsToCache(_ response: DayLogsResponse, date: String) {
-        guard let data = try? JSONEncoder().encode(response) else { return }
-        defaults.set(data, forKey: Self.dayLogsCacheKeyPrefix + date)
+        HomeDayLogsDiskCache.persist(response, date: date, defaults: defaults)
     }
 
     private func loadDayLogsFromCache(date: String) -> DayLogsResponse? {
-        guard let data = defaults.data(forKey: Self.dayLogsCacheKeyPrefix + date) else { return nil }
-        return try? JSONDecoder().decode(DayLogsResponse.self, from: data)
+        HomeDayLogsDiskCache.load(date: date, defaults: defaults)
     }
 
     private func removeDayLogsCacheEntry(date: String) {
-        defaults.removeObject(forKey: Self.dayLogsCacheKeyPrefix + date)
+        HomeDayLogsDiskCache.remove(date: date, defaults: defaults)
     }
 
     private func syncInputRowsFromDayLogs(_ entries: [DayLogEntry], for dateString: String) {
@@ -4533,9 +4524,10 @@ struct MainLoggingShellView: View {
         // Full replace: remove ALL old saved rows and replace with the requested
         // day's entries. Keep active drafts only when their draft timestamp belongs
         // to the same day; otherwise a today draft visually leaks into yesterday.
+        let currentActiveRows = inputRows.filter { !$0.isSaved }
         let activeRows: [HomeLogRow]
-        if draftDayString() == dateString {
-            activeRows = inputRows.filter { !$0.isSaved }
+        if draftDayString() == dateString || (draftLoggedAt == nil && dateString == summaryDateString) {
+            activeRows = currentActiveRows
         } else {
             activeRows = []
         }
@@ -4612,7 +4604,7 @@ struct MainLoggingShellView: View {
         prefetchTask?.cancel()
         prefetchTask = Task(priority: .utility) {
             let calendar = Calendar.current
-            let formatter = Self.summaryRequestFormatter
+            let formatter = HomeLoggingDateUtils.summaryRequestFormatter
 
             // Check if any days in the range need fetching
             var needsFetch = false
@@ -4687,7 +4679,7 @@ struct MainLoggingShellView: View {
     }
 
     private var summaryDateString: String {
-        Self.summaryRequestFormatter.string(from: selectedSummaryDate)
+        HomeLoggingDateUtils.summaryRequestFormatter.string(from: selectedSummaryDate)
     }
 
     private func userFriendlyDaySummaryError(_ error: Error) -> String {
@@ -4732,7 +4724,7 @@ struct MainLoggingShellView: View {
         pendingSaveRequest = nil
         pendingSaveFingerprint = nil
         pendingSaveIdempotencyKey = nil
-        defaults.removeObject(forKey: Self.pendingSaveDefaultsKey)
+        HomePendingSaveStore.clear(defaults: defaults)
     }
 
     private func saveRequestFingerprint(_ request: SaveLogRequest) -> String {
@@ -4908,24 +4900,16 @@ struct MainLoggingShellView: View {
             fingerprint: pendingSaveFingerprint,
             idempotencyKey: pendingSaveIdempotencyKey.uuidString.lowercased()
         )
-        let encoder = JSONEncoder()
-        guard let data = try? encoder.encode(draft) else {
-            return
-        }
-        defaults.set(data, forKey: Self.pendingSaveDefaultsKey)
+        HomePendingSaveStore.save(draft, defaults: defaults)
     }
 
     private func restorePendingSaveContextIfNeeded() {
         guard pendingSaveRequest == nil, pendingSaveIdempotencyKey == nil else {
             return
         }
-        guard let data = defaults.data(forKey: Self.pendingSaveDefaultsKey) else {
-            return
-        }
-        let decoder = JSONDecoder()
-        guard let draft = try? decoder.decode(PendingSaveDraft.self, from: data),
+        guard let draft = HomePendingSaveStore.load(defaults: defaults),
               let key = UUID(uuidString: draft.idempotencyKey) else {
-            defaults.removeObject(forKey: Self.pendingSaveDefaultsKey)
+            HomePendingSaveStore.clear(defaults: defaults)
             return
         }
 
@@ -4969,385 +4953,6 @@ struct MainLoggingShellView: View {
         (value * 10).rounded() / 10
     }
 
-    private static let loggedAtFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let summaryRequestFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        return formatter
-    }()
-
-    private static let summaryDisplayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .none
-        return formatter
-    }()
-
-    private static let topDateFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.dateFormat = "MMM d"
-        return formatter
-    }()
-
-    private static let pendingSaveDefaultsKey = "app.pendingSaveDraft.v1"
-}
-
-private struct PendingSaveDraft: Codable {
-    let request: SaveLogRequest
-    let fingerprint: String
-    let idempotencyKey: String
-}
-
-private struct InFlightParseSnapshot {
-    let text: String
-    let requestSequence: Int
-    let activeRowID: UUID
-    let dirtyRowIDsAtDispatch: [UUID]
-}
-
-private struct RowCalorieDetails: Identifiable {
-    let id: UUID
-    let rowText: String
-    let displayName: String
-    let calories: Int
-    let protein: Double?
-    let carbs: Double?
-    let fat: Double?
-    let parseConfidence: Double
-    let itemConfidence: Double?
-    let primaryConfidence: Double
-    let hasManualOverride: Bool
-    let sourceLabel: String
-    let thoughtProcess: String
-    let parsedItems: [ParsedFoodItem]
-    let manualEditedFields: [String]
-    let manualOriginalSources: [String]
-    let imagePreviewData: Data?
-    let imageRef: String?
-}
-
-private struct PreparedImagePayload {
-    let uploadData: Data
-    let previewData: Data
-    let mimeType: String
-}
-
-private struct HomeImagePicker: UIViewControllerRepresentable {
-    let sourceType: UIImagePickerController.SourceType
-    let onImagePicked: (UIImage) -> Void
-    let onCancel: () -> Void
-    @Environment(\.dismiss) private var dismiss
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
-    }
-
-    func makeUIViewController(context: Context) -> UIImagePickerController {
-        let picker = UIImagePickerController()
-        picker.delegate = context.coordinator
-        picker.sourceType = UIImagePickerController.isSourceTypeAvailable(sourceType) ? sourceType : .photoLibrary
-        picker.allowsEditing = false
-        return picker
-    }
-
-    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
-
-    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
-        private let parent: HomeImagePicker
-
-        init(parent: HomeImagePicker) {
-            self.parent = parent
-        }
-
-        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
-            parent.dismiss()
-            parent.onCancel()
-        }
-
-        func imagePickerController(
-            _ picker: UIImagePickerController,
-            didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]
-        ) {
-            let image = (info[.originalImage] as? UIImage) ?? (info[.editedImage] as? UIImage)
-            parent.dismiss()
-            if let image {
-                parent.onImagePicked(image)
-            } else {
-                parent.onCancel()
-            }
-        }
-    }
-}
-
-/// Applies the swipe offset/opacity as a single GPU-composited layer.
-/// Without this, every frame of the swipe gesture forces SwiftUI to re-layout
-/// the entire child tree. `drawingGroup()` flattens it to a Metal texture first.
-private struct DaySwipeOffsetModifier: ViewModifier, Animatable {
-    var offset: CGFloat
-
-    var animatableData: CGFloat {
-        get { offset }
-        set { offset = newValue }
-    }
-
-    func body(content: Content) -> some View {
-        content
-            .offset(x: offset)
-            .opacity(1.0 - min(abs(offset) / 200, 0.4))
-    }
-}
-
-private struct LiquidGlassCapsuleButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .padding(.horizontal, 14)
-            .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
-            .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
-            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
-    }
-}
-
-private struct EditableParsedItem: Identifiable {
-    let id = UUID()
-
-    var name: String
-    var quantity: Double
-    var unit: String
-    var grams: Double
-    var calories: Double
-    var protein: Double
-    var carbs: Double
-    var fat: Double
-    var nutritionSourceId: String
-    var originalNutritionSourceId: String?
-    var sourceFamily: String?
-    var matchConfidence: Double
-    var servingOptions: [ParsedServingOption]?
-    var foodDescription: String?
-    var explanation: String?
-
-    private var gramsPerUnit: Double
-    private var caloriesPerUnit: Double
-    private var proteinPerUnit: Double
-    private var carbsPerUnit: Double
-    private var fatPerUnit: Double
-    private let originalName: String
-    private let originalQuantity: Double
-    private let originalUnit: String
-    private let originalCalories: Double
-    private let originalProtein: Double
-    private let originalCarbs: Double
-    private let originalFat: Double
-    private let originalNutritionSourceIdSnapshot: String
-
-    init(apiItem: ParsedFoodItem) {
-        let quantityBasis = apiItem.amount ?? apiItem.quantity
-        let safeQuantity = max(quantityBasis, 0.0001)
-        name = apiItem.name
-        quantity = quantityBasis
-        unit = apiItem.unitNormalized ?? apiItem.unit
-        grams = apiItem.grams
-        calories = apiItem.calories
-        protein = apiItem.protein
-        carbs = apiItem.carbs
-        fat = apiItem.fat
-        nutritionSourceId = apiItem.nutritionSourceId
-        originalNutritionSourceId = apiItem.originalNutritionSourceId
-        sourceFamily = apiItem.sourceFamily
-        matchConfidence = apiItem.matchConfidence
-        servingOptions = apiItem.servingOptions
-        foodDescription = apiItem.foodDescription
-        explanation = apiItem.explanation
-
-        gramsPerUnit = apiItem.gramsPerUnit ?? (apiItem.grams / safeQuantity)
-        caloriesPerUnit = apiItem.calories / safeQuantity
-        proteinPerUnit = apiItem.protein / safeQuantity
-        carbsPerUnit = apiItem.carbs / safeQuantity
-        fatPerUnit = apiItem.fat / safeQuantity
-
-        originalName = apiItem.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        originalQuantity = quantityBasis
-        originalUnit = (apiItem.unitNormalized ?? apiItem.unit).trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        originalCalories = apiItem.calories
-        originalProtein = apiItem.protein
-        originalCarbs = apiItem.carbs
-        originalFat = apiItem.fat
-        originalNutritionSourceIdSnapshot = apiItem.originalNutritionSourceId ?? apiItem.nutritionSourceId
-    }
-
-    mutating func updateQuantity(_ newQuantity: Double) {
-        let bounded = max(newQuantity, 0)
-        quantity = bounded
-        grams = Self.roundOneDecimal(gramsPerUnit * bounded)
-        calories = Self.roundOneDecimal(caloriesPerUnit * bounded)
-        protein = Self.roundOneDecimal(proteinPerUnit * bounded)
-        carbs = Self.roundOneDecimal(carbsPerUnit * bounded)
-        fat = Self.roundOneDecimal(fatPerUnit * bounded)
-    }
-
-    mutating func applyServingOption(_ option: ParsedServingOption) {
-        let usesServingBasis = optionUsesServingBasis(option)
-        let baseQuantity = usesServingBasis ? 1.0 : max(option.quantity, 0.0001)
-        let resolvedUnit = option.unit.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !resolvedUnit.isEmpty {
-            if usesServingBasis || isWeightOrVolumeUnit(resolvedUnit) {
-                unit = "serving"
-            } else {
-                unit = resolvedUnit
-            }
-        }
-
-        if usesServingBasis {
-            gramsPerUnit = option.grams
-            caloriesPerUnit = option.calories
-            proteinPerUnit = option.protein
-            carbsPerUnit = option.carbs
-            fatPerUnit = option.fat
-        } else {
-            gramsPerUnit = option.grams / baseQuantity
-            caloriesPerUnit = option.calories / baseQuantity
-            proteinPerUnit = option.protein / baseQuantity
-            carbsPerUnit = option.carbs / baseQuantity
-            fatPerUnit = option.fat / baseQuantity
-        }
-
-        let sourceId = option.nutritionSourceId.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !sourceId.isEmpty {
-            nutritionSourceId = sourceId
-        }
-
-        updateQuantity(quantity)
-    }
-
-    private func optionUsesServingBasis(_ option: ParsedServingOption) -> Bool {
-        if abs(option.quantity - 1) > 0.0001 {
-            return true
-        }
-        return isWeightOrVolumeUnit(option.unit)
-    }
-
-    private func isWeightOrVolumeUnit(_ value: String) -> Bool {
-        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized == "g" || normalized == "gram" || normalized == "grams" ||
-            normalized == "ml" || normalized == "milliliter" || normalized == "milliliters" ||
-            normalized == "oz" || normalized == "ounce" || normalized == "ounces"
-    }
-
-    func asParsedFoodItem() -> ParsedFoodItem {
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedName = normalizedName.isEmpty ? "item" : normalizedName
-        let normalizedUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let resolvedUnit = normalizedUnit.isEmpty ? "count" : normalizedUnit
-        let editedFields = manualEditedFields(
-            currentName: resolvedName,
-            currentQuantity: quantity,
-            currentUnit: resolvedUnit,
-            currentCalories: calories,
-            currentProtein: protein,
-            currentCarbs: carbs,
-            currentFat: fat,
-            currentSource: nutritionSourceId
-        )
-
-        return ParsedFoodItem(
-            name: resolvedName,
-            quantity: quantity,
-            unit: resolvedUnit,
-            grams: grams,
-            calories: calories,
-            protein: protein,
-            carbs: carbs,
-            fat: fat,
-            nutritionSourceId: nutritionSourceId,
-            originalNutritionSourceId: originalNutritionSourceId ?? originalNutritionSourceIdSnapshot,
-            sourceFamily: editedFields.isEmpty ? sourceFamily : "manual",
-            matchConfidence: matchConfidence,
-            amount: quantity,
-            unitNormalized: resolvedUnit,
-            gramsPerUnit: quantity > 0 ? (grams / quantity) : nil,
-            needsClarification: false,
-            manualOverride: editedFields.isEmpty ? nil : true,
-            servingOptions: servingOptions,
-            foodDescription: foodDescription,
-            explanation: explanation
-        )
-    }
-
-    func asSaveParsedFoodItem() -> SaveParsedFoodItem {
-        let normalizedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedName = normalizedName.isEmpty ? "item" : normalizedName
-        let normalizedUnit = unit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let resolvedUnit = normalizedUnit.isEmpty ? "count" : normalizedUnit
-        let editedFields = manualEditedFields(
-            currentName: resolvedName,
-            currentQuantity: quantity,
-            currentUnit: resolvedUnit,
-            currentCalories: calories,
-            currentProtein: protein,
-            currentCarbs: carbs,
-            currentFat: fat,
-            currentSource: nutritionSourceId
-        )
-
-        return SaveParsedFoodItem(
-            name: resolvedName,
-            quantity: quantity,
-            amount: quantity,
-            unit: resolvedUnit,
-            unitNormalized: resolvedUnit,
-            grams: grams,
-            gramsPerUnit: quantity > 0 ? (grams / quantity) : nil,
-            calories: calories,
-            protein: protein,
-            carbs: carbs,
-            fat: fat,
-            nutritionSourceId: nutritionSourceId,
-            originalNutritionSourceId: originalNutritionSourceId ?? originalNutritionSourceIdSnapshot,
-            sourceFamily: editedFields.isEmpty ? sourceFamily : "manual",
-            matchConfidence: matchConfidence,
-            needsClarification: false,
-            manualOverride: editedFields.isEmpty
-                ? nil
-                : SaveManualOverride(
-                    enabled: true,
-                    reason: "Adjusted manually in app.",
-                    editedFields: editedFields
-                )
-        )
-    }
-
-    private func manualEditedFields(
-        currentName: String,
-        currentQuantity: Double,
-        currentUnit: String,
-        currentCalories: Double,
-        currentProtein: Double,
-        currentCarbs: Double,
-        currentFat: Double,
-        currentSource: String
-    ) -> [String] {
-        var fields: [String] = []
-        if currentName.lowercased() != originalName.lowercased() { fields.append("name") }
-        if abs(currentQuantity - originalQuantity) > 0.0001 { fields.append("quantity") }
-        if currentUnit != originalUnit { fields.append("unit") }
-        if abs(currentCalories - originalCalories) > 0.05 { fields.append("calories") }
-        if abs(currentProtein - originalProtein) > 0.05 { fields.append("protein") }
-        if abs(currentCarbs - originalCarbs) > 0.05 { fields.append("carbs") }
-        if abs(currentFat - originalFat) > 0.05 { fields.append("fat") }
-        if currentSource != originalNutritionSourceIdSnapshot { fields.append("nutritionSourceId") }
-        return fields
-    }
-
-    private static func roundOneDecimal(_ value: Double) -> Double {
-        (value * 10).rounded() / 10
-    }
 }
 
 #Preview {
