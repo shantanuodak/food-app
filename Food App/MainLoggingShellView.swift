@@ -68,7 +68,6 @@ struct MainLoggingShellView: View {
     @State private var detailsDrawerMode: DetailsDrawerMode = .full
     @State private var selectedRowDetails: RowCalorieDetails?
     @State private var activeEditingRowID: UUID?
-    @State private var isCameraSourceDialogPresented = false
     @State private var selectedCameraSource: CameraInputSource?
     @State private var isImagePickerPresented = false
     @State private var imagePickerSourceType: UIImagePickerController.SourceType = .photoLibrary
@@ -232,23 +231,6 @@ struct MainLoggingShellView: View {
                 }
             }
             .padding()
-            .confirmationDialog(
-                "Add from",
-                isPresented: $isCameraSourceDialogPresented,
-                titleVisibility: .visible
-            ) {
-                Button("Take a picture") {
-                    handleCameraSourceSelection(.takePicture)
-                }
-                Button("Photo") {
-                    handleCameraSourceSelection(.photo)
-                }
-                Button("Cancel", role: .cancel) {
-                    inputMode = .text
-                }
-            } message: {
-                Text("Choose how you want to add food.")
-            }
             .onChange(of: rowTextSignature) { _, _ in
                 if suppressDebouncedParseOnce {
                     suppressDebouncedParseOnce = false
@@ -262,9 +244,11 @@ struct MainLoggingShellView: View {
                 }
                 scheduleDebouncedParse(for: noteText)
             }
-            .onChange(of: inputMode) { _, newMode in
-                if newMode == .camera {
-                    isCameraSourceDialogPresented = true
+            .onChange(of: inputMode) { oldMode, newMode in
+                // Skip when handleCameraSourceSelection itself flipped the
+                // mode to .camera — it already presents the custom camera.
+                if newMode == .camera, oldMode != .camera, !isCustomCameraPresented, !isImagePickerPresented {
+                    handleCameraSourceSelection(.takePicture)
                 } else if newMode == .voice {
                     handleVoiceModeTapped()
                 }
@@ -331,9 +315,10 @@ struct MainLoggingShellView: View {
                 clearParseSchedulerState()
             }
             .onReceive(NotificationCenter.default.publisher(for: .openCameraFromTabBar)) { _ in
-                selectedCameraSource = nil
-                inputMode = .camera
-                isCameraSourceDialogPresented = true
+                // Tap on the dock camera button → straight to the custom camera
+                // (no action sheet). The camera's bottom-left album icon
+                // handles "from photo library" once the user is inside it.
+                handleCameraSourceSelection(.takePicture)
             }
             .onReceive(NotificationCenter.default.publisher(for: .openVoiceFromTabBar)) { _ in
                 inputMode = .voice
