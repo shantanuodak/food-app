@@ -255,30 +255,50 @@ export async function runSegmentAwareParsePipeline(
   options?: Parameters<typeof runPrimaryParsePipeline>[1]
 ): Promise<ParsePipelineOutput> {
   const segments = splitFoodTextSegments(text);
+  const cacheScope = options?.cacheScope ?? 'global';
 
+  // Single-segment input: nothing to coordinate, hand off directly.
   if (segments.length <= 1) {
+    console.info(
+      '[segment_pipeline]',
+      JSON.stringify({ stage: 'single_segment', cacheScope, segmentCount: segments.length })
+    );
     return runPrimaryParsePipeline(text, options);
   }
 
-  const cacheScope = options?.cacheScope ?? 'global';
-
-  // Check cache for every segment in parallel
+  // Check cache for every segment in parallel.
   const cacheChecks = await Promise.all(
     segments.map(async (seg) => {
       const cached = await getParseCache(seg, cacheScope);
       if (cached && shouldAcceptCachedResult(cached.result)) {
-        return { seg, result: cached.result, fromCache: true };
+        return { seg, result: cached.result, fromCache: true, output: null as ParsePipelineOutput | null };
       }
-      return { seg, result: null as ParseResult | null, fromCache: false };
+      return { seg, result: null as ParseResult | null, fromCache: false, output: null };
     })
   );
 
-  const allCached = cacheChecks.every((c) => c.fromCache);
+  const cachedHits = cacheChecks.filter((c) => c.fromCache).length;
+  const uncachedSegments = cacheChecks.filter((c) => !c.fromCache).map((c) => c.seg);
 
-  // Full cache hit across all segments
-  if (allCached) {
+  console.info(
+    '[segment_pipeline]',
+    JSON.stringify({
+      stage: 'cache_lookup',
+      cacheScope,
+      segmentCount: segments.length,
+      cachedHits,
+      uncachedCount: uncachedSegments.length
+    })
+  );
+
+  // Full cache hit across all segments.
+  if (uncachedSegments.length === 0) {
     const combined = combineParseResults(cacheChecks.map((c) => c.result as ParseResult));
     const clarification = computeClarificationState(text, combined);
+    console.info(
+      '[segment_pipeline]',
+      JSON.stringify({ stage: 'all_cached_return', cacheScope, items: combined.items.length })
+    );
     return {
       result: combined,
       route: 'cache',
@@ -293,59 +313,90 @@ export async function runSegmentAwareParsePipeline(
     };
   }
 
-  // Partial cache hit: only call Gemini for the uncached segments
-  const uncachedSegments = cacheChecks.filter((c) => !c.fromCache).map((c) => c.seg);
-  const uncachedText = uncachedSegments.join('\n');
+  // Per-segment parsing in parallel. We deliberately do NOT bundle the
+  // uncached segments into a single Gemini call — when Gemini sees
+  // multi-line input it sometimes consolidates everything into one item
+  // (the canonical example: "2 naan, butter paneer masala, rice bowl,
+  // onion salad and buttermilk" came back as a single Naan x2 item).
+  // Going one segment per Gemini call guarantees each food gets its own
+  // focused prompt and cannot be merged.
+  const perSegmentOutputs = await Promise.all(
+    uncachedSegments.map(async (seg) => {
+      const out = await runPrimaryParsePipeline(seg, options);
+      return { seg, output: out };
+    })
+  );
 
-  let uncachedOutput = await runPrimaryParsePipeline(uncachedText, options);
+  let anyFallbackUsed = false;
+  let firstFallbackModel: string | null = null;
+  let firstFallbackUsage: AICallUsage | null = null;
+  const aggregatedReasonCodes = new Set<string>();
+  let routeForResponse: ParsePipelineRoute = 'gemini';
 
-  // If Gemini returned fewer items than segments (coverage gap), fall back to
-  // one call per missing segment so nothing gets silently dropped
-  if (uncachedOutput.result.items.length < uncachedSegments.length) {
-    const perSegmentResults: ParseResult[] = [];
-    for (const seg of uncachedSegments) {
-      const segOutput = await runPrimaryParsePipeline(seg, options);
-      perSegmentResults.push(segOutput.result);
-      if (segOutput.result.items.length > 0 && !segOutput.cacheHit) {
-        setParseCache(seg, segOutput.result, cacheScope).catch(() => {});
-      }
+  for (const { seg, output } of perSegmentOutputs) {
+    if (output.fallbackUsed) {
+      anyFallbackUsed = true;
+      if (firstFallbackModel === null) firstFallbackModel = output.fallbackModel;
+      if (firstFallbackUsage === null) firstFallbackUsage = output.fallbackUsage;
     }
-    const combined = combineParseResults(perSegmentResults);
-    uncachedOutput = { ...uncachedOutput, result: combined, cacheHit: false };
-  } else if (uncachedOutput.result.items.length > 0 && !uncachedOutput.cacheHit) {
-    // Full item count matched — cache each segment individually for future reuse
-    for (const seg of uncachedSegments) {
-      const segItem = uncachedOutput.result.items.find(
-        (item) => item.name.toLowerCase().includes(seg.toLowerCase().replace(/^\d+\s*/, ''))
-      );
-      if (segItem) {
-        const segResult: ParseResult = {
-          confidence: segItem.matchConfidence,
-          assumptions: [],
-          items: [segItem],
-          totals: {
-            calories: segItem.calories,
-            protein: segItem.protein,
-            carbs: segItem.carbs,
-            fat: segItem.fat
-          }
-        };
-        setParseCache(seg, segResult, cacheScope).catch(() => {});
-      }
+    for (const code of output.reasonCodes) {
+      aggregatedReasonCodes.add(code);
     }
+    // If a per-segment call failed entirely, surface its route so the
+    // overall response still reflects "we tried but couldn't get this".
+    if (output.route === 'unresolved' && routeForResponse !== 'unresolved') {
+      routeForResponse = 'unresolved';
+    }
+
+    // Cache successful per-segment results so a repeat of the same food
+    // is free next time the user types it.
+    if (output.result.items.length > 0 && !output.cacheHit) {
+      setParseCache(seg, output.result, cacheScope).catch(() => {});
+    }
+
+    console.info(
+      '[segment_pipeline]',
+      JSON.stringify({
+        stage: 'per_segment_result',
+        cacheScope,
+        segment: seg,
+        items: output.result.items.length,
+        route: output.route,
+        fallbackUsed: output.fallbackUsed,
+        reasonCodes: output.reasonCodes
+      })
+    );
   }
 
-  // Merge cached segment results with freshly-parsed ones
+  // Merge cached segment results with freshly-parsed ones.
   const cachedResults = cacheChecks.filter((c) => c.fromCache).map((c) => c.result as ParseResult);
-  const merged = combineParseResults([...cachedResults, uncachedOutput.result]);
+  const freshResults = perSegmentOutputs.map((p) => p.output.result);
+  const merged = combineParseResults([...cachedResults, ...freshResults]);
   const clarification = computeClarificationState(text, merged);
 
+  console.info(
+    '[segment_pipeline]',
+    JSON.stringify({
+      stage: 'merged_return',
+      cacheScope,
+      segmentCount: segments.length,
+      cachedHits,
+      freshItems: freshResults.reduce((sum, r) => sum + r.items.length, 0),
+      finalItemCount: merged.items.length,
+      anyFallbackUsed,
+      route: routeForResponse
+    })
+  );
+
   return {
-    ...uncachedOutput,
     result: merged,
-    route: cachedResults.length > 0 ? 'gemini' : uncachedOutput.route,
+    route: routeForResponse,
     cacheHit: false,
-    sourcesUsed: collectSourcesUsed(merged.items, uncachedOutput.route, false),
+    sourcesUsed: collectSourcesUsed(merged.items, routeForResponse, false),
+    reasonCodes: Array.from(aggregatedReasonCodes),
+    fallbackUsed: anyFallbackUsed,
+    fallbackModel: firstFallbackModel,
+    fallbackUsage: firstFallbackUsage,
     needsClarification: clarification.needsClarification,
     clarificationQuestions: clarification.clarificationQuestions
   };
