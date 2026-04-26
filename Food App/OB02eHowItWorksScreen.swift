@@ -19,31 +19,29 @@ struct OB02eHowItWorksScreen: View {
                 // Headline
                 Text("Why Food App's\napproach works")
                     .font(OnboardingTypography.instrumentSerif(style: .regular, size: 38))
-                    .foregroundStyle(colorScheme == .dark ? .white : .black)
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
                     .multilineTextAlignment(.center)
                     .lineSpacing(2)
                     .opacity(appeared ? 1 : 0)
                     .padding(.horizontal, 24)
                     .padding(.top, 24)
 
-                // Feature cards
+                // Feature cards — staggered entry per card so they cascade in
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 26) {
-                        // Card 1: Type anything — blue gradient
                         typingCard
+                            .modifier(StaggeredEntry(index: 0, appeared: appeared))
 
-                        // Card 2: Track your Progress — amber gradient
                         TrackProgressCardView()
+                            .modifier(StaggeredEntry(index: 1, appeared: appeared))
 
-                        // Card 3: Take a Food Photo — dark gradient
                         TakePhotoCardView()
+                            .modifier(StaggeredEntry(index: 2, appeared: appeared))
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 28)
                     .padding(.bottom, 16)
                 }
-                .opacity(appeared ? 1 : 0)
-                .offset(y: appeared ? 0 : 16)
 
                 Spacer(minLength: 8)
 
@@ -71,7 +69,7 @@ struct OB02eHowItWorksScreen: View {
         }
     }
 
-    // MARK: - Typing Card (Blue Gradient)
+    // MARK: - Typing Card (frosted glass)
 
     private var typingCard: some View {
         VStack(spacing: 0) {
@@ -79,32 +77,16 @@ struct OB02eHowItWorksScreen: View {
                 .padding(.horizontal, 12)
                 .padding(.top, 29)
 
-            Text("Type anything - get instant nutrition facts")
+            Text("Type anything — get instant nutrition facts")
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
                 .padding(.top, 10)
                 .padding(.bottom, 20)
         }
         .frame(height: 142)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    RadialGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: Color(red: 0.56, green: 0.71, blue: 0.83), location: 0),
-                            .init(color: Color(red: 0.44, green: 0.62, blue: 0.81), location: 0.25),
-                            .init(color: Color(red: 0.33, green: 0.53, blue: 0.78), location: 0.5),
-                            .init(color: Color(red: 0.20, green: 0.45, blue: 0.76), location: 0.75),
-                            .init(color: Color(red: 0.09, green: 0.36, blue: 0.74), location: 1.0)
-                        ]),
-                        center: UnitPoint(x: 0.23, y: 0.52),
-                        startRadius: 0,
-                        endRadius: 320
-                    )
-                )
-                .shadow(color: .black.opacity(0.25), radius: 21.5, x: 0, y: 4)
-        )
+        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
+        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
     }
 
     // MARK: - Top Bar
@@ -128,6 +110,25 @@ struct OB02eHowItWorksScreen: View {
             }
         }
         .frame(height: 44)
+    }
+}
+
+// MARK: - Staggered Entry
+
+/// Fades + lifts each card in turn so the three feature cards cascade
+/// rather than appearing all at once. Stagger is 80ms per index.
+private struct StaggeredEntry: ViewModifier {
+    let index: Int
+    let appeared: Bool
+
+    func body(content: Content) -> some View {
+        let reduceMotion = UIAccessibility.isReduceMotionEnabled
+        let delay = reduceMotion ? 0 : 0.1 + Double(index) * 0.08
+        let duration = reduceMotion ? 0.0 : 0.4
+        return content
+            .opacity(appeared ? 1 : 0)
+            .offset(y: appeared ? 0 : (reduceMotion ? 0 : 12))
+            .animation(.easeOut(duration: duration).delay(delay), value: appeared)
     }
 }
 
@@ -204,14 +205,7 @@ struct LoggingDemoAnimation: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 14)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color(.systemGray6))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-            )
+            .onboardingGlassPanel(cornerRadius: 14, fillOpacity: 0.10, strokeOpacity: 0.14)
         }
         .onAppear { startAnimation() }
         .onDisappear { timerTask?.cancel() }
@@ -240,6 +234,14 @@ struct LoggingDemoAnimation: View {
 
     private func startAnimation() {
         timerTask?.cancel()
+
+        // Reduced-motion: jump straight to the final result of the first item, no loop.
+        if UIAccessibility.isReduceMotionEnabled {
+            typedCount = currentItem.text.count
+            phase = .hold
+            return
+        }
+
         timerTask = Task {
             // Initial pause
             try? await Task.sleep(nanoseconds: 800_000_000)
@@ -293,14 +295,20 @@ private struct ShimmerCalorieText: View {
     @State private var shimmerOffset: CGFloat = -1
 
     var body: some View {
-        HStack(spacing: 4) {
+        let accentTint = LinearGradient(
+            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+
+        return HStack(spacing: 4) {
             Image(systemName: "sparkles")
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(accentTint)
 
             Text(text)
-                .font(.system(size: 15, weight: .medium, design: .monospaced))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .foregroundStyle(accentTint)
         }
         .overlay(
             GeometryReader { geo in
@@ -310,9 +318,9 @@ private struct ShimmerCalorieText: View {
                 LinearGradient(
                     stops: [
                         .init(color: .clear, location: 0),
-                        .init(color: .white.opacity(0.8), location: 0.4),
-                        .init(color: .white.opacity(0.9), location: 0.5),
-                        .init(color: .white.opacity(0.8), location: 0.6),
+                        .init(color: .white.opacity(0.7), location: 0.4),
+                        .init(color: .white.opacity(0.85), location: 0.5),
+                        .init(color: .white.opacity(0.7), location: 0.6),
                         .init(color: .clear, location: 1)
                     ],
                     startPoint: .leading,
@@ -325,6 +333,8 @@ private struct ShimmerCalorieText: View {
         )
         .compositingGroup()
         .onAppear {
+            // Reduced-motion: skip the sweeping shimmer (still keeps the gradient tint)
+            guard !UIAccessibility.isReduceMotionEnabled else { return }
             withAnimation(
                 .easeInOut(duration: 1.8)
                 .repeatForever(autoreverses: false)
@@ -340,92 +350,74 @@ private struct ShimmerCalorieText: View {
 private struct TrackProgressCardView: View {
     @State private var barProgress: CGFloat = 0
 
-    private let greenWidth: CGFloat = 38.0 / 92.0   // ~41%
-    private let blueWidth: CGFloat = 64.0 / 92.0    // ~70%
-    private let orangeWidth: CGFloat = 1.0           // 100%
-
     var body: some View {
-        HStack(spacing: 19) {
-            // Left: dark card with calorie summary
-            ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 15, style: .continuous)
-                    .fill(Color(red: 0.20, green: 0.20, blue: 0.20))
-                    .frame(width: 115, height: 88)
+        let accentBar = LinearGradient(
+            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
 
-                VStack(alignment: .leading, spacing: 0) {
-                    HStack(spacing: 6) {
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("Total")
-                                .font(.system(size: 14, weight: .regular))
-                                .foregroundStyle(.white)
-                            Text("720 cal")
-                                .font(.system(size: 16, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-
-                        Image(systemName: "flame.fill")
-                            .font(.system(size: 28))
-                            .foregroundStyle(Color(red: 0.95, green: 0.75, blue: 0.20))
+        return HStack(spacing: 19) {
+            // Left: nested glass tile with calorie summary + animated progress bar
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 6) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("Total")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                        Text("720 cal")
+                            .font(.system(size: 17, weight: .bold, design: .rounded))
+                            .foregroundStyle(OnboardingGlassTheme.textPrimary)
                     }
 
-                    // Animated segmented progress bar
-                    ZStack(alignment: .leading) {
-                        Capsule()
-                            .fill(Color(red: 1.0, green: 0.51, blue: 0.15))
-                            .frame(width: 92 * barProgress, height: 8)
-
-                        Capsule()
-                            .fill(Color(red: 0.16, green: 0.72, blue: 1.0))
-                            .frame(width: 92 * blueWidth * barProgress, height: 8)
-
-                        Capsule()
-                            .fill(Color(red: 0.27, green: 0.69, blue: 0.08))
-                            .frame(width: 92 * greenWidth * barProgress, height: 8)
-                    }
-                    .frame(width: 92, height: 8, alignment: .leading)
-                    .padding(.top, 10)
+                    Image(systemName: "flame.fill")
+                        .font(.system(size: 26))
+                        .foregroundStyle(OnboardingGlassTheme.accentStart)
                 }
-                .padding(.leading, 12)
+
+                // Single accent-gradient progress bar
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(OnboardingGlassTheme.textPrimary.opacity(0.10))
+                        .frame(width: 92, height: 8)
+
+                    Capsule()
+                        .fill(accentBar)
+                        .frame(width: 92 * barProgress, height: 8)
+                }
+                .frame(width: 92, height: 8, alignment: .leading)
             }
-            .frame(width: 115)
+            .padding(12)
+            .frame(width: 124)
+            .onboardingGlassPanel(cornerRadius: 15, fillOpacity: 0.10, strokeOpacity: 0.14)
 
             // Right: text
             VStack(alignment: .leading, spacing: 4) {
                 Text("Track your Progress")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
 
                 Text("Track your daily progress and see trends")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.65))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .lineSpacing(2)
             }
 
             Spacer(minLength: 0)
         }
-        .padding(.leading, 23)
-        .padding(.trailing, 26)
-        .padding(.vertical, 27)
+        .padding(.leading, 18)
+        .padding(.trailing, 20)
+        .padding(.vertical, 16)
         .frame(height: 142)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    RadialGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: Color(red: 0.95, green: 0.84, blue: 0.47), location: 0),
-                            .init(color: Color(red: 0.92, green: 0.73, blue: 0.31), location: 0.5),
-                            .init(color: Color(red: 0.91, green: 0.67, blue: 0.22), location: 0.75),
-                            .init(color: Color(red: 0.89, green: 0.62, blue: 0.14), location: 1.0)
-                        ]),
-                        center: UnitPoint(x: 0.23, y: 0.52),
-                        startRadius: 0,
-                        endRadius: 320
-                    )
-                )
-                .shadow(color: .black.opacity(0.25), radius: 21.5, x: 0, y: 4)
-        )
+        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
+        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
         .onAppear {
+            // Reduced-motion: jump straight to filled state.
+            guard !UIAccessibility.isReduceMotionEnabled else {
+                barProgress = 1.0
+                return
+            }
             withAnimation(.easeOut(duration: 1.5).delay(0.8)) {
                 barProgress = 1.0
             }
@@ -437,7 +429,7 @@ private struct TrackProgressCardView: View {
 
 private struct TakePhotoCardView: View {
     private let orbit: CGFloat = 52
-    private let period: TimeInterval = 6
+    private let period: TimeInterval = 8
 
     var body: some View {
         TimelineView(.animation(paused: UIAccessibility.isReduceMotionEnabled)) { context in
@@ -457,16 +449,24 @@ private struct TakePhotoCardView: View {
                     .scaledToFill()
                     .frame(width: 117, height: 117)
                     .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+                    )
 
-                // Orbiting camera icon
+                // Orbiting camera icon — accent-tinted capsule, readable on the light glass card
                 let camRad = angle * .pi / 180
                 Circle()
-                    .fill(.white.opacity(0.1))
+                    .fill(OnboardingGlassTheme.accentStart.opacity(0.22))
                     .frame(width: 46, height: 46)
                     .overlay(
+                        Circle()
+                            .strokeBorder(OnboardingGlassTheme.accentStart.opacity(0.45), lineWidth: 1)
+                    )
+                    .overlay(
                         Image(systemName: "camera.fill")
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.7))
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(OnboardingGlassTheme.textPrimary)
                     )
                     .offset(
                         x: cos(camRad) * orbit,
@@ -480,11 +480,11 @@ private struct TakePhotoCardView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text("Take a Food Photo")
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
 
                 Text("Just take a picture\nand log your food.")
                     .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.39))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .lineSpacing(2)
             }
 
@@ -495,25 +495,7 @@ private struct TakePhotoCardView: View {
         .padding(.vertical, 12)
         .frame(height: 142)
         .frame(maxWidth: .infinity)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(
-                    RadialGradient(
-                        gradient: Gradient(stops: [
-                            .init(color: Color(red: 0.43, green: 0.42, blue: 0.42), location: 0),
-                            .init(color: Color(red: 0.32, green: 0.31, blue: 0.31), location: 0.23),
-                            .init(color: Color(red: 0.22, green: 0.21, blue: 0.21), location: 0.47),
-                            .init(color: Color(red: 0.16, green: 0.16, blue: 0.16), location: 0.59),
-                            .init(color: Color(red: 0.11, green: 0.11, blue: 0.11), location: 0.70),
-                            .init(color: Color(red: 0.05, green: 0.05, blue: 0.05), location: 0.82),
-                            .init(color: .black, location: 0.94)
-                        ]),
-                        center: UnitPoint(x: 0.23, y: 0.52),
-                        startRadius: 0,
-                        endRadius: 320
-                    )
-                )
-                .shadow(color: .black.opacity(0.25), radius: 21.5, x: 0, y: 4)
-        )
+        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
+        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
     }
 }
