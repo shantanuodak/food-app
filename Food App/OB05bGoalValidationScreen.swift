@@ -39,6 +39,30 @@ struct OB05bGoalValidationScreen: View {
         "\(Int(draft.weightValue)) \(weightUnit)"
     }
 
+    /// Projected weight at the end of the plan, in the user's chosen units.
+    /// `nil` for maintain (no delta) — caller renders "Maintain" instead.
+    ///
+    /// Math stays in lockstep with `OnboardingCalculator.weeklyRateLbs(...)`
+    /// — same source of truth used by the daily-deficit calculation and the
+    /// projected goal date — so the three readouts can never disagree.
+    private var goalWeightDisplay: String? {
+        guard let goal = draft.goal, goal != .maintain,
+              let lbsPerWeek = OnboardingCalculator.weeklyRateLbs(for: goal, pace: draft.pace) else {
+            return nil
+        }
+        let totalLbsDelta = lbsPerWeek * Double(paceWeeks)
+        let direction: Double = goal == .lose ? -1.0 : 1.0
+
+        let deltaInUserUnit: Double
+        switch draft.units ?? .imperial {
+        case .metric:    deltaInUserUnit = totalLbsDelta * 0.453592
+        case .imperial:  deltaInUserUnit = totalLbsDelta
+        }
+
+        let goalValue = draft.weightValue + direction * deltaInUserUnit
+        return "\(Int(goalValue.rounded())) \(weightUnit)"
+    }
+
     private var accentGradient: LinearGradient {
         LinearGradient(
             colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
@@ -149,7 +173,7 @@ struct OB05bGoalValidationScreen: View {
 
     private var timelineStrip: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            HStack(alignment: .top) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("TODAY")
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
@@ -165,9 +189,14 @@ struct OB05bGoalValidationScreen: View {
                     Text("GOAL")
                         .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(OnboardingGlassTheme.textMuted)
-                    Text("\(paceWeeks) weeks")
+                    Text(goalWeightDisplay ?? "Maintain")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(OnboardingGlassTheme.textPrimary)
+                    if goalWeightDisplay != nil {
+                        Text("in \(paceWeeks) weeks")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(OnboardingGlassTheme.textMuted)
+                    }
                 }
             }
 
