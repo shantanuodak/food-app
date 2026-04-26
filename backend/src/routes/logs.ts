@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { saveFoodLogStrict, updateFoodLog } from '../services/logService.js';
+import { deleteFoodLog, saveFoodLogStrict, updateFoodLog } from '../services/logService.js';
 import { getDaySummary, getDaySummaryRange } from '../services/daySummaryService.js';
 import { getDayLogs, getDayLogsRange } from '../services/dayLogsService.js';
 import { getProgressSummary } from '../services/progressService.js';
@@ -254,6 +254,17 @@ router.patch('/:id', async (req, res, next) => {
     });
 
     res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const { id: logId } = logIdParamSchema.parse(req.params);
+    const auth = res.locals.auth as { userId: string };
+    const deleted = await deleteFoodLog({ logId, userId: auth.userId });
+    res.status(200).json(deleted);
   } catch (err) {
     next(err);
   }

@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 
-export type HealthSyncAction = 'upsert';
+export type HealthSyncAction = 'upsert' | 'delete';
 export type HealthSyncMode = 'per-log';
 
 export type HealthSyncContract = {
@@ -14,12 +14,11 @@ export function buildHealthWriteKey(userId: string, logId: string): string {
   return createHash('sha256').update(`health:v1:${userId}:${logId}`).digest('hex');
 }
 
-export function buildHealthSyncContract(userId: string, logId: string): HealthSyncContract {
+export function buildHealthSyncContract(userId: string, logId: string, action: HealthSyncAction = 'upsert'): HealthSyncContract {
   return {
     syncMode: 'per-log',
-    action: 'upsert',
+    action,
     healthWriteKey: buildHealthWriteKey(userId, logId),
     dedupeStrategy: 'stable-per-log-id'
   };
 }
-

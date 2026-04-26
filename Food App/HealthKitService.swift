@@ -17,6 +17,7 @@ enum HealthKitServiceError: LocalizedError {
     case notAuthorized
     case authorizationFailed(String)
     case saveFailed(String)
+    case deleteFailed(String)
     case readFailed(String)
 
     var errorDescription: String? {
@@ -29,6 +30,8 @@ enum HealthKitServiceError: LocalizedError {
             return "Apple Health permission request failed: \(message)"
         case let .saveFailed(message):
             return "Failed to sync nutrition data to Apple Health: \(message)"
+        case let .deleteFailed(message):
+            return "Failed to delete nutrition data from Apple Health: \(message)"
         case let .readFailed(message):
             return "Failed to read Apple Health data: \(message)"
         }
@@ -249,7 +252,12 @@ final class HealthKitService: ObservableObject {
         }
     }
 
-    func writeNutritionTotals(_ totals: NutritionTotals, loggedAt: Date) async throws -> Bool {
+    func writeNutritionTotals(
+        _ totals: NutritionTotals,
+        loggedAt: Date,
+        logId: String,
+        healthWriteKey: String
+    ) async throws -> Bool {
 #if canImport(HealthKit)
         guard authorizationState == .authorized else {
             throw HealthKitServiceError.notAuthorized
@@ -261,25 +269,25 @@ final class HealthKitService: ObservableObject {
         if totals.calories > 0,
            let type = HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed) {
             let quantity = HKQuantity(unit: .kilocalorie(), doubleValue: totals.calories)
-            samples.append(HKQuantitySample(type: type, quantity: quantity, start: loggedAt, end: endDate))
+            samples.append(nutritionSample(type: type, quantity: quantity, start: loggedAt, end: endDate, logId: logId, healthWriteKey: healthWriteKey, valueKind: "calories"))
         }
 
         if totals.protein > 0,
            let type = HKObjectType.quantityType(forIdentifier: .dietaryProtein) {
             let quantity = HKQuantity(unit: .gram(), doubleValue: totals.protein)
-            samples.append(HKQuantitySample(type: type, quantity: quantity, start: loggedAt, end: endDate))
+            samples.append(nutritionSample(type: type, quantity: quantity, start: loggedAt, end: endDate, logId: logId, healthWriteKey: healthWriteKey, valueKind: "protein"))
         }
 
         if totals.carbs > 0,
            let type = HKObjectType.quantityType(forIdentifier: .dietaryCarbohydrates) {
             let quantity = HKQuantity(unit: .gram(), doubleValue: totals.carbs)
-            samples.append(HKQuantitySample(type: type, quantity: quantity, start: loggedAt, end: endDate))
+            samples.append(nutritionSample(type: type, quantity: quantity, start: loggedAt, end: endDate, logId: logId, healthWriteKey: healthWriteKey, valueKind: "carbs"))
         }
 
         if totals.fat > 0,
            let type = HKObjectType.quantityType(forIdentifier: .dietaryFatTotal) {
             let quantity = HKQuantity(unit: .gram(), doubleValue: totals.fat)
-            samples.append(HKQuantitySample(type: type, quantity: quantity, start: loggedAt, end: endDate))
+            samples.append(nutritionSample(type: type, quantity: quantity, start: loggedAt, end: endDate, logId: logId, healthWriteKey: healthWriteKey, valueKind: "fat"))
         }
 
         guard !samples.isEmpty else {
@@ -311,10 +319,158 @@ final class HealthKitService: ObservableObject {
         throw HealthKitServiceError.unavailable
 #endif
     }
+
+    func deleteNutritionTotals(
+        _ totals: NutritionTotals,
+        loggedAt: Date,
+        logId: String,
+        healthWriteKey: String
+    ) async throws -> Bool {
+#if canImport(HealthKit)
+        guard authorizationState == .authorized else {
+            throw HealthKitServiceError.notAuthorized
+        }
+
+        var samplesToDelete: [HKSample] = []
+        for target in nutritionDeleteTargets(totals: totals) {
+            samplesToDelete.append(contentsOf: try await matchingNutritionSamples(
+                type: target.type,
+                unit: target.unit,
+                expectedValue: target.value,
+                loggedAt: loggedAt,
+                logId: logId,
+                healthWriteKey: healthWriteKey
+            ))
+        }
+
+        let uniqueSamples = Dictionary(grouping: samplesToDelete, by: \.uuid).compactMap { $0.value.first }
+        guard !uniqueSamples.isEmpty else {
+            return false
+        }
+
+        do {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                store.delete(uniqueSamples) { success, error in
+                    if let error {
+                        continuation.resume(throwing: HealthKitServiceError.deleteFailed(error.localizedDescription))
+                        return
+                    }
+                    if success {
+                        continuation.resume()
+                    } else {
+                        continuation.resume(throwing: HealthKitServiceError.deleteFailed("Unknown Apple Health delete error"))
+                    }
+                }
+            }
+            return true
+        } catch {
+            if let healthError = error as? HealthKitServiceError {
+                throw healthError
+            }
+            throw HealthKitServiceError.deleteFailed(error.localizedDescription)
+        }
+#else
+        throw HealthKitServiceError.unavailable
+#endif
+    }
 }
 
 #if canImport(HealthKit)
 private extension HealthKitService {
+    static let foodAppLogIdMetadataKey = "foodAppLogId"
+    static let healthWriteKeyMetadataKey = "healthWriteKey"
+    static let healthValueKindMetadataKey = "foodAppNutritionValueKind"
+    static let healthSourceMetadataValue = "FoodApp"
+
+    typealias NutritionDeleteTarget = (type: HKQuantityType, unit: HKUnit, value: Double)
+
+    func nutritionSample(
+        type: HKQuantityType,
+        quantity: HKQuantity,
+        start: Date,
+        end: Date,
+        logId: String,
+        healthWriteKey: String,
+        valueKind: String
+    ) -> HKQuantitySample {
+        HKQuantitySample(
+            type: type,
+            quantity: quantity,
+            start: start,
+            end: end,
+            metadata: [
+                Self.foodAppLogIdMetadataKey: logId,
+                Self.healthWriteKeyMetadataKey: healthWriteKey,
+                Self.healthValueKindMetadataKey: valueKind,
+                HKMetadataKeyExternalUUID: "\(healthWriteKey).\(valueKind)",
+                HKMetadataKeySyncIdentifier: "\(healthWriteKey).\(valueKind)",
+                HKMetadataKeySyncVersion: 1,
+                HKMetadataKeyWasUserEntered: true,
+                HKMetadataKeyFoodType: Self.healthSourceMetadataValue
+            ]
+        )
+    }
+
+    func nutritionDeleteTargets(totals: NutritionTotals) -> [NutritionDeleteTarget] {
+        [
+            HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed).map { ($0, HKUnit.kilocalorie(), totals.calories) },
+            HKObjectType.quantityType(forIdentifier: .dietaryProtein).map { ($0, HKUnit.gram(), totals.protein) },
+            HKObjectType.quantityType(forIdentifier: .dietaryCarbohydrates).map { ($0, HKUnit.gram(), totals.carbs) },
+            HKObjectType.quantityType(forIdentifier: .dietaryFatTotal).map { ($0, HKUnit.gram(), totals.fat) }
+        ]
+        .compactMap { $0 }
+        .filter { $0.value > 0 }
+    }
+
+    func matchingNutritionSamples(
+        type: HKQuantityType,
+        unit: HKUnit,
+        expectedValue: Double,
+        loggedAt: Date,
+        logId: String,
+        healthWriteKey: String
+    ) async throws -> [HKQuantitySample] {
+        let endDate = loggedAt.addingTimeInterval(1)
+        let datePredicate = HKQuery.predicateForSamples(withStart: loggedAt, end: endDate, options: [.strictStartDate])
+        let logPredicate = HKQuery.predicateForObjects(withMetadataKey: Self.foodAppLogIdMetadataKey, operatorType: .equalTo, value: logId)
+        let keyPredicate = HKQuery.predicateForObjects(withMetadataKey: Self.healthWriteKeyMetadataKey, operatorType: .equalTo, value: healthWriteKey)
+        let metadataPredicate = NSCompoundPredicate(orPredicateWithSubpredicates: [logPredicate, keyPredicate])
+        let primaryPredicate = NSCompoundPredicate(andPredicateWithSubpredicates: [datePredicate, metadataPredicate])
+
+        var matches = try await fetchQuantitySamples(type: type, predicate: primaryPredicate)
+
+        // Legacy samples were written before metadata existed. Keep this
+        // conservative: only delete samples written by this app in the same
+        // 1-second window with the same nutrition value.
+        if matches.isEmpty {
+            let legacyCandidates = try await fetchQuantitySamples(type: type, predicate: datePredicate)
+            matches = legacyCandidates.filter { sample in
+                sample.sourceRevision.source.bundleIdentifier == Bundle.main.bundleIdentifier &&
+                    abs(sample.quantity.doubleValue(for: unit) - expectedValue) < 0.01
+            }
+        }
+
+        return matches
+    }
+
+    func fetchQuantitySamples(type: HKQuantityType, predicate: NSPredicate) async throws -> [HKQuantitySample] {
+        try await withCheckedThrowingContinuation { continuation in
+            let query = HKSampleQuery(
+                sampleType: type,
+                predicate: predicate,
+                limit: HKObjectQueryNoLimit,
+                sortDescriptors: nil
+            ) { _, results, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitServiceError.readFailed(error.localizedDescription))
+                    return
+                }
+                continuation.resume(returning: (results as? [HKQuantitySample]) ?? [])
+            }
+            self.store.execute(query)
+        }
+    }
+
     var nutritionQuantityTypes: [HKQuantityType] {
         [
             HKObjectType.quantityType(forIdentifier: .dietaryEnergyConsumed),

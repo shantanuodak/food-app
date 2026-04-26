@@ -292,9 +292,23 @@ struct SaveParsedFoodItem: Codable, Hashable {
     let manualOverride: SaveManualOverride?
 }
 
+struct HealthSyncResponse: Decodable {
+    let syncMode: String
+    let action: String
+    let healthWriteKey: String
+    let dedupeStrategy: String
+}
+
 struct SaveLogResponse: Decodable {
     let logId: String
     let status: String
+    let healthSync: HealthSyncResponse?
+}
+
+struct DeleteLogResponse: Decodable {
+    let logId: String
+    let status: String
+    let healthSync: HealthSyncResponse?
 }
 
 /// PATCH /v1/logs/:id — parse references are optional so the client-side

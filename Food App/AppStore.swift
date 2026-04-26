@@ -221,11 +221,28 @@ final class AppStore: ObservableObject {
         )
     }
 
-    func syncNutritionToAppleHealth(totals: NutritionTotals, loggedAt: Date) async throws -> Bool {
+    func syncNutritionToAppleHealth(totals: NutritionTotals, loggedAt: Date, logId: String, healthWriteKey: String) async throws -> Bool {
         guard isHealthSyncEnabled else {
             return false
         }
-        return try await healthKitService.writeNutritionTotals(totals, loggedAt: loggedAt)
+        return try await healthKitService.writeNutritionTotals(
+            totals,
+            loggedAt: loggedAt,
+            logId: logId,
+            healthWriteKey: healthWriteKey
+        )
+    }
+
+    func deleteNutritionFromAppleHealth(totals: NutritionTotals, loggedAt: Date, logId: String, healthWriteKey: String) async throws -> Bool {
+        guard isHealthSyncEnabled else {
+            return false
+        }
+        return try await healthKitService.deleteNutritionTotals(
+            totals,
+            loggedAt: loggedAt,
+            logId: logId,
+            healthWriteKey: healthWriteKey
+        )
     }
 
     func fetchBodyMassSamples(from startDate: Date, to endDate: Date) async throws -> [BodyMassSample] {

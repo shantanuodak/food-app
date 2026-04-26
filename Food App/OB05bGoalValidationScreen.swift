@@ -192,11 +192,6 @@ struct OB05bGoalValidationScreen: View {
                     Text(goalWeightDisplay ?? "Maintain")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(OnboardingGlassTheme.textPrimary)
-                    if goalWeightDisplay != nil {
-                        Text("in \(paceWeeks) weeks")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundStyle(OnboardingGlassTheme.textMuted)
-                    }
                 }
             }
 
@@ -205,11 +200,34 @@ struct OB05bGoalValidationScreen: View {
                 .fill(accentGradient)
                 .frame(height: 4)
 
-            if !metrics.projectedGoalDate.isEmpty {
-                Text("Projected: \(metrics.projectedGoalDate)")
+            // Single secondary line below the bar: projected date and pace
+            // duration share one visual treatment so they read as one
+            // thought ("when you'll reach goal") rather than two competing
+            // pieces of metadata.
+            if let caption = timelineCaption {
+                Text(caption)
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(OnboardingGlassTheme.textMuted)
             }
+        }
+    }
+
+    /// Combined caption shown beneath the progress bar.
+    /// - Both date and weeks when there is an actual weight-change goal.
+    /// - Just date if the projected date is set but goal is maintain.
+    /// - `nil` when neither piece of info is available.
+    private var timelineCaption: String? {
+        let dateAvailable = !metrics.projectedGoalDate.isEmpty
+        let weeksAvailable = goalWeightDisplay != nil
+        switch (dateAvailable, weeksAvailable) {
+        case (true, true):
+            return "Projected: \(metrics.projectedGoalDate)  ·  in \(paceWeeks) weeks"
+        case (true, false):
+            return "Projected: \(metrics.projectedGoalDate)"
+        case (false, true):
+            return "in \(paceWeeks) weeks"
+        case (false, false):
+            return nil
         }
     }
 

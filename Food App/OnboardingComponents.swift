@@ -86,6 +86,39 @@ enum OnboardingGlassTheme {
         dark: UIColor(white: 1.0, alpha: 0.03)
     )
 
+    // MARK: - Quiet Wellness Tokens (Onboarding refresh — pilot on OB08)
+    //
+    // A flatter, warmer palette being piloted on the Account screen. If the
+    // direction validates, the rest of onboarding (OB01–07, OB09, OB10)
+    // follows in a separate pass. See `docs/UI_COMPONENTS.md` →
+    // "Onboarding refresh — in progress".
+
+    /// Warm off-white (light) / soft charcoal (dark). Replaces
+    /// `OnboardingAnimatedBackground` on screens migrated to the new direction.
+    static let neutralBackground = adaptiveColor(
+        light: UIColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1.0),  // #FAF7F2
+        dark: UIColor(red: 0.086, green: 0.082, blue: 0.071, alpha: 1.0)  // #161512
+    )
+
+    /// Card and button surface; sits on top of `neutralBackground`.
+    static let neutralSurface = adaptiveColor(
+        light: UIColor.white,
+        dark: UIColor(red: 0.122, green: 0.118, blue: 0.102, alpha: 1.0)  // #1F1E1A
+    )
+
+    /// Single accent for the new direction. Replaces the gradient pair
+    /// (`accentStart`/`accentEnd`) on migrated screens.
+    static let accentAmber = adaptiveColor(
+        light: UIColor(red: 0.91, green: 0.64, blue: 0.24, alpha: 1.0),  // #E8A33D
+        dark: UIColor(red: 0.94, green: 0.71, blue: 0.35, alpha: 1.0)   // #F0B458
+    )
+
+    /// 1-pt border on cards / buttons / circle nav buttons.
+    static let hairline = adaptiveColor(
+        light: UIColor(white: 0.0, alpha: 0.06),
+        dark: UIColor(white: 1.0, alpha: 0.10)
+    )
+
     private static func adaptiveColor(light: UIColor, dark: UIColor) -> Color {
         Color(
             uiColor: UIColor { traits in

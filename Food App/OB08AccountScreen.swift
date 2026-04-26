@@ -22,7 +22,7 @@ struct OB08AccountScreen: View {
 
             // Apple unavailable note
             if !enableApple {
-                Text("Google sign-in is enabled right now. Apple sign-in is coming soon.")
+                Text(L10n.onboardingAccountAppleUnavailable)
                     .font(.caption)
                     .foregroundStyle(OnboardingGlassTheme.textMuted)
                     .multilineTextAlignment(.center)
@@ -37,7 +37,7 @@ struct OB08AccountScreen: View {
                     ProgressView()
                         .tint(OnboardingGlassTheme.textSecondary)
                         .controlSize(.small)
-                    Text("Connecting account...")
+                    Text(L10n.onboardingAccountConnecting)
                         .font(.caption)
                         .foregroundStyle(OnboardingGlassTheme.textSecondary)
                 }
@@ -56,19 +56,21 @@ struct OB08AccountScreen: View {
         Button {
             onSelectProvider(option.provider)
         } label: {
-            VStack(spacing: 12) {
+            HStack(spacing: 10) {
                 providerIcon(provider: option.provider)
                 Text(option.shortTitle)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(OnboardingGlassTheme.textPrimary)
             }
             .frame(maxWidth: .infinity)
-            .frame(height: 96)
+            .frame(height: 60)
         }
         .buttonStyle(SignInUnifiedButtonStyle())
+        .accessibilityLabel(Text(option.shortTitle))
+        .accessibilityHint(Text("Sign in with \(option.shortTitle) to save your progress."))
         .opacity(appeared ? 1 : 0)
-        .offset(y: appeared ? 0 : 20)
-        .animation(.spring(response: 0.55, dampingFraction: 0.78).delay(animDelay), value: appeared)
+        .offset(y: appeared ? 0 : 12)
+        .animation(.easeOut(duration: 0.45).delay(animDelay), value: appeared)
     }
 
     @ViewBuilder
@@ -76,14 +78,14 @@ struct OB08AccountScreen: View {
         switch provider {
         case .apple:
             Image(systemName: "apple.logo")
-                .font(.system(size: 28, weight: .medium))
+                .font(.system(size: 20, weight: .medium))
                 .foregroundStyle(OnboardingGlassTheme.textPrimary)
         case .google:
             Image("ios_light_rd_na")
                 .resizable()
                 .interpolation(.high)
                 .scaledToFit()
-                .frame(width: 36, height: 36)
+                .frame(width: 22, height: 22)
         }
     }
 
@@ -101,49 +103,36 @@ struct OB08AccountScreen: View {
     private var providerOptions: [ProviderOption] {
         if prefersGooglePrimary {
             return [
-                ProviderOption(shortTitle: "Google", provider: .google, isPrimary: true, isEnabled: true),
-                ProviderOption(shortTitle: "Apple", provider: .apple, isPrimary: false, isEnabled: enableApple)
+                ProviderOption(shortTitle: L10n.onboardingAccountGoogleLabel, provider: .google, isPrimary: true, isEnabled: true),
+                ProviderOption(shortTitle: L10n.onboardingAccountAppleLabel, provider: .apple, isPrimary: false, isEnabled: enableApple)
             ]
         }
         return [
-            ProviderOption(shortTitle: "Apple", provider: .apple, isPrimary: true, isEnabled: enableApple),
-            ProviderOption(shortTitle: "Google", provider: .google, isPrimary: false, isEnabled: true)
+            ProviderOption(shortTitle: L10n.onboardingAccountAppleLabel, provider: .apple, isPrimary: true, isEnabled: enableApple),
+            ProviderOption(shortTitle: L10n.onboardingAccountGoogleLabel, provider: .google, isPrimary: false, isEnabled: true)
         ]
     }
 }
 
 // MARK: - Unified Button Style
+//
+// Quiet Wellness button: flat neutral surface, hairline border, 12pt corner.
+// Replaces the previous glass-panel style which sat at 96pt tall with a
+// frosted material background and layered shadow.
 
 private struct SignInUnifiedButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(OnboardingGlassTheme.panelFill)
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(OnboardingGlassTheme.neutralSurface)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(OnboardingGlassTheme.hairline, lineWidth: 1)
             )
-            .shadow(color: Color.black.opacity(0.07), radius: 10, y: 4)
             .opacity(configuration.isPressed ? 0.86 : 1.0)
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
-    }
-}
-
-private struct AnyButtonStyle: ButtonStyle {
-    private let makeBodyClosure: (Configuration) -> AnyView
-
-    init<S: ButtonStyle>(_ style: S) {
-        makeBodyClosure = { configuration in
-            AnyView(style.makeBody(configuration: configuration))
-        }
-    }
-
-    func makeBody(configuration: Configuration) -> some View {
-        makeBodyClosure(configuration)
     }
 }

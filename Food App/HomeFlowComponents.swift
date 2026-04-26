@@ -346,6 +346,7 @@ struct HM01LogComposerSection: View {
     let onInputTapped: () -> Void
     let onCaloriesTapped: (HomeLogRow) -> Void
     let onFocusedRowChanged: (UUID?) -> Void
+    let onServerBackedRowCleared: (HomeLogRow) -> Void
     /// Fires after the client-side quantity fast path rescales a row's items
     /// (e.g. "3 chicken tenders" → "4 chicken tenders"). The parent view uses
     /// this to schedule persistence: PATCH for rows that already have a
@@ -364,6 +365,7 @@ struct HM01LogComposerSection: View {
         onInputTapped: @escaping () -> Void,
         onCaloriesTapped: @escaping (HomeLogRow) -> Void = { _ in },
         onFocusedRowChanged: @escaping (UUID?) -> Void = { _ in },
+        onServerBackedRowCleared: @escaping (HomeLogRow) -> Void = { _ in },
         onQuantityFastPathUpdated: @escaping (UUID) -> Void = { _ in }
     ) {
         _rows = rows
@@ -375,6 +377,7 @@ struct HM01LogComposerSection: View {
         self.onInputTapped = onInputTapped
         self.onCaloriesTapped = onCaloriesTapped
         self.onFocusedRowChanged = onFocusedRowChanged
+        self.onServerBackedRowCleared = onServerBackedRowCleared
         self.onQuantityFastPathUpdated = onQuantityFastPathUpdated
     }
 
@@ -555,10 +558,16 @@ struct HM01LogComposerSection: View {
                 }
                 guard rows[index].text != newValue else { return }
 
-                let oldText = rows[index].text
+                let oldRow = rows[index]
+                let oldText = oldRow.text
                 let wasEmpty = oldText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 rows[index].text = newValue
                 let isEmpty = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+                if isEmpty && !wasEmpty && oldRow.serverLogId != nil {
+                    onServerBackedRowCleared(oldRow)
+                    return
+                }
 
                 if isEmpty && !wasEmpty {
                     // Text just became empty — clear all parse state

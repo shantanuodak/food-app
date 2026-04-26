@@ -559,18 +559,14 @@ struct OnboardingView: View {
                     isError: currentScreenState.loadState == .error
                 )
 
-                // Action buttons
-                VStack(spacing: 10) {
-                    primaryButton("Start logging") {
-                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                        finishOnboarding()
-                    }
-                    .disabled(isSubmitting)
-                    secondaryButton("Explore app") {
-                        finishOnboarding()
-                    }
-                    .disabled(isSubmitting)
+                // Slide-to-confirm CTA. The drag gesture replaces the previous
+                // tap button so the final onboarding submission requires a
+                // small deliberate motion. "Explore app" was removed: the
+                // Ready screen now has a single, intentional commit path.
+                SlideToConfirmButton(label: "Start logging") {
+                    finishOnboarding()
                 }
+                .disabled(isSubmitting)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 24)
             }
@@ -769,17 +765,14 @@ struct OnboardingView: View {
                 flow.moveNextOnboarding()
             }
         case .ready:
-            VStack(spacing: 10) {
-                primaryButton("Start logging") {
-                    UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-                    finishOnboarding()
-                }
-                .disabled(isSubmitting)
-                secondaryButton("Explore app") {
-                    finishOnboarding()
-                }
-                .disabled(isSubmitting)
+            // Fallback path (not normally reached — `.ready` is handled
+            // directly by `readyRouteView`). Mirrors the same single-CTA
+            // slide-to-confirm so behaviour is consistent if this branch
+            // is ever exercised by future routing changes.
+            SlideToConfirmButton(label: "Start logging") {
+                finishOnboarding()
             }
+            .disabled(isSubmitting)
         }
     }
 

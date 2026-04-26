@@ -339,6 +339,116 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(typeof summaryResponse.body.remaining.calories).toBe('number');
   });
 
+  test('delete log removes log/items, refreshes day data, and preserves parse cache', async () => {
+    const onboarding = await request(app)
+      .post('/v1/onboarding')
+      .set(authHeader)
+      .send({
+        goal: 'maintain',
+        dietPreference: 'none',
+        allergies: [],
+        units: 'imperial',
+        activityLevel: 'moderate',
+        timezone: 'America/New_York',
+        age: 30,
+        sex: 'male',
+        heightCm: 170,
+        weightKg: 70,
+        pace: 'balanced',
+        activityDetail: 'lightlyActive'
+      });
+    expect(onboarding.status).toBe(200);
+
+    const parseResponse = await request(app)
+      .post('/v1/logs/parse')
+      .set(authHeader)
+      .send({
+        text: '2 eggs and toast',
+        loggedAt: '2026-02-15T13:35:00.000Z'
+      });
+    expect(parseResponse.status).toBe(200);
+
+    const parseResponseCached = await request(app)
+      .post('/v1/logs/parse')
+      .set(authHeader)
+      .send({
+        text: '2 eggs and toast',
+        loggedAt: '2026-02-15T13:35:00.000Z'
+      });
+    expect(parseResponseCached.status).toBe(200);
+    expect(parseResponseCached.body.cacheHit).toBe(true);
+
+    const saveResponse = await request(app)
+      .post('/v1/logs')
+      .set(authHeader)
+      .set('Idempotency-Key', '066a85b1-9759-4e9f-a724-6af999da3a4b')
+      .send({
+        parseRequestId: parseResponse.body.parseRequestId,
+        parseVersion: parseResponse.body.parseVersion,
+        parsedLog: {
+          rawText: '2 eggs and toast',
+          loggedAt: '2026-02-15T13:35:00.000Z',
+          confidence: parseResponse.body.confidence,
+          totals: parseResponse.body.totals,
+          items: parseResponse.body.items
+        }
+      });
+    expect(saveResponse.status).toBe(200);
+
+    const logId = saveResponse.body.logId;
+    const itemRowsBefore = await pool.query<{ c: string }>(
+      'SELECT COUNT(*)::text AS c FROM food_log_items WHERE food_log_id = $1',
+      [logId]
+    );
+    expect(Number(itemRowsBefore.rows[0].c)).toBeGreaterThan(0);
+
+    const otherUserDelete = await request(app)
+      .delete(`/v1/logs/${logId}`)
+      .set({ Authorization: 'Bearer dev-22222222-2222-2222-2222-222222222222' });
+    expect(otherUserDelete.status).toBe(404);
+    expect(otherUserDelete.body.error.code).toBe('LOG_NOT_FOUND');
+
+    const cacheBeforeDelete = await pool.query<{ c: string }>('SELECT COUNT(*)::text AS c FROM parse_cache');
+    expect(Number(cacheBeforeDelete.rows[0].c)).toBeGreaterThan(0);
+
+    const deleteResponse = await request(app)
+      .delete(`/v1/logs/${logId}`)
+      .set(authHeader);
+    expect(deleteResponse.status).toBe(200);
+    expect(deleteResponse.body.status).toBe('deleted');
+    expect(deleteResponse.body.logId).toBe(logId);
+    expect(deleteResponse.body.healthSync?.action).toBe('delete');
+
+    const logRowsAfter = await pool.query<{ c: string }>(
+      'SELECT COUNT(*)::text AS c FROM food_logs WHERE id = $1',
+      [logId]
+    );
+    expect(Number(logRowsAfter.rows[0].c)).toBe(0);
+
+    const itemRowsAfter = await pool.query<{ c: string }>(
+      'SELECT COUNT(*)::text AS c FROM food_log_items WHERE food_log_id = $1',
+      [logId]
+    );
+    expect(Number(itemRowsAfter.rows[0].c)).toBe(0);
+
+    const summaryAfterDelete = await request(app)
+      .get('/v1/logs/day-summary')
+      .set(authHeader)
+      .query({ date: '2026-02-15' });
+    expect(summaryAfterDelete.status).toBe(200);
+    expect(summaryAfterDelete.body.totals.calories).toBe(0);
+
+    const logsAfterDelete = await request(app)
+      .get('/v1/logs/day-logs')
+      .set(authHeader)
+      .query({ date: '2026-02-15' });
+    expect(logsAfterDelete.status).toBe(200);
+    expect(logsAfterDelete.body.logs).toEqual([]);
+
+    const cacheAfterDelete = await pool.query<{ c: string }>('SELECT COUNT(*)::text AS c FROM parse_cache');
+    expect(Number(cacheAfterDelete.rows[0].c)).toBe(Number(cacheBeforeDelete.rows[0].c));
+  });
+
   test('onboarding provenance is persisted and reproducible for identical inputs', async () => {
     const payload = {
       goal: 'maintain',

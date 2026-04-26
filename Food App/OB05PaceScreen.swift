@@ -30,22 +30,21 @@ struct OB05PaceScreen: View {
     }
 
     private var weeklyRate: String {
-        switch draft.goal ?? .maintain {
-        case .lose:
-            switch resolvedPace {
-            case .conservative: return "~0.25 lb/week"
-            case .balanced: return "~0.5 lb/week"
-            case .aggressive: return "~1 lb/week"
-            }
-        case .maintain:
+        // Read from the same calculator that drives the user's daily
+        // calorie target — otherwise the chip says one rate while the
+        // backend plans for another. Maintain has no rate.
+        guard let lbs = OnboardingCalculator.weeklyRateLbs(for: draft.goal, pace: resolvedPace) else {
             return "Maintain weight"
-        case .gain:
-            switch resolvedPace {
-            case .conservative: return "~0.25 lb/week"
-            case .balanced: return "~0.5 lb/week"
-            case .aggressive: return "~0.75 lb/week"
-            }
         }
+        // Trim ".0" for whole-number rates (1.0 → "1") so the chip reads
+        // naturally; keep one decimal otherwise (0.5 stays as "0.5").
+        let formatted: String
+        if lbs.truncatingRemainder(dividingBy: 1) == 0 {
+            formatted = String(Int(lbs))
+        } else {
+            formatted = String(format: "%g", lbs)
+        }
+        return "~\(formatted) lb/week"
     }
 
     var body: some View {

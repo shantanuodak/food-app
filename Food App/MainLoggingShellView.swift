@@ -58,6 +58,7 @@ struct MainLoggingShellView: View {
     /// with the row's current items. Cancelled & replaced on each keystroke
     /// so a user adjusting 3 → 4 → 5 → 6 only results in one network call.
     @State private var pendingPatchTasks: [UUID: Task<Void, Never>] = [:]
+    @State private var pendingDeleteTasks: [UUID: Task<Void, Never>] = [:]
     private let patchDebounceNs: UInt64 = 1_500_000_000
     @FocusState private var isNoteEditorFocused: Bool
     @State private var flowStartedAt: Date?
@@ -312,6 +313,8 @@ struct MainLoggingShellView: View {
                 // on the next load anyway.
                 for task in pendingPatchTasks.values { task.cancel() }
                 pendingPatchTasks.removeAll()
+                for task in pendingDeleteTasks.values { task.cancel() }
+                pendingDeleteTasks.removeAll()
                 clearParseSchedulerState()
             }
             .onReceive(NotificationCenter.default.publisher(for: .openCameraFromTabBar)) { _ in
@@ -815,6 +818,9 @@ struct MainLoggingShellView: View {
             },
             onFocusedRowChanged: { rowID in
                 activeEditingRowID = rowID
+            },
+            onServerBackedRowCleared: { row in
+                handleServerBackedRowCleared(row)
             },
             onQuantityFastPathUpdated: { rowID in
                 handleQuantityFastPathUpdate(rowID: rowID)
@@ -3868,6 +3874,98 @@ struct MainLoggingShellView: View {
         }
     }
 
+    // MARK: - Delete Saved Row
+
+    private func handleServerBackedRowCleared(_ row: HomeLogRow) {
+        guard let serverLogId = row.serverLogId else { return }
+
+        pendingPatchTasks[row.id]?.cancel()
+        pendingPatchTasks[row.id] = nil
+        pendingDeleteTasks[row.id]?.cancel()
+
+        let originalIndex = inputRows.firstIndex(where: { $0.id == row.id }) ?? inputRows.count
+        var restoredRow = row
+        restoredRow.isSaved = true
+        restoredRow.parsePhase = .idle
+
+        inputRows.removeAll { $0.id == row.id }
+        if inputRows.allSatisfy({ $0.isSaved }) {
+            inputRows.append(.empty())
+        }
+
+        let savedDay = String((row.serverLoggedAt ?? summaryDateString).prefix(10))
+        removeDeletedLogFromVisibleDayLogs(logId: serverLogId, dateString: savedDay)
+        saveError = nil
+
+        let task = Task { @MainActor in
+            await deleteServerBackedRow(
+                row: restoredRow,
+                serverLogId: serverLogId,
+                savedDay: savedDay,
+                originalIndex: originalIndex
+            )
+        }
+        pendingDeleteTasks[row.id] = task
+    }
+
+    private func deleteServerBackedRow(
+        row: HomeLogRow,
+        serverLogId: String,
+        savedDay: String,
+        originalIndex: Int
+    ) async {
+        defer { pendingDeleteTasks[row.id] = nil }
+
+        guard appStore.isNetworkReachable else {
+            restoreDeletedRow(row, at: originalIndex)
+            saveError = L10n.noNetworkSave
+            return
+        }
+
+        do {
+            let response = try await appStore.apiClient.deleteLog(id: serverLogId)
+            await deleteSavedLogFromAppleHealthIfEnabled(row: row, healthSync: response.healthSync)
+            invalidateDayCache(for: savedDay)
+            await loadDaySummary(forcedDate: savedDay, skipCache: true)
+            await loadDayLogs(forcedDate: savedDay, skipCache: true)
+            NotificationCenter.default.post(
+                name: .nutritionProgressDidChange,
+                object: nil,
+                userInfo: ["savedDay": savedDay]
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            handleAuthFailureIfNeeded(error)
+            restoreDeletedRow(row, at: originalIndex)
+            saveError = userFriendlySaveError(error)
+        }
+    }
+
+    private func restoreDeletedRow(_ row: HomeLogRow, at originalIndex: Int) {
+        guard !inputRows.contains(where: { $0.id == row.id }) else { return }
+        let insertIndex = min(max(originalIndex, 0), inputRows.count)
+        inputRows.insert(row, at: insertIndex)
+    }
+
+    private func removeDeletedLogFromVisibleDayLogs(logId: String, dateString: String) {
+        guard summaryDateString == dateString else { return }
+        if let existing = dayLogs, existing.date == dateString {
+            dayLogs = DayLogsResponse(
+                date: existing.date,
+                timezone: existing.timezone,
+                logs: existing.logs.filter { $0.id != logId }
+            )
+        }
+        if let cached = dayCacheLogs[dateString] {
+            dayCacheLogs[dateString] = DayLogsResponse(
+                date: cached.date,
+                timezone: cached.timezone,
+                logs: cached.logs.filter { $0.id != logId }
+            )
+        }
+    }
+
     private func retryLastSave() {
         guard appStore.isNetworkReachable else {
             saveError = L10n.noNetworkRetry
@@ -4194,7 +4292,7 @@ struct MainLoggingShellView: View {
                 }
             }
 
-            let syncedToHealth = await syncSavedLogToAppleHealthIfEnabled(effectiveRequest)
+            let syncedToHealth = await syncSavedLogToAppleHealthIfEnabled(effectiveRequest, response: response)
             if syncedToHealth {
                 if intent == .auto {
                     saveSuccessMessage = nil
@@ -4279,7 +4377,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func syncSavedLogToAppleHealthIfEnabled(_ request: SaveLogRequest) async -> Bool {
+    private func syncSavedLogToAppleHealthIfEnabled(_ request: SaveLogRequest, response: SaveLogResponse) async -> Bool {
         guard appStore.isHealthSyncEnabled else { return false }
 
         let loggedAtDate = HomeLoggingDateUtils.loggedAtFormatter.date(from: request.parsedLog.loggedAt) ??
@@ -4288,7 +4386,9 @@ struct MainLoggingShellView: View {
         do {
             return try await appStore.syncNutritionToAppleHealth(
                 totals: request.parsedLog.totals,
-                loggedAt: loggedAtDate
+                loggedAt: loggedAtDate,
+                logId: response.logId,
+                healthWriteKey: response.healthSync?.healthWriteKey ?? response.logId
             )
         } catch {
             if let healthError = error as? HealthKitServiceError,
@@ -4296,6 +4396,38 @@ struct MainLoggingShellView: View {
                 appStore.disconnectAppleHealth()
             }
             return false
+        }
+    }
+
+    private func deleteSavedLogFromAppleHealthIfEnabled(row: HomeLogRow, healthSync: HealthSyncResponse?) async {
+        guard appStore.isHealthSyncEnabled else { return }
+        guard let serverLogId = row.serverLogId else { return }
+
+        let loggedAtText = row.serverLoggedAt ?? HomeLoggingDateUtils.loggedAtFormatter.string(from: selectedSummaryDate)
+        let loggedAtDate = HomeLoggingDateUtils.loggedAtFormatter.date(from: loggedAtText) ??
+            ISO8601DateFormatter().date(from: loggedAtText) ??
+            selectedSummaryDate
+        let totals = NutritionTotals(
+            calories: row.parsedItems.isEmpty ? Double(row.calories ?? 0) : row.parsedItems.reduce(0) { $0 + $1.calories },
+            protein: row.parsedItems.reduce(0) { $0 + $1.protein },
+            carbs: row.parsedItems.reduce(0) { $0 + $1.carbs },
+            fat: row.parsedItems.reduce(0) { $0 + $1.fat }
+        )
+
+        do {
+            _ = try await appStore.deleteNutritionFromAppleHealth(
+                totals: totals,
+                loggedAt: loggedAtDate,
+                logId: serverLogId,
+                healthWriteKey: healthSync?.healthWriteKey ?? serverLogId
+            )
+        } catch {
+            if let healthError = error as? HealthKitServiceError,
+               case .notAuthorized = healthError {
+                appStore.disconnectAppleHealth()
+            }
+            // Apple Health cleanup is best-effort and must not resurrect a log
+            // after the backend delete has already succeeded.
         }
     }
 

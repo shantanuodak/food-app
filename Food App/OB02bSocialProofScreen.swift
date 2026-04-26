@@ -64,20 +64,37 @@ struct OB02bSocialProofScreen: View {
             }
         }
         .onAppear {
-            withAnimation(.easeOut(duration: 0.5)) {
-                appeared = true
-            }
-            // Plot the curve slowly, after the screen has settled in.
-            withAnimation(.easeInOut(duration: 3.9).delay(0.6)) {
-                graphProgress = 1.0
-            }
-            // Stat arrives just as the curve completes.
-            withAnimation(.easeOut(duration: 0.5).delay(3.9)) {
-                statVisible = true
-            }
-            // Gentle, noticeable float — starts after the graph finishes drawing.
-            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true).delay(4.5)) {
-                floating = true
+            // Reset every appearance so navigating back to this screen
+            // replays the animation. SwiftUI keeps @State alive across
+            // back-nav, which means without this reset the second visit
+            // would call `withAnimation { graphProgress = 1.0 }` on a
+            // value that's already 1.0 — a no-op — and the curve would
+            // snap to final state instead of plotting.
+            appeared = false
+            graphProgress = 0
+            statVisible = false
+            floating = false
+
+            // Defer the animation block one runloop tick so SwiftUI sees
+            // the reset values commit before the new animations start;
+            // otherwise the from→to diff collapses inside the same frame.
+            DispatchQueue.main.async {
+                // Total screen-settle time targeted at 2s.
+                withAnimation(.easeOut(duration: 0.25)) {
+                    appeared = true
+                }
+                // Plot: 0.3s delay + 1.7s duration → completes at 2.0s.
+                withAnimation(.easeInOut(duration: 1.7).delay(0.3)) {
+                    graphProgress = 1.0
+                }
+                // Stat fades in to land right at the 2.0s mark.
+                withAnimation(.easeOut(duration: 0.4).delay(1.6)) {
+                    statVisible = true
+                }
+                // Float kicks in the moment the screen settles.
+                withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true).delay(2.0)) {
+                    floating = true
+                }
             }
         }
     }

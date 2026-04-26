@@ -294,6 +294,7 @@ type UpdateLogInput = {
 };
 
 type UpdateLogResponse = { logId: string; status: 'updated'; healthSync: HealthSyncContract };
+type DeleteLogResponse = { logId: string; status: 'deleted'; healthSync: HealthSyncContract };
 
 /**
  * Replace the items and totals of an existing food_log. Used by PATCH
@@ -399,6 +400,36 @@ export async function updateFoodLog(input: UpdateLogInput): Promise<UpdateLogRes
       logId: input.logId,
       status: 'updated',
       healthSync: buildHealthSyncContract(input.userId, input.logId)
+    };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+export async function deleteFoodLog(input: { logId: string; userId: string }): Promise<DeleteLogResponse> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const ownerCheck = await client.query<{ id: string }>(
+      `SELECT id FROM food_logs WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [input.logId, input.userId]
+    );
+    if (ownerCheck.rowCount === 0) {
+      throw new ApiError(404, 'LOG_NOT_FOUND', 'Food log not found');
+    }
+
+    // food_log_items are removed by the existing ON DELETE CASCADE constraint.
+    await client.query(`DELETE FROM food_logs WHERE id = $1 AND user_id = $2`, [input.logId, input.userId]);
+
+    await client.query('COMMIT');
+    return {
+      logId: input.logId,
+      status: 'deleted',
+      healthSync: buildHealthSyncContract(input.userId, input.logId, 'delete')
     };
   } catch (err) {
     await client.query('ROLLBACK');

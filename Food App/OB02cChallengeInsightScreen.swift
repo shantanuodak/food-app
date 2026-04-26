@@ -67,10 +67,12 @@ struct OB02cChallengeInsightScreen: View {
                     .offset(y: appeared ? 0 : 12)
                     .padding(.horizontal, 24)
 
-                // Insight — simple muted text
+                // Insight — primary text color for accessibility. Previously
+                // was a flat 45% gray which failed contrast guidelines on
+                // the cream onboarding background.
                 Text(content.insight)
                     .font(.system(size: 16, weight: .regular))
-                    .foregroundStyle(Color(red: 0.45, green: 0.45, blue: 0.45))
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
                     .multilineTextAlignment(.center)
                     .lineSpacing(4)
                     .padding(.top, 16)
