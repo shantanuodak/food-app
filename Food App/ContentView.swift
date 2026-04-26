@@ -131,7 +131,6 @@ struct HomeProfileScreen: View {
                 planSection
                 bodySection
                 dietSection
-                appearanceSection
                 healthSection
                 trackingAccuracySection
                 accountSection
@@ -331,17 +330,6 @@ struct HomeProfileScreen: View {
             if activePrefs.isEmpty {
                 Text("Select any that apply.")
             }
-        }
-    }
-
-    private var appearanceSection: some View {
-        Section("Appearance") {
-            Picker("Theme", selection: appearancePreferenceBinding) {
-                ForEach(AppearancePreference.allCases) { pref in
-                    Text(pref.title).tag(pref)
-                }
-            }
-            .pickerStyle(.segmented)
         }
     }
 
@@ -677,13 +665,6 @@ struct HomeProfileScreen: View {
             set: { wantsEnabled in
                 if wantsEnabled { requestHealthAccess() } else { disconnectHealthAccess() }
             }
-        )
-    }
-
-    private var appearancePreferenceBinding: Binding<AppearancePreference> {
-        Binding(
-            get: { appStore.appearancePreference },
-            set: { appStore.setAppearancePreference($0) }
         )
     }
 

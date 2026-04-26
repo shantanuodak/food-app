@@ -1,25 +1,6 @@
 import Foundation
 import Combine
 
-enum AppearancePreference: String, CaseIterable, Identifiable {
-    case system
-    case light
-    case dark
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .system:
-            return "System"
-        case .light:
-            return "Light"
-        case .dark:
-            return "Dark"
-        }
-    }
-}
-
 @MainActor
 final class AppStore: ObservableObject {
     @Published var isOnboardingComplete: Bool
@@ -27,7 +8,6 @@ final class AppStore: ObservableObject {
     @Published var isNetworkReachable: Bool
     @Published var networkQualityHint: String
     @Published var isHealthSyncEnabled: Bool
-    @Published var appearancePreference: AppearancePreference
     @Published private(set) var healthAuthorizationState: HealthAuthorizationState
     @Published private(set) var todaySteps: Double = 0
     @Published private(set) var todayActiveEnergy: Double = 0
@@ -44,7 +24,6 @@ final class AppStore: ObservableObject {
     private let defaults: UserDefaults
     private let onboardingKey = "app.onboarding.completed"
     private let healthSyncKey = "app.health.sync.enabled.v1"
-    private let appearancePreferenceKey = "app.appearance.preference.v1"
     private let networkMonitor: NetworkStatusMonitor
     private var cancellables = Set<AnyCancellable>()
 
@@ -81,9 +60,6 @@ final class AppStore: ObservableObject {
         self.isOnboardingComplete = defaults.bool(forKey: onboardingKey)
         self.isNetworkReachable = true
         self.networkQualityHint = L10n.networkOnline
-        self.appearancePreference = AppearancePreference(
-            rawValue: defaults.string(forKey: appearancePreferenceKey) ?? ""
-        ) ?? .system
         self.healthAuthorizationState = healthKitService.authorizationState
         self.isHealthSyncEnabled = defaults.bool(forKey: healthSyncKey)
         if healthAuthorizationState != .authorized && isHealthSyncEnabled {
@@ -188,11 +164,6 @@ final class AppStore: ObservableObject {
         let effective = enabled && healthAuthorizationState == .authorized
         isHealthSyncEnabled = effective
         defaults.set(effective, forKey: healthSyncKey)
-    }
-
-    func setAppearancePreference(_ preference: AppearancePreference) {
-        appearancePreference = preference
-        defaults.set(preference.rawValue, forKey: appearancePreferenceKey)
     }
 
     func syncNutritionToAppleHealth(totals: NutritionTotals, loggedAt: Date) async throws -> Bool {

@@ -15,22 +15,11 @@ import GoogleSignIn
 struct Food_AppApp: App {
     @StateObject private var appStore = AppStore()
 
-    private var preferredColorScheme: ColorScheme? {
-        switch appStore.appearancePreference {
-        case .system:
-            return nil
-        case .light:
-            return .light
-        case .dark:
-            return .dark
-        }
-    }
-
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appStore)
-                .preferredColorScheme(preferredColorScheme)
+                .preferredColorScheme(.light)
                 .onOpenURL { url in
 #if canImport(GoogleSignIn)
                     _ = GIDSignIn.sharedInstance.handle(url)

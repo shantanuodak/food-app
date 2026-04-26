@@ -12,9 +12,6 @@ enum L10n {
     static let networkOnline = tr("network.status.online", "Online")
     static let networkOffline = tr("network.status.offline", "Offline")
     static let networkLimited = tr("network.status.limited", "Connected (limited network)")
-    static let themeToggleLabel = tr("theme.toggle.label", "Toggle appearance")
-    static let themeDarkLabel = tr("theme.mode.dark", "Dark")
-    static let themeLightLabel = tr("theme.mode.light", "Light")
 
     static let onboardingTitle = tr("onboarding.title", "Welcome")
     static let onboardingGoalSection = tr("onboarding.goal.section", "Goal")
