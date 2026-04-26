@@ -327,40 +327,13 @@ struct OnboardingView: View {
     }
 
     private var notificationsPermissionRouteView: some View {
-        ZStack {
-            OnboardingStaticBackground()
-
-            VStack(spacing: 0) {
-                Text("Notifications")
-                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
-                    .foregroundStyle(colorScheme == .dark ? .white : .black)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 32)
-
-                Text("Optional. Helpful reminders to stay consistent — you can change this later in Settings.")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                    .padding(.horizontal, 24)
-
-                Spacer()
-
-                OB09bNotificationsPermissionScreen(
-                    enableNotifications: $draft.enableNotifications,
-                    onEnableNotifications: requestNotificationAccess,
-                    notificationStatusMessage: notificationStatusMessage
-                )
-                .padding(.horizontal, 20)
-
-                Spacer()
-
-                primaryButton("Next") {
-                    flow.moveNextOnboarding()
-                }
-                .padding(.bottom, 24)
-            }
-        }
+        OB09bNotificationsPermissionScreen(
+            enableNotifications: $draft.enableNotifications,
+            onEnableNotifications: requestNotificationAccess,
+            notificationStatusMessage: notificationStatusMessage,
+            onContinue: { flow.moveNextOnboarding() },
+            onBack: { flow.moveBackOnboarding() }
+        )
     }
 
     // MARK: - Account Route (OB08) — Quiet Wellness redesign
@@ -742,7 +715,9 @@ struct OnboardingView: View {
             OB09bNotificationsPermissionScreen(
                 enableNotifications: $draft.enableNotifications,
                 onEnableNotifications: requestNotificationAccess,
-                notificationStatusMessage: notificationStatusMessage
+                notificationStatusMessage: notificationStatusMessage,
+                onContinue: { flow.moveNextOnboarding() },
+                onBack: { flow.moveBackOnboarding() }
             )
         case .ready:
             OB10ReadyScreen(
