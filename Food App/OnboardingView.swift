@@ -315,45 +315,15 @@ struct OnboardingView: View {
     }
 
     private var permissionsRouteView: some View {
-        ZStack {
-            OnboardingStaticBackground()
-
-            VStack(spacing: 0) {
-                // Headline
-                Text("Apple Health")
-                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
-                    .foregroundStyle(colorScheme == .dark ? .white : .black)
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 32)
-
-                Text("Optional. Sync activity automatically — you can change this later in Settings.")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(Color(red: 0.51, green: 0.51, blue: 0.51))
-                    .multilineTextAlignment(.center)
-                    .padding(.top, 8)
-                    .padding(.horizontal, 24)
-
-                Spacer()
-
-                OB09PermissionsScreen(
-                    connectHealth: $draft.connectHealth,
-                    isRequestingHealthPermission: isRequestingHealthPermission,
-                    healthPermissionMessage: healthPermissionMessage,
-                    onConnectHealth: requestHealthAccess,
-                    onDisconnectHealth: disconnectHealthAccess
-                )
-                .padding(.horizontal, 20)
-
-                Spacer()
-
-                // Center-aligned Next button
-                primaryButton("Next") {
-                    flow.moveNextOnboarding()
-                }
-                .disabled(isRequestingHealthPermission)
-                .padding(.bottom, 24)
-            }
-        }
+        OB09PermissionsScreen(
+            connectHealth: $draft.connectHealth,
+            isRequestingHealthPermission: isRequestingHealthPermission,
+            healthPermissionMessage: healthPermissionMessage,
+            onConnectHealth: requestHealthAccess,
+            onDisconnectHealth: disconnectHealthAccess,
+            onContinue: { flow.moveNextOnboarding() },
+            onBack: { flow.moveBackOnboarding() }
+        )
     }
 
     private var notificationsPermissionRouteView: some View {
@@ -764,7 +734,9 @@ struct OnboardingView: View {
                 isRequestingHealthPermission: isRequestingHealthPermission,
                 healthPermissionMessage: healthPermissionMessage,
                 onConnectHealth: requestHealthAccess,
-                onDisconnectHealth: disconnectHealthAccess
+                onDisconnectHealth: disconnectHealthAccess,
+                onContinue: { flow.moveNextOnboarding() },
+                onBack: { flow.moveBackOnboarding() }
             )
         case .notificationsPermission:
             OB09bNotificationsPermissionScreen(
