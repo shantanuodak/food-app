@@ -428,53 +428,26 @@ private struct TrackProgressCardView: View {
 // MARK: - Take a Food Photo Card
 
 private struct TakePhotoCardView: View {
-    private let orbit: CGFloat = 52
-    private let period: TimeInterval = 8
+    @State private var shimmerPhase: CGFloat = -1
 
     var body: some View {
-        TimelineView(.animation(paused: UIAccessibility.isReduceMotionEnabled)) { context in
-            let elapsed = context.date.timeIntervalSinceReferenceDate
-            let angle = (elapsed.truncatingRemainder(dividingBy: period) / period) * 360
-
-            cardContent(angle: angle)
-        }
-    }
-
-    private func cardContent(angle: Double) -> some View {
         HStack(spacing: 16) {
-            // Food photo — large, fills card height
-            ZStack {
-                Image("food_photo_demo")
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 117, height: 117)
-                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12, style: .continuous)
-                            .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
-                    )
-
-                // Orbiting camera icon — accent-tinted capsule, readable on the light glass card
-                let camRad = angle * .pi / 180
-                Circle()
-                    .fill(OnboardingGlassTheme.accentStart.opacity(0.22))
-                    .frame(width: 46, height: 46)
-                    .overlay(
-                        Circle()
-                            .strokeBorder(OnboardingGlassTheme.accentStart.opacity(0.45), lineWidth: 1)
-                    )
-                    .overlay(
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(OnboardingGlassTheme.textPrimary)
-                    )
-                    .offset(
-                        x: cos(camRad) * orbit,
-                        y: sin(camRad) * orbit
-                    )
-
-            }
-            .frame(width: 117, height: 117)
+            // Food photo with a diagonal white sweep — same vocabulary as the
+            // intro photos on `OB01WelcomeScreen` so the "this is a captured
+            // photo" feeling reads consistently.
+            Image("food_photo_demo")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 117, height: 117)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    shimmerSweep
+                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+                )
 
             // Text
             VStack(alignment: .leading, spacing: 4) {
@@ -497,5 +470,38 @@ private struct TakePhotoCardView: View {
         .frame(maxWidth: .infinity)
         .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
         .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
+        .onAppear { startShimmer() }
+    }
+
+    /// Diagonal top-left → bottom-right white sweep that loops every 2.5s,
+    /// matching `OB01WelcomeScreen`'s `shimmerGradient`. Pure decoration —
+    /// fully suppressed under `accessibilityReduceMotion`.
+    private var shimmerSweep: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let sweepWidth = w * 0.7
+
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0),
+                    .init(color: .white.opacity(0.25), location: 0.4),
+                    .init(color: .white.opacity(0.35), location: 0.5),
+                    .init(color: .white.opacity(0.25), location: 0.6),
+                    .init(color: .clear, location: 1)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            .frame(width: sweepWidth)
+            .offset(x: shimmerPhase * (w + sweepWidth) - sweepWidth)
+            .allowsHitTesting(false)
+        }
+    }
+
+    private func startShimmer() {
+        guard !UIAccessibility.isReduceMotionEnabled else { return }
+        withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: false)) {
+            shimmerPhase = 1
+        }
     }
 }
