@@ -473,20 +473,23 @@ private struct TakePhotoCardView: View {
         .onAppear { startShimmer() }
     }
 
-    /// Diagonal top-left → bottom-right white sweep that loops every 2.5s,
-    /// matching `OB01WelcomeScreen`'s `shimmerGradient`. Pure decoration —
-    /// fully suppressed under `accessibilityReduceMotion`.
+    /// Diagonal top-left → bottom-right specular sweep that loops every 2.5s.
+    /// Uses `.plusLighter` blend mode so the highlight *adds* brightness to
+    /// the photo instead of overlaying translucent white — that way the gleam
+    /// is visible even on light/bright food shots where a plain white overlay
+    /// would disappear into the background.
+    /// Pure decoration; fully suppressed under `accessibilityReduceMotion`.
     private var shimmerSweep: some View {
         GeometryReader { geo in
             let w = geo.size.width
-            let sweepWidth = w * 0.7
+            let sweepWidth = w * 0.5
 
             LinearGradient(
                 stops: [
                     .init(color: .clear, location: 0),
-                    .init(color: .white.opacity(0.25), location: 0.4),
-                    .init(color: .white.opacity(0.35), location: 0.5),
-                    .init(color: .white.opacity(0.25), location: 0.6),
+                    .init(color: .white.opacity(0.45), location: 0.4),
+                    .init(color: .white.opacity(0.75), location: 0.5),
+                    .init(color: .white.opacity(0.45), location: 0.6),
                     .init(color: .clear, location: 1)
                 ],
                 startPoint: .topLeading,
@@ -494,6 +497,7 @@ private struct TakePhotoCardView: View {
             )
             .frame(width: sweepWidth)
             .offset(x: shimmerPhase * (w + sweepWidth) - sweepWidth)
+            .blendMode(.plusLighter)
             .allowsHitTesting(false)
         }
     }
