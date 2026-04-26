@@ -1,5 +1,6 @@
 import type { ParseResult } from './deterministicParser.js';
 import type { AICallUsage } from './aiNormalizerService.js';
+import type { DietaryFlag } from './dietaryConflictService.js';
 
 export type ParsePipelineRoute = 'cache' | 'deterministic' | 'gemini' | 'unresolved';
 
@@ -30,6 +31,13 @@ export type ParseDecisionResult = {
   fallbackUsage: AICallUsage | null;
   needsClarification: boolean;
   clarificationQuestions: string[];
+  /**
+   * Diet preference / allergy violations detected against the user's
+   * onboarding profile after parsing completes. Empty array (or omitted
+   * for backward compat) means no flags. Computed deterministically —
+   * no extra LLM call.
+   */
+  dietaryFlags?: DietaryFlag[];
 };
 
 export type ParseProviderName = 'cache' | 'gemini';

@@ -7,7 +7,19 @@ import { runSegmentAwareParsePipeline, runSegmentAwareParsePipelineStreaming } f
 import { checkParseRateLimit } from './parseRateLimiterService.js';
 import { createParseRequest } from './parseRequestService.js';
 import type { ParseDecisionResult } from './parseDecisionTypes.js';
-import { getOnboardingParsePreferences } from './onboardingService.js';
+import { getOnboardingParsePreferences, getDietAndAllergies } from './onboardingService.js';
+import { detectDietaryConflicts, type DietaryFlag } from './dietaryConflictService.js';
+
+async function loadDietaryFlagsForResult(userId: string, items: ReadonlyArray<{ name: string }>): Promise<DietaryFlag[]> {
+  if (items.length === 0) return [];
+  const profile = await getDietAndAllergies(userId);
+  if (!profile.dietPreference && profile.allergies.length === 0) return [];
+  return detectDietaryConflicts({
+    itemNames: items.map((item) => item.name),
+    dietPreference: profile.dietPreference,
+    allergies: profile.allergies
+  });
+}
 
 type ParseAuthContext = {
   userId: string;
@@ -152,8 +164,11 @@ export async function executePrimaryParse(input: PrimaryParseOrchestratorInput):
     email: input.auth.email
   });
 
+  const dietaryFlags = await loadDietaryFlagsForResult(userId, pipeline.result.items);
+
   return {
     ...pipeline,
+    dietaryFlags,
     budget: {
       dailyLimitUsd: budget.dailyBudgetUsd,
       dailyUsedTodayUsd: roundedUsd(budget.globalUsedTodayUsd),
@@ -235,8 +250,11 @@ export async function executePrimaryParseStreaming(input: PrimaryParseStreamingI
     email: input.auth.email
   });
 
+  const dietaryFlags = await loadDietaryFlagsForResult(userId, pipeline.result.items);
+
   return {
     ...pipeline,
+    dietaryFlags,
     budget: {
       dailyLimitUsd: budget.dailyBudgetUsd,
       dailyUsedTodayUsd: roundedUsd(budget.globalUsedTodayUsd),

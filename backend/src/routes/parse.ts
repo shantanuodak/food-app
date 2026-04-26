@@ -11,6 +11,8 @@ import { getGeminiCircuitRetryAfterSeconds } from '../services/geminiFlashClient
 import { collectSourcesUsed } from '../services/parseContractService.js';
 import { parseImageWithGemini } from '../services/imageParseService.js';
 import { checkParseRateLimit } from '../services/parseRateLimiterService.js';
+import { getDietAndAllergies } from '../services/onboardingService.js';
+import { detectDietaryConflicts } from '../services/dietaryConflictService.js';
 
 const router = Router();
 const supportedImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/heic']);
@@ -117,6 +119,16 @@ router.post('/image', async (req, res, next) => {
     const roundedDurationMs = Math.round(parseDurationMs * 10) / 10;
     const sourcesUsed = collectSourcesUsed(parsedImage.result.items, 'gemini', false);
 
+    // Image parse bypasses the orchestrator, so run the diet/allergy check inline.
+    const dietaryProfile = await getDietAndAllergies(auth.userId);
+    const imageDietaryFlags = (dietaryProfile.dietPreference || dietaryProfile.allergies.length > 0)
+      ? detectDietaryConflicts({
+          itemNames: parsedImage.result.items.map((item) => item.name),
+          dietPreference: dietaryProfile.dietPreference,
+          allergies: dietaryProfile.allergies
+        })
+      : [];
+
     res.setHeader('x-parse-route', 'gemini');
     res.setHeader('x-parse-duration-ms', String(roundedDurationMs));
     res.setHeader('x-parse-cache', 'miss');
@@ -153,6 +165,7 @@ router.post('/image', async (req, res, next) => {
       totals: parsedImage.result.totals,
       items: parsedImage.result.items,
       assumptions: parsedImage.result.assumptions,
+      dietaryFlags: imageDietaryFlags,
       inputKind: 'image',
       extractedText: parsedImage.extractedText,
       imageMeta: {
@@ -225,7 +238,7 @@ router.post('/', async (req, res, next) => {
 
       const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
       const roundedDurationMs = Math.round(parseDurationMs * 10) / 10;
-      const { result, route, cacheHit, fallbackUsed, fallbackModel, needsClarification, clarificationQuestions, budget, sourcesUsed, reasonCodes } = orchestrated;
+      const { result, route, cacheHit, fallbackUsed, fallbackModel, needsClarification, clarificationQuestions, budget, sourcesUsed, reasonCodes, dietaryFlags } = orchestrated;
 
       res.write(`event: done\ndata: ${JSON.stringify({
         requestId: parseRequestId,
@@ -245,7 +258,8 @@ router.post('/', async (req, res, next) => {
         confidence: result.confidence,
         totals: result.totals,
         items: result.items,
-        assumptions: []
+        assumptions: [],
+        dietaryFlags: dietaryFlags ?? []
       })}\n\n`);
       res.end();
     } catch (err) {
@@ -292,7 +306,8 @@ router.post('/', async (req, res, next) => {
       budget,
       cacheDebug,
       sourcesUsed,
-      reasonCodes
+      reasonCodes,
+      dietaryFlags
     } =
       orchestrated;
 
@@ -326,6 +341,7 @@ router.post('/', async (req, res, next) => {
       totals: result.totals,
       items: result.items,
       assumptions: [],
+      dietaryFlags: dietaryFlags ?? [],
       ...(cacheDebug ? { cacheDebug } : {})
     });
   } catch (err) {

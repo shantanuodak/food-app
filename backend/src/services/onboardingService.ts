@@ -62,6 +62,35 @@ export async function getOnboardingParsePreferences(userId: string): Promise<{ u
   };
 }
 
+/**
+ * Reads diet preference + allergies for a user. Returned in the form
+ * the parse pipeline / dietary conflict service expects:
+ * - `dietPreference`: the comma-separated string iOS already serializes
+ *   (`"vegetarian,gluten_free"` or `"no_preference"`); null if no profile yet.
+ * - `allergies`: array of rawValue strings (e.g. `["peanuts", "shellfish"]`).
+ */
+export async function getDietAndAllergies(userId: string): Promise<{
+  dietPreference: string | null;
+  allergies: string[];
+}> {
+  const result = await pool.query<{ diet_preference: string | null; allergies_json: string[] | null }>(
+    `
+    SELECT diet_preference, allergies_json
+    FROM onboarding_profiles
+    WHERE user_id = $1
+    `,
+    [userId]
+  );
+  const row = result.rows[0];
+  if (!row) {
+    return { dietPreference: null, allergies: [] };
+  }
+  return {
+    dietPreference: row.diet_preference || null,
+    allergies: Array.isArray(row.allergies_json) ? row.allergies_json : []
+  };
+}
+
 export async function getOnboardingProvenance(userId: string): Promise<OnboardingProvenance | null> {
   const result = await pool.query<{
     onboarding_provenance_mode: string;

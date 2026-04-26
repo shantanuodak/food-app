@@ -3523,7 +3523,8 @@ struct MainLoggingShellView: View {
                 extractedText: nil,
                 imageMeta: nil,
                 visionModel: nil,
-                visionFallbackUsed: nil
+                visionFallbackUsed: nil,
+                dietaryFlags: nil
             )
             editableItems = response.items.map(EditableParsedItem.init(apiItem:))
             clearParseSchedulerState()

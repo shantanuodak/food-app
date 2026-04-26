@@ -1,5 +1,7 @@
 import { pool } from '../db.js';
 import { ApiError } from '../utils/errors.js';
+import { getDietAndAllergies } from './onboardingService.js';
+import { detectDietaryConflicts, type DietaryFlag } from './dietaryConflictService.js';
 
 type DayLogItem = {
   id: string;
@@ -31,6 +33,13 @@ type DayLogEntry = {
     fat: number;
   };
   items: DayLogItem[];
+  /**
+   * Diet preference / allergy violations recomputed against the current
+   * onboarding profile each time the day is fetched. Re-running on read
+   * (rather than persisting at save time) means iOS picks up newly added
+   * allergies for past meals without a backfill.
+   */
+  dietaryFlags?: DietaryFlag[];
 };
 
 type DayLogsResponse = {
@@ -174,6 +183,9 @@ export async function getDayLogsRange(
     });
   }
 
+  const dietaryProfile = await getDietAndAllergies(userId);
+  const hasProfile = dietaryProfile.dietPreference !== null || dietaryProfile.allergies.length > 0;
+
   // Group logs by day
   const logsByDay = new Map<string, DayLogEntry[]>();
   for (const log of logsResult.rows) {
@@ -181,6 +193,14 @@ export async function getDayLogsRange(
     if (!logsByDay.has(dayDate)) {
       logsByDay.set(dayDate, []);
     }
+    const items = itemsByLogId.get(log.id) ?? [];
+    const flags = hasProfile
+      ? detectDietaryConflicts({
+          itemNames: items.map((item) => item.foodName),
+          dietPreference: dietaryProfile.dietPreference,
+          allergies: dietaryProfile.allergies
+        })
+      : [];
     logsByDay.get(dayDate)!.push({
       id: log.id,
       loggedAt: log.logged_at instanceof Date ? log.logged_at.toISOString() : String(log.logged_at),
@@ -193,7 +213,8 @@ export async function getDayLogsRange(
         carbs: round(toNumber(log.total_carbs_g)),
         fat: round(toNumber(log.total_fat_g))
       },
-      items: itemsByLogId.get(log.id) ?? []
+      items,
+      dietaryFlags: flags
     });
   }
 
@@ -306,20 +327,35 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
     });
   }
 
-  const logs: DayLogEntry[] = logsResult.rows.map((log) => ({
-    id: log.id,
-    loggedAt: log.logged_at instanceof Date ? log.logged_at.toISOString() : String(log.logged_at),
-    rawText: log.raw_text,
-    inputKind: log.input_kind || 'text',
-    confidence: round(toNumber(log.parse_confidence)),
-    totals: {
-      calories: round(toNumber(log.total_calories)),
-      protein: round(toNumber(log.total_protein_g)),
-      carbs: round(toNumber(log.total_carbs_g)),
-      fat: round(toNumber(log.total_fat_g))
-    },
-    items: itemsByLogId.get(log.id) ?? []
-  }));
+  const dietaryProfile = await getDietAndAllergies(userId);
+  const hasProfile = dietaryProfile.dietPreference !== null || dietaryProfile.allergies.length > 0;
+
+  const logs: DayLogEntry[] = logsResult.rows.map((log) => {
+    const items = itemsByLogId.get(log.id) ?? [];
+    const flags = hasProfile
+      ? detectDietaryConflicts({
+          itemNames: items.map((item) => item.foodName),
+          dietPreference: dietaryProfile.dietPreference,
+          allergies: dietaryProfile.allergies
+        })
+      : [];
+
+    return {
+      id: log.id,
+      loggedAt: log.logged_at instanceof Date ? log.logged_at.toISOString() : String(log.logged_at),
+      rawText: log.raw_text,
+      inputKind: log.input_kind || 'text',
+      confidence: round(toNumber(log.parse_confidence)),
+      totals: {
+        calories: round(toNumber(log.total_calories)),
+        protein: round(toNumber(log.total_protein_g)),
+        carbs: round(toNumber(log.total_carbs_g)),
+        fat: round(toNumber(log.total_fat_g))
+      },
+      items,
+      dietaryFlags: flags
+    };
+  });
 
   return { date, timezone: effectiveTimezone, logs };
 }

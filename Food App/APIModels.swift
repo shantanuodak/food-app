@@ -94,6 +94,26 @@ struct ParseLogResponse: Decodable {
     let imageMeta: ParseImageMeta?
     let visionModel: String?
     let visionFallbackUsed: Bool?
+    /// Diet preference / allergy violations detected against the user's
+    /// onboarding profile. Optional so older backend builds without the
+    /// field still decode cleanly.
+    let dietaryFlags: [DietaryFlag]?
+}
+
+/// Mirrors `DietaryFlag` from `backend/src/services/dietaryConflictService.ts`.
+struct DietaryFlag: Codable, Hashable {
+    let itemName: String
+    /// `"allergy"` or `"diet"`.
+    let rule: String
+    /// e.g. `"peanuts"`, `"vegetarian"`.
+    let ruleKey: String
+    /// Lowercase substring inside `itemName` that triggered the match.
+    let matchedToken: String
+    /// `"warning"` or `"critical"`.
+    let severity: String
+
+    var isCritical: Bool { severity == "critical" }
+    var isAllergy: Bool { rule == "allergy" }
 }
 
 struct ParseImageMeta: Decodable {
@@ -333,6 +353,9 @@ struct DayLogEntry: Codable, Identifiable {
     let confidence: Double
     let totals: NutritionTotals
     let items: [DayLogItem]
+    /// Diet/allergy violations recomputed by the backend on day fetch.
+    /// Optional for backward compat with older backend builds.
+    let dietaryFlags: [DietaryFlag]?
 }
 
 struct DayLogItem: Codable, Identifiable {
