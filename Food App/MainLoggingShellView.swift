@@ -45,7 +45,7 @@ struct MainLoggingShellView: View {
     @State private var isLoadingDayLogs = false
     /// Per-saved-log-id dismissal state for `HomeMealInsightCard`.
     /// Persisted in UserDefaults so dismissals survive app launches and day swipes.
-    @State private var dismissedInsightLogIds: Set<String> = HomeMealInsightSection.loadDismissedLogIds()
+    @State private var dismissedInsightLogIds: Set<String> = RecentFlaggedMealCard.loadDismissedLogIds()
     /// Once-per-day in-app pause for users whose biggest challenge is emotional eating.
     @State private var isMindfulPausePresented = false
     /// In-memory cache for adjacent days — keyed by "yyyy-MM-dd" date string.
@@ -146,6 +146,18 @@ struct MainLoggingShellView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Floating glass card surfacing the most recent flagged meal.
+                // Bottom padding clears the mic/camera dock that lives in the
+                // outer `HomeTabShellView` ZStack (60pt buttons + 16pt dock
+                // padding ≈ 92pt of room).
+                RecentFlaggedMealCard(
+                    logs: dayLogs?.logs ?? [],
+                    dismissedLogIds: $dismissedInsightLogIds
+                )
+                .padding(.horizontal, 16)
+                .padding(.bottom, 92)
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 15, coordinateSpace: .local)
@@ -747,13 +759,6 @@ struct MainLoggingShellView: View {
     private var composeEntryContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             inputSection
-
-            HomeMealInsightSection(
-                logs: dayLogs?.logs ?? [],
-                dismissedLogIds: $dismissedInsightLogIds,
-                onDismiss: { _ in }
-            )
-            .padding(.top, 12)
 
             homeStatusStrip
                 .padding(.top, 8)

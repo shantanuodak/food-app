@@ -1,127 +1,142 @@
 import SwiftUI
 
-/// A small contextual banner shown on the home logging screen below a saved
-/// meal that conflicts with the user's diet preferences or allergies.
+/// Floating glass-effect card shown above the home dock when the most
+/// recently logged meal conflicts with the user's diet preferences or
+/// allergies.
 ///
-/// Visual language matches the rest of the home screen (system semantic
-/// colors, light tinted backgrounds), NOT the onboarding glass theme.
-///
-/// Severity drives the look:
-/// - `critical` (allergy): red triangle + soft red tint
-/// - `warning` (diet preference): orange info icon + soft orange tint
-///
-/// Tap to expand and see all flag details. Long-press to dismiss for that
-/// specific saved log (persisted in UserDefaults so the card stays hidden
-/// across app launches and day-swipes).
-struct HomeMealInsightCard: View {
-    let serverLogId: String
-    let rawText: String
-    let flags: [DietaryFlag]
-    let onDismiss: (String) -> Void
+/// Design constraints (per design feedback):
+/// - **One card at a time** — even if multiple saved meals have flags,
+///   only the most-recently-saved unflagged-by-user one renders.
+/// - **Glass material** matches the existing dock's `.glassEffect` so
+///   the card visually belongs to the floating-controls layer.
+/// - **Compact, single line** — meal name + a deduped human rule
+///   summary. No banner stacks, no scolding header.
+struct RecentFlaggedMealCard: View {
+    let logs: [DayLogEntry]
+    @Binding var dismissedLogIds: Set<String>
 
-    @State private var expanded = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    /// Worst severity wins for the headline tint.
-    private var isCritical: Bool { flags.contains(where: { $0.isCritical }) }
-    private var iconName: String { isCritical ? "exclamationmark.triangle.fill" : "info.circle.fill" }
-    private var accentColor: Color { isCritical ? .red : .orange }
-    private var tint: Color { accentColor.opacity(0.08) }
-    private var stroke: Color { accentColor.opacity(0.22) }
-
-    /// Headline summarizing the highest-severity flag.
-    private var headline: String {
-        guard let primary = flags.first(where: { $0.isCritical }) ?? flags.first else {
-            return ""
-        }
-        return "Heads up — \(primary.itemName) contains \(humanRule(primary))"
+    private var mostRecentFlagged: DayLogEntry? {
+        // `logs` is server-ordered ASC by loggedAt — last one is the freshest.
+        logs.last(where: { entry in
+            (entry.dietaryFlags?.isEmpty == false) && !dismissedLogIds.contains(entry.id)
+        })
     }
-
-    private var moreCount: Int { max(0, flags.count - 1) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: expanded ? 8 : 0) {
-            HStack(alignment: .top, spacing: 10) {
+        Group {
+            if let entry = mostRecentFlagged,
+               let flags = entry.dietaryFlags,
+               !flags.isEmpty {
+                FloatingInsightCard(
+                    entry: entry,
+                    flags: flags,
+                    onDismiss: {
+                        dismissedLogIds.insert(entry.id)
+                        RecentFlaggedMealCard.persistDismissedLogIds(dismissedLogIds)
+                    }
+                )
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
+        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: mostRecentFlagged?.id)
+    }
+
+    // MARK: - Persistence helpers
+
+    private static let dismissedKey = "food-app.insight.dismissed.v1"
+
+    static func loadDismissedLogIds(defaults: UserDefaults = .standard) -> Set<String> {
+        Set(defaults.stringArray(forKey: dismissedKey) ?? [])
+    }
+
+    static func persistDismissedLogIds(_ ids: Set<String>, defaults: UserDefaults = .standard) {
+        defaults.set(Array(ids), forKey: dismissedKey)
+    }
+}
+
+// MARK: - Floating card
+
+private struct FloatingInsightCard: View {
+    let entry: DayLogEntry
+    let flags: [DietaryFlag]
+    let onDismiss: () -> Void
+
+    private var isCritical: Bool { flags.contains(where: { $0.isCritical }) }
+    private var iconName: String { isCritical ? "exclamationmark.triangle.fill" : "info.circle.fill" }
+    private var iconColor: Color { isCritical ? .red : .orange }
+
+    /// Dedupe rules per item — if "peanut chat" matches both `peanuts`
+    /// allergy and a vegan rule, we want one card with both labels, not two.
+    private var humanRulesSummary: String {
+        let dedupedKeys: [String] = {
+            var seen = Set<String>()
+            var ordered: [String] = []
+            for flag in flags {
+                if !seen.contains(flag.ruleKey) {
+                    seen.insert(flag.ruleKey)
+                    ordered.append(flag.ruleKey)
+                }
+            }
+            return ordered
+        }()
+        return dedupedKeys.map(humanRule).joined(separator: ", ")
+    }
+
+    /// Pick the best display name: the parsed item name from the first
+    /// flag (closest to what the user typed and what conflicted), falling
+    /// back to the raw input.
+    private var displayName: String {
+        flags.first?.itemName ?? entry.rawText
+    }
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(iconColor.opacity(0.16))
+                    .frame(width: 32, height: 32)
                 Image(systemName: iconName)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(accentColor)
-                    .frame(width: 22)
-                    .padding(.top, 1)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(headline)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-
-                    if !expanded && moreCount > 0 {
-                        Text("\(moreCount) more conflict\(moreCount == 1 ? "" : "s")")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                    }
-                }
-
-                Spacer(minLength: 0)
-
-                if flags.count > 1 {
-                    Image(systemName: expanded ? "chevron.up" : "chevron.down")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 22, minHeight: 22)
-                }
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(iconColor)
             }
 
-            if expanded {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(Array(flags.enumerated()), id: \.offset) { _, flag in
-                        HStack(alignment: .top, spacing: 8) {
-                            Circle()
-                                .fill(flag.isCritical ? Color.red : Color.orange)
-                                .frame(width: 5, height: 5)
-                                .padding(.top, 7)
-                            Text("\(flag.itemName) → \(humanRule(flag))")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.primary)
-                        }
-                    }
-                }
-                .padding(.leading, 32)
-                .padding(.top, 4)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(displayName)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(humanRulesSummary)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
             }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(tint))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(stroke, lineWidth: 1)
-        )
-        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .onTapGesture {
-            guard flags.count > 1 else { return }
-            withAnimation(reduceMotion ? .none : .easeOut(duration: 0.2)) {
-                expanded.toggle()
+
+            Spacer(minLength: 0)
+
+            Button(action: {
+                UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                onDismiss()
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 28, height: 28)
+                    .contentShape(Circle())
             }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Dismiss insight"))
         }
-        .onLongPressGesture(minimumDuration: 0.4) {
-            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
-            onDismiss(serverLogId)
-        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .glassEffect(.regular, in: .rect(cornerRadius: 18))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(accessibilityDescription)
-        .accessibilityAddTraits(isCritical ? [.isStaticText, .isHeader] : .isStaticText)
-        .accessibilityHint("Long press to dismiss this insight for this meal.")
+        .accessibilityLabel(
+            Text("\(isCritical ? "Critical." : "Heads up.") \(displayName), \(humanRulesSummary).")
+        )
     }
 
-    private var accessibilityDescription: String {
-        let severityWord = isCritical ? "Critical." : "Heads up."
-        let detail = flags.map { "\($0.itemName) \(humanRule($0))" }.joined(separator: ", ")
-        return "\(severityWord) \(detail)"
-    }
-
-    private func humanRule(_ flag: DietaryFlag) -> String {
-        switch flag.ruleKey {
+    private func humanRule(_ ruleKey: String) -> String {
+        switch ruleKey {
         case "peanuts": return "peanut allergy"
         case "tree_nuts": return "tree nut allergy"
         case "gluten": return "gluten / wheat"
@@ -131,56 +146,13 @@ struct HomeMealInsightCard: View {
         case "fish": return "fish"
         case "soy": return "soy"
         case "sesame": return "sesame"
-        case "vegetarian": return "non-vegetarian item"
-        case "vegan": return "non-vegan item"
-        case "pescatarian": return "non-pescatarian item"
+        case "vegetarian": return "non-vegetarian"
+        case "vegan": return "non-vegan"
+        case "pescatarian": return "non-pescatarian"
         case "gluten_free": return "gluten / wheat"
         case "dairy_free": return "dairy"
-        case "halal": return "non-halal item"
-        default: return flag.ruleKey.replacingOccurrences(of: "_", with: " ")
-        }
-    }
-}
-
-/// Loops over the saved logs for the day and renders one insight card per
-/// log entry that has unflagged flags (i.e. flags whose serverLogId hasn't
-/// been dismissed yet).
-struct HomeMealInsightSection: View {
-    let logs: [DayLogEntry]
-    @Binding var dismissedLogIds: Set<String>
-    let onDismiss: (String) -> Void
-
-    private static let dismissedKey = "food-app.insight.dismissed.v1"
-
-    /// UserDefaults helper — call from the home view to load dismissed ids on appear.
-    static func loadDismissedLogIds(defaults: UserDefaults = .standard) -> Set<String> {
-        Set(defaults.stringArray(forKey: dismissedKey) ?? [])
-    }
-
-    static func persistDismissedLogIds(_ ids: Set<String>, defaults: UserDefaults = .standard) {
-        defaults.set(Array(ids), forKey: dismissedKey)
-    }
-
-    var body: some View {
-        let active = logs.filter { entry in
-            (entry.dietaryFlags?.isEmpty == false) && !dismissedLogIds.contains(entry.id)
-        }
-
-        if !active.isEmpty {
-            VStack(spacing: 10) {
-                ForEach(active) { entry in
-                    HomeMealInsightCard(
-                        serverLogId: entry.id,
-                        rawText: entry.rawText,
-                        flags: entry.dietaryFlags ?? [],
-                        onDismiss: { id in
-                            dismissedLogIds.insert(id)
-                            HomeMealInsightSection.persistDismissedLogIds(dismissedLogIds)
-                            onDismiss(id)
-                        }
-                    )
-                }
-            }
+        case "halal": return "non-halal"
+        default: return ruleKey.replacingOccurrences(of: "_", with: " ")
         }
     }
 }
