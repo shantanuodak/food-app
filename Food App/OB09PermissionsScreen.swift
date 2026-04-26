@@ -105,38 +105,57 @@ struct OB09PermissionsScreen: View {
 
     private var iconRow: some View {
         HStack(spacing: 14) {
-            // Apple Health placeholder — white rounded card with red heart.
-            // Replace with `Image("AppleHealthIcon")` once the asset lands.
+            // Apple Health card — white surface with the brand heart icon.
+            // Uses `Image("AppleHealthIcon")` so the user-supplied PNG renders
+            // once it's been dropped into `Assets.xcassets/AppleHealthIcon.imageset`.
+            // Falls back to a styled SF Symbol if the asset isn't there yet.
             iconCard(
                 background: Color.white,
                 cornerRadius: 22,
                 content: {
-                    Image(systemName: "heart.fill")
-                        .font(.system(size: 36, weight: .semibold))
-                        .foregroundStyle(
-                            LinearGradient(
-                                colors: [Color(red: 1.0, green: 0.18, blue: 0.33), Color(red: 0.95, green: 0.10, blue: 0.55)],
-                                startPoint: .topLeading,
-                                endPoint: .bottomTrailing
+                    if UIImage(named: "AppleHealthIcon") != nil {
+                        Image("AppleHealthIcon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 60, height: 60)
+                    } else {
+                        Image(systemName: "heart.fill")
+                            .font(.system(size: 36, weight: .semibold))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [Color(red: 1.0, green: 0.18, blue: 0.33), Color(red: 0.95, green: 0.10, blue: 0.55)],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
                             )
-                        )
+                    }
                 }
             )
 
-            // Food App placeholder — purple rounded card with a leaf glyph
-            // standing in for the real logomark. Swap with
-            // `Image("FoodAppIcon")` once the asset lands.
+            // Food App card — white surface with the leaf placeholder rendered
+            // in the product's brand accent gradient (warm-gold → mint), so
+            // the chrome matches every other onboarding accent on screen.
+            // Swap to `Image("FoodAppIcon")` once that logomark asset lands.
             iconCard(
-                background: LinearGradient(
-                    colors: [Color(red: 0.42, green: 0.32, blue: 0.95), Color(red: 0.32, green: 0.20, blue: 0.85)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
+                background: Color.white,
                 cornerRadius: 22,
                 content: {
-                    Image(systemName: "leaf.fill")
-                        .font(.system(size: 36, weight: .semibold))
-                        .foregroundStyle(.white)
+                    if UIImage(named: "FoodAppIcon") != nil {
+                        Image("FoodAppIcon")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 60, height: 60)
+                    } else {
+                        Image(systemName: "leaf.fill")
+                            .font(.system(size: 36, weight: .semibold))
+                            .foregroundStyle(
+                                LinearGradient(
+                                    colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    }
                 }
             )
         }
