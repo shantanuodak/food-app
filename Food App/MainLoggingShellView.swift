@@ -43,6 +43,9 @@ struct MainLoggingShellView: View {
     @State private var daySummaryError: String?
     @State private var dayLogs: DayLogsResponse?
     @State private var isLoadingDayLogs = false
+    /// Per-saved-log-id dismissal state for `HomeMealInsightCard`.
+    /// Persisted in UserDefaults so dismissals survive app launches and day swipes.
+    @State private var dismissedInsightLogIds: Set<String> = HomeMealInsightSection.loadDismissedLogIds()
     /// In-memory cache for adjacent days — keyed by "yyyy-MM-dd" date string.
     @State private var dayCacheSummary: [String: DaySummaryResponse] = [:]
     @State private var dayCacheLogs: [String: DayLogsResponse] = [:]
@@ -726,6 +729,13 @@ struct MainLoggingShellView: View {
     private var composeEntryContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             inputSection
+
+            HomeMealInsightSection(
+                logs: dayLogs?.logs ?? [],
+                dismissedLogIds: $dismissedInsightLogIds,
+                onDismiss: { _ in }
+            )
+            .padding(.top, 12)
 
             homeStatusStrip
                 .padding(.top, 8)
