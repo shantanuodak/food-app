@@ -2238,6 +2238,19 @@ struct MainLoggingShellView: View {
             let totalCalories = inputRows[freshRowIndex].parsedItems.reduce(0.0) { $0 + $1.calories }
             inputRows[freshRowIndex].calories = Int(totalCalories.rounded())
             inputRows[freshRowIndex].showCalorieUpdateShimmer = true
+
+            // If this row has already been persisted (saved on a prior
+            // day or auto-saved earlier), push the in-memory swap to the
+            // server so the placeholder doesn't reappear on the next
+            // day-summary fetch. `performPatchUpdate` reads the row's
+            // current parsedItems and totals and PATCHes the log,
+            // refreshes the day cache, and posts the
+            // `nutritionProgressDidChange` notification — same flow used
+            // for any other row edit. Soft-fail on errors (the in-memory
+            // state is still correct).
+            if let serverLogId = inputRows[freshRowIndex].serverLogId {
+                await performPatchUpdate(rowID: rowID, serverLogId: serverLogId)
+            }
         } catch {
             // Soft fail — keep placeholder. The button stays available.
             // We could surface a toast here in a follow-up.
