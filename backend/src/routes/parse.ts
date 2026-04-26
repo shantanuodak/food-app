@@ -120,14 +120,20 @@ router.post('/image', async (req, res, next) => {
     const sourcesUsed = collectSourcesUsed(parsedImage.result.items, 'gemini', false);
 
     // Image parse bypasses the orchestrator, so run the diet/allergy check inline.
-    const dietaryProfile = await getDietAndAllergies(auth.userId);
-    const imageDietaryFlags = (dietaryProfile.dietPreference || dietaryProfile.allergies.length > 0)
-      ? detectDietaryConflicts({
+    // Soft-fail: never block a parse on dietary lookup.
+    let imageDietaryFlags: ReturnType<typeof detectDietaryConflicts> = [];
+    try {
+      const dietaryProfile = await getDietAndAllergies(auth.userId);
+      if (dietaryProfile.dietPreference || dietaryProfile.allergies.length > 0) {
+        imageDietaryFlags = detectDietaryConflicts({
           itemNames: parsedImage.result.items.map((item) => item.name),
           dietPreference: dietaryProfile.dietPreference,
           allergies: dietaryProfile.allergies
-        })
-      : [];
+        });
+      }
+    } catch (err) {
+      console.warn('[dietary] image flag computation failed; returning no flags', err);
+    }
 
     res.setHeader('x-parse-route', 'gemini');
     res.setHeader('x-parse-duration-ms', String(roundedDurationMs));

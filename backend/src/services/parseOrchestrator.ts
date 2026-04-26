@@ -12,13 +12,20 @@ import { detectDietaryConflicts, type DietaryFlag } from './dietaryConflictServi
 
 async function loadDietaryFlagsForResult(userId: string, items: ReadonlyArray<{ name: string }>): Promise<DietaryFlag[]> {
   if (items.length === 0) return [];
-  const profile = await getDietAndAllergies(userId);
-  if (!profile.dietPreference && profile.allergies.length === 0) return [];
-  return detectDietaryConflicts({
-    itemNames: items.map((item) => item.name),
-    dietPreference: profile.dietPreference,
-    allergies: profile.allergies
-  });
+  try {
+    const profile = await getDietAndAllergies(userId);
+    if (!profile.dietPreference && profile.allergies.length === 0) return [];
+    return detectDietaryConflicts({
+      itemNames: items.map((item) => item.name),
+      dietPreference: profile.dietPreference,
+      allergies: profile.allergies
+    });
+  } catch (err) {
+    // Non-fatal — never block a parse on dietary lookup. The user sees their
+    // calories; flags reappear on the next request once the DB recovers.
+    console.warn('[dietary] flag computation failed; returning no flags', err);
+    return [];
+  }
 }
 
 type ParseAuthContext = {

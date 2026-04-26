@@ -183,7 +183,16 @@ export async function getDayLogsRange(
     });
   }
 
-  const dietaryProfile = await getDietAndAllergies(userId);
+  // Soft-fail: never let dietary lookup break a day-logs range fetch.
+  let dietaryProfile: { dietPreference: string | null; allergies: string[] } = {
+    dietPreference: null,
+    allergies: []
+  };
+  try {
+    dietaryProfile = await getDietAndAllergies(userId);
+  } catch (err) {
+    console.warn('[dietary] day-logs-range profile fetch failed; returning no flags', err);
+  }
   const hasProfile = dietaryProfile.dietPreference !== null || dietaryProfile.allergies.length > 0;
 
   // Group logs by day
@@ -327,7 +336,16 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
     });
   }
 
-  const dietaryProfile = await getDietAndAllergies(userId);
+  // Soft-fail: never let dietary lookup break a day-logs fetch.
+  let dietaryProfile: { dietPreference: string | null; allergies: string[] } = {
+    dietPreference: null,
+    allergies: []
+  };
+  try {
+    dietaryProfile = await getDietAndAllergies(userId);
+  } catch (err) {
+    console.warn('[dietary] day-logs profile fetch failed; returning no flags', err);
+  }
   const hasProfile = dietaryProfile.dietPreference !== null || dietaryProfile.allergies.length > 0;
 
   const logs: DayLogEntry[] = logsResult.rows.map((log) => {
