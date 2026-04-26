@@ -47,6 +47,7 @@ struct OnboardingDraft: Codable, Equatable {
     var experience: ExperienceChoice?
     var challenge: ChallengeChoice?
     var preferences: Set<PreferenceChoice> = []
+    var allergies: Set<AllergyChoice> = []
     var accountProvider: AccountProvider?
     var connectHealth = false
     var enableNotifications = false
@@ -453,16 +454,33 @@ enum OnboardingCalculator {
         return max(minFloor, Int((bmr * activityMultiplier).rounded()))
     }
 
-    /// Daily calorie deficit/surplus based on pace (matches MyFitnessPal model):
+    /// Single source of truth for "what does this pace mean in pounds per
+    /// week?" — used by the daily-deficit math, the projected-goal-date
+    /// estimate, and the pace-screen chip. Kept here so the three readouts
+    /// the user sees during onboarding can never disagree with each other.
+    /// Returns nil for goals that don't move the user's weight (Maintain).
+    static func weeklyRateLbs(for goal: GoalOption?, pace: PaceChoice?) -> Double? {
+        switch goal ?? .maintain {
+        case .maintain:
+            return nil
+        case .lose, .gain:
+            switch pace ?? .balanced {
+            case .conservative: return 0.5
+            case .balanced:     return 1.0
+            case .aggressive:   return 1.5
+            }
+        }
+    }
+
+    /// Daily calorie deficit/surplus based on pace (3,500 cal ≈ 1 lb body fat):
     /// - Conservative: 0.5 lb/week = 250 cal/day
     /// - Balanced:     1.0 lb/week = 500 cal/day
     /// - Aggressive:   1.5 lb/week = 750 cal/day
     private static func dailyDeficitForPace(_ pace: PaceChoice?) -> Int {
-        switch pace ?? .balanced {
-        case .conservative: return 250
-        case .balanced:     return 500
-        case .aggressive:   return 750
-        }
+        // Derive from weeklyRateLbs so the chip, projected date, and target
+        // calorie math stay in lockstep — change weekly rates in one place.
+        let weekly = weeklyRateLbs(for: .lose, pace: pace) ?? 1.0
+        return Int((weekly * 3500.0 / 7.0).rounded())
     }
 
     private static func targetKcal(from draft: OnboardingDraft, maintenance: Int) -> Int {
@@ -481,12 +499,8 @@ enum OnboardingCalculator {
 
     /// Projected weeks based on a 10 lb (4.5 kg) goal using the pace's weekly rate.
     private static func projectedGoalDate(from draft: OnboardingDraft, now: Date) -> String {
-        let lbsPerWeek: Double
-        switch draft.pace ?? .balanced {
-        case .conservative: lbsPerWeek = 0.5
-        case .balanced:     lbsPerWeek = 1.0
-        case .aggressive:   lbsPerWeek = 1.5
-        }
+        // Maintain has no rate; fall back to balanced for the projection.
+        let lbsPerWeek = weeklyRateLbs(for: draft.goal, pace: draft.pace) ?? 1.0
         // Assume a 10 lb goal if we can't compute actual delta
         let targetLbs: Double = 10
         let weeksToGoal = max(4, Int((targetLbs / lbsPerWeek).rounded(.up)))
@@ -676,7 +690,13 @@ enum PaceChoice: String, CaseIterable, Identifiable, Codable {
     }
 }
 
-enum PreferenceChoice: String, CaseIterable, Identifiable, Hashable, Codable {
+/// A multi-select chip option that can be rendered by `OnboardingChipSelector`.
+/// Both diet preferences and allergies conform.
+protocol ChipOption: Identifiable, Hashable {
+    var title: String { get }
+}
+
+enum PreferenceChoice: String, CaseIterable, Identifiable, Hashable, Codable, ChipOption {
     case highProtein = "high_protein"
     case vegetarian
     case vegan
@@ -706,6 +726,57 @@ enum PreferenceChoice: String, CaseIterable, Identifiable, Hashable, Codable {
         case .lowSodium: return "Low sodium"
         case .mediterranean: return "Mediterranean"
         case .noPreference: return "No preference"
+        }
+    }
+}
+
+/// Common food allergens shown as multi-select chips in OB06 and the Profile.
+///
+/// IMPORTANT: the `matchTokens` here are mirrored on the backend in
+/// `backend/src/services/dietaryConflictService.ts`. Backend is the
+/// authoritative source for actual conflict detection; the iOS list is
+/// used only for client-side preview before the backend response lands.
+/// If you edit one list, edit the other.
+enum AllergyChoice: String, CaseIterable, Identifiable, Hashable, Codable, ChipOption {
+    case peanuts
+    case treeNuts = "tree_nuts"
+    case gluten
+    case dairy
+    case eggs
+    case shellfish
+    case fish
+    case soy
+    case sesame
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .peanuts: return "Peanuts"
+        case .treeNuts: return "Tree nuts"
+        case .gluten: return "Gluten / wheat"
+        case .dairy: return "Dairy"
+        case .eggs: return "Eggs"
+        case .shellfish: return "Shellfish"
+        case .fish: return "Fish"
+        case .soy: return "Soy"
+        case .sesame: return "Sesame"
+        }
+    }
+
+    /// Lowercase substrings used for client-side conflict preview against parsed
+    /// food item names. The backend has the authoritative version.
+    var matchTokens: [String] {
+        switch self {
+        case .peanuts: return ["peanut"]
+        case .treeNuts: return ["almond", "walnut", "cashew", "pecan", "pistachio", "hazelnut", "macadamia", "brazil nut"]
+        case .gluten: return ["bread", "pasta", "wheat", "flour", "noodle", "barley", "rye", "couscous", "cracker", "pita", "tortilla", "bagel", "pretzel"]
+        case .dairy: return ["milk", "cheese", "butter", "cream", "yogurt", "yoghurt", "ice cream", "whey", "paneer", "ghee"]
+        case .eggs: return ["egg", "omelet", "omelette", "frittata", "quiche"]
+        case .shellfish: return ["shrimp", "prawn", "lobster", "crab", "crawfish", "scallop", "clam", "oyster", "mussel"]
+        case .fish: return ["salmon", "tuna", "cod", "tilapia", "mackerel", "trout", "halibut", "sardine", "anchovy", "bass"]
+        case .soy: return ["soy", "tofu", "edamame", "tempeh", "miso", "soybean"]
+        case .sesame: return ["sesame", "tahini"]
         }
     }
 }

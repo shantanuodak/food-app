@@ -131,6 +131,7 @@ struct HomeProfileScreen: View {
                 planSection
                 bodySection
                 dietSection
+                allergiesSection
                 healthSection
                 trackingAccuracySection
                 accountSection
@@ -329,6 +330,39 @@ struct HomeProfileScreen: View {
         } footer: {
             if activePrefs.isEmpty {
                 Text("Select any that apply.")
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var allergiesSection: some View {
+        Section {
+            ForEach(AllergyChoice.allCases) { allergy in
+                Button {
+                    toggleAllergy(allergy)
+                } label: {
+                    HStack(spacing: 12) {
+                        Image(systemName: "exclamationmark.shield.fill")
+                            .foregroundStyle(.red.opacity(0.85))
+                            .frame(width: 22)
+                        Text(allergy.title)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        if draft.allergies.contains(allergy) {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(.tint)
+                                .font(.body.weight(.semibold))
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+        } header: {
+            Text("Allergies")
+        } footer: {
+            if draft.allergies.isEmpty {
+                Text("We'll flag foods that conflict with these in your daily log.")
             }
         }
     }
@@ -659,6 +693,14 @@ struct HomeProfileScreen: View {
         }
     }
 
+    private func toggleAllergy(_ allergy: AllergyChoice) {
+        if draft.allergies.contains(allergy) {
+            draft.allergies.remove(allergy)
+        } else {
+            draft.allergies.insert(allergy)
+        }
+    }
+
     private var healthToggleBinding: Binding<Bool> {
         Binding(
             get: { draft.connectHealth },
@@ -732,7 +774,7 @@ struct HomeProfileScreen: View {
             let request = OnboardingRequest(
                 goal: goal,
                 dietPreference: dietPreferencePayload,
-                allergies: [],
+                allergies: draft.allergies.map(\.rawValue).sorted(),
                 units: draft.units ?? .imperial,
                 activityLevel: activity.apiValue,
                 timezone: TimeZone.current.identifier,

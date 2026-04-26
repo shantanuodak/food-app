@@ -415,9 +415,26 @@ struct OnboardingSelectableTiles<Option: Identifiable & Equatable>: View {
     }
 }
 
-struct OnboardingChipSelector: View {
-    let options: [PreferenceChoice]
-    @Binding var selected: Set<PreferenceChoice>
+/// Generic multi-select chip grid used for diet preferences and allergies.
+///
+/// `exclusiveOption` (optional) implements the "No preference" / "I'm picky"
+/// shortcut: tapping it clears the rest; tapping any other option clears
+/// the exclusive choice. Pass `nil` (the default) for a plain multi-select
+/// where any subset including empty is valid (e.g. allergies).
+struct OnboardingChipSelector<Option: ChipOption>: View {
+    let options: [Option]
+    @Binding var selected: Set<Option>
+    let exclusiveOption: Option?
+
+    init(
+        options: [Option],
+        selected: Binding<Set<Option>>,
+        exclusiveOption: Option? = nil
+    ) {
+        self.options = options
+        self._selected = selected
+        self.exclusiveOption = exclusiveOption
+    }
 
     var body: some View {
         let columns = [
@@ -429,10 +446,12 @@ struct OnboardingChipSelector: View {
             ForEach(options) { option in
                 let isSelected = selected.contains(option)
                 Button {
-                    if option == .noPreference {
-                        selected = [.noPreference]
+                    if let exclusive = exclusiveOption, option == exclusive {
+                        selected = [exclusive]
                     } else {
-                        selected.remove(.noPreference)
+                        if let exclusive = exclusiveOption {
+                            selected.remove(exclusive)
+                        }
                         if isSelected {
                             selected.remove(option)
                         } else {

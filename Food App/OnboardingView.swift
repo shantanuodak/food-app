@@ -788,7 +788,10 @@ struct OnboardingView: View {
         case .howItWorks:
             EmptyView()
         case .preferencesOptional:
-            OB06PreferencesOptionalScreen(preferences: $draft.preferences)
+            OB06PreferencesOptionalScreen(
+                preferences: $draft.preferences,
+                allergies: $draft.allergies
+            )
         case .planPreview:
             EmptyView()
         case .account:
@@ -1049,7 +1052,7 @@ struct OnboardingView: View {
             let request = OnboardingRequest(
                 goal: draft.goal ?? .maintain,
                 dietPreference: dietPreferencePayload,
-                allergies: [],
+                allergies: draft.allergies.map(\.rawValue).sorted(),
                 units: draft.units ?? .imperial,
                 activityLevel: draft.activity?.apiValue ?? .moderate,
                 timezone: TimeZone.current.identifier,
