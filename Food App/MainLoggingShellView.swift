@@ -46,6 +46,8 @@ struct MainLoggingShellView: View {
     /// Per-saved-log-id dismissal state for `HomeMealInsightCard`.
     /// Persisted in UserDefaults so dismissals survive app launches and day swipes.
     @State private var dismissedInsightLogIds: Set<String> = HomeMealInsightSection.loadDismissedLogIds()
+    /// Once-per-day in-app pause for users whose biggest challenge is emotional eating.
+    @State private var isMindfulPausePresented = false
     /// In-memory cache for adjacent days — keyed by "yyyy-MM-dd" date string.
     @State private var dayCacheSummary: [String: DaySummaryResponse] = [:]
     @State private var dayCacheLogs: [String: DayLogsResponse] = [:]
@@ -284,6 +286,10 @@ struct MainLoggingShellView: View {
                     Task { await appStore.refreshHealthActivity() }
                     prefetchAdjacentDays(around: selectedSummaryDate)
                 }
+                // Surface the mindful-pause sheet once per day for emotional-eating users.
+                if appStore.selectedChallenge == .emotionalEating, MindfulPauseGate.shouldShow() {
+                    isMindfulPausePresented = true
+                }
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
                 guard ready else { return }
@@ -334,6 +340,18 @@ struct MainLoggingShellView: View {
                     onCancel: {
                         inputMode = .text
                         selectedCameraSource = nil
+                    }
+                )
+            }
+            .fullScreenCover(isPresented: $isMindfulPausePresented) {
+                MindfulPauseSheet(
+                    onContinueLogging: {
+                        MindfulPauseGate.markShown()
+                        isMindfulPausePresented = false
+                    },
+                    onSkipForToday: {
+                        MindfulPauseGate.markShown()
+                        isMindfulPausePresented = false
                     }
                 )
             }

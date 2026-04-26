@@ -25,6 +25,14 @@ struct Food_AppApp: App {
                     _ = GIDSignIn.sharedInstance.handle(url)
 #endif
                 }
+                .task {
+                    // Refresh the cached notification auth state from the OS
+                    // (the user may have toggled it inside iOS Settings while
+                    // the app was backgrounded), then idempotently
+                    // re-schedule any challenge-driven nudges.
+                    await appStore.refreshNotificationAuthState()
+                    await appStore.reconcileNotifications()
+                }
         }
     }
 }

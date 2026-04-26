@@ -12,6 +12,7 @@ struct OnboardingView: View {
     @State private var isAccountLoading = false
     @State private var isRequestingHealthPermission = false
     @State private var healthPermissionMessage: String?
+    @State private var notificationStatusMessage: String?
     @State private var hasRestored = false
     @State private var pendingRouteError: String?
     @State private var baselineStep: BaselineScreenStep = .sex
@@ -325,7 +326,9 @@ struct OnboardingView: View {
                     isRequestingHealthPermission: isRequestingHealthPermission,
                     healthPermissionMessage: healthPermissionMessage,
                     onConnectHealth: requestHealthAccess,
-                    onDisconnectHealth: disconnectHealthAccess
+                    onDisconnectHealth: disconnectHealthAccess,
+                    onEnableNotifications: requestNotificationAccess,
+                    notificationStatusMessage: notificationStatusMessage
                 )
                 .padding(.horizontal, 20)
 
@@ -808,7 +811,9 @@ struct OnboardingView: View {
                 isRequestingHealthPermission: isRequestingHealthPermission,
                 healthPermissionMessage: healthPermissionMessage,
                 onConnectHealth: requestHealthAccess,
-                onDisconnectHealth: disconnectHealthAccess
+                onDisconnectHealth: disconnectHealthAccess,
+                onEnableNotifications: requestNotificationAccess,
+                notificationStatusMessage: notificationStatusMessage
             )
         case .ready:
             OB10ReadyScreen(
@@ -1073,6 +1078,7 @@ struct OnboardingView: View {
                     _ = try await appStore.apiClient.submitOnboarding(request)
                     OnboardingPersistence.save(draft: draft, route: flow.onboardingRoute, defaults: defaults)
                     appStore.setHealthSyncEnabled(draft.connectHealth)
+                    appStore.setSelectedChallenge(draft.challenge)
                     appStore.markOnboardingComplete()
                     setScreenState(.ready, state: .default)
                     flow.showHome()
@@ -1233,6 +1239,28 @@ struct OnboardingView: View {
         appStore.disconnectAppleHealth()
         draft.connectHealth = false
         healthPermissionMessage = "Apple Health disconnected."
+    }
+
+    private func requestNotificationAccess() {
+        Task {
+            let status = await appStore.requestNotificationAuthorization()
+            await MainActor.run {
+                switch status {
+                case .authorized, .provisional, .ephemeral:
+                    draft.enableNotifications = true
+                    notificationStatusMessage = "Notifications enabled."
+                case .denied:
+                    draft.enableNotifications = false
+                    notificationStatusMessage = "Notifications disabled in iOS Settings — you can re-enable anytime."
+                case .notDetermined:
+                    draft.enableNotifications = false
+                    notificationStatusMessage = nil
+                @unknown default:
+                    draft.enableNotifications = false
+                    notificationStatusMessage = nil
+                }
+            }
+        }
     }
 
     private func syncBaselineStepForCurrentDraft() {

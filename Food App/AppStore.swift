@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import UserNotifications
 
 @MainActor
 final class AppStore: ObservableObject {
@@ -15,15 +16,26 @@ final class AppStore: ObservableObject {
     /// Data fetching that requires auth should wait for this before proceeding.
     @Published private(set) var isSessionRestored: Bool = false
 
+    /// The "biggest challenge" the user picked in onboarding. Drives whether
+    /// challenge-specific nudges (notifications) and in-app sheets fire.
+    /// iOS-local only — not sent to backend in MVP.
+    @Published private(set) var selectedChallenge: ChallengeChoice?
+
+    /// Cached system notification authorization status. Used by the
+    /// `NotificationScheduler` to short-circuit cleanly when permission isn't granted.
+    @Published private(set) var notificationAuthState: UNAuthorizationStatus = .notDetermined
+
     let configuration: AppConfiguration
     let authSessionStore: AuthSessionStore
     let authService: AuthService
     let apiClient: APIClient
     let healthKitService: HealthKitService
+    let notificationScheduler: NotificationScheduler
 
     private let defaults: UserDefaults
     private let onboardingKey = "app.onboarding.completed"
     private let healthSyncKey = "app.health.sync.enabled.v1"
+    private let challengeKey = "app.challenge.choice.v1"
     private let networkMonitor: NetworkStatusMonitor
     private var cancellables = Set<AnyCancellable>()
 
@@ -57,6 +69,7 @@ final class AppStore: ObservableObject {
         self.healthKitService = healthKitService
         self.defaults = defaults
         self.networkMonitor = NetworkStatusMonitor()
+        self.notificationScheduler = NotificationScheduler()
         self.isOnboardingComplete = defaults.bool(forKey: onboardingKey)
         self.isNetworkReachable = true
         self.networkQualityHint = L10n.networkOnline
@@ -65,6 +78,10 @@ final class AppStore: ObservableObject {
         if healthAuthorizationState != .authorized && isHealthSyncEnabled {
             self.isHealthSyncEnabled = false
             defaults.set(false, forKey: healthSyncKey)
+        }
+        if let storedChallenge = defaults.string(forKey: challengeKey),
+           let resolved = ChallengeChoice(rawValue: storedChallenge) {
+            self.selectedChallenge = resolved
         }
 
         networkMonitor.$isReachable
@@ -164,6 +181,44 @@ final class AppStore: ObservableObject {
         let effective = enabled && healthAuthorizationState == .authorized
         isHealthSyncEnabled = effective
         defaults.set(effective, forKey: healthSyncKey)
+    }
+
+    /// Persists the user's challenge choice and re-runs notification scheduling.
+    /// Call from onboarding completion, profile edits, etc.
+    func setSelectedChallenge(_ challenge: ChallengeChoice?) {
+        selectedChallenge = challenge
+        if let raw = challenge?.rawValue {
+            defaults.set(raw, forKey: challengeKey)
+        } else {
+            defaults.removeObject(forKey: challengeKey)
+        }
+        Task { await reconcileNotifications() }
+    }
+
+    /// Refresh the cached system notification authorization status from the OS.
+    /// Cheap; safe to call on app launch and after the user toggles
+    /// notifications inside iOS Settings.
+    func refreshNotificationAuthState() async {
+        notificationAuthState = await notificationScheduler.currentAuthorizationStatus()
+    }
+
+    /// Ask the user for notification permission via the system prompt.
+    /// Returns the resolved status.
+    @discardableResult
+    func requestNotificationAuthorization() async -> UNAuthorizationStatus {
+        let status = await notificationScheduler.requestAuthorization()
+        notificationAuthState = status
+        await reconcileNotifications()
+        return status
+    }
+
+    /// Idempotent — cancels stale requests, schedules per-challenge nudges
+    /// based on current state.
+    func reconcileNotifications() async {
+        await notificationScheduler.reconcile(
+            challenge: selectedChallenge,
+            authState: notificationAuthState
+        )
     }
 
     func syncNutritionToAppleHealth(totals: NutritionTotals, loggedAt: Date) async throws -> Bool {

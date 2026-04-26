@@ -7,6 +7,13 @@ struct OB09PermissionsScreen: View {
     let healthPermissionMessage: String?
     let onConnectHealth: () -> Void
     let onDisconnectHealth: () -> Void
+    /// Invoked when the user toggles notifications on. The parent is
+    /// responsible for actually calling the system permission prompt
+    /// and reconciling the resulting authorization state.
+    let onEnableNotifications: () -> Void
+    /// Optional message surfaced under the notifications block — e.g.
+    /// "Notifications disabled in iOS Settings — enable them anytime."
+    let notificationStatusMessage: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -46,7 +53,17 @@ struct OB09PermissionsScreen: View {
                 bodyText: "Helpful reminders to stay consistent.",
                 enabled: enableNotifications
             ) {
-                enableNotifications.toggle()
+                if enableNotifications {
+                    enableNotifications = false
+                } else {
+                    onEnableNotifications()
+                }
+            }
+
+            if let notificationStatusMessage {
+                Text(notificationStatusMessage)
+                    .font(.footnote)
+                    .foregroundStyle(enableNotifications ? .green : OnboardingGlassTheme.textSecondary)
             }
 
             let enabledCount = (connectHealth ? 1 : 0) + (enableNotifications ? 1 : 0)
