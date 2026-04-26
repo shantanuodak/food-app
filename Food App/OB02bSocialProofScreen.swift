@@ -68,15 +68,15 @@ struct OB02bSocialProofScreen: View {
                 appeared = true
             }
             // Plot the curve slowly, after the screen has settled in.
-            withAnimation(.easeInOut(duration: 3.0).delay(0.6)) {
+            withAnimation(.easeInOut(duration: 3.9).delay(0.6)) {
                 graphProgress = 1.0
             }
             // Stat arrives just as the curve completes.
-            withAnimation(.easeOut(duration: 0.5).delay(3.0)) {
+            withAnimation(.easeOut(duration: 0.5).delay(3.9)) {
                 statVisible = true
             }
             // Gentle, noticeable float — starts after the graph finishes drawing.
-            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true).delay(3.6)) {
+            withAnimation(.easeInOut(duration: 2.6).repeatForever(autoreverses: true).delay(4.5)) {
                 floating = true
             }
         }
