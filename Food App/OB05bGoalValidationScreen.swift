@@ -1,5 +1,13 @@
 import SwiftUI
 
+/// Mid-flow goal-validation preview. Calm, single-card layout — the user
+/// can still adjust their plan from here, so this screen avoids the
+/// celebratory framing reserved for `OB10ReadyScreen`.
+///
+/// Visual vocabulary matches the rest of the redesigned onboarding flow
+/// (`OB02bSocialProofScreen`, `OB02eHowItWorksScreen`,
+/// `OB06PreferencesOptionalScreen`): chevron-only back bar, Instrument
+/// Serif headline, frosted-glass panels, singular warm-gold → mint accent.
 struct OB05bGoalValidationScreen: View {
     let draft: OnboardingDraft
     let metrics: OnboardingMetrics
@@ -7,10 +15,13 @@ struct OB05bGoalValidationScreen: View {
     let onContinue: () -> Void
     var onAdjustPlan: (() -> Void)? = nil
 
-    @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var appeared = false
-    @State private var pathProgress: CGFloat = 0
-    @State private var checkmarkScale: CGFloat = 0
+    @State private var cardVisible = false
+    @State private var kcalAnimatedValue: Double = 0
+    @State private var macrosVisible = false
+
+    // MARK: - Derived display values
 
     private var paceWeeks: Int {
         switch draft.pace ?? .balanced {
@@ -18,10 +29,6 @@ struct OB05bGoalValidationScreen: View {
         case .balanced: return 12
         case .aggressive: return 8
         }
-    }
-
-    private var paceLabel: String {
-        (draft.pace ?? .balanced).title.lowercased()
     }
 
     private var weightUnit: String {
@@ -32,14 +39,15 @@ struct OB05bGoalValidationScreen: View {
         "\(Int(draft.weightValue)) \(weightUnit)"
     }
 
-    private var goalDirection: String {
-        switch draft.goal {
-        case .lose: return "lose weight"
-        case .gain: return "gain muscle"
-        case .maintain: return "maintain weight"
-        case .none: return "reach your goal"
-        }
+    private var accentGradient: LinearGradient {
+        LinearGradient(
+            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
     }
+
+    // MARK: - Body
 
     var body: some View {
         ZStack {
@@ -51,456 +59,241 @@ struct OB05bGoalValidationScreen: View {
                     .padding(.horizontal, 16)
 
                 ScrollView(showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        // Headline
-                        VStack(spacing: 12) {
-                            Image(systemName: "checkmark.seal.fill")
-                                .font(.system(size: 48))
-                                .foregroundStyle(
-                                    LinearGradient(
-                                        colors: [Color(red: 0.20, green: 0.83, blue: 0.60), Color(red: 0.10, green: 0.70, blue: 0.50)],
-                                        startPoint: .topLeading,
-                                        endPoint: .bottomTrailing
-                                    )
-                                )
-                                .scaleEffect(checkmarkScale)
+                    VStack(spacing: 28) {
+                        heroBlock
+                            .padding(.top, 28)
+                            .padding(.horizontal, 24)
 
-                            Text("Your plan is ready")
-                                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 38))
-                                .foregroundStyle(colorScheme == .dark ? .white : .black)
-                                .multilineTextAlignment(.center)
-
-                            Text("Based on your profile, here's your starting target.")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                                .multilineTextAlignment(.center)
-                        }
-                        .padding(.top, 36)
-                        .padding(.horizontal, 20)
-                        .opacity(appeared ? 1 : 0)
-
-                        // Journey Timeline Card
-                        journeyCard
-                            .padding(.top, 32)
+                        planCard
                             .padding(.horizontal, 16)
-                            .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 20)
-
-                        // Daily Target Card
-                        dailyTargetCard
-                            .padding(.top, 16)
-                            .padding(.horizontal, 16)
-                            .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 20)
-
-                        // Macro Distribution Card
-                        macroDistributionCard
-                            .padding(.top, 16)
-                            .padding(.horizontal, 16)
-                            .opacity(appeared ? 1 : 0)
-                            .offset(y: appeared ? 0 : 20)
                     }
                     .padding(.bottom, 24)
                 }
 
-                VStack(spacing: 10) {
-                    Button(action: onContinue) {
-                        HStack(spacing: 8) {
-                            Text("Next")
-                                .font(.system(size: 16, weight: .bold))
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 14, weight: .bold))
-                        }
-                        .foregroundStyle(OnboardingGlassTheme.ctaForeground)
-                        .frame(width: 220, height: 60)
-                        .background(OnboardingGlassTheme.ctaBackground)
-                        .clipShape(Capsule())
-                    }
-                    .buttonStyle(.plain)
-
-                    if let onAdjustPlan {
-                        Button(action: onAdjustPlan) {
-                            Text("Adjust plan")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.bottom, 24)
+                actionButtons
+                    .padding(.bottom, 24)
             }
         }
-        .onAppear {
-            withAnimation(.easeOut(duration: 0.6)) {
-                appeared = true
-            }
-            withAnimation(.spring(response: 0.6, dampingFraction: 0.5).delay(0.3)) {
-                checkmarkScale = 1.0
-            }
-            withAnimation(.easeInOut(duration: 1.2).delay(0.5)) {
-                pathProgress = 1.0
-            }
-        }
+        .onAppear { runEntranceAnimation() }
     }
 
-    // MARK: - Top Bar
+    // MARK: - Top bar
 
     private var topBar: some View {
-        ZStack {
-            Text("Your Plan")
-                .font(.system(size: 17, weight: .semibold))
-                .foregroundStyle(colorScheme == .dark ? .white : .black)
-
-            HStack {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(colorScheme == .dark ? .white : .black)
-                        .frame(width: 44, height: 44)
-                        .background(
-                            Circle()
-                                .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.white)
-                                .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
-                        )
-                }
-                .buttonStyle(.plain)
-
-                Spacer()
+        HStack {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.black)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        Circle()
+                            .fill(Color.white)
+                            .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
+                    )
             }
+            .buttonStyle(.plain)
+
+            Spacer()
         }
         .frame(height: 44)
     }
 
-    // MARK: - Journey Card
+    // MARK: - Hero block
 
-    private var journeyCard: some View {
-        VStack(spacing: 20) {
-            // Weight labels
+    private var heroBlock: some View {
+        VStack(spacing: 8) {
+            Text("Here's your starting plan")
+                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 41))
+                .foregroundStyle(OnboardingGlassTheme.textPrimary)
+                .multilineTextAlignment(.center)
+
+            Text("You can adjust before you start logging.")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .opacity(appeared ? 1 : 0)
+        .offset(y: appeared ? 0 : 12)
+    }
+
+    // MARK: - Consolidated plan card
+
+    private var planCard: some View {
+        VStack(spacing: 0) {
+            timelineStrip
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 16)
+
+            Divider()
+                .background(OnboardingGlassTheme.panelStroke)
+                .padding(.horizontal, 20)
+
+            kcalHero
+                .padding(.horizontal, 20)
+                .padding(.top, 22)
+                .padding(.bottom, 18)
+
+            macroPillsRow
+                .padding(.horizontal, 20)
+                .padding(.bottom, 22)
+        }
+        .frame(maxWidth: .infinity)
+        .onboardingGlassPanel(cornerRadius: 22, fillOpacity: 0.07, strokeOpacity: 0.14)
+        .opacity(cardVisible ? 1 : 0)
+        .offset(y: cardVisible ? 0 : 16)
+    }
+
+    // MARK: - Timeline strip (compact, single row)
+
+    private var timelineStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text("TODAY")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(OnboardingGlassTheme.textMuted)
                     Text(currentWeight)
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(colorScheme == .dark ? .white : .black)
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(OnboardingGlassTheme.textPrimary)
                 }
-
-                Spacer()
-
-                Image(systemName: "arrow.right")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(OnboardingGlassTheme.textMuted)
 
                 Spacer()
 
                 VStack(alignment: .trailing, spacing: 2) {
                     Text("GOAL")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
                         .foregroundStyle(OnboardingGlassTheme.textMuted)
                     Text("\(paceWeeks) weeks")
-                        .font(.system(size: 20, weight: .bold))
-                        .foregroundStyle(Color(red: 0.20, green: 0.83, blue: 0.60))
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(OnboardingGlassTheme.textPrimary)
                 }
             }
 
-            // Animated progress path
-            GeometryReader { geo in
-                let width = geo.size.width
-                ZStack(alignment: .leading) {
-                    // Track
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(OnboardingGlassTheme.panelStroke)
-                        .frame(height: 6)
+            // Single accent track — no dots, no "Start/Midpoint/Target"
+            Capsule()
+                .fill(accentGradient)
+                .frame(height: 4)
 
-                    // Filled progress
-                    RoundedRectangle(cornerRadius: 4)
-                        .fill(
-                            LinearGradient(
-                                colors: [
-                                    Color(red: 0.20, green: 0.83, blue: 0.60),
-                                    Color(red: 0.10, green: 0.70, blue: 0.85)
-                                ],
-                                startPoint: .leading,
-                                endPoint: .trailing
-                            )
-                        )
-                        .frame(width: width * pathProgress, height: 6)
-
-                    // Milestone dots
-                    HStack {
-                        timelineDot(filled: pathProgress > 0)
-                        Spacer()
-                        timelineDot(filled: pathProgress > 0.5)
-                        Spacer()
-                        timelineDot(filled: pathProgress >= 1.0)
-                    }
-                }
-            }
-            .frame(height: 20)
-
-            // Timeline labels
-            HStack {
-                Text("Start")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(OnboardingGlassTheme.textMuted)
-                Spacer()
-                Text("Midpoint")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(OnboardingGlassTheme.textMuted)
-                Spacer()
-                Text("Target")
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Color(red: 0.20, green: 0.83, blue: 0.60))
-            }
-
-            // Projected date
             if !metrics.projectedGoalDate.isEmpty {
-                HStack(spacing: 6) {
-                    Image(systemName: "calendar")
-                        .font(.system(size: 13))
-                        .foregroundStyle(OnboardingGlassTheme.textMuted)
-                    Text("Projected: \(metrics.projectedGoalDate)")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                }
+                Text("Projected: \(metrics.projectedGoalDate)")
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(OnboardingGlassTheme.textMuted)
             }
         }
-        .padding(20)
-        .onboardingGlassPanel(cornerRadius: 22, fillOpacity: 0.06, strokeOpacity: 0.12)
     }
 
-    private func timelineDot(filled: Bool) -> some View {
-        Circle()
-            .fill(filled
-                ? Color(red: 0.20, green: 0.83, blue: 0.60)
-                : OnboardingGlassTheme.panelStroke
-            )
-            .frame(width: 14, height: 14)
-            .overlay(
-                Circle()
-                    .fill(Color.white)
-                    .frame(width: 6, height: 6)
-                    .opacity(filled ? 1 : 0)
-            )
-            .scaleEffect(filled ? 1.0 : 0.8)
-            .animation(.spring(response: 0.4, dampingFraction: 0.6), value: filled)
-    }
+    // MARK: - Kcal hero
 
-    // MARK: - Daily Target Card
+    private var kcalHero: some View {
+        VStack(spacing: 4) {
+            Text("DAILY TARGET")
+                .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                .foregroundStyle(OnboardingGlassTheme.textMuted)
 
-    private var dailyTargetCard: some View {
-        HStack(spacing: 14) {
-            Image(systemName: "flame.fill")
-                .font(.system(size: 28))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color.orange, Color.red],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
+            HStack(alignment: .lastTextBaseline, spacing: 4) {
+                RollingNumberText(value: kcalAnimatedValue, fractionDigits: 0)
+                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 46))
+                    .foregroundStyle(accentGradient)
 
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Your daily target")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(colorScheme == .dark ? .white : .black)
-
-                Text("\(metrics.targetKcal) kcal/day — with \(metrics.proteinTarget)g protein, \(metrics.carbTarget)g carbs, \(metrics.fatTarget)g fat.")
-                    .font(.system(size: 14, weight: .regular))
+                Text("kcal")
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .offset(y: -4)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text("Daily target \(metrics.targetKcal) kilocalories"))
         }
-        .padding(16)
-        .onboardingGlassPanel(cornerRadius: 18, fillOpacity: 0.06, strokeOpacity: 0.12)
+        .frame(maxWidth: .infinity)
     }
 
-    // MARK: - Macro Distribution Card
+    // MARK: - Macro pills
 
-    private var macroSlices: [GoalValidationMacroSlice] {
-        [
-            GoalValidationMacroSlice(
-                name: "Protein",
-                grams: metrics.proteinTarget,
-                caloriesPerGram: 4,
-                startColor: Color(red: 0.34, green: 0.56, blue: 1.00),
-                endColor: Color(red: 0.60, green: 0.41, blue: 1.00)
-            ),
-            GoalValidationMacroSlice(
-                name: "Carbs",
-                grams: metrics.carbTarget,
-                caloriesPerGram: 4,
-                startColor: Color(red: 0.20, green: 0.90, blue: 0.62),
-                endColor: Color(red: 0.71, green: 0.94, blue: 0.35)
-            ),
-            GoalValidationMacroSlice(
-                name: "Fat",
-                grams: metrics.fatTarget,
-                caloriesPerGram: 9,
-                startColor: Color(red: 1.00, green: 0.61, blue: 0.26),
-                endColor: Color(red: 1.00, green: 0.37, blue: 0.41)
-            )
-        ]
-        .filter { $0.grams > 0 }
+    private var macroPillsRow: some View {
+        HStack(spacing: 10) {
+            macroPill(label: "Protein", grams: metrics.proteinTarget, index: 0)
+            macroPill(label: "Carbs", grams: metrics.carbTarget, index: 1)
+            macroPill(label: "Fat", grams: metrics.fatTarget, index: 2)
+        }
     }
 
-    private var totalMacroCalories: Double {
-        macroSlices.reduce(0) { $0 + $1.calories }
-    }
-
-    private var macroDistributionCard: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(spacing: 8) {
-                Circle()
-                    .fill(OnboardingGlassTheme.textPrimary.opacity(0.95))
-                    .frame(width: 7, height: 7)
-                Text("MACRO DISTRIBUTION")
-                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(OnboardingGlassTheme.textPrimary.opacity(0.9))
-            }
-
-            HStack(alignment: .center, spacing: 14) {
-                GoalValidationDonutChart(
-                    slices: macroSlices,
-                    totalCalories: totalMacroCalories
-                )
-                .frame(width: 126, height: 126)
-
-                VStack(alignment: .leading, spacing: 10) {
-                    ForEach(macroSlices) { slice in
-                        GoalValidationMacroLegendRow(
-                            slice: slice,
-                            totalCalories: totalMacroCalories
-                        )
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
+    private func macroPill(label: String, grams: Int, index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label.uppercased())
+                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                .foregroundStyle(OnboardingGlassTheme.textMuted)
+            Text("\(grams)g")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(OnboardingGlassTheme.textPrimary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .onboardingGlassPanel(
-            cornerRadius: OnboardingGlassMetrics.cornerRadius,
-            fillOpacity: 0.07,
-            strokeOpacity: 0.14
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .onboardingGlassPanel(cornerRadius: 12, fillOpacity: 0.10, strokeOpacity: 0.14)
+        .opacity(macrosVisible ? 1 : 0)
+        .offset(y: macrosVisible ? 0 : 6)
+        .animation(
+            reduceMotion ? .none : .easeOut(duration: 0.4).delay(Double(index) * 0.08),
+            value: macrosVisible
         )
-    }
-}
-
-// MARK: - Macro Supporting Types
-
-private struct GoalValidationMacroSlice: Identifiable {
-    let id = UUID()
-    let name: String
-    let grams: Int
-    let caloriesPerGram: Double
-    let startColor: Color
-    let endColor: Color
-
-    var calories: Double {
-        Double(grams) * caloriesPerGram
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("\(label): \(grams) grams"))
     }
 
-    func fraction(totalCalories: Double) -> Double {
-        guard totalCalories > 0 else { return 0 }
-        return calories / totalCalories
-    }
-}
+    // MARK: - Action buttons
 
-private struct GoalValidationDonutChart: View {
-    let slices: [GoalValidationMacroSlice]
-    let totalCalories: Double
-
-    @State private var reveal: Double = 0
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(OnboardingGlassTheme.panelStroke.opacity(0.6), lineWidth: 16)
-
-            ForEach(Array(slices.enumerated()), id: \.element.id) { index, slice in
-                let start = startFraction(at: index)
-                let end = start + slice.fraction(totalCalories: totalCalories) * reveal
-
-                Circle()
-                    .trim(from: start, to: end)
-                    .stroke(
-                        AngularGradient(
-                            colors: [slice.startColor, slice.endColor],
-                            center: .center
-                        ),
-                        style: StrokeStyle(lineWidth: 16, lineCap: .round)
-                    )
-                    .rotationEffect(.degrees(-90))
-                    .shadow(color: slice.endColor.opacity(0.42), radius: 4, y: 1)
+    private var actionButtons: some View {
+        VStack(spacing: 10) {
+            Button(action: onContinue) {
+                HStack(spacing: 8) {
+                    Text("Next")
+                        .font(.system(size: 16, weight: .bold))
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 14, weight: .bold))
+                }
+                .foregroundStyle(OnboardingGlassTheme.ctaForeground)
+                .frame(width: 220, height: 60)
+                .background(OnboardingGlassTheme.ctaBackground)
+                .clipShape(Capsule())
             }
+            .buttonStyle(.plain)
 
-            VStack(spacing: 2) {
-                RollingNumberText(
-                    value: totalCalories.rounded(),
-                    fractionDigits: 0,
-                    suffix: " kcal"
-                )
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(OnboardingGlassTheme.textPrimary)
-
-                Text("macro energy")
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
-                    .foregroundStyle(OnboardingGlassTheme.textMuted)
-            }
-        }
-        .onAppear {
-            reveal = 0
-            withAnimation(.spring(response: 0.85, dampingFraction: 0.88)) {
-                reveal = 1
+            if let onAdjustPlan {
+                Button(action: onAdjustPlan) {
+                    Text("Adjust plan")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                }
+                .buttonStyle(.plain)
             }
         }
     }
 
-    private func startFraction(at index: Int) -> Double {
-        guard totalCalories > 0 else { return 0 }
-        let priorCalories = slices.prefix(index).reduce(0) { $0 + $1.calories }
-        return priorCalories / totalCalories
-    }
-}
+    // MARK: - Entrance animation
 
-private struct GoalValidationMacroLegendRow: View {
-    let slice: GoalValidationMacroSlice
-    let totalCalories: Double
+    private func runEntranceAnimation() {
+        if reduceMotion {
+            appeared = true
+            cardVisible = true
+            kcalAnimatedValue = Double(metrics.targetKcal)
+            macrosVisible = true
+            return
+        }
 
-    private var percentText: String {
-        guard totalCalories > 0 else { return "0%" }
-        let percent = Int((slice.calories / totalCalories * 100).rounded())
-        return "\(percent)%"
-    }
-
-    var body: some View {
-        HStack(spacing: 8) {
-            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [slice.startColor, slice.endColor],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
-                .frame(width: 9, height: 9)
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(slice.name)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
-                Text("\(slice.grams)g")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-            }
-
-            Spacer(minLength: 8)
-
-            Text(percentText)
-                .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                .foregroundStyle(OnboardingGlassTheme.textSecondary)
+        withAnimation(.easeOut(duration: 0.4)) {
+            appeared = true
+        }
+        withAnimation(.easeOut(duration: 0.5).delay(0.15)) {
+            cardVisible = true
+        }
+        // Kcal rolls in from 0 — RollingNumberText handles the inner animation.
+        withAnimation(.spring(response: 0.7, dampingFraction: 0.85).delay(0.4)) {
+            kcalAnimatedValue = Double(metrics.targetKcal)
+        }
+        // Macro pills cascade with a small stagger (handled per-pill).
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.65) {
+            macrosVisible = true
         }
     }
 }
