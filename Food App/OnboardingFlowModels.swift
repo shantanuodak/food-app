@@ -574,7 +574,9 @@ extension OnboardingRoute {
         case .account:
             return "Save your setup"
         case .permissions:
-            return "Optional permissions"
+            return "Apple Health"
+        case .notificationsPermission:
+            return "Notifications"
         case .ready:
             return "You’re all set"
         case .goalValidation:
@@ -613,7 +615,9 @@ extension OnboardingRoute {
         case .account:
             return "Create or connect an account to keep your progress synced."
         case .permissions:
-            return "Health and reminders can be enabled now or later in Settings."
+            return "Optional. Sync activity automatically — you can change this later in Settings."
+        case .notificationsPermission:
+            return "Optional. Helpful reminders to stay consistent — you can change this later in Settings."
         case .ready:
             return "You’re ready to log your first meal."
         case .goalValidation:

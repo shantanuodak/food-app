@@ -25,6 +25,10 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
     case experience = 15
     case howItWorks = 16
     case challengeInsight = 17
+    /// Notifications permission — split out from the original `.permissions`
+    /// route (which is now Apple-Health-only). Sits immediately after it so
+    /// the user is asked one decision per screen.
+    case notificationsPermission = 18
 
     static let activeFlow: [OnboardingRoute] = [
         .welcome,
@@ -38,9 +42,16 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
         .baseline,
         .activity,
         .pace,
+        // Preferences + allergies sit between pace and goalValidation:
+        // they're the last bit of profile data we collect before showing
+        // the user their plan, and the parse pipeline relies on the
+        // allergies set to surface dietary-conflict flags.
+        .preferencesOptional,
         .goalValidation,
         .account,
+        // `.permissions` is Apple-Health-only; notifications are next.
         .permissions,
+        .notificationsPermission,
         .ready
     ]
 
@@ -63,7 +74,8 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
         case .preferencesOptional: return "Preferences"
         case .planPreview: return "Plan Preview"
         case .account: return "Account"
-        case .permissions: return "Permissions"
+        case .permissions: return "Apple Health"
+        case .notificationsPermission: return "Notifications"
         case .ready: return "Ready"
         }
     }
@@ -76,6 +88,9 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
         case .activity: return 4
         case .pace: return 5
         case .goalValidation: return 6
+        // .preferencesOptional intentionally has no progress step — the
+        // redesigned screen is self-contained and doesn't render the
+        // wrapper progress bar.
         default: return nil
         }
     }
@@ -108,12 +123,11 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
     }
 
     var normalizedForActiveFlow: OnboardingRoute {
-        switch self {
-        case .preferencesOptional:
-            return .goalValidation
-        default:
-            return self
-        }
+        // Was used to redirect away from `.preferencesOptional` when it was
+        // pulled from the active flow. Now that the route is back, every
+        // case maps to itself — the function is kept as a hook for future
+        // route deprecations.
+        return self
     }
 }
 
