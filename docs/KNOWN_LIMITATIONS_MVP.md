@@ -18,6 +18,7 @@
 - Internal metrics/alerts endpoints use shared header key; no per-role auth layer yet.
 - Alerting is exposed via internal API and runbook; external alert delivery integrations (Slack/PagerDuty) are not wired in this repo.
 - Replay benchmark harness is local/script-based and not yet scheduled in CI.
+- Challenge-driven local notifications (`food-app.consistency.lunch` / `food-app.consistency.dinner`) for users who picked "Inconsistent meals" fire at fixed times (12:30 / 19:30) and do **not** check whether the user has already logged that day. Per-day skip-already-logged logic requires a `UNNotificationServiceExtension` or rolling per-day rebuild and is deferred post-MVP. Users may receive a "Lunch check-in" even after they've already logged lunch.
 
 ## 4) Data and Reliability Tradeoffs
 - Food matching quality is strongest for common foods/phrases; uncommon restaurant dishes may fall back to clarification.
