@@ -139,6 +139,11 @@ struct ParseBudget: Decodable {
     let escalationAllowed: Bool?
 }
 
+/// Marker source id the backend sets on items the parser couldn't
+/// resolve. Mirrors `UNRESOLVED_PLACEHOLDER_SOURCE_ID` in
+/// `backend/src/services/parsePipelineService.ts` — keep both in sync.
+let kUnresolvedPlaceholderSourceId = "unresolved_placeholder"
+
 struct ParsedFoodItem: Codable, Hashable {
     let name: String
     let quantity: Double
@@ -160,6 +165,13 @@ struct ParsedFoodItem: Codable, Hashable {
     let servingOptions: [ParsedServingOption]?
     let foodDescription: String?
     let explanation: String?
+
+    /// True when the backend emitted this as a placeholder for a segment
+    /// it couldn't parse. iOS uses this to render the red exclamation
+    /// badge on the row and the per-item Retry button in the drawer.
+    var isUnresolvedPlaceholder: Bool {
+        nutritionSourceId == kUnresolvedPlaceholderSourceId
+    }
 
     init(
         name: String,

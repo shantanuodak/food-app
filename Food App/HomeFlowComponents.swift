@@ -135,6 +135,19 @@ struct HomeLogRow: Identifiable, Equatable {
         return false
     }
 
+    /// True when the row's parsed items contain ≥1 backend-emitted
+    /// unresolved placeholder. Distinct from `isUnresolved` (whole-row
+    /// failure) — this signals a *partial* failure where some segments
+    /// parsed and some didn't. Drives the red exclamation badge next to
+    /// the calorie value and the per-item Retry buttons in the drawer.
+    var hasUnresolvedItems: Bool {
+        parsedItems.contains(where: { $0.isUnresolvedPlaceholder })
+    }
+
+    var unresolvedItemCount: Int {
+        parsedItems.filter { $0.isUnresolvedPlaceholder }.count
+    }
+
     var loadingRouteHint: LoadingRouteHint? {
         if case let .active(routeHint, _) = parsePhase {
             return routeHint
@@ -692,16 +705,31 @@ struct HM01LogComposerSection: View {
                 Button {
                     onCaloriesTapped(row)
                 } label: {
-                    Group {
-                        if row.isApproximate {
-                            Text("~\(calories) cal")
-                        } else {
-                            RollingNumberText(value: Double(calories), suffix: " cal")
+                    HStack(spacing: 6) {
+                        // Red exclamation badge when one or more parsed items
+                        // are placeholders. Tap routes to the same drawer as
+                        // the calorie label, where the user can retry the
+                        // unresolved segments.
+                        if showCalories && row.hasUnresolvedItems {
+                            Image(systemName: "exclamationmark.circle.fill")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(.red)
+                                .accessibilityLabel(
+                                    Text("\(row.unresolvedItemCount) item\(row.unresolvedItemCount == 1 ? "" : "s") couldn't parse")
+                                )
                         }
+
+                        Group {
+                            if row.isApproximate {
+                                Text("~\(calories) cal")
+                            } else {
+                                RollingNumberText(value: Double(calories), suffix: " cal")
+                            }
+                        }
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
                     }
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
                     .frame(maxWidth: .infinity, alignment: .trailing)
                     .contentShape(Rectangle())
                 }

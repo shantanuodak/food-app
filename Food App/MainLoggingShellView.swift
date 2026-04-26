@@ -68,6 +68,10 @@ struct MainLoggingShellView: View {
     @State private var inputMode: HomeInputMode = .text
     @State private var detailsDrawerMode: DetailsDrawerMode = .full
     @State private var selectedRowDetails: RowCalorieDetails?
+    /// Per-(row, itemIndex) retry tracking for unresolved placeholders.
+    /// Key format: "<rowUUID>-<itemIndex>". Drives the in-flight spinner
+    /// on Retry buttons in the drawer + dedupes concurrent taps.
+    @State private var retryingPlaceholderKeys: Set<String> = []
     @State private var activeEditingRowID: UUID?
     @State private var selectedCameraSource: CameraInputSource?
     @State private var isImagePickerPresented = false
@@ -1178,38 +1182,42 @@ struct MainLoggingShellView: View {
                         VStack(alignment: .leading, spacing: 10) {
                             Text("Items")
                                 .font(.headline)
-                            ForEach(Array(liveDetails.parsedItems.enumerated()), id: \.offset) { _, item in
-                                HStack(alignment: .center, spacing: 10) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.name)
-                                            .font(.subheadline.weight(.medium))
-                                        Text("\(item.quantity.formatted()) \(item.unit)")
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                    }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text("\(Int(item.calories.rounded())) cal")
-                                            .font(.subheadline.weight(.semibold))
-                                        if let protein = Optional(item.protein),
-                                           let carbs = Optional(item.carbs),
-                                           let fat = Optional(item.fat) {
-                                            Text("P \(formatOneDecimal(protein))g · C \(formatOneDecimal(carbs))g · F \(formatOneDecimal(fat))g")
-                                                .font(.caption2)
+                            ForEach(Array(liveDetails.parsedItems.enumerated()), id: \.offset) { idx, item in
+                                if item.isUnresolvedPlaceholder {
+                                    unresolvedItemRow(rowID: liveDetails.id, itemIndex: idx, item: item)
+                                } else {
+                                    HStack(alignment: .center, spacing: 10) {
+                                        VStack(alignment: .leading, spacing: 2) {
+                                            Text(item.name)
+                                                .font(.subheadline.weight(.medium))
+                                            Text("\(item.quantity.formatted()) \(item.unit)")
+                                                .font(.caption)
                                                 .foregroundStyle(.secondary)
                                         }
+                                        Spacer()
+                                        VStack(alignment: .trailing, spacing: 2) {
+                                            Text("\(Int(item.calories.rounded())) cal")
+                                                .font(.subheadline.weight(.semibold))
+                                            if let protein = Optional(item.protein),
+                                               let carbs = Optional(item.carbs),
+                                               let fat = Optional(item.fat) {
+                                                Text("P \(formatOneDecimal(protein))g · C \(formatOneDecimal(carbs))g · F \(formatOneDecimal(fat))g")
+                                                    .font(.caption2)
+                                                    .foregroundStyle(.secondary)
+                                            }
+                                        }
                                     }
+                                    .padding(.vertical, 8)
+                                    .padding(.horizontal, 12)
+                                    .background(
+                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                            .fill(detailCardFillColor)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                                    .stroke(detailBorderColor, lineWidth: 1)
+                                            )
+                                    )
                                 }
-                                .padding(.vertical, 8)
-                                .padding(.horizontal, 12)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(detailCardFillColor)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                .stroke(detailBorderColor, lineWidth: 1)
-                                        )
-                                )
                             }
                         }
                     }
@@ -2112,6 +2120,127 @@ struct MainLoggingShellView: View {
         case .photo:
             imagePickerSourceType = .photoLibrary
             isImagePickerPresented = true
+        }
+    }
+
+    /// Drawer row for an unresolved-placeholder item. Shows the original
+    /// segment text + a Retry button (or a spinner while a retry is
+    /// in flight). Tapping Retry calls `retryUnresolvedItem`.
+    @ViewBuilder
+    private func unresolvedItemRow(rowID: UUID, itemIndex: Int, item: ParsedFoodItem) -> some View {
+        let key = "\(rowID.uuidString)-\(itemIndex)"
+        let isRetrying = retryingPlaceholderKeys.contains(key)
+
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.red)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(item.name)
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+                Text("Couldn't parse — tap Retry")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Button {
+                Task { await retryUnresolvedItem(rowID: rowID, itemIndex: itemIndex) }
+            } label: {
+                Group {
+                    if isRetrying {
+                        ProgressView()
+                            .controlSize(.small)
+                            .tint(.primary)
+                    } else {
+                        Text("Retry")
+                            .font(.subheadline.weight(.semibold))
+                    }
+                }
+                .frame(width: 64, height: 32)
+                .background(
+                    Capsule().fill(Color.red.opacity(0.12))
+                )
+                .overlay(
+                    Capsule().stroke(Color.red.opacity(0.35), lineWidth: 1)
+                )
+                .foregroundStyle(.red)
+            }
+            .buttonStyle(.plain)
+            .disabled(isRetrying)
+            .accessibilityLabel(Text("Retry parsing \(item.name)"))
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.red.opacity(0.04))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(Color.red.opacity(0.18), lineWidth: 1)
+                )
+        )
+    }
+
+    // MARK: - Per-item Retry (drawer)
+    //
+    // When the segment-aware parser couldn't resolve a segment it emits a
+    // placeholder item; the drawer renders that with a Retry button.
+    // Retry re-parses just that segment text and replaces the placeholder
+    // with the new item if the second pass succeeds. In-memory only —
+    // saved-row persistence (PATCH) is queued as a separate follow-up.
+
+    @MainActor
+    private func retryUnresolvedItem(rowID: UUID, itemIndex: Int) async {
+        let key = "\(rowID.uuidString)-\(itemIndex)"
+        guard !retryingPlaceholderKeys.contains(key) else { return }
+        retryingPlaceholderKeys.insert(key)
+        defer { retryingPlaceholderKeys.remove(key) }
+
+        guard let rowIndex = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
+        guard itemIndex < inputRows[rowIndex].parsedItems.count else { return }
+        let placeholder = inputRows[rowIndex].parsedItems[itemIndex]
+        guard placeholder.isUnresolvedPlaceholder else { return }
+
+        let segmentText = placeholder.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !segmentText.isEmpty else { return }
+
+        let loggedAtIso = HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+        let request = ParseLogRequest(text: segmentText, loggedAt: loggedAtIso)
+
+        do {
+            let response = try await appStore.apiClient.parseLog(request)
+
+            // Pick the first non-placeholder item the retry produced.
+            // If the retry ALSO came back as a placeholder, leave the
+            // existing one in place — the user can edit the text or try
+            // again.
+            guard let resolved = response.items.first(where: { !$0.isUnresolvedPlaceholder }) else {
+                return
+            }
+
+            // Re-validate the row + item index — the row may have been
+            // edited or removed during the in-flight retry.
+            guard let freshRowIndex = inputRows.firstIndex(where: { $0.id == rowID }),
+                  itemIndex < inputRows[freshRowIndex].parsedItems.count,
+                  inputRows[freshRowIndex].parsedItems[itemIndex].isUnresolvedPlaceholder else {
+                return
+            }
+
+            inputRows[freshRowIndex].parsedItems[itemIndex] = resolved
+
+            // Recompute row totals from the updated items so the row's
+            // headline calorie reflects the freshly-parsed item.
+            let totalCalories = inputRows[freshRowIndex].parsedItems.reduce(0.0) { $0 + $1.calories }
+            inputRows[freshRowIndex].calories = Int(totalCalories.rounded())
+            inputRows[freshRowIndex].showCalorieUpdateShimmer = true
+        } catch {
+            // Soft fail — keep placeholder. The button stays available.
+            // We could surface a toast here in a follow-up.
         }
     }
 
