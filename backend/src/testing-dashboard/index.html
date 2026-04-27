@@ -406,6 +406,7 @@
                   <th>Input</th>
                   <th>Route</th>
                   <th>Expected Cal</th>
+                  <th>Benchmark</th>
                   <th>Actual Cal</th>
                   <th>Confidence</th>
                   <th>Keywords</th>
@@ -704,6 +705,15 @@ function routeBadge(r) {
   const map = { gemini:'badge-blue', cache:'badge-green', deterministic:'badge-muted', unresolved:'badge-red', error:'badge-red' };
   return `<span class="badge ${map[r] || 'badge-muted'}">${r || '—'}</span>`;
 }
+function escapeHtml(value) {
+  return String(value || '').replace(/[&<>"']/g, ch => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;'
+  }[ch]));
+}
 
 /* ====================================================================== */
 /* OVERVIEW */
@@ -880,12 +890,17 @@ function renderEvalResult(result) {
     const calRange = c.expectedCaloriesMax < 99999
       ? `${c.expectedCaloriesMin}–${c.expectedCaloriesMax}`
       : '—';
+    const benchmarkTitle = escapeHtml([c.benchmarkNotes, c.benchmarkReference].filter(Boolean).join(' '));
+    const benchmarkSource = escapeHtml(c.benchmarkSource || '—');
     tbody.innerHTML += `
       <tr>
         <td><span class="badge badge-muted">${c.cuisine}</span></td>
         <td class="truncate" title="${c.input}">${c.input}</td>
         <td>${routeBadge(c.route)}</td>
         <td class="mono text-muted">${calRange}</td>
+        <td title="${benchmarkTitle}">
+          <span class="badge ${c.benchmarkConfidence === 'high' ? 'badge-green' : c.benchmarkConfidence === 'medium' ? 'badge-blue' : 'badge-muted'}">${benchmarkSource}</span>
+        </td>
         <td class="mono">${fmt(c.actualCalories)}</td>
         <td class="mono ${confClass(c.confidence)}">${fmt(c.confidence, 2)}</td>
         <td>${kwBadge}</td>

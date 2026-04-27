@@ -1,6 +1,11 @@
 import { performance } from 'node:perf_hooks';
 import { runPrimaryParsePipeline } from './parsePipelineService.js';
 import { pool } from '../db.js';
+import {
+  type BenchmarkConfidence,
+  type BenchmarkSpec,
+  resolveNutritionBenchmark
+} from './nutritionBenchmarkService.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -13,6 +18,10 @@ export type EvalCaseResult = {
   actualCalories: number;
   expectedCaloriesMin: number;
   expectedCaloriesMax: number;
+  benchmarkSource: string;
+  benchmarkConfidence: BenchmarkConfidence;
+  benchmarkNotes: string;
+  benchmarkReference?: string;
   detectedItems: string;
   passKeywords: boolean;
   passCalories: boolean;
@@ -58,6 +67,7 @@ type GoldenCase = {
   text: string;
   expectedKeywords: string[];
   caloriesRange?: { min: number; max: number };
+  benchmark?: BenchmarkSpec;
 };
 
 export type EvalCaseSet = 'golden' | 'exploration' | 'combined';
@@ -71,8 +81,34 @@ export type EvalRunOptions = {
 };
 
 const GOLDEN_CASES: GoldenCase[] = [
-  { cuisine: 'American', text: 'Black Coffee 1 Cup', expectedKeywords: ['coffee'], caloriesRange: { min: 0, max: 15 } },
-  { cuisine: 'American', text: 'Coke 8oz', expectedKeywords: ['coke', 'cola', 'soft drink', 'soda'], caloriesRange: { min: 60, max: 120 } },
+  {
+    cuisine: 'American',
+    text: 'Black Coffee 1 Cup',
+    expectedKeywords: ['coffee'],
+    caloriesRange: { min: 0, max: 15 },
+    benchmark: usdaBenchmark(
+      { min: 0, max: 15 },
+      'coffee, brewed',
+      237,
+      'USDA-backed benchmark for one 8 fl oz cup of brewed black coffee.',
+      0.75,
+      10
+    )
+  },
+  {
+    cuisine: 'American',
+    text: 'Coke 8oz',
+    expectedKeywords: ['coke', 'cola', 'soft drink', 'soda'],
+    caloriesRange: { min: 60, max: 120 },
+    benchmark: usdaBenchmark(
+      { min: 60, max: 120 },
+      'cola regular',
+      240,
+      'USDA-backed benchmark for 8 fl oz of regular cola.',
+      0.2,
+      10
+    )
+  },
   { cuisine: 'American', text: 'Cheeseburger 1 burger', expectedKeywords: ['cheeseburger', 'burger'], caloriesRange: { min: 250, max: 900 } },
   { cuisine: 'American', text: 'Pepperoni Pizza 2 slices', expectedKeywords: ['pizza', 'pepperoni'], caloriesRange: { min: 300, max: 900 } },
   { cuisine: 'American', text: 'Caesar Salad with Chicken', expectedKeywords: ['caesar', 'salad', 'chicken'], caloriesRange: { min: 180, max: 800 } },
@@ -133,10 +169,47 @@ const GOLDEN_CASES: GoldenCase[] = [
 ];
 
 const EXPLORATION_SEEDS: GoldenCase[] = [
-  { cuisine: 'Indian', text: 'cold coffee 8 oz', expectedKeywords: ['cold', 'coffee'], caloriesRange: { min: 80, max: 350 } },
+  {
+    cuisine: 'Indian',
+    text: 'cold coffee 8 oz',
+    expectedKeywords: ['cold', 'coffee'],
+    caloriesRange: { min: 80, max: 350 },
+    benchmark: curatedBenchmark(
+      { min: 80, max: 350 },
+      'Curated cuisine benchmark',
+      'Indian cold coffee commonly implies milk and sugar unless the user says black coffee.',
+      'medium'
+    )
+  },
   { cuisine: 'Indian', text: 'Indian cold coffee 1 glass', expectedKeywords: ['cold', 'coffee'], caloriesRange: { min: 120, max: 450 } },
-  { cuisine: 'American', text: 'black iced coffee 8 oz', expectedKeywords: ['coffee'], caloriesRange: { min: 0, max: 20 } },
-  { cuisine: 'American', text: 'cold brew coffee 8 oz', expectedKeywords: ['coffee'], caloriesRange: { min: 0, max: 25 } },
+  {
+    cuisine: 'American',
+    text: 'black iced coffee 8 oz',
+    expectedKeywords: ['coffee'],
+    caloriesRange: { min: 0, max: 20 },
+    benchmark: usdaBenchmark(
+      { min: 0, max: 20 },
+      'coffee, brewed',
+      237,
+      'USDA-backed benchmark for unsweetened black iced coffee.',
+      0.75,
+      10
+    )
+  },
+  {
+    cuisine: 'American',
+    text: 'cold brew coffee 8 oz',
+    expectedKeywords: ['coffee'],
+    caloriesRange: { min: 0, max: 25 },
+    benchmark: usdaBenchmark(
+      { min: 0, max: 25 },
+      'coffee, brewed',
+      237,
+      'USDA-backed benchmark for unsweetened cold brew coffee.',
+      0.75,
+      10
+    )
+  },
   { cuisine: 'Indian', text: 'masala chai 1 cup', expectedKeywords: ['chai', 'tea'], caloriesRange: { min: 40, max: 220 } },
   { cuisine: 'Indian', text: 'sweet lassi 1 glass', expectedKeywords: ['lassi'], caloriesRange: { min: 120, max: 420 } },
   { cuisine: 'Indian', text: 'mango lassi 12 oz', expectedKeywords: ['mango', 'lassi'], caloriesRange: { min: 180, max: 650 } },
@@ -178,7 +251,15 @@ function generatedExplorationCases(): GoldenCase[] {
       generated.push({
         ...seed,
         text: `${baseName} ${portion}`,
-        caloriesRange: widenRange(seed.caloriesRange)
+        caloriesRange: widenRange(seed.caloriesRange),
+        benchmark: seed.caloriesRange
+          ? curatedBenchmark(
+              widenRange(seed.caloriesRange)!,
+              'Generated exploration range',
+              'Generated from a seed case with a deliberately widened range because the portion variant has not been individually sourced.',
+              'low'
+            )
+          : undefined
       });
     }
   }
@@ -191,6 +272,53 @@ function widenRange(range?: { min: number; max: number }): { min: number; max: n
     min: Math.max(0, Math.floor(range.min * 0.5)),
     max: Math.ceil(range.max * 1.8)
   };
+}
+
+function curatedBenchmark(
+  range: { min: number; max: number },
+  label: string,
+  notes: string,
+  confidence: BenchmarkConfidence = 'medium'
+): BenchmarkSpec {
+  return {
+    range,
+    source: {
+      type: 'curated',
+      label,
+      confidence,
+      notes
+    }
+  };
+}
+
+function usdaBenchmark(
+  range: { min: number; max: number },
+  query: string,
+  grams: number,
+  notes: string,
+  tolerancePct = 0.25,
+  minToleranceCalories = 15
+): BenchmarkSpec {
+  return {
+    ...curatedBenchmark(range, 'Curated fallback benchmark', notes, 'medium'),
+    usda: {
+      query,
+      grams,
+      tolerancePct,
+      minToleranceCalories
+    }
+  };
+}
+
+function benchmarkForCase(testCase: GoldenCase): BenchmarkSpec | undefined {
+  if (testCase.benchmark) return testCase.benchmark;
+  if (!testCase.caloriesRange) return undefined;
+  return curatedBenchmark(
+    testCase.caloriesRange,
+    'Curated eval range',
+    'Hand-authored calorie range used as a broad sanity check until this case is upgraded to a sourced benchmark.',
+    'low'
+  );
 }
 
 function dedupeCases(cases: GoldenCase[]): GoldenCase[] {
@@ -252,6 +380,7 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
 
   for (const testCase of evalCases) {
     const caseStart = performance.now();
+    const benchmark = await resolveNutritionBenchmark(benchmarkForCase(testCase));
 
     let output;
     try {
@@ -266,8 +395,12 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
         input: testCase.text,
         route: 'error',
         actualCalories: 0,
-        expectedCaloriesMin: testCase.caloriesRange?.min ?? 0,
-        expectedCaloriesMax: testCase.caloriesRange?.max ?? 99999,
+        expectedCaloriesMin: benchmark.range.min,
+        expectedCaloriesMax: benchmark.range.max,
+        benchmarkSource: benchmark.sourceLabel,
+        benchmarkConfidence: benchmark.confidence,
+        benchmarkNotes: benchmark.notes,
+        benchmarkReference: benchmark.reference,
         detectedItems: '',
         passKeywords: false,
         passCalories: false,
@@ -283,9 +416,7 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
     const names = output.result.items.map((item) => item.name).join(' | ');
     const totalCalories = output.result.totals.calories;
     const passKeywords = includesAnyKeyword(names, testCase.expectedKeywords);
-    const passCalories = testCase.caloriesRange
-      ? totalCalories >= testCase.caloriesRange.min && totalCalories <= testCase.caloriesRange.max
-      : true;
+    const passCalories = totalCalories >= benchmark.range.min && totalCalories <= benchmark.range.max;
     const pass = passKeywords && passCalories;
 
     // Track by cuisine
@@ -301,8 +432,12 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
       input: testCase.text,
       route: output.route,
       actualCalories: round(totalCalories),
-      expectedCaloriesMin: testCase.caloriesRange?.min ?? 0,
-      expectedCaloriesMax: testCase.caloriesRange?.max ?? 99999,
+      expectedCaloriesMin: benchmark.range.min,
+      expectedCaloriesMax: benchmark.range.max,
+      benchmarkSource: benchmark.sourceLabel,
+      benchmarkConfidence: benchmark.confidence,
+      benchmarkNotes: benchmark.notes,
+      benchmarkReference: benchmark.reference,
       detectedItems: names,
       passKeywords,
       passCalories,
