@@ -34,6 +34,7 @@ export type BenchmarkSpec = {
 
 export type ResolvedBenchmark = {
   range: CaloriesRange;
+  hasUsableRange: boolean;
   sourceType: BenchmarkSourceType;
   sourceLabel: string;
   confidence: BenchmarkConfidence;
@@ -106,6 +107,7 @@ export async function resolveNutritionBenchmark(
   if (!spec) {
     return {
       range: { min: 0, max: 99999 },
+      hasUsableRange: false,
       sourceType: 'curated',
       sourceLabel: 'No benchmark',
       confidence: 'low',
@@ -131,6 +133,7 @@ export async function resolveNutritionBenchmark(
   if (!providers.includes('curated')) {
     return {
       range: { min: 0, max: 99999 },
+      hasUsableRange: false,
       sourceType: 'curated_fallback',
       sourceLabel: 'No enabled benchmark',
       confidence: 'low',
@@ -147,6 +150,7 @@ export async function resolveNutritionBenchmark(
 
   return {
     range: spec.range,
+    hasUsableRange: true,
     sourceType: failedProviders.length ? 'curated_fallback' : 'curated',
     sourceLabel: spec.source.label,
     confidence: spec.source.confidence,
@@ -195,6 +199,7 @@ async function resolveUsdaBenchmark(spec: BenchmarkSpec): Promise<ResolvedBenchm
         min: Math.max(0, Math.floor(expectedCalories - tolerance)),
         max: Math.ceil(expectedCalories + tolerance)
       },
+      hasUsableRange: true,
       sourceType: 'usda_fdc',
       sourceLabel: 'USDA FoodData Central',
       confidence: 'high',
@@ -271,6 +276,7 @@ async function resolveFatSecretBenchmark(spec: BenchmarkSpec): Promise<ResolvedB
         min: Math.max(0, Math.floor(expectedCalories - tolerance)),
         max: Math.ceil(expectedCalories + tolerance)
       },
+      hasUsableRange: true,
       sourceType: 'fatsecret',
       sourceLabel: 'FatSecret',
       confidence: 'medium',

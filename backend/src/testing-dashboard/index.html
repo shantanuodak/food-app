@@ -907,15 +907,19 @@ function renderEvalResult(result) {
   const tbody = document.getElementById('eval-cases-tbody');
   tbody.innerHTML = '';
   for (const c of result.cases) {
-    const statusBadge = c.pass
-      ? '<span class="badge badge-green">PASS</span>'
-      : '<span class="badge badge-red">FAIL</span>';
+    const statusBadge = !c.hasUsableBenchmark
+      ? '<span class="badge badge-yellow">NO BENCH</span>'
+      : c.pass
+        ? '<span class="badge badge-green">PASS</span>'
+        : '<span class="badge badge-red">FAIL</span>';
     const kwBadge = c.passKeywords
       ? '<span class="badge badge-green">✓</span>'
       : '<span class="badge badge-red">✗</span>';
-    const calBadge = c.passCalories
-      ? '<span class="badge badge-green">✓</span>'
-      : '<span class="badge badge-red">✗</span>';
+    const calBadge = !c.hasUsableBenchmark
+      ? '<span class="badge badge-muted">—</span>'
+      : c.passCalories
+        ? '<span class="badge badge-green">✓</span>'
+        : '<span class="badge badge-red">✗</span>';
     const calRange = c.expectedCaloriesMax < 99999
       ? `${c.expectedCaloriesMin}–${c.expectedCaloriesMax}`
       : '—';

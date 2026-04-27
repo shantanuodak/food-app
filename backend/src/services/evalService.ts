@@ -23,6 +23,7 @@ export type EvalCaseResult = {
   benchmarkConfidence: BenchmarkConfidence;
   benchmarkNotes: string;
   benchmarkReference?: string;
+  hasUsableBenchmark: boolean;
   detectedItems: string;
   passKeywords: boolean;
   passCalories: boolean;
@@ -415,6 +416,7 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
         benchmarkConfidence: benchmark.confidence,
         benchmarkNotes: benchmark.notes,
         benchmarkReference: benchmark.reference,
+        hasUsableBenchmark: benchmark.hasUsableRange,
         detectedItems: '',
         passKeywords: false,
         passCalories: false,
@@ -430,7 +432,7 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
     const names = output.result.items.map((item) => item.name).join(' | ');
     const totalCalories = output.result.totals.calories;
     const passKeywords = includesAnyKeyword(names, testCase.expectedKeywords);
-    const passCalories = totalCalories >= benchmark.range.min && totalCalories <= benchmark.range.max;
+    const passCalories = benchmark.hasUsableRange && totalCalories >= benchmark.range.min && totalCalories <= benchmark.range.max;
     const pass = passKeywords && passCalories;
 
     // Track by cuisine
@@ -452,6 +454,7 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
       benchmarkConfidence: benchmark.confidence,
       benchmarkNotes: benchmark.notes,
       benchmarkReference: benchmark.reference,
+      hasUsableBenchmark: benchmark.hasUsableRange,
       detectedItems: names,
       passKeywords,
       passCalories,
