@@ -263,6 +263,20 @@
       padding: 8px 10px;
       min-width: 130px;
     }
+    .provider-toggles { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; min-height: 36px; }
+    .provider-toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text);
+      font-size: 12px;
+      padding: 7px 10px;
+      cursor: pointer;
+    }
+    .provider-toggle input { min-width: 0; width: 14px; height: 14px; padding: 0; }
     .text-muted { color: var(--muted); }
     .text-green { color: var(--green); }
     .text-red { color: var(--red); }
@@ -367,6 +381,14 @@
           <div class="eval-control">
             <label for="eval-max-cases">Max cases</label>
             <input id="eval-max-cases" type="number" min="1" max="500" value="57" />
+          </div>
+          <div class="eval-control">
+            <label>Benchmark sources</label>
+            <div class="provider-toggles">
+              <label class="provider-toggle"><input type="checkbox" value="usda" checked /> USDA</label>
+              <label class="provider-toggle"><input type="checkbox" value="fatsecret" checked /> FatSecret</label>
+              <label class="provider-toggle"><input type="checkbox" value="curated" checked /> Curated fallback</label>
+            </div>
           </div>
         </div>
       </div>
@@ -797,6 +819,12 @@ async function runEval() {
   const caseSet = document.getElementById('eval-case-set').value;
   const cacheMode = document.getElementById('eval-cache-mode').value;
   const maxCases = Math.max(1, Math.min(500, Number(document.getElementById('eval-max-cases').value || 57)));
+  const benchmarkProviders = Array.from(document.querySelectorAll('.provider-toggle input:checked'))
+    .map(input => input.value);
+  if (!benchmarkProviders.length) {
+    alert('Select at least one benchmark source.');
+    return;
+  }
   btn.disabled = true;
   msg.style.display = 'inline-flex';
   msg.innerHTML = '<span class="spinner"></span>&nbsp;Starting eval run…';
@@ -805,7 +833,7 @@ async function runEval() {
     // Kick off the run (returns 202 immediately)
     const start = await api('/evals/run', {
       method: 'POST',
-      body: JSON.stringify({ caseSet, cacheMode, maxCases })
+      body: JSON.stringify({ caseSet, cacheMode, maxCases, benchmarkProviders })
     });
 
     // Poll every 3s until it finishes
@@ -857,7 +885,8 @@ function renderEvalResult(result) {
   const routeStr = Object.entries(result.byRoute)
     .map(([k, v]) => `${k}: ${v}`).join(' · ');
   const modeStr = result.caseSet && result.cacheMode ? `${result.caseSet}/${result.cacheMode}` : '';
-  document.getElementById('eval-route-summary').textContent = [modeStr, routeStr].filter(Boolean).join(' · ');
+  const providerStr = result.benchmarkProviders?.length ? `bench: ${result.benchmarkProviders.join('+')}` : '';
+  document.getElementById('eval-route-summary').textContent = [modeStr, providerStr, routeStr].filter(Boolean).join(' · ');
 
   // Cuisine breakdown
   const cuisineGrid = document.getElementById('cuisine-breakdown');

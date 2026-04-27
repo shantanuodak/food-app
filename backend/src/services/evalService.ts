@@ -3,6 +3,7 @@ import { runPrimaryParsePipeline } from './parsePipelineService.js';
 import { pool } from '../db.js';
 import {
   type BenchmarkConfidence,
+  type BenchmarkProvider,
   type BenchmarkSpec,
   resolveNutritionBenchmark
 } from './nutritionBenchmarkService.js';
@@ -34,6 +35,7 @@ export type EvalRunResult = {
   runType: string;
   caseSet: EvalCaseSet;
   cacheMode: EvalCacheMode;
+  benchmarkProviders: BenchmarkProvider[];
   requestedCases: number;
   evaluatedCases: number;
   totalCases: number;
@@ -76,6 +78,7 @@ export type EvalCacheMode = 'cached' | 'fresh';
 export type EvalRunOptions = {
   caseSet?: EvalCaseSet;
   cacheMode?: EvalCacheMode;
+  benchmarkProviders?: BenchmarkProvider[];
   maxCases?: number;
   onProgress?: (casesDone: number, totalCases: number) => void;
 };
@@ -178,7 +181,8 @@ const EXPLORATION_SEEDS: GoldenCase[] = [
       { min: 80, max: 350 },
       'Curated cuisine benchmark',
       'Indian cold coffee commonly implies milk and sugar unless the user says black coffee.',
-      'medium'
+      'medium',
+      'cold coffee 8 oz'
     )
   },
   { cuisine: 'Indian', text: 'Indian cold coffee 1 glass', expectedKeywords: ['cold', 'coffee'], caloriesRange: { min: 120, max: 450 } },
@@ -278,7 +282,8 @@ function curatedBenchmark(
   range: { min: number; max: number },
   label: string,
   notes: string,
-  confidence: BenchmarkConfidence = 'medium'
+  confidence: BenchmarkConfidence = 'medium',
+  fatSecretQuery?: string
 ): BenchmarkSpec {
   return {
     range,
@@ -287,7 +292,13 @@ function curatedBenchmark(
       label,
       confidence,
       notes
-    }
+    },
+    fatSecret: fatSecretQuery
+      ? {
+          query: fatSecretQuery,
+          servingHint: fatSecretQuery
+        }
+      : undefined
   };
 }
 
@@ -317,7 +328,8 @@ function benchmarkForCase(testCase: GoldenCase): BenchmarkSpec | undefined {
     testCase.caloriesRange,
     'Curated eval range',
     'Hand-authored calorie range used as a broad sanity check until this case is upgraded to a sourced benchmark.',
-    'low'
+    'low',
+    testCase.text
   );
 }
 
@@ -380,7 +392,9 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
 
   for (const testCase of evalCases) {
     const caseStart = performance.now();
-    const benchmark = await resolveNutritionBenchmark(benchmarkForCase(testCase));
+    const benchmark = await resolveNutritionBenchmark(benchmarkForCase(testCase), {
+      providers: options.benchmarkProviders
+    });
 
     let output;
     try {
@@ -456,6 +470,7 @@ export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<Ev
     runType: `parse_${caseSet}_${cacheMode}`,
     caseSet,
     cacheMode,
+    benchmarkProviders: options.benchmarkProviders ?? ['usda', 'fatsecret', 'curated'],
     requestedCases,
     evaluatedCases: evalCases.length,
     totalCases: cases.length,

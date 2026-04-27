@@ -17,6 +17,7 @@ const router = Router();
 const evalRunRequestSchema = z.object({
   caseSet: z.enum(['golden', 'exploration', 'combined']).optional().default('golden'),
   cacheMode: z.enum(['cached', 'fresh']).optional().default('cached'),
+  benchmarkProviders: z.array(z.enum(['usda', 'fatsecret', 'curated'])).optional().default(['usda', 'fatsecret', 'curated']),
   maxCases: z.number().int().min(1).max(500).optional()
 });
 
