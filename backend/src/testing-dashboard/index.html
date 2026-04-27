@@ -250,6 +250,19 @@
     /* ---- Misc ---- */
     .section { margin-bottom: 28px; }
     .row-actions { display: flex; gap: 8px; align-items: center; margin-bottom: 16px; }
+    .eval-controls { display: flex; gap: 10px; flex-wrap: wrap; align-items: end; margin: 12px 0 16px; }
+    .eval-control { display: flex; flex-direction: column; gap: 4px; }
+    .eval-control label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+    .eval-control select,
+    .eval-control input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-size: 13px;
+      padding: 8px 10px;
+      min-width: 130px;
+    }
     .text-muted { color: var(--muted); }
     .text-green { color: var(--green); }
     .text-red { color: var(--red); }
@@ -333,8 +346,29 @@
           </span>
         </div>
         <p class="text-muted" style="font-size:13px; margin-bottom:16px;">
-          Runs all 57 golden cases through the live parse pipeline (Gemini + cache + deterministic). Results are saved to history.
+          Runs parser eval cases through the live pipeline. Use cached mode for cheap regression checks, or fresh mode for prompt/model checks with a hard case cap.
         </p>
+        <div class="eval-controls">
+          <div class="eval-control">
+            <label for="eval-case-set">Case set</label>
+            <select id="eval-case-set">
+              <option value="golden">Golden 57</option>
+              <option value="exploration">Exploration bank</option>
+              <option value="combined">Combined bank</option>
+            </select>
+          </div>
+          <div class="eval-control">
+            <label for="eval-cache-mode">Cache mode</label>
+            <select id="eval-cache-mode">
+              <option value="cached">Cached / cheap</option>
+              <option value="fresh">Fresh scope / capped</option>
+            </select>
+          </div>
+          <div class="eval-control">
+            <label for="eval-max-cases">Max cases</label>
+            <input id="eval-max-cases" type="number" min="1" max="500" value="57" />
+          </div>
+        </div>
       </div>
 
       <div id="eval-result-area" style="display:none">
@@ -750,17 +784,24 @@ let allParsesData = [];
 async function runEval() {
   const btn = document.getElementById('run-eval-btn');
   const msg = document.getElementById('eval-running-msg');
+  const caseSet = document.getElementById('eval-case-set').value;
+  const cacheMode = document.getElementById('eval-cache-mode').value;
+  const maxCases = Math.max(1, Math.min(500, Number(document.getElementById('eval-max-cases').value || 57)));
   btn.disabled = true;
   msg.style.display = 'inline-flex';
   msg.innerHTML = '<span class="spinner"></span>&nbsp;Starting eval run…';
 
   try {
     // Kick off the run (returns 202 immediately)
-    await api('/evals/run', { method: 'POST', body: JSON.stringify({ runType: 'golden_set' }) });
+    const start = await api('/evals/run', {
+      method: 'POST',
+      body: JSON.stringify({ caseSet, cacheMode, maxCases })
+    });
 
     // Poll every 3s until it finishes
-    msg.innerHTML = '<span class="spinner"></span>&nbsp;Running 57 cases in background… polling every 3s';
-    const runId = await pollEvalStatus();
+    const totalCases = start.status?.totalCases || maxCases;
+    msg.innerHTML = `<span class="spinner"></span>&nbsp;Running ${totalCases} ${cacheMode} ${caseSet} cases… polling every 3s`;
+    const runId = await pollEvalStatus(msg);
 
     // Fetch the full result
     msg.innerHTML = '<span class="spinner"></span>&nbsp;Fetching results…';
@@ -776,12 +817,15 @@ async function runEval() {
   }
 }
 
-async function pollEvalStatus() {
-  const maxWaitMs = 5 * 60 * 1000; // 5 minutes cap
+async function pollEvalStatus(msg) {
+  const maxWaitMs = 10 * 60 * 1000; // 10 minutes cap for capped fresh runs
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
     await new Promise(r => setTimeout(r, 3000));
     const status = await api('/evals/status');
+    if (status.state === 'running' && msg) {
+      msg.innerHTML = `<span class="spinner"></span>&nbsp;Running ${status.casesDone}/${status.totalCases} cases… polling every 3s`;
+    }
     if (status.state === 'complete' && status.runId) return status.runId;
     if (status.state === 'error') throw new Error(status.error || 'Eval run failed');
     // else 'running' or 'idle' — keep polling
@@ -802,7 +846,8 @@ function renderEvalResult(result) {
 
   const routeStr = Object.entries(result.byRoute)
     .map(([k, v]) => `${k}: ${v}`).join(' · ');
-  document.getElementById('eval-route-summary').textContent = routeStr;
+  const modeStr = result.caseSet && result.cacheMode ? `${result.caseSet}/${result.cacheMode}` : '';
+  document.getElementById('eval-route-summary').textContent = [modeStr, routeStr].filter(Boolean).join(' · ');
 
   // Cuisine breakdown
   const cuisineGrid = document.getElementById('cuisine-breakdown');

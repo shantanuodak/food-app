@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import { getMetricsSnapshot } from '../services/metricsService.js';
@@ -12,6 +13,12 @@ import {
 import { pool } from '../db.js';
 
 const router = Router();
+
+const evalRunRequestSchema = z.object({
+  caseSet: z.enum(['golden', 'exploration', 'combined']).optional().default('golden'),
+  cacheMode: z.enum(['cached', 'fresh']).optional().default('cached'),
+  maxCases: z.number().int().min(1).max(500).optional()
+});
 
 // ---------------------------------------------------------------------------
 // Auth helper (same pattern as internalMetrics.ts)
@@ -128,20 +135,35 @@ router.post('/evals/run', async (req, res, next) => {
       return;
     }
 
+    const options = evalRunRequestSchema.parse(req.body ?? {});
+    const defaultCases = options.caseSet === 'golden' ? 57 : 50;
+    const requestedCases = options.maxCases ?? defaultCases;
+    const totalCases = Math.min(
+      requestedCases,
+      options.cacheMode === 'fresh' ? 75 : 500,
+      options.caseSet === 'golden' ? 57 : 500
+    );
+
     // Reset status and respond immediately; don't block the request
     evalStatus.state = 'running';
     evalStatus.startedAt = new Date().toISOString();
     evalStatus.finishedAt = null;
     evalStatus.runId = null;
     evalStatus.error = null;
-    evalStatus.totalCases = 57;
+    evalStatus.totalCases = totalCases;
     evalStatus.casesDone = 0;
 
     // Fire and forget
     (async () => {
       try {
-        const result = await runGoldenSetEval();
-        const runId = await saveEvalRun(result);
+        const result = await runGoldenSetEval({
+          ...options,
+          onProgress: (casesDone, totalCases) => {
+            evalStatus.casesDone = casesDone;
+            evalStatus.totalCases = totalCases;
+          }
+        });
+        const runId = await saveEvalRun(result, result.runType);
         evalStatus.state = 'complete';
         evalStatus.finishedAt = new Date().toISOString();
         evalStatus.runId = runId;

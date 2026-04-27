@@ -22,6 +22,11 @@ export type EvalCaseResult = {
 };
 
 export type EvalRunResult = {
+  runType: string;
+  caseSet: EvalCaseSet;
+  cacheMode: EvalCacheMode;
+  requestedCases: number;
+  evaluatedCases: number;
   totalCases: number;
   passed: number;
   failed: number;
@@ -53,6 +58,16 @@ type GoldenCase = {
   text: string;
   expectedKeywords: string[];
   caloriesRange?: { min: number; max: number };
+};
+
+export type EvalCaseSet = 'golden' | 'exploration' | 'combined';
+export type EvalCacheMode = 'cached' | 'fresh';
+
+export type EvalRunOptions = {
+  caseSet?: EvalCaseSet;
+  cacheMode?: EvalCacheMode;
+  maxCases?: number;
+  onProgress?: (casesDone: number, totalCases: number) => void;
 };
 
 const GOLDEN_CASES: GoldenCase[] = [
@@ -117,6 +132,77 @@ const GOLDEN_CASES: GoldenCase[] = [
   { cuisine: 'Dessert', text: 'Banana Pudding 1 cup', expectedKeywords: ['banana', 'pudding'], caloriesRange: { min: 120, max: 700 } }
 ];
 
+const EXPLORATION_SEEDS: GoldenCase[] = [
+  { cuisine: 'Indian', text: 'cold coffee 8 oz', expectedKeywords: ['cold', 'coffee'], caloriesRange: { min: 80, max: 350 } },
+  { cuisine: 'Indian', text: 'Indian cold coffee 1 glass', expectedKeywords: ['cold', 'coffee'], caloriesRange: { min: 120, max: 450 } },
+  { cuisine: 'American', text: 'black iced coffee 8 oz', expectedKeywords: ['coffee'], caloriesRange: { min: 0, max: 20 } },
+  { cuisine: 'American', text: 'cold brew coffee 8 oz', expectedKeywords: ['coffee'], caloriesRange: { min: 0, max: 25 } },
+  { cuisine: 'Indian', text: 'masala chai 1 cup', expectedKeywords: ['chai', 'tea'], caloriesRange: { min: 40, max: 220 } },
+  { cuisine: 'Indian', text: 'sweet lassi 1 glass', expectedKeywords: ['lassi'], caloriesRange: { min: 120, max: 420 } },
+  { cuisine: 'Indian', text: 'mango lassi 12 oz', expectedKeywords: ['mango', 'lassi'], caloriesRange: { min: 180, max: 650 } },
+  { cuisine: 'Indian', text: 'buttermilk 1 glass', expectedKeywords: ['buttermilk'], caloriesRange: { min: 30, max: 180 } },
+  { cuisine: 'Indian', text: 'poha 1 bowl', expectedKeywords: ['poha'], caloriesRange: { min: 150, max: 550 } },
+  { cuisine: 'Indian', text: 'upma 1 bowl', expectedKeywords: ['upma'], caloriesRange: { min: 150, max: 550 } },
+  { cuisine: 'Indian', text: 'vada pav 1 piece', expectedKeywords: ['vada', 'pav'], caloriesRange: { min: 180, max: 600 } },
+  { cuisine: 'Indian', text: 'paneer tikka 6 pieces', expectedKeywords: ['paneer', 'tikka'], caloriesRange: { min: 180, max: 700 } },
+  { cuisine: 'Indian', text: 'naan 1 piece', expectedKeywords: ['naan'], caloriesRange: { min: 180, max: 450 } },
+  { cuisine: 'Indian', text: 'garlic naan 1 piece', expectedKeywords: ['naan', 'garlic'], caloriesRange: { min: 220, max: 550 } },
+  { cuisine: 'Indian', text: 'rava dosa 1 dosa', expectedKeywords: ['dosa'], caloriesRange: { min: 150, max: 650 } },
+  { cuisine: 'Indian', text: 'sev puri 1 plate', expectedKeywords: ['sev', 'puri'], caloriesRange: { min: 180, max: 650 } },
+  { cuisine: 'Indian', text: 'dahi puri 1 plate', expectedKeywords: ['dahi', 'puri'], caloriesRange: { min: 180, max: 700 } },
+  { cuisine: 'Indian', text: 'biryani chicken 1 plate', expectedKeywords: ['biryani', 'chicken'], caloriesRange: { min: 350, max: 1200 } },
+  { cuisine: 'American', text: 'iced latte 12 oz', expectedKeywords: ['latte'], caloriesRange: { min: 60, max: 350 } },
+  { cuisine: 'American', text: 'frappuccino 16 oz', expectedKeywords: ['frappuccino', 'coffee'], caloriesRange: { min: 180, max: 650 } },
+  { cuisine: 'American', text: 'oat milk latte 12 oz', expectedKeywords: ['latte', 'oat'], caloriesRange: { min: 90, max: 350 } },
+  { cuisine: 'Mexican', text: 'horchata 12 oz', expectedKeywords: ['horchata'], caloriesRange: { min: 120, max: 450 } },
+  { cuisine: 'Thai', text: 'thai iced tea 12 oz', expectedKeywords: ['thai', 'tea'], caloriesRange: { min: 120, max: 500 } },
+  { cuisine: 'Vietnamese', text: 'vietnamese iced coffee 8 oz', expectedKeywords: ['coffee'], caloriesRange: { min: 80, max: 350 } },
+  { cuisine: 'Middle Eastern', text: 'turkish coffee 1 cup', expectedKeywords: ['coffee'], caloriesRange: { min: 0, max: 80 } },
+  { cuisine: 'Korean', text: 'banana milk 1 bottle', expectedKeywords: ['banana', 'milk'], caloriesRange: { min: 120, max: 350 } },
+  { cuisine: 'Japanese', text: 'matcha latte 12 oz', expectedKeywords: ['matcha', 'latte'], caloriesRange: { min: 80, max: 420 } },
+  { cuisine: 'Mediterranean', text: 'turkish ayran 1 glass', expectedKeywords: ['ayran'], caloriesRange: { min: 40, max: 180 } }
+];
+
+const PORTION_VARIANTS = ['1 cup', '1 bowl', '1 plate', '2 pieces', '1 serving'];
+
+function generatedExplorationCases(): GoldenCase[] {
+  const generated: GoldenCase[] = [];
+  for (const seed of EXPLORATION_SEEDS) {
+    generated.push(seed);
+    for (const portion of PORTION_VARIANTS) {
+      if (generated.length >= 500) break;
+      const baseName = seed.text
+        .replace(/\b\d+(?:\.\d+)?\s*(?:oz|cup|cups|glass|bowl|plate|pieces?|serving|bottle)\b/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+      generated.push({
+        ...seed,
+        text: `${baseName} ${portion}`,
+        caloriesRange: widenRange(seed.caloriesRange)
+      });
+    }
+  }
+  return dedupeCases(generated).slice(0, 500);
+}
+
+function widenRange(range?: { min: number; max: number }): { min: number; max: number } | undefined {
+  if (!range) return undefined;
+  return {
+    min: Math.max(0, Math.floor(range.min * 0.5)),
+    max: Math.ceil(range.max * 1.8)
+  };
+}
+
+function dedupeCases(cases: GoldenCase[]): GoldenCase[] {
+  const seen = new Set<string>();
+  return cases.filter((testCase) => {
+    const key = `${testCase.cuisine}:${normalizeText(testCase.text)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -138,18 +224,41 @@ function round(value: number, digits = 3): number {
 // Core eval runner
 // ---------------------------------------------------------------------------
 
-export async function runGoldenSetEval(): Promise<EvalRunResult> {
+function casesForSet(caseSet: EvalCaseSet): GoldenCase[] {
+  if (caseSet === 'golden') return GOLDEN_CASES;
+  if (caseSet === 'exploration') return generatedExplorationCases();
+  return dedupeCases([...GOLDEN_CASES, ...generatedExplorationCases()]);
+}
+
+function boundedCaseLimit(cacheMode: EvalCacheMode, requested: number, available: number): number {
+  const maxAllowed = cacheMode === 'fresh' ? 75 : 500;
+  return Math.max(1, Math.min(requested, available, maxAllowed));
+}
+
+export async function runGoldenSetEval(options: EvalRunOptions = {}): Promise<EvalRunResult> {
   const runStart = performance.now();
   const cases: EvalCaseResult[] = [];
   const byCategory: Record<string, { total: number; passed: number }> = {};
   const byRoute: Record<string, number> = {};
+  const caseSet = options.caseSet ?? 'golden';
+  const cacheMode = options.cacheMode ?? 'cached';
+  const availableCases = casesForSet(caseSet);
+  const requestedCases = options.maxCases ?? (caseSet === 'golden' ? GOLDEN_CASES.length : 50);
+  const caseLimit = boundedCaseLimit(cacheMode, requestedCases, availableCases.length);
+  const evalCases = availableCases.slice(0, caseLimit);
+  const cacheScope = cacheMode === 'fresh'
+    ? `eval:${caseSet}:${Date.now()}:${Math.random().toString(36).slice(2)}`
+    : 'global';
 
-  for (const testCase of GOLDEN_CASES) {
+  for (const testCase of evalCases) {
     const caseStart = performance.now();
 
     let output;
     try {
-      output = await runPrimaryParsePipeline(testCase.text, { allowFallback: true });
+      output = await runPrimaryParsePipeline(testCase.text, {
+        allowFallback: true,
+        cacheScope
+      });
     } catch {
       // If the pipeline throws (e.g. no DB connection in eval env), record as failed
       cases.push({
@@ -166,6 +275,7 @@ export async function runGoldenSetEval(): Promise<EvalRunResult> {
         confidence: 0,
         latencyMs: round(performance.now() - caseStart)
       });
+      options.onProgress?.(cases.length, evalCases.length);
       continue;
     }
 
@@ -200,6 +310,7 @@ export async function runGoldenSetEval(): Promise<EvalRunResult> {
       confidence: round(output.result.confidence),
       latencyMs
     });
+    options.onProgress?.(cases.length, evalCases.length);
   }
 
   const passed = cases.filter((c) => c.pass).length;
@@ -207,6 +318,11 @@ export async function runGoldenSetEval(): Promise<EvalRunResult> {
   const durationMs = round(performance.now() - runStart);
 
   return {
+    runType: `parse_${caseSet}_${cacheMode}`,
+    caseSet,
+    cacheMode,
+    requestedCases,
+    evaluatedCases: evalCases.length,
     totalCases: cases.length,
     passed,
     failed,
