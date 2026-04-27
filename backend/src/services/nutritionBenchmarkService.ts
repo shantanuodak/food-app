@@ -152,7 +152,7 @@ export async function resolveNutritionBenchmark(
     confidence: spec.source.confidence,
     notes: spec.source.notes,
     reference: failedProviders.length
-      ? `External lookup unavailable; using curated fallback. ${failedProviders.join(' · ')}`
+      ? `External lookup unavailable; using SnapCalorie curated fallback. ${failedProviders.join(' · ')}`
       : undefined
   };
 }

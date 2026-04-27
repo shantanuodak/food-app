@@ -179,7 +179,7 @@ const EXPLORATION_SEEDS: GoldenCase[] = [
     caloriesRange: { min: 80, max: 350 },
     benchmark: curatedBenchmark(
       { min: 80, max: 350 },
-      'Curated cuisine benchmark',
+      'SnapCalorie curated benchmark',
       'Indian cold coffee commonly implies milk and sugar unless the user says black coffee.',
       'medium',
       'cold coffee 8 oz'
@@ -259,7 +259,7 @@ function generatedExplorationCases(): GoldenCase[] {
         benchmark: seed.caloriesRange
           ? curatedBenchmark(
               widenRange(seed.caloriesRange)!,
-              'Generated exploration range',
+              'SnapCalorie generated exploration range',
               'Generated from a seed case with a deliberately widened range because the portion variant has not been individually sourced.',
               'low'
             )
@@ -311,7 +311,7 @@ function usdaBenchmark(
   minToleranceCalories = 15
 ): BenchmarkSpec {
   return {
-    ...curatedBenchmark(range, 'Curated fallback benchmark', notes, 'medium'),
+    ...curatedBenchmark(range, 'SnapCalorie fallback benchmark', notes, 'medium'),
     usda: {
       query,
       grams,
@@ -326,8 +326,8 @@ function benchmarkForCase(testCase: GoldenCase): BenchmarkSpec | undefined {
   if (!testCase.caloriesRange) return undefined;
   return curatedBenchmark(
     testCase.caloriesRange,
-    'Curated eval range',
-    'Hand-authored calorie range used as a broad sanity check until this case is upgraded to a sourced benchmark.',
+    'SnapCalorie curated range',
+    'Hand-reviewed calorie range intended for SnapCalorie-backed eval truth until this case is moved into the curated benchmark database.',
     'low',
     testCase.text
   );
