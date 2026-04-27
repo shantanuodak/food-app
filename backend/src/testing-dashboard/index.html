@@ -201,6 +201,18 @@
     @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.4; } }
     .alert-name { font-weight: 600; flex: 1; }
     .alert-value { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
+    .attention-list { display: grid; gap: 8px; }
+    .attention-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 12px 14px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+    .attention-item strong { display: block; margin-bottom: 2px; }
+    .attention-item p { color: var(--muted); font-size: 12px; margin: 0; }
 
     /* ---- Eval result summary ---- */
     .eval-summary {
@@ -283,6 +295,8 @@
     .text-yellow { color: var(--yellow); }
     hr { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
     .truncate { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .truth-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+    @media (max-width: 900px) { .truth-grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -307,12 +321,11 @@
   <header>
     <div class="logo">🍱 Testing Dashboard <span>/ Nutrition Parser</span></div>
     <nav>
-      <button class="active" onclick="switchTab('overview', this)">Overview</button>
-      <button onclick="switchTab('eval-runner', this)">Eval Runner</button>
-      <button onclick="switchTab('eval-history', this)">Eval History</button>
-      <button onclick="switchTab('recent-parses', this)">Recent Parses</button>
-      <button onclick="switchTab('costs', this)">Cost Tracker</button>
-      <button onclick="switchTab('cache', this)">Cache</button>
+      <button class="active" onclick="switchTab('overview', this)">Health</button>
+      <button onclick="switchTab('eval-runner', this)">Food Quality</button>
+      <button onclick="switchTab('benchmarks', this)">Benchmarks</button>
+      <button onclick="switchTab('eval-history', this)">History</button>
+      <button onclick="switchTab('advanced', this)">Advanced</button>
     </nav>
     <div class="header-actions">
       <span class="refresh-info" id="last-refresh">—</span>
@@ -324,6 +337,13 @@
 
     <!-- ==================== OVERVIEW ==================== -->
     <div id="tab-overview" class="tab-panel active">
+      <div class="card section">
+        <h3>Needs Attention</h3>
+        <div class="attention-list" id="attention-list">
+          <div class="text-muted">Loading…</div>
+        </div>
+      </div>
+
       <div class="grid-4" id="overview-stats">
         <div class="stat-card"><div class="stat-label">Parses Today</div><div class="stat-value" id="ov-parses-today">—</div></div>
         <div class="stat-card"><div class="stat-label">Cache Hit Ratio</div><div class="stat-value" id="ov-cache">—</div><div class="stat-sub">all time</div></div>
@@ -351,7 +371,7 @@
     <div id="tab-eval-runner" class="tab-panel">
       <div class="section">
         <div class="row-actions">
-          <h2 style="margin:0">Golden Set Eval — 57 Cases</h2>
+          <h2 style="margin:0">Food Quality Check</h2>
           <button class="btn btn-primary" id="run-eval-btn" onclick="runEval()">
             ▶ Run Eval
           </button>
@@ -360,7 +380,7 @@
           </span>
         </div>
         <p class="text-muted" style="font-size:13px; margin-bottom:16px;">
-          Runs parser eval cases through the live pipeline. Use cached mode for cheap regression checks, or fresh mode for prompt/model checks with a hard case cap.
+          Tests the app parser against known food cases. Use cached mode for a quick check, or fresh mode when you want to retest the model.
         </p>
         <div class="eval-controls">
           <div class="eval-control">
@@ -413,33 +433,58 @@
 
         <!-- Cuisine breakdown -->
         <div class="card section">
-          <h3>Pass Rate by Cuisine</h3>
+          <h3>Result by Cuisine</h3>
           <div class="cuisine-grid" id="cuisine-breakdown"></div>
         </div>
 
         <!-- Per-case table -->
         <div class="section">
-          <h3>Case-Level Results</h3>
+          <h3>Food Results</h3>
           <div class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Cuisine</th>
-                  <th>Input</th>
-                  <th>Route</th>
-                  <th>Expected Cal</th>
-                  <th>Benchmark</th>
-                  <th>Actual Cal</th>
-                  <th>Confidence</th>
-                  <th>Keywords</th>
-                  <th>Calories</th>
-                  <th>Status</th>
+                  <th>Food</th>
+                  <th>Expected Range</th>
+                  <th>App Result</th>
+                  <th>Truth Source</th>
+                  <th>Result</th>
                 </tr>
               </thead>
               <tbody id="eval-cases-tbody"></tbody>
             </table>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- ==================== BENCHMARKS ==================== -->
+    <div id="tab-benchmarks" class="tab-panel">
+      <div class="section">
+        <h2>Benchmark Truth Sources</h2>
+        <p class="text-muted" style="font-size:13px; margin-bottom:16px;">
+          These sources define what the expected calories should be. The parser is judged against them.
+        </p>
+        <div class="truth-grid">
+          <div class="card">
+            <h3>USDA</h3>
+            <p class="text-muted">Best for simple foods like coffee, milk, fruit, rice, eggs, and raw ingredients.</p>
+          </div>
+          <div class="card">
+            <h3>FatSecret</h3>
+            <p class="text-muted">Best for prepared, branded, and serving-based foods when FatSecret access is active.</p>
+          </div>
+          <div class="card">
+            <h3>SnapCalorie Curated</h3>
+            <p class="text-muted">Manual truth source for foods you review in SnapCalorie and trust enough for evals.</p>
+          </div>
+        </div>
+      </div>
+      <div class="card section">
+        <h3>Current Rule</h3>
+        <p class="text-muted">
+          A case is only trustworthy when it has a usable truth source. If the eval says “Needs benchmark,” that case should not be treated as a parser failure yet.
+        </p>
       </div>
     </div>
 
@@ -654,13 +699,21 @@ let currentTab = 'overview';
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
-  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'advanced') {
+    document.getElementById('tab-recent-parses').classList.add('active');
+    document.getElementById('tab-costs').classList.add('active');
+    document.getElementById('tab-cache').classList.add('active');
+  } else {
+    document.getElementById('tab-' + name).classList.add('active');
+  }
   btn.classList.add('active');
   currentTab = name;
   if (name === 'eval-history') loadEvalHistory();
-  if (name === 'recent-parses') loadRecentParses();
-  if (name === 'costs') loadCosts();
-  if (name === 'cache') loadCache();
+  if (name === 'advanced') {
+    loadRecentParses();
+    loadCosts();
+    loadCache();
+  }
 }
 
 /* ====================================================================== */
@@ -759,6 +812,7 @@ async function loadOverview() {
       document.getElementById('ov-eval-sub').textContent =
         `${e.passed}/${e.totalCases} cases · ${fmtTime(e.runAt)}`;
     }
+    await renderAttention(data, alertItems);
 
     // Alerts
     const alertList = document.getElementById('alert-list');
@@ -805,6 +859,72 @@ async function loadOverview() {
   } catch (e) {
     console.error('Overview load failed', e);
   }
+}
+
+async function renderAttention(data, alertItems) {
+  const list = document.getElementById('attention-list');
+  const items = [];
+  const activeAlerts = alertItems.filter(alert => (alert.state || (alert.triggered ? 'alert' : 'ok')) === 'alert');
+  if (activeAlerts.length) {
+    items.push({
+      tone: 'red',
+      title: `${activeAlerts.length} active alert${activeAlerts.length === 1 ? '' : 's'}`,
+      body: 'Check the health signals before trusting new eval runs.'
+    });
+  }
+  if (!data.latestEval) {
+    items.push({ tone: 'yellow', title: 'No eval has run yet', body: 'Run a food quality check to establish a baseline.' });
+  } else if (data.latestEval.passRate < 0.8) {
+    items.push({
+      tone: 'red',
+      title: `Latest eval is ${fmtPct(data.latestEval.passRate)}`,
+      body: `${data.latestEval.passed}/${data.latestEval.totalCases} cases passed. Review failed cases before changing prompts.`
+    });
+  }
+
+  if (data.todayParses < 10) {
+    items.push({
+      tone: 'yellow',
+      title: 'Small real-user sample today',
+      body: `${data.todayParses} parse${data.todayParses === 1 ? '' : 's'} today. Use eval cases to create more variation.`
+    });
+  }
+
+  if (data.latestEval?.id) {
+    try {
+      const detail = await api('/evals/' + data.latestEval.id);
+      const cases = detail.result?.cases ?? [];
+      const missing = cases.filter(c => c.hasUsableBenchmark === false).length;
+      const lowConfidence = cases.filter(c => c.confidence !== null && c.confidence < 0.75).length;
+      if (missing) {
+        items.push({
+          tone: 'yellow',
+          title: `${missing} case${missing === 1 ? '' : 's'} need benchmarks`,
+          body: 'Add USDA, FatSecret, or SnapCalorie truth before using these as parser failures.'
+        });
+      }
+      if (lowConfidence) {
+        items.push({
+          tone: 'yellow',
+          title: `${lowConfidence} low-confidence eval result${lowConfidence === 1 ? '' : 's'}`,
+          body: 'These are good candidates for prompt or benchmark review.'
+        });
+      }
+    } catch {
+      items.push({ tone: 'yellow', title: 'Could not load latest eval details', body: 'Summary is available, but case-level attention items are hidden.' });
+    }
+  }
+
+  if (!items.length) {
+    items.push({ tone: 'green', title: 'No urgent issues', body: 'The latest dashboard signals look usable. Keep adding varied food cases.' });
+  }
+
+  list.innerHTML = items.map(item => `
+    <div class="attention-item">
+      <div class="alert-dot ${item.tone === 'green' ? 'ok' : item.tone === 'red' ? 'alert' : 'insufficient_data'}"></div>
+      <div><strong>${escapeHtml(item.title)}</strong><p>${escapeHtml(item.body)}</p></div>
+    </div>
+  `).join('');
 }
 
 /* ====================================================================== */
@@ -908,36 +1028,31 @@ function renderEvalResult(result) {
   tbody.innerHTML = '';
   for (const c of result.cases) {
     const statusBadge = !c.hasUsableBenchmark
-      ? '<span class="badge badge-yellow">NO BENCH</span>'
+      ? '<span class="badge badge-yellow">Needs benchmark</span>'
       : c.pass
-        ? '<span class="badge badge-green">PASS</span>'
-        : '<span class="badge badge-red">FAIL</span>';
-    const kwBadge = c.passKeywords
-      ? '<span class="badge badge-green">✓</span>'
-      : '<span class="badge badge-red">✗</span>';
-    const calBadge = !c.hasUsableBenchmark
-      ? '<span class="badge badge-muted">—</span>'
-      : c.passCalories
-        ? '<span class="badge badge-green">✓</span>'
-        : '<span class="badge badge-red">✗</span>';
+        ? '<span class="badge badge-green">Looks right</span>'
+        : '<span class="badge badge-red">Needs review</span>';
     const calRange = c.expectedCaloriesMax < 99999
       ? `${c.expectedCaloriesMin}–${c.expectedCaloriesMax}`
       : '—';
-    const benchmarkTitle = escapeHtml([c.benchmarkNotes, c.benchmarkReference].filter(Boolean).join(' '));
+    const detailTitle = escapeHtml([
+      `Parser used: ${c.route || '—'}`,
+      `Confidence: ${fmt(c.confidence, 2)}`,
+      `Keyword match: ${c.passKeywords ? 'yes' : 'no'}`,
+      `Calorie check: ${c.passCalories ? 'yes' : 'no'}`,
+      c.benchmarkNotes,
+      c.benchmarkReference
+    ].filter(Boolean).join(' · '));
     const benchmarkSource = escapeHtml(c.benchmarkSource || '—');
     tbody.innerHTML += `
-      <tr>
-        <td><span class="badge badge-muted">${c.cuisine}</span></td>
-        <td class="truncate" title="${c.input}">${c.input}</td>
-        <td>${routeBadge(c.route)}</td>
-        <td class="mono text-muted">${calRange}</td>
-        <td title="${benchmarkTitle}">
-          <span class="badge ${c.benchmarkConfidence === 'high' ? 'badge-green' : c.benchmarkConfidence === 'medium' ? 'badge-blue' : 'badge-muted'}">${benchmarkSource}</span>
+      <tr title="${detailTitle}">
+        <td>
+          <div class="truncate" title="${escapeHtml(c.input)}">${escapeHtml(c.input)}</div>
+          <div class="text-muted" style="font-size:11px">${escapeHtml(c.cuisine)} · ${escapeHtml(c.route || 'parser')}</div>
         </td>
+        <td class="mono text-muted">${calRange}</td>
         <td class="mono">${fmt(c.actualCalories)}</td>
-        <td class="mono ${confClass(c.confidence)}">${fmt(c.confidence, 2)}</td>
-        <td>${kwBadge}</td>
-        <td>${calBadge}</td>
+        <td><span class="badge ${c.benchmarkConfidence === 'high' ? 'badge-green' : c.benchmarkConfidence === 'medium' ? 'badge-blue' : 'badge-muted'}">${benchmarkSource}</span></td>
         <td>${statusBadge}</td>
       </tr>`;
   }
