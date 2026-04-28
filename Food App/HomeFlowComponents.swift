@@ -86,6 +86,9 @@ struct HomeLogRow: Identifiable, Equatable {
     /// un-save → edit → PATCH so cache invalidation targets the correct day
     /// (not the day the user happens to be viewing now).
     var serverLoggedAt: String? = nil
+    /// Optimistic delete marker used to avoid refocusing a row while it is being
+    /// removed from the backend.
+    var isDeleting: Bool = false
 
     static func empty() -> HomeLogRow {
         HomeLogRow(
@@ -427,6 +430,7 @@ struct HM01LogComposerSection: View {
                         HStack(alignment: .top, spacing: 12) {
                             if row.isSaved {
                                 Button {
+                                    guard !row.isDeleting else { return }
                                     if let index = indexForRowID(row.id) {
                                         rows[index].isSaved = false
                                         rows[index].savedAt = nil
@@ -441,6 +445,7 @@ struct HM01LogComposerSection: View {
                                         .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
                                 }
                                 .buttonStyle(.plain)
+                                .disabled(row.isDeleting)
                                 .modifier(InsertShimmerModifier(isActive: row.showInsertShimmer, onComplete: {
                                     if let index = indexForRowID(row.id) {
                                         rows[index].showInsertShimmer = false
@@ -482,6 +487,8 @@ struct HM01LogComposerSection: View {
                             trailingCaloriesView(for: row)
                                 .frame(width: 150, alignment: .trailing)
                         }
+                        .opacity(row.isDeleting ? 0.35 : 1)
+                        .animation(.easeOut(duration: 0.12), value: row.isDeleting)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

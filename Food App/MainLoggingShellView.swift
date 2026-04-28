@@ -33,6 +33,7 @@ struct MainLoggingShellView: View {
     @State private var pendingSaveRequest: SaveLogRequest?
     @State private var pendingSaveFingerprint: String?
     @State private var pendingSaveIdempotencyKey: UUID?
+    @State private var pendingSaveQueue: [PendingSaveQueueItem] = []
     @State private var isEscalating = false
     @State private var escalationError: String?
     @State private var escalationInfoMessage: String?
@@ -84,6 +85,11 @@ struct MainLoggingShellView: View {
     @State private var suppressDebouncedParseOnce = false
     @State private var isCalendarPresented = false
     @State private var isProfilePresented = false
+    @State private var isNutritionSummaryPresented = false
+    @State private var currentFoodLogStreak: Int?
+    @State private var isLoadingFoodLogStreak = false
+    @State private var isKeyboardVisible = false
+    @State private var isSyncInfoPresented = false
     /// Slide direction for day transitions: negative = slide left (going forward), positive = slide right (going back)
     @State private var dayTransitionOffset: CGFloat = 0
     /// Locks the swipe direction once determined — prevents fighting with ScrollView vertical scroll
@@ -230,10 +236,13 @@ struct MainLoggingShellView: View {
                 .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $isProfilePresented) {
-                NavigationStack {
-                    HomeProfileScreen()
-                        .environmentObject(appStore)
-                }
+                HomeProfileScreen()
+                    .environmentObject(appStore)
+            }
+            .sheet(isPresented: $isNutritionSummaryPresented) {
+                nutritionSummarySheet
+                    .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
             }
             .padding()
             .onChange(of: rowTextSignature) { _, _ in
@@ -284,7 +293,7 @@ struct MainLoggingShellView: View {
                     submitRestoredPendingSaveIfPossible()
                     refreshDaySummary()
                     refreshDayLogs()
-                    Task { await appStore.refreshHealthActivity() }
+                    refreshCurrentStreak()
                     prefetchAdjacentDays(around: selectedSummaryDate)
                 }
                 // Surface the mindful-pause sheet once per day for emotional-eating users.
@@ -303,8 +312,8 @@ struct MainLoggingShellView: View {
                 }
                 refreshDaySummary()
                 refreshDayLogs()
+                refreshCurrentStreak()
                 submitRestoredPendingSaveIfPossible()
-                Task { await appStore.refreshHealthActivity() }
                 prefetchAdjacentDays(around: selectedSummaryDate)
             }
             .onDisappear {
@@ -329,6 +338,14 @@ struct MainLoggingShellView: View {
             }
             .onReceive(NotificationCenter.default.publisher(for: .openVoiceFromTabBar)) { _ in
                 inputMode = .voice
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openNutritionSummaryFromTabBar)) { _ in
+                refreshNutritionStateForVisibleDay()
+                isNutritionSummaryPresented = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { notification in
+                refreshNutritionStateAfterProgressChange(notification)
+                refreshCurrentStreak()
             }
             .sheet(isPresented: $isDetailsDrawerPresented) {
                 detailsDrawer
@@ -433,6 +450,20 @@ struct MainLoggingShellView: View {
                     .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
                 }
             }
+            .overlay(alignment: .bottom) {
+                if !isVoiceOverlayPresented {
+                    bottomActionDock
+                        .transition(.opacity.combined(with: .scale(scale: 0.8)))
+                }
+            }
+            .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
+            .animation(.easeInOut(duration: 0.2), value: isKeyboardVisible)
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
+                isKeyboardVisible = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                isKeyboardVisible = false
+            }
             .onChange(of: speechService.isListening) { wasListening, isNowListening in
                 guard wasListening && !isNowListening && isVoiceOverlayPresented else { return }
                 let finalText = speechService.transcribedText
@@ -463,6 +494,153 @@ struct MainLoggingShellView: View {
                 inputMode = .text
             }
         }
+    }
+
+    private var bottomActionDock: some View {
+        VStack(spacing: 10) {
+            if pendingSyncItemCount > 0 {
+                syncStatusPill
+                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+            }
+
+            ZStack {
+                HStack(spacing: 0) {
+                    HStack(spacing: 12) {
+                        bottomDockButton(
+                            systemImage: "camera.fill",
+                            color: Color(red: 0.380, green: 0.333, blue: 0.961),
+                            accessibilityLabel: "Open camera"
+                        ) {
+                            NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
+                        }
+
+                        bottomDockButton(
+                            systemImage: "mic.fill",
+                            color: Color(red: 0.796, green: 0.188, blue: 0.878),
+                            accessibilityLabel: "Voice input"
+                        ) {
+                            NotificationCenter.default.post(name: .openVoiceFromTabBar, object: nil)
+                        }
+                    }
+
+                    Spacer(minLength: 12)
+
+                    HStack(spacing: 12) {
+                        streakDockIndicator
+
+                        bottomDockButton(
+                            systemImage: "flame.fill",
+                            color: .orange,
+                            accessibilityLabel: "Open nutrition summary"
+                        ) {
+                            NotificationCenter.default.post(name: .openNutritionSummaryFromTabBar, object: nil)
+                        }
+                    }
+                }
+
+                if isKeyboardVisible {
+                    bottomDockButton(
+                        systemImage: "keyboard.chevron.compact.down",
+                        color: .secondary,
+                        accessibilityLabel: "Dismiss keyboard"
+                    ) {
+                        NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                    }
+                    .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                }
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.bottom, 16)
+    }
+
+    private var syncStatusPill: some View {
+        Button {
+            isSyncInfoPresented = true
+        } label: {
+            HStack(spacing: 8) {
+                ProgressView()
+                    .controlSize(.mini)
+
+                Text(syncStatusTitle)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 14)
+            .frame(height: 34)
+        }
+        .buttonStyle(.plain)
+        .background(.regularMaterial, in: Capsule(style: .continuous))
+        .accessibilityLabel(Text(syncStatusTitle))
+        .alert("Pending sync", isPresented: $isSyncInfoPresented) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text(syncStatusExplanation)
+        }
+    }
+
+    private var pendingSyncItemCount: Int {
+        let unsavedVisibleRows = inputRows.filter { row in
+            guard !row.isSaved else { return false }
+            return row.calories != nil || !row.parsedItems.isEmpty || row.parsedItem != nil
+        }.count
+        return unsavedVisibleRows + pendingSaveQueue.count + pendingPatchTasks.count
+    }
+
+    private var syncStatusTitle: String {
+        "\(pendingSyncItemCount) \(pendingSyncItemCount == 1 ? "item" : "items") syncing"
+    }
+
+    private var syncStatusExplanation: String {
+        if saveError != nil {
+            return "These items are visible here and included in your calories, but they have not fully synced yet. Check your connection and retry if needed."
+        }
+
+        return "These items are visible here and included in your calories. They are still syncing and will be confirmed automatically."
+    }
+
+    private var streakDockIndicator: some View {
+        ZStack(alignment: .bottomTrailing) {
+            Image(systemName: "calendar")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.primary)
+                .frame(width: 60, height: 60)
+
+            if isLoadingFoodLogStreak && currentFoodLogStreak == nil {
+                ProgressView()
+                    .controlSize(.mini)
+                    .padding(8)
+            } else {
+                Text("\(currentFoodLogStreak ?? 0)")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+                    .frame(minWidth: 20, minHeight: 20)
+                    .background(.regularMaterial, in: Circle())
+                    .padding(8)
+            }
+        }
+        .glassEffect(.regular, in: .circle)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(currentFoodLogStreak ?? 0)-day food streak"))
+    }
+
+    private func bottomDockButton(
+        systemImage: String,
+        color: Color,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(color)
+                .frame(width: 60, height: 60)
+        }
+        .glassEffect(.regular.interactive(), in: .circle)
+        .accessibilityLabel(Text(accessibilityLabel))
     }
 
     private var topHeaderStrip: some View {
@@ -754,11 +932,124 @@ struct MainLoggingShellView: View {
 
             homeStatusStrip
                 .padding(.top, 8)
+        }
+    }
 
-            if appStore.isHealthSyncEnabled && appStore.healthAuthorizationState == .authorized {
-                activityCard
-                    .padding(.top, 16)
+    private var nutritionSummarySheet: some View {
+        let totals = visibleNutritionTotals
+        let macroCalories = max(1.0, totals.protein * 4 + totals.carbs * 4 + totals.fat * 9)
+
+        return NavigationStack {
+            VStack(alignment: .leading, spacing: 20) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Daily Calories")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .textCase(.uppercase)
+                    Text("\(Int(totals.calories.rounded())) kcal")
+                        .font(.system(size: 42, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                }
+
+                VStack(spacing: 12) {
+                    nutrientRow(
+                        title: "Protein",
+                        value: totals.protein,
+                        suffix: "g",
+                        percent: (totals.protein * 4) / macroCalories,
+                        color: .blue
+                    )
+                    nutrientRow(
+                        title: "Carbs",
+                        value: totals.carbs,
+                        suffix: "g",
+                        percent: (totals.carbs * 4) / macroCalories,
+                        color: .green
+                    )
+                    nutrientRow(
+                        title: "Fat",
+                        value: totals.fat,
+                        suffix: "g",
+                        percent: (totals.fat * 9) / macroCalories,
+                        color: .orange
+                    )
+                }
+
+                Spacer()
             }
+            .padding(24)
+            .navigationTitle(summaryDateString == HomeLoggingDateUtils.summaryRequestFormatter.string(from: Date()) ? "Today" : summaryDateString)
+            .navigationBarTitleDisplayMode(.inline)
+        }
+    }
+
+    private var visibleNutritionTotals: NutritionTotals {
+        inputRows.reduce(NutritionTotals(calories: 0, protein: 0, carbs: 0, fat: 0)) { totals, row in
+            let rowCalories = Double(row.calories ?? 0)
+            let rowProtein: Double
+            let rowCarbs: Double
+            let rowFat: Double
+
+            if !row.parsedItems.isEmpty {
+                rowProtein = row.parsedItems.reduce(0) { $0 + $1.protein }
+                rowCarbs = row.parsedItems.reduce(0) { $0 + $1.carbs }
+                rowFat = row.parsedItems.reduce(0) { $0 + $1.fat }
+            } else if let item = row.parsedItem {
+                rowProtein = item.protein
+                rowCarbs = item.carbs
+                rowFat = item.fat
+            } else {
+                rowProtein = 0
+                rowCarbs = 0
+                rowFat = 0
+            }
+
+            return NutritionTotals(
+                calories: totals.calories + rowCalories,
+                protein: totals.protein + rowProtein,
+                carbs: totals.carbs + rowCarbs,
+                fat: totals.fat + rowFat
+            )
+        }
+    }
+
+    private func refreshNutritionStateForVisibleDay() {
+        invalidateDayCache(for: summaryDateString)
+        refreshDaySummary()
+        refreshDayLogs()
+    }
+
+    private func refreshNutritionStateAfterProgressChange(_ notification: Notification) {
+        guard let savedDay = notification.userInfo?["savedDay"] as? String else {
+            refreshNutritionStateForVisibleDay()
+            return
+        }
+
+        invalidateDayCache(for: savedDay)
+        guard savedDay == summaryDateString else { return }
+        refreshDaySummary()
+        refreshDayLogs()
+    }
+
+    private func nutrientRow(title: String, value: Double, suffix: String, percent: Double, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(.headline)
+                Spacer()
+                Text("\(Int(value.rounded()))\(suffix) · \(Int((percent * 100).rounded()))%")
+                    .font(.subheadline.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(.systemGray5))
+                    Capsule()
+                        .fill(color.gradient)
+                        .frame(width: max(0, min(proxy.size.width, proxy.size.width * percent)))
+                }
+            }
+            .frame(height: 10)
         }
     }
 
@@ -1663,7 +1954,7 @@ struct MainLoggingShellView: View {
             if let selectedCameraSource {
                 return selectedCameraSource.statusMessage
             }
-            return "Choose how you want to add food: take a picture or photo."
+            return ""
         case .manualAdd:
             return "Manual add tools are open in Details."
         }
@@ -2408,16 +2699,22 @@ struct MainLoggingShellView: View {
             row.imagePreviewData = prepared.previewData
             row.imageRef = pendingImageStorageRef
             suppressDebouncedParseOnce = true
-            inputRows = [row]
+
+            let savedRows = inputRows.filter { $0.isSaved }
+            let unsavedNonEmpty = inputRows.filter {
+                !$0.isSaved && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            inputRows = savedRows + unsavedNonEmpty + [row]
             clearParseSchedulerState()
 
             parseResult = response
             latestParseInputKind = normalizedInputKind(response.inputKind, fallback: "image")
             editableItems = response.items.map(EditableParsedItem.init(apiItem:))
-            applyRowParseResult(response)
-            if inputRows.indices.contains(0) {
-                inputRows[0].imagePreviewData = prepared.previewData
-                inputRows[0].imageRef = pendingImageStorageRef
+            let imageRowIDs: Set<UUID> = [row.id]
+            applyRowParseResult(response, targetRowIDs: imageRowIDs)
+            if let idx = inputRows.lastIndex(where: { $0.id == row.id }) {
+                inputRows[idx].imagePreviewData = prepared.previewData
+                inputRows[idx].imageRef = pendingImageStorageRef
             }
             parseInfoMessage = nil
             parseError = nil
@@ -2742,6 +3039,20 @@ struct MainLoggingShellView: View {
             completedRowParses = []
             autoSavedParseIDs = []
             clearParseSchedulerState()
+            let clearedRowIDs = Set(inputRows.filter { !$0.isSaved }.map(\.id))
+            if !clearedRowIDs.isEmpty {
+                let previousQueueCount = pendingSaveQueue.count
+                pendingSaveQueue.removeAll { item in
+                    guard item.serverLogId == nil, let rowID = item.rowID else {
+                        return false
+                    }
+                    return clearedRowIDs.contains(rowID)
+                }
+                if pendingSaveQueue.count != previousQueueCount {
+                    persistPendingSaveQueue()
+                    refreshRetryStateFromPendingQueue()
+                }
+            }
             // Preserve saved (history) rows — only reset the active input row
             let savedRows = inputRows.filter { $0.isSaved }
             inputRows = savedRows + [HomeLogRow.empty()]
@@ -3816,7 +4127,7 @@ struct MainLoggingShellView: View {
             pendingSaveFingerprint = fingerprint
             pendingSaveRequest = requestToSave
             pendingSaveIdempotencyKey = idempotencyKey
-            persistPendingSaveContext()
+            persistPendingSaveContext(rowID: activeEditingRowID)
             isRetry = false
         }
 
@@ -3941,6 +4252,9 @@ struct MainLoggingShellView: View {
             invalidateDayCache(for: savedDay)
             await loadDaySummary(forcedDate: savedDay, skipCache: true)
             await loadDayLogs(forcedDate: savedDay, skipCache: true)
+            if let logs = dayLogs, logs.date == savedDay {
+                reconcilePendingSaveQueue(with: logs.logs, for: savedDay)
+            }
             NotificationCenter.default.post(
                 name: .nutritionProgressDidChange,
                 object: nil,
@@ -4021,6 +4335,11 @@ struct MainLoggingShellView: View {
     private func handleServerBackedRowCleared(_ row: HomeLogRow) {
         guard let serverLogId = row.serverLogId else { return }
 
+        isNoteEditorFocused = false
+        activeEditingRowID = nil
+        NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+
         pendingPatchTasks[row.id]?.cancel()
         pendingPatchTasks[row.id] = nil
         pendingDeleteTasks[row.id]?.cancel()
@@ -4029,10 +4348,11 @@ struct MainLoggingShellView: View {
         var restoredRow = row
         restoredRow.isSaved = true
         restoredRow.parsePhase = .idle
+        restoredRow.isDeleting = false
 
-        inputRows.removeAll { $0.id == row.id }
-        if inputRows.allSatisfy({ $0.isSaved }) {
-            inputRows.append(.empty())
+        if let index = inputRows.firstIndex(where: { $0.id == row.id }) {
+            inputRows[index] = restoredRow
+            inputRows[index].isDeleting = true
         }
 
         let savedDay = String((row.serverLoggedAt ?? summaryDateString).prefix(10))
@@ -4040,6 +4360,14 @@ struct MainLoggingShellView: View {
         saveError = nil
 
         let task = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.12)) {
+                inputRows.removeAll { $0.id == row.id }
+                if inputRows.allSatisfy({ $0.isSaved }) {
+                    inputRows.append(.empty())
+                }
+            }
             await deleteServerBackedRow(
                 row: restoredRow,
                 serverLogId: serverLogId,
@@ -4086,8 +4414,10 @@ struct MainLoggingShellView: View {
 
     private func restoreDeletedRow(_ row: HomeLogRow, at originalIndex: Int) {
         guard !inputRows.contains(where: { $0.id == row.id }) else { return }
+        var restored = row
+        restored.isDeleting = false
         let insertIndex = min(max(originalIndex, 0), inputRows.count)
-        inputRows.insert(row, at: insertIndex)
+        inputRows.insert(restored, at: insertIndex)
     }
 
     private func removeDeletedLogFromVisibleDayLogs(logId: String, dateString: String) {
@@ -4143,7 +4473,7 @@ struct MainLoggingShellView: View {
             pendingSaveFingerprint = saveRequestFingerprint(request)
             pendingSaveRequest = request
             pendingSaveIdempotencyKey = key
-            persistPendingSaveContext()
+            persistPendingSaveContext(rowID: firstSaveable.rowID)
         }
         autoSaveTask = Task {
             try? await Task.sleep(nanoseconds: autoSaveDelayNs)
@@ -4191,7 +4521,7 @@ struct MainLoggingShellView: View {
             pendingSaveFingerprint = saveRequestFingerprint(request)
             pendingSaveRequest = request
             pendingSaveIdempotencyKey = idempotencyKey
-            persistPendingSaveContext()
+            persistPendingSaveContext(rowID: entry.rowID)
 
             // Mark before the call so a retry loop can't stack up (idempotency key
             // on the backend is the real guard against duplicate writes).
@@ -4219,7 +4549,12 @@ struct MainLoggingShellView: View {
             pendingSaveFingerprint = saveRequestFingerprint(request)
             pendingSaveRequest = request
             pendingSaveIdempotencyKey = idempotencyKey
-            persistPendingSaveContext()
+            persistPendingSaveContext(
+                rowID: inputRows.first(where: { !$0.isSaved && $0.imagePreviewData != nil })?.id,
+                imageUploadData: pendingImageData,
+                imagePreviewData: pendingImagePreviewData,
+                imageMimeType: pendingImageMimeType
+            )
             await submitSave(request: request, idempotencyKey: idempotencyKey, isRetry: false, intent: .auto)
         }
     }
@@ -4391,19 +4726,42 @@ struct MainLoggingShellView: View {
     private func prepareSaveRequestForNetwork(_ request: SaveLogRequest, idempotencyKey: UUID) async throws -> SaveLogRequest {
         var prepared = request
         let kind = normalizedInputKind(prepared.parsedLog.inputKind, fallback: latestParseInputKind)
+        let queueKey = idempotencyKey.uuidString.lowercased()
+        let queuedItem = pendingSaveQueue.first { $0.idempotencyKey == queueKey }
 
-        // Image storage is deferred — images are kept locally for now.
-        // If a storage ref already exists (e.g. from a retry), preserve it.
-        if kind == "image",
-           let existingRef = pendingImageStorageRef ?? prepared.parsedLog.imageRef,
-           !existingRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            prepared = requestWithImageRef(prepared, imageRef: existingRef)
+        if kind == "image" {
+            if let existingRef = pendingImageStorageRef ?? prepared.parsedLog.imageRef,
+               !existingRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                prepared = requestWithImageRef(prepared, imageRef: existingRef)
+            } else if let imageData = pendingImageData ?? queuedItem?.imageUploadData ?? inputRows.compactMap(\.imagePreviewData).first {
+                let imageRef = try await appStore.imageStorageService.uploadJPEG(
+                    imageData,
+                    userIdentifierHint: appStore.authSessionStore.session?.userID
+                )
+                pendingImageStorageRef = imageRef
+                prepared = requestWithImageRef(prepared, imageRef: imageRef)
+                for index in inputRows.indices where inputRows[index].imagePreviewData != nil {
+                    inputRows[index].imageRef = imageRef
+                }
+            }
         }
 
         if pendingSaveIdempotencyKey == idempotencyKey {
             pendingSaveRequest = prepared
             pendingSaveFingerprint = saveRequestFingerprint(prepared)
             persistPendingSaveContext()
+        }
+        if pendingSaveQueue.contains(where: { $0.idempotencyKey == queueKey }) {
+            upsertPendingSaveQueueItem(
+                request: prepared,
+                fingerprint: saveRequestFingerprint(prepared),
+                idempotencyKey: idempotencyKey,
+                rowID: queuedItem?.rowID,
+                imageUploadData: queuedItem?.imageUploadData,
+                imagePreviewData: queuedItem?.imagePreviewData,
+                imageMimeType: queuedItem?.imageMimeType,
+                serverLogId: queuedItem?.serverLogId
+            )
         }
 
         return prepared
@@ -4451,6 +4809,11 @@ struct MainLoggingShellView: View {
                 isRetry: isRetry,
                 logId: response.logId,
                 timeToLogMs: timeToLogMs
+            )
+            markPendingSaveSucceeded(
+                idempotencyKey: idempotencyKey,
+                logId: response.logId,
+                preparedRequest: effectiveRequest
             )
             clearPendingSaveContext()
             if intent != .auto {
@@ -4738,6 +5101,36 @@ struct MainLoggingShellView: View {
         }
     }
 
+    private func refreshCurrentStreak() {
+        guard appStore.configuration.progressFeatureEnabled else {
+            currentFoodLogStreak = nil
+            return
+        }
+
+        Task { @MainActor in
+            isLoadingFoodLogStreak = true
+            defer { isLoadingFoodLogStreak = false }
+
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: Date())
+            guard let start = calendar.date(byAdding: .day, value: -179, to: today) else {
+                return
+            }
+
+            let formatter = HomeLoggingDateUtils.summaryRequestFormatter
+            do {
+                let response = try await appStore.apiClient.getProgress(
+                    from: formatter.string(from: start),
+                    to: formatter.string(from: today),
+                    timezone: TimeZone.current.identifier
+                )
+                currentFoodLogStreak = response.streaks.currentDays
+            } catch {
+                handleAuthFailureIfNeeded(error)
+            }
+        }
+    }
+
     private func loadDayLogs(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
         let dateToLoad = forcedDate ?? summaryDateString
 
@@ -4804,7 +5197,71 @@ struct MainLoggingShellView: View {
         HomeDayLogsDiskCache.remove(date: date, defaults: defaults)
     }
 
+    private func pendingRowsForDate(_ dateString: String, excluding serverEntries: [DayLogEntry]) -> [HomeLogRow] {
+        let serverLogIds = Set(serverEntries.map(\.id))
+        return pendingSaveQueue
+            .filter { item in
+                item.dateString == dateString && item.serverLogId.map { !serverLogIds.contains($0) } ?? true
+            }
+            .sorted { $0.createdAt < $1.createdAt }
+            .map(makePendingSaveRow)
+    }
+
+    private func makePendingSaveRow(from item: PendingSaveQueueItem) -> HomeLogRow {
+        let body = item.request.parsedLog
+        let parsedItems = body.items.map(parsedFoodItem(from:))
+        let displayText: String
+        if normalizedInputKind(body.inputKind, fallback: "text") == "image" &&
+            body.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            displayText = "Photo meal"
+        } else {
+            displayText = body.rawText
+        }
+        let stableID = item.rowID ?? UUID(uuid: stableUUID(from: item.idempotencyKey))
+        return HomeLogRow(
+            id: stableID,
+            text: displayText,
+            calories: Int(body.totals.calories.rounded()),
+            calorieRangeText: nil,
+            isApproximate: false,
+            parsePhase: .idle,
+            parsedItem: parsedItems.first,
+            parsedItems: parsedItems,
+            editableItemIndices: [],
+            normalizedTextAtParse: normalizedRowText(displayText),
+            imagePreviewData: item.imagePreviewData,
+            imageRef: body.imageRef,
+            isSaved: true,
+            savedAt: nil,
+            serverLogId: item.serverLogId,
+            serverLoggedAt: body.loggedAt
+        )
+    }
+
+    private func parsedFoodItem(from item: SaveParsedFoodItem) -> ParsedFoodItem {
+        ParsedFoodItem(
+            name: item.name,
+            quantity: item.amount ?? item.quantity,
+            unit: item.unit,
+            grams: item.grams,
+            calories: item.calories,
+            protein: item.protein,
+            carbs: item.carbs,
+            fat: item.fat,
+            nutritionSourceId: item.nutritionSourceId,
+            originalNutritionSourceId: item.originalNutritionSourceId,
+            sourceFamily: item.sourceFamily,
+            matchConfidence: item.matchConfidence,
+            amount: item.amount,
+            unitNormalized: item.unitNormalized,
+            gramsPerUnit: item.gramsPerUnit,
+            needsClarification: item.needsClarification,
+            manualOverride: item.manualOverride?.enabled
+        )
+    }
+
     private func syncInputRowsFromDayLogs(_ entries: [DayLogEntry], for dateString: String) {
+        reconcilePendingSaveQueue(with: entries, for: dateString)
         let savedRows: [HomeLogRow] = entries.map { entry in
             let items: [ParsedFoodItem] = entry.items.map { item in
                 ParsedFoodItem(
@@ -4823,9 +5280,15 @@ struct MainLoggingShellView: View {
                 )
             }
             let stableID = UUID(uuidString: entry.id) ?? UUID(uuid: stableUUID(from: entry.id))
+            let displayText: String
+            if entry.inputKind == "image" && entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                displayText = "Photo meal"
+            } else {
+                displayText = entry.rawText
+            }
             return HomeLogRow(
                 id: stableID,
-                text: entry.rawText,
+                text: displayText,
                 calories: Int(entry.totals.calories.rounded()),
                 calorieRangeText: nil,
                 isApproximate: false,
@@ -4838,9 +5301,9 @@ struct MainLoggingShellView: View {
                 // `rowNeedsFreshParse` would see nil and treat any quantity
                 // edit as a brand-new parse, bypassing the client-side fast
                 // path.
-                normalizedTextAtParse: normalizedRowText(entry.rawText),
+                normalizedTextAtParse: normalizedRowText(displayText),
                 imagePreviewData: nil,
-                imageRef: nil,
+                imageRef: entry.imageRef,
                 isSaved: true,
                 savedAt: nil,
                 serverLogId: entry.id,
@@ -4852,13 +5315,15 @@ struct MainLoggingShellView: View {
         // day's entries. Keep active drafts only when their draft timestamp belongs
         // to the same day; otherwise a today draft visually leaks into yesterday.
         let currentActiveRows = inputRows.filter { !$0.isSaved }
+        let pendingRows = pendingRowsForDate(dateString, excluding: entries)
+        let pendingRowIDs = Set(pendingRows.map(\.id))
         let activeRows: [HomeLogRow]
         if draftDayString() == dateString || (draftLoggedAt == nil && dateString == summaryDateString) {
-            activeRows = currentActiveRows
+            activeRows = currentActiveRows.filter { !pendingRowIDs.contains($0.id) }
         } else {
             activeRows = []
         }
-        inputRows = savedRows + activeRows
+        inputRows = savedRows + pendingRows + activeRows
 
         // Ensure there's always at least one empty active row for input
         if inputRows.allSatisfy({ $0.isSaved }) {
@@ -5051,7 +5516,94 @@ struct MainLoggingShellView: View {
         pendingSaveRequest = nil
         pendingSaveFingerprint = nil
         pendingSaveIdempotencyKey = nil
-        HomePendingSaveStore.clear(defaults: defaults)
+    }
+
+    private func upsertPendingSaveQueueItem(
+        request: SaveLogRequest,
+        fingerprint: String,
+        idempotencyKey: UUID,
+        rowID: UUID?,
+        imageUploadData: Data? = nil,
+        imagePreviewData: Data? = nil,
+        imageMimeType: String? = nil,
+        serverLogId: String? = nil
+    ) {
+        let key = idempotencyKey.uuidString.lowercased()
+        let dateString = String(request.parsedLog.loggedAt.prefix(10))
+        let existingIndex = pendingSaveQueue.firstIndex { item in
+            item.idempotencyKey == key || (rowID != nil && item.rowID == rowID && item.serverLogId == nil)
+        }
+        let existing = existingIndex.map { pendingSaveQueue[$0] }
+        let item = PendingSaveQueueItem(
+            id: existing?.id ?? UUID(),
+            rowID: rowID ?? existing?.rowID,
+            request: request,
+            fingerprint: fingerprint,
+            idempotencyKey: key,
+            dateString: dateString,
+            createdAt: existing?.createdAt ?? Date(),
+            imageUploadData: imageUploadData ?? existing?.imageUploadData,
+            imagePreviewData: imagePreviewData ?? existing?.imagePreviewData,
+            imageMimeType: imageMimeType ?? existing?.imageMimeType,
+            serverLogId: serverLogId ?? existing?.serverLogId
+        )
+
+        if let existingIndex {
+            pendingSaveQueue[existingIndex] = item
+        } else {
+            pendingSaveQueue.append(item)
+        }
+        persistPendingSaveQueue()
+        refreshRetryStateFromPendingQueue()
+    }
+
+    private func persistPendingSaveQueue() {
+        HomePendingSaveStore.saveQueue(pendingSaveQueue, defaults: defaults)
+    }
+
+    private func refreshRetryStateFromPendingQueue() {
+        guard let item = pendingSaveQueue.first(where: { $0.serverLogId == nil }),
+              let key = UUID(uuidString: item.idempotencyKey) else {
+            pendingSaveRequest = nil
+            pendingSaveFingerprint = nil
+            pendingSaveIdempotencyKey = nil
+            return
+        }
+
+        pendingSaveRequest = item.request
+        pendingSaveFingerprint = item.fingerprint
+        pendingSaveIdempotencyKey = key
+    }
+
+    private func markPendingSaveSucceeded(idempotencyKey: UUID, logId: String, preparedRequest: SaveLogRequest) {
+        let key = idempotencyKey.uuidString.lowercased()
+        guard let index = pendingSaveQueue.firstIndex(where: { $0.idempotencyKey == key }) else {
+            refreshRetryStateFromPendingQueue()
+            return
+        }
+        pendingSaveQueue[index].request = preparedRequest
+        pendingSaveQueue[index].fingerprint = saveRequestFingerprint(preparedRequest)
+        pendingSaveQueue[index].serverLogId = logId
+        persistPendingSaveQueue()
+        refreshRetryStateFromPendingQueue()
+    }
+
+    private func removePendingSave(idempotencyKey: String) {
+        pendingSaveQueue.removeAll { $0.idempotencyKey == idempotencyKey }
+        persistPendingSaveQueue()
+        refreshRetryStateFromPendingQueue()
+    }
+
+    private func reconcilePendingSaveQueue(with logs: [DayLogEntry], for dateString: String) {
+        let serverLogIds = Set(logs.map(\.id))
+        let beforeCount = pendingSaveQueue.count
+        pendingSaveQueue.removeAll { item in
+            item.dateString == dateString && item.serverLogId.map { serverLogIds.contains($0) } == true
+        }
+        if pendingSaveQueue.count != beforeCount {
+            persistPendingSaveQueue()
+            refreshRetryStateFromPendingQueue()
+        }
     }
 
     private func saveRequestFingerprint(_ request: SaveLogRequest) -> String {
@@ -5218,44 +5770,52 @@ struct MainLoggingShellView: View {
         _ = appStore.handleAuthFailureIfNeeded(error)
     }
 
-    private func persistPendingSaveContext() {
+    private func persistPendingSaveContext(
+        rowID: UUID? = nil,
+        imageUploadData: Data? = nil,
+        imagePreviewData: Data? = nil,
+        imageMimeType: String? = nil
+    ) {
         guard let pendingSaveRequest, let pendingSaveFingerprint, let pendingSaveIdempotencyKey else {
             return
         }
-        let draft = PendingSaveDraft(
+        upsertPendingSaveQueueItem(
             request: pendingSaveRequest,
             fingerprint: pendingSaveFingerprint,
-            idempotencyKey: pendingSaveIdempotencyKey.uuidString.lowercased()
+            idempotencyKey: pendingSaveIdempotencyKey,
+            rowID: rowID,
+            imageUploadData: imageUploadData,
+            imagePreviewData: imagePreviewData,
+            imageMimeType: imageMimeType
         )
-        HomePendingSaveStore.save(draft, defaults: defaults)
     }
 
     private func restorePendingSaveContextIfNeeded() {
-        guard pendingSaveRequest == nil, pendingSaveIdempotencyKey == nil else {
+        guard pendingSaveQueue.isEmpty else {
             return
         }
-        guard let draft = HomePendingSaveStore.load(defaults: defaults),
-              let key = UUID(uuidString: draft.idempotencyKey) else {
-            HomePendingSaveStore.clear(defaults: defaults)
-            return
-        }
-
-        pendingSaveRequest = draft.request
-        pendingSaveFingerprint = draft.fingerprint
-        pendingSaveIdempotencyKey = key
+        pendingSaveQueue = HomePendingSaveStore.loadQueue(defaults: defaults)
+        refreshRetryStateFromPendingQueue()
     }
 
     private func submitRestoredPendingSaveIfPossible() {
         guard appStore.isNetworkReachable, !isSaving else { return }
-        guard let pendingSaveRequest, let pendingSaveIdempotencyKey else { return }
+        let itemsToSubmit = pendingSaveQueue.filter { $0.serverLogId == nil }
+        guard !itemsToSubmit.isEmpty else { return }
 
         Task { @MainActor in
-            await submitSave(
-                request: pendingSaveRequest,
-                idempotencyKey: pendingSaveIdempotencyKey,
-                isRetry: true,
-                intent: .auto
-            )
+            for item in itemsToSubmit {
+                guard let key = UUID(uuidString: item.idempotencyKey) else {
+                    removePendingSave(idempotencyKey: item.idempotencyKey)
+                    continue
+                }
+                await submitSave(
+                    request: item.request,
+                    idempotencyKey: key,
+                    isRetry: true,
+                    intent: .auto
+                )
+            }
         }
     }
 
