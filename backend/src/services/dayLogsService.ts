@@ -25,6 +25,7 @@ type DayLogEntry = {
   loggedAt: string;
   rawText: string;
   inputKind: string;
+  imageRef: string | null;
   confidence: number;
   totals: {
     calories: number;
@@ -104,6 +105,7 @@ export async function getDayLogsRange(
     logged_at: Date;
     raw_text: string;
     input_kind: string;
+    image_ref: string | null;
     parse_confidence: string;
     total_calories: string;
     total_protein_g: string;
@@ -111,7 +113,7 @@ export async function getDayLogsRange(
     total_fat_g: string;
     day_date: string;
   }>(
-    `SELECT id, logged_at, raw_text, input_kind, parse_confidence,
+    `SELECT id, logged_at, raw_text, input_kind, image_ref, parse_confidence,
             total_calories, total_protein_g, total_carbs_g, total_fat_g,
             (logged_at AT TIME ZONE $2)::date::text AS day_date
      FROM food_logs
@@ -215,6 +217,7 @@ export async function getDayLogsRange(
       loggedAt: log.logged_at instanceof Date ? log.logged_at.toISOString() : String(log.logged_at),
       rawText: log.raw_text,
       inputKind: log.input_kind || 'text',
+      imageRef: log.image_ref,
       confidence: round(toNumber(log.parse_confidence)),
       totals: {
         calories: round(toNumber(log.total_calories)),
@@ -262,6 +265,7 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
     logged_at: Date;
     raw_text: string;
     input_kind: string;
+    image_ref: string | null;
     parse_confidence: string;
     total_calories: string;
     total_protein_g: string;
@@ -269,7 +273,7 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
     total_fat_g: string;
   }>(
     `
-    SELECT id, logged_at, raw_text, input_kind, parse_confidence,
+    SELECT id, logged_at, raw_text, input_kind, image_ref, parse_confidence,
            total_calories, total_protein_g, total_carbs_g, total_fat_g
     FROM food_logs
     WHERE user_id = $1
@@ -363,6 +367,7 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
       loggedAt: log.logged_at instanceof Date ? log.logged_at.toISOString() : String(log.logged_at),
       rawText: log.raw_text,
       inputKind: log.input_kind || 'text',
+      imageRef: log.image_ref,
       confidence: round(toNumber(log.parse_confidence)),
       totals: {
         calories: round(toNumber(log.total_calories)),

@@ -268,6 +268,24 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(onboardingResponse.status).toBe(200);
     expect(onboardingResponse.body.calorieTarget).toBeGreaterThan(0);
 
+    const profileResponse = await request(app)
+      .get('/v1/onboarding')
+      .set(authHeader);
+
+    expect(profileResponse.status).toBe(200);
+    expect(profileResponse.body.goal).toBe(onboardingPayload.goal);
+    expect(profileResponse.body.units).toBe(onboardingPayload.units);
+    expect(profileResponse.body.activityLevel).toBe(onboardingPayload.activityLevel);
+    expect(profileResponse.body.timezone).toBe(onboardingPayload.timezone);
+    expect(profileResponse.body.age).toBe(onboardingPayload.age);
+    expect(profileResponse.body.sex).toBe(onboardingPayload.sex);
+    expect(profileResponse.body.heightCm).toBe(onboardingPayload.heightCm);
+    expect(profileResponse.body.weightKg).toBe(onboardingPayload.weightKg);
+    expect(profileResponse.body.pace).toBe(onboardingPayload.pace);
+    expect(profileResponse.body.activityDetail).toBe(onboardingPayload.activityDetail);
+    expect(profileResponse.body.calorieTarget).toBe(onboardingResponse.body.calorieTarget);
+    expect(profileResponse.body.macroTargets).toEqual(onboardingResponse.body.macroTargets);
+
     const parseResponse = await request(app)
       .post('/v1/logs/parse')
       .set(authHeader)
@@ -310,6 +328,8 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
         parsedLog: {
           rawText: '2 eggs, 2 slices toast, black coffee',
           loggedAt: '2026-02-15T13:35:00.000Z',
+          inputKind: 'image',
+          imageRef: 'users/test-user/food-logs/2026/02/photo.jpg',
           confidence: parseResponse.body.confidence,
           totals: parseResponse.body.totals,
           items: parseResponse.body.items
@@ -323,6 +343,15 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(saveResponse.body.healthSync?.action).toBe('upsert');
     expect(typeof saveResponse.body.healthSync?.healthWriteKey).toBe('string');
     expect(saveResponse.body.healthSync?.healthWriteKey?.length).toBeGreaterThan(10);
+
+    const dayLogsResponse = await request(app)
+      .get('/v1/logs/day-logs')
+      .set(authHeader)
+      .query({ date: '2026-02-15' });
+
+    expect(dayLogsResponse.status).toBe(200);
+    expect(dayLogsResponse.body.logs[0].inputKind).toBe('image');
+    expect(dayLogsResponse.body.logs[0].imageRef).toBe('users/test-user/food-logs/2026/02/photo.jpg');
 
     const summaryResponse = await request(app)
       .get('/v1/logs/day-summary')
