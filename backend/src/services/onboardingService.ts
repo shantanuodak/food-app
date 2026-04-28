@@ -31,6 +31,28 @@ export type OnboardingProvenance = {
   inputs: Record<string, unknown>;
 };
 
+export type OnboardingProfile = {
+  goal: 'lose' | 'maintain' | 'gain';
+  dietPreference: string;
+  allergies: string[];
+  units: 'metric' | 'imperial';
+  activityLevel: 'low' | 'moderate' | 'high';
+  timezone: string;
+  age: number | null;
+  sex: 'female' | 'male' | 'other' | null;
+  heightCm: number | null;
+  weightKg: number | null;
+  pace: 'conservative' | 'balanced' | 'aggressive' | null;
+  activityDetail: 'mostlySitting' | 'lightlyActive' | 'moderatelyActive' | 'veryActive' | null;
+  calorieTarget: number;
+  macroTargets: {
+    protein: number;
+    carbs: number;
+    fat: number;
+  };
+  updatedAt: string;
+};
+
 export type OnboardingTargetCalculation = {
   calorieTarget: number;
   protein: number;
@@ -123,6 +145,79 @@ export async function getOnboardingProvenance(userId: string): Promise<Onboardin
     calculatorVersion: row.onboarding_calculator_version,
     computedAt: row.onboarding_computed_at.toISOString(),
     inputs: row.onboarding_inputs_json || {}
+  };
+}
+
+export async function getOnboardingProfile(userId: string): Promise<OnboardingProfile | null> {
+  const result = await pool.query<{
+    goal: 'lose' | 'maintain' | 'gain';
+    diet_preference: string;
+    allergies_json: string[] | null;
+    units: 'metric' | 'imperial';
+    activity_level: 'low' | 'moderate' | 'high';
+    timezone: string;
+    age: number | null;
+    sex: 'female' | 'male' | 'other' | null;
+    height_cm: string | null;
+    weight_kg: string | null;
+    pace: 'conservative' | 'balanced' | 'aggressive' | null;
+    activity_detail: 'mostlySitting' | 'lightlyActive' | 'moderatelyActive' | 'veryActive' | null;
+    calorie_target: string;
+    macro_target_protein: string;
+    macro_target_carbs: string;
+    macro_target_fat: string;
+    updated_at: Date;
+  }>(
+    `
+    SELECT
+      goal,
+      diet_preference,
+      allergies_json,
+      units,
+      activity_level,
+      timezone,
+      age,
+      sex,
+      height_cm,
+      weight_kg,
+      pace,
+      activity_detail,
+      calorie_target,
+      macro_target_protein,
+      macro_target_carbs,
+      macro_target_fat,
+      updated_at
+    FROM onboarding_profiles
+    WHERE user_id = $1
+    `,
+    [userId]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    return null;
+  }
+
+  return {
+    goal: row.goal,
+    dietPreference: row.diet_preference,
+    allergies: Array.isArray(row.allergies_json) ? row.allergies_json : [],
+    units: row.units,
+    activityLevel: row.activity_level,
+    timezone: row.timezone,
+    age: row.age,
+    sex: row.sex,
+    heightCm: row.height_cm === null ? null : Number(row.height_cm),
+    weightKg: row.weight_kg === null ? null : Number(row.weight_kg),
+    pace: row.pace,
+    activityDetail: row.activity_detail,
+    calorieTarget: Number(row.calorie_target),
+    macroTargets: {
+      protein: Number(row.macro_target_protein),
+      carbs: Number(row.macro_target_carbs),
+      fat: Number(row.macro_target_fat)
+    },
+    updatedAt: row.updated_at.toISOString()
   };
 }
 

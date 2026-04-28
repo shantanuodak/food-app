@@ -37,6 +37,11 @@ Use Supabase Free + Render Free deployment runbook:
 - Escalation route model can be overridden with `AI_ESCALATION_MODEL_NAME`.
 - If `GEMINI_API_KEY` is not set, backend uses local mock normalization fallback so local development still works.
 
+## Image Parse Integration
+- `POST /v1/logs/parse/image` uses `AI_IMAGE_PRIMARY_MODEL` for Take Photo nutrition estimates.
+- Default primary image model is `gemini-2.5-flash`.
+- `AI_IMAGE_FALLBACK_MODEL` can be set to a different model for low-confidence image retries.
+
 ## FatSecret Platform Integration
 - Set `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` in `.env` to enable FatSecret lookup in primary parse flow.
 - Optional tuning:

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { ApiError } from '../utils/errors.js';
-import { getOnboardingProvenance, upsertOnboarding } from '../services/onboardingService.js';
+import { getOnboardingProfile, getOnboardingProvenance, upsertOnboarding } from '../services/onboardingService.js';
 
 const router = Router();
 
@@ -33,6 +33,19 @@ const onboardingSchema = z.object({
     .max(100)
     .refine((value) => isValidTimezone(value), 'timezone must be a valid IANA timezone')
     .default('UTC')
+});
+
+router.get('/', async (req, res, next) => {
+  try {
+    const auth = res.locals.auth as { userId: string };
+    const profile = await getOnboardingProfile(auth.userId);
+    if (!profile) {
+      throw new ApiError(404, 'ONBOARDING_NOT_FOUND', 'Onboarding profile not found');
+    }
+    res.status(200).json(profile);
+  } catch (err) {
+    next(err);
+  }
 });
 
 router.post('/', async (req, res, next) => {
