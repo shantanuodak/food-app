@@ -13,7 +13,8 @@ struct ContentView: View {
 
     var body: some View {
         Group {
-            switch flow.route {            case .onboarding:
+            switch flow.route {
+            case .onboarding:
                 OnboardingView(flow: flow)
             case .home:
                 HomeTabShellView()
@@ -29,74 +30,15 @@ struct ContentView: View {
 }
 
 private struct HomeTabShellView: View {
-    @State private var isVoiceActive = false
-    @State private var isKeyboardVisible = false
-
     var body: some View {
-        ZStack(alignment: .bottom) {
-            MainLoggingShellView()
-
-            // Floating centered mic + camera + keyboard dismiss buttons
-            if !isVoiceActive {
-                HStack(spacing: 12) {
-                    Button {
-                        NotificationCenter.default.post(name: .openVoiceFromTabBar, object: nil)
-                    } label: {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(Color(red: 0.796, green: 0.188, blue: 0.878)) // #CB30E0
-                            .frame(width: 60, height: 60)
-                    }
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel(Text("Voice input"))
-
-                    Button {
-                        NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
-                    } label: {
-                        Image(systemName: "camera.fill")
-                            .font(.system(size: 20, weight: .medium))
-                            .foregroundStyle(Color(red: 0.380, green: 0.333, blue: 0.961)) // #6155F5
-                            .frame(width: 60, height: 60)
-                    }
-                    .glassEffect(.regular.interactive(), in: .circle)
-                    .accessibilityLabel(Text("Open camera"))
-
-                    if isKeyboardVisible {
-                        Button {
-                            NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
-                            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                        } label: {
-                            Image(systemName: "keyboard.chevron.compact.down")
-                                .font(.system(size: 20, weight: .medium))
-                                .foregroundStyle(.secondary)
-                                .frame(width: 60, height: 60)
-                        }
-                        .glassEffect(.regular.interactive(), in: .circle)
-                        .accessibilityLabel(Text("Dismiss keyboard"))
-                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
-                    }
-                }
-                .padding(.bottom, 16)
-                .transition(.opacity.combined(with: .scale(scale: 0.8)))
-            }
-        }
-        .animation(.easeInOut(duration: 0.25), value: isVoiceActive)
-        .animation(.easeInOut(duration: 0.2), value: isKeyboardVisible)
-        .onReceive(NotificationCenter.default.publisher(for: .voiceRecordingStateChanged)) { notification in
-            isVoiceActive = notification.userInfo?["isRecording"] as? Bool ?? false
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
-            isKeyboardVisible = true
-        }
-        .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
-            isKeyboardVisible = false
-        }
+        MainLoggingShellView()
     }
 }
 
 extension Notification.Name {
     static let openCameraFromTabBar = Notification.Name("openCameraFromTabBar")
     static let openVoiceFromTabBar = Notification.Name("openVoiceFromTabBar")
+    static let openNutritionSummaryFromTabBar = Notification.Name("openNutritionSummaryFromTabBar")
     static let voiceRecordingStateChanged = Notification.Name("voiceRecordingStateChanged")
     static let dismissKeyboardFromTabBar = Notification.Name("dismissKeyboardFromTabBar")
 }
@@ -109,12 +51,12 @@ struct HomeProfileScreen: View {
     @State private var hasLoadedDraft = false
     @State private var isRequestingHealthPermission = false
     @State private var healthPermissionMessage: String?
-    @State private var isRestartOnboardingConfirmationPresented = false
     @State private var isAdmin = false
     @State private var adminGeminiEnabled = false
     @State private var isAdminFlagsLoading = false
     @State private var trackingAccuracy: TrackingAccuracyResponse?
     @State private var isLoadingAccuracy = false
+    @State private var isSignOutConfirmationPresented = false
 
     // Auto-save
     private enum SaveStatus: Equatable {
@@ -128,14 +70,8 @@ struct HomeProfileScreen: View {
         NavigationStack {
             Form {
                 summaryHeaderSection
-                planSection
-                bodySection
-                dietSection
-                allergiesSection
-                healthSection
-                trackingAccuracySection
-                accountSection
-                if isAdmin { adminSection }
+                profileHubSection
+                appHubSection
             }
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.large)
@@ -144,19 +80,9 @@ struct HomeProfileScreen: View {
                     saveStatusIndicator
                 }
             }
-            .confirmationDialog(
-                "Restart onboarding?",
-                isPresented: $isRestartOnboardingConfirmationPresented,
-                titleVisibility: .visible
-            ) {
-                Button("Restart", role: .destructive) { appStore.resetOnboarding() }
-                Button("Cancel", role: .cancel) { }
-            } message: {
-                Text("This will send you back to onboarding.")
-            }
             .onChange(of: draft) { _, _ in triggerDebouncedSave() }
             .task {
-                loadDraftIfNeeded()
+                await loadDraftIfNeeded()
                 await loadAdminFlags()
                 await loadTrackingAccuracy()
             }
@@ -165,14 +91,97 @@ struct HomeProfileScreen: View {
 
     // MARK: - Sections
 
+    private var profileHubSection: some View {
+        Section {
+            NavigationLink {
+                PlanProfileDetailView {
+                    planSection
+                }
+            } label: {
+                ProfileHubRow(
+                    title: "Plan & goals",
+                    systemImage: "target"
+                )
+            }
+
+            NavigationLink {
+                BodyProfileDetailView {
+                    bodySection
+                }
+            } label: {
+                ProfileHubRow(
+                    title: "Body details",
+                    systemImage: "person.text.rectangle"
+                )
+            }
+
+            NavigationLink {
+                FoodPreferencesProfileDetailView {
+                    dietSection
+                    allergiesSection
+                }
+            } label: {
+                ProfileHubRow(
+                    title: "Food preferences",
+                    systemImage: "fork.knife"
+                )
+            }
+
+            NavigationLink {
+                HealthInsightsProfileDetailView {
+                    healthSection
+                    trackingAccuracySection
+                }
+            } label: {
+                ProfileHubRow(
+                    title: "Health & insights",
+                    systemImage: "heart.text.square"
+                )
+            }
+        }
+    }
+
+    private var appHubSection: some View {
+        Section("Account and app") {
+            NavigationLink {
+                AccountProfileDetailView {
+                    accountSection
+                    mealReminderSection
+                }
+            } label: {
+                ProfileHubRow(
+                    title: "Account & app",
+                    systemImage: accountProviderIcon
+                )
+            }
+
+            if isAdmin {
+                NavigationLink {
+                    AdminProfileDetailView {
+                        adminSection
+                    }
+                } label: {
+                    ProfileHubRow(
+                        title: "Admin",
+                        systemImage: "sparkles"
+                    )
+                }
+            }
+        }
+    }
+
     @ViewBuilder
     private var summaryHeaderSection: some View {
         Section {
             if draft.hasBaselineValues, let goal = draft.goal {
                 let metrics = OnboardingCalculator.metrics(from: draft)
+                let calorieTarget = draft.savedCalorieTarget ?? metrics.targetKcal
+                let proteinTarget = draft.savedMacroTargets?.protein ?? metrics.proteinTarget
+                let carbTarget = draft.savedMacroTargets?.carbs ?? metrics.carbTarget
+                let fatTarget = draft.savedMacroTargets?.fat ?? metrics.fatTarget
                 VStack(spacing: 12) {
                     VStack(spacing: 4) {
-                        Text("\(metrics.targetKcal)")
+                        Text("\(calorieTarget)")
                             .font(.largeTitle.bold())
                             .foregroundStyle(.primary)
                         Text("kcal / day target")
@@ -181,9 +190,9 @@ struct HomeProfileScreen: View {
                     }
 
                     HStack(spacing: 10) {
-                        macroPill("P", value: metrics.proteinTarget, color: .blue)
-                        macroPill("C", value: metrics.carbTarget, color: .orange)
-                        macroPill("F", value: metrics.fatTarget, color: .purple)
+                        macroPill("P", value: proteinTarget, color: .blue)
+                        macroPill("C", value: carbTarget, color: .orange)
+                        macroPill("F", value: fatTarget, color: .purple)
                     }
 
                     Text("\(L10n.goalLabel(goal)) · \(draft.pace?.title ?? "Balanced") pace")
@@ -539,10 +548,42 @@ struct HomeProfileScreen: View {
                 Label("Signed in with", systemImage: accountProviderIcon)
             }
             Button(role: .destructive) {
-                isRestartOnboardingConfirmationPresented = true
+                isSignOutConfirmationPresented = true
             } label: {
-                Label("Restart Onboarding", systemImage: "arrow.counterclockwise")
+                Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
             }
+            .alert("Sign out?", isPresented: $isSignOutConfirmationPresented) {
+                Button("Cancel", role: .cancel) { }
+                Button("Sign Out", role: .destructive) {
+                    appStore.signOut()
+                }
+            } message: {
+                Text("This clears this device's session and returns you to sign in. Your saved food logs stay in your account.")
+            }
+        }
+    }
+
+    private var mealReminderSection: some View {
+        Section {
+            reminderTimePicker(
+                title: "Breakfast",
+                systemImage: "sunrise.fill",
+                keyPath: \.breakfast
+            )
+            reminderTimePicker(
+                title: "Lunch",
+                systemImage: "sun.max.fill",
+                keyPath: \.lunch
+            )
+            reminderTimePicker(
+                title: "Dinner",
+                systemImage: "moon.fill",
+                keyPath: \.dinner
+            )
+        } header: {
+            Text("Meal reminders")
+        } footer: {
+            Text("Used for local food reminders when notifications are enabled.")
         }
     }
 
@@ -710,6 +751,38 @@ struct HomeProfileScreen: View {
         )
     }
 
+    private func reminderTimePicker(
+        title: String,
+        systemImage: String,
+        keyPath: WritableKeyPath<MealReminderSettings, MealReminderTime>
+    ) -> some View {
+        DatePicker(
+            selection: Binding(
+                get: { date(for: appStore.mealReminderSettings[keyPath: keyPath]) },
+                set: { newDate in
+                    var settings = appStore.mealReminderSettings
+                    settings[keyPath: keyPath] = reminderTime(from: newDate)
+                    appStore.setMealReminderSettings(settings)
+                }
+            ),
+            displayedComponents: .hourAndMinute
+        ) {
+            Label(title, systemImage: systemImage)
+        }
+    }
+
+    private func date(for time: MealReminderTime) -> Date {
+        var components = Calendar.current.dateComponents([.year, .month, .day], from: Date())
+        components.hour = time.hour
+        components.minute = time.minute
+        return Calendar.current.date(from: components) ?? Date()
+    }
+
+    private func reminderTime(from date: Date) -> MealReminderTime {
+        let components = Calendar.current.dateComponents([.hour, .minute], from: date)
+        return MealReminderTime(hour: components.hour ?? 12, minute: components.minute ?? 0)
+    }
+
     private var dietPreferencePayload: String {
         if draft.preferences.isEmpty || draft.preferences.contains(.noPreference) {
             return "no_preference"
@@ -719,12 +792,15 @@ struct HomeProfileScreen: View {
 
     // MARK: - Data loading
 
-    private func loadDraftIfNeeded() {
+    private func loadDraftIfNeeded() async {
         guard !hasLoadedDraft else { return }
         hasLoadedDraft = true
         appStore.refreshHealthAuthorizationState()
         if let persisted = OnboardingPersistence.load() {
             draft = persisted.draft
+        }
+        if let profile = try? await appStore.apiClient.getOnboardingProfile() {
+            draft = OnboardingDraft(profile: profile, accountProvider: appStore.authSessionStore.session?.provider)
         }
         draft.migrateLegacyBaselineTouchStateIfNeeded()
         draft.connectHealth = appStore.isHealthSyncEnabled
@@ -787,7 +863,10 @@ struct HomeProfileScreen: View {
             )
             saveStatus = .saving
             do {
-                _ = try await appStore.apiClient.submitOnboarding(request)
+                let response = try await appStore.apiClient.submitOnboarding(request)
+                draft.savedCalorieTarget = response.calorieTarget
+                draft.savedMacroTargets = response.macroTargets
+                OnboardingPersistence.save(draft: draft, route: .ready)
                 appStore.setError(nil)
                 saveStatus = .saved
                 savedResetTask?.cancel()
@@ -837,6 +916,109 @@ struct HomeProfileScreen: View {
         } catch {
             _ = appStore.handleAuthFailureIfNeeded(error)
         }
+    }
+}
+
+private struct ProfileHubRow: View {
+    let title: String
+    let systemImage: String
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.primary)
+                .frame(width: 24)
+
+            Text(title)
+                .foregroundStyle(.primary)
+        }
+        .frame(minHeight: 44, alignment: .center)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct PlanProfileDetailView<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        Form { content }
+            .navigationTitle("Plan & Goals")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct BodyProfileDetailView<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        Form { content }
+            .navigationTitle("Body Details")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct FoodPreferencesProfileDetailView<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        Form { content }
+            .navigationTitle("Food Preferences")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct HealthInsightsProfileDetailView<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        Form { content }
+            .navigationTitle("Health & Insights")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct AccountProfileDetailView<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        Form { content }
+            .navigationTitle("Account & App")
+            .navigationBarTitleDisplayMode(.inline)
+    }
+}
+
+private struct AdminProfileDetailView<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        Form { content }
+            .navigationTitle("Admin")
+            .navigationBarTitleDisplayMode(.inline)
     }
 }
 

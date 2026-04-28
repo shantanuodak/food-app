@@ -146,7 +146,7 @@ struct OnboardingView: View {
                             }
                             Divider()
                             Button("Clear auth session", role: .destructive) {
-                                appStore.authService.signOut()
+                                appStore.signOut()
                                 localError = "Auth session cleared. Sign in again on Save your setup."
                             }
                         } label: {
@@ -163,6 +163,7 @@ struct OnboardingView: View {
             restorePersistedContextIfNeeded()
             syncBaselineStepForCurrentDraft()
             syncScreenStateHooks()
+            Task { await autoAdvancePermissionRouteIfNeeded() }
         }
         .onChange(of: draft) { _, _ in
             persistDraft()
@@ -180,6 +181,7 @@ struct OnboardingView: View {
             }
             persistDraft()
             syncScreenStateHooks()
+            Task { await autoAdvancePermissionRouteIfNeeded() }
         }
     }
 
@@ -321,6 +323,7 @@ struct OnboardingView: View {
             healthPermissionMessage: healthPermissionMessage,
             onConnectHealth: requestHealthAccess,
             onDisconnectHealth: disconnectHealthAccess,
+            onSkip: { flow.moveNextOnboarding() },
             onContinue: { flow.moveNextOnboarding() },
             onBack: { flow.moveBackOnboarding() }
         )
@@ -704,6 +707,7 @@ struct OnboardingView: View {
                 healthPermissionMessage: healthPermissionMessage,
                 onConnectHealth: requestHealthAccess,
                 onDisconnectHealth: disconnectHealthAccess,
+                onSkip: { flow.moveNextOnboarding() },
                 onContinue: { flow.moveNextOnboarding() },
                 onBack: { flow.moveBackOnboarding() }
             )
@@ -963,7 +967,9 @@ struct OnboardingView: View {
 
             for attempt in 1...maxAttempts {
                 do {
-                    _ = try await appStore.apiClient.submitOnboarding(request)
+                    let response = try await appStore.apiClient.submitOnboarding(request)
+                    draft.savedCalorieTarget = response.calorieTarget
+                    draft.savedMacroTargets = response.macroTargets
                     OnboardingPersistence.save(draft: draft, route: flow.onboardingRoute, defaults: defaults)
                     appStore.setHealthSyncEnabled(draft.connectHealth)
                     appStore.setSelectedChallenge(draft.challenge)
@@ -1110,6 +1116,9 @@ struct OnboardingView: View {
                         ? "Apple Health connected."
                         : "Apple Health permission was not granted."
                     isRequestingHealthPermission = false
+                    if granted {
+                        flow.moveNextOnboarding()
+                    }
                 }
             } catch {
                 let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -1136,6 +1145,7 @@ struct OnboardingView: View {
                 case .authorized, .provisional, .ephemeral:
                     draft.enableNotifications = true
                     notificationStatusMessage = "Notifications enabled."
+                    flow.moveNextOnboarding()
                 case .denied:
                     draft.enableNotifications = false
                     notificationStatusMessage = "Notifications disabled in iOS Settings — you can re-enable anytime."
@@ -1147,6 +1157,28 @@ struct OnboardingView: View {
                     notificationStatusMessage = nil
                 }
             }
+        }
+    }
+
+    private func autoAdvancePermissionRouteIfNeeded() async {
+        switch flow.onboardingRoute {
+        case .permissions:
+            appStore.refreshHealthAuthorizationState()
+            if appStore.isHealthSyncEnabled && appStore.healthAuthorizationState == .authorized {
+                draft.connectHealth = true
+                flow.moveNextOnboarding()
+            }
+        case .notificationsPermission:
+            await appStore.refreshNotificationAuthState()
+            switch appStore.notificationAuthState {
+            case .authorized, .provisional, .ephemeral:
+                draft.enableNotifications = true
+                flow.moveNextOnboarding()
+            default:
+                break
+            }
+        default:
+            break
         }
     }
 

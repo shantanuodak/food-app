@@ -24,11 +24,13 @@ final class AppStore: ObservableObject {
     /// Cached system notification authorization status. Used by the
     /// `NotificationScheduler` to short-circuit cleanly when permission isn't granted.
     @Published private(set) var notificationAuthState: UNAuthorizationStatus = .notDetermined
+    @Published private(set) var mealReminderSettings: MealReminderSettings
 
     let configuration: AppConfiguration
     let authSessionStore: AuthSessionStore
     let authService: AuthService
     let apiClient: APIClient
+    let imageStorageService: ImageStorageService
     let healthKitService: HealthKitService
     let notificationScheduler: NotificationScheduler
 
@@ -36,6 +38,7 @@ final class AppStore: ObservableObject {
     private let onboardingKey = "app.onboarding.completed"
     private let healthSyncKey = "app.health.sync.enabled.v1"
     private let challengeKey = "app.challenge.choice.v1"
+    private let mealReminderSettingsKey = "app.meal.reminder.settings.v1"
     private let networkMonitor: NetworkStatusMonitor
     private var cancellables = Set<AnyCancellable>()
 
@@ -65,6 +68,12 @@ final class AppStore: ObservableObject {
                 await authService.handleUnauthorizedAndAttemptRecovery()
             }
         )
+        self.imageStorageService = ImageStorageService(
+            configuration: resolvedConfiguration,
+            authTokenProvider: {
+                try await authService.validAccessToken()
+            }
+        )
         let healthKitService = HealthKitService()
         self.healthKitService = healthKitService
         self.defaults = defaults
@@ -74,6 +83,7 @@ final class AppStore: ObservableObject {
         self.isNetworkReachable = true
         self.networkQualityHint = L10n.networkOnline
         self.healthAuthorizationState = healthKitService.authorizationState
+        self.mealReminderSettings = Self.loadMealReminderSettings(defaults: defaults, key: mealReminderSettingsKey)
         self.isHealthSyncEnabled = defaults.bool(forKey: healthSyncKey)
         if healthAuthorizationState != .authorized && isHealthSyncEnabled {
             self.isHealthSyncEnabled = false
@@ -129,10 +139,16 @@ final class AppStore: ObservableObject {
         if sessionStore.session?.refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             Task { [authService, weak self] in
                 await authService.restoreSessionIfPossible()
-                await MainActor.run { self?.isSessionRestored = true }
+                await MainActor.run {
+                    self?.isSessionRestored = true
+                    Task { await self?.refreshOnboardingCompletionFromBackend() }
+                }
             }
         } else {
             isSessionRestored = true
+            if sessionStore.session != nil {
+                Task { await refreshOnboardingCompletionFromBackend() }
+            }
         }
     }
 
@@ -147,6 +163,43 @@ final class AppStore: ObservableObject {
         OnboardingPersistence.clear(defaults: defaults)
     }
 
+    func signOut() {
+        authService.signOut()
+        isOnboardingComplete = false
+        defaults.set(false, forKey: onboardingKey)
+        OnboardingPersistence.clear(defaults: defaults)
+        HomePendingSaveStore.clear(defaults: defaults)
+        notificationScheduler.cancelAll()
+        selectedChallenge = nil
+        defaults.removeObject(forKey: challengeKey)
+        lastAPIError = nil
+    }
+
+    func refreshOnboardingCompletionFromBackend() async {
+        do {
+            let profile = try await apiClient.getOnboardingProfile()
+            let draft = OnboardingDraft(profile: profile, accountProvider: authSessionStore.session?.provider)
+            OnboardingPersistence.save(draft: draft, route: .ready, defaults: defaults)
+            markOnboardingComplete()
+        } catch {
+            if Self.isNotFound(error) {
+                // Only trust a backend 404 if this device has never marked
+                // onboarding complete locally. For users who already finished
+                // onboarding on this device, a 404 most likely means the
+                // GET /v1/onboarding route isn't deployed yet — don't bounce
+                // them back to the welcome screen.
+                if !isOnboardingComplete {
+                    defaults.set(false, forKey: onboardingKey)
+                }
+                return
+            }
+            // Do not sign the user out on a launch-time profile fetch.
+            // Render cold-starts and transient network errors must not wipe
+            // the session; real auth failures will surface on the next
+            // user-driven request and be handled there.
+        }
+    }
+
     func setError(_ message: String?) {
         lastAPIError = message
     }
@@ -155,10 +208,13 @@ final class AppStore: ObservableObject {
         guard let apiError = error as? APIClientError else {
             return false
         }
+        if case .missingAuthToken = apiError, authSessionStore.session != nil {
+            return false
+        }
         guard Self.isAuthTokenError(apiError) else {
             return false
         }
-        authService.signOut()
+        signOut()
         return true
     }
 
@@ -195,6 +251,14 @@ final class AppStore: ObservableObject {
         Task { await reconcileNotifications() }
     }
 
+    func setMealReminderSettings(_ settings: MealReminderSettings) {
+        mealReminderSettings = settings
+        if let data = try? JSONEncoder().encode(settings) {
+            defaults.set(data, forKey: mealReminderSettingsKey)
+        }
+        Task { await reconcileNotifications() }
+    }
+
     /// Refresh the cached system notification authorization status from the OS.
     /// Cheap; safe to call on app launch and after the user toggles
     /// notifications inside iOS Settings.
@@ -217,7 +281,8 @@ final class AppStore: ObservableObject {
     func reconcileNotifications() async {
         await notificationScheduler.reconcile(
             challenge: selectedChallenge,
-            authState: notificationAuthState
+            authState: notificationAuthState,
+            mealReminders: mealReminderSettings
         )
     }
 
@@ -272,7 +337,7 @@ final class AppStore: ObservableObject {
         case .missingAuthToken:
             return true
         case let .server(statusCode, payload):
-            if statusCode == 401 || statusCode == 403 {
+            if statusCode == 401 {
                 return true
             }
 
@@ -290,5 +355,21 @@ final class AppStore: ObservableObject {
         default:
             return false
         }
+    }
+
+    private static func isNotFound(_ error: Error) -> Bool {
+        guard let apiError = error as? APIClientError else { return false }
+        if case let .server(statusCode, payload) = apiError {
+            return statusCode == 404 || payload.code == "ONBOARDING_NOT_FOUND"
+        }
+        return false
+    }
+
+    private static func loadMealReminderSettings(defaults: UserDefaults, key: String) -> MealReminderSettings {
+        guard let data = defaults.data(forKey: key),
+              let decoded = try? JSONDecoder().decode(MealReminderSettings.self, from: data) else {
+            return .default
+        }
+        return decoded
     }
 }

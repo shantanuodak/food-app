@@ -70,6 +70,10 @@ final class APIClient {
         try await request(path: "/v1/onboarding", method: "POST", body: requestBody, requiresAuth: true)
     }
 
+    func getOnboardingProfile() async throws -> OnboardingProfileResponse {
+        try await request(path: "/v1/onboarding", method: "GET", requiresAuth: true)
+    }
+
     func parseLog(_ requestBody: ParseLogRequest) async throws -> ParseLogResponse {
         try await request(path: "/v1/logs/parse", method: "POST", body: requestBody, requiresAuth: true)
     }

@@ -23,6 +23,7 @@ struct OB09PermissionsScreen: View {
     let healthPermissionMessage: String?
     let onConnectHealth: () -> Void
     let onDisconnectHealth: () -> Void
+    let onSkip: () -> Void
     /// Tap on the "Continue" CTA. The parent advances to the next route.
     let onContinue: () -> Void
     /// Tap on the back chevron in the top bar.
@@ -75,6 +76,12 @@ struct OB09PermissionsScreen: View {
                 Spacer(minLength: 24)
 
                 continueButton
+                    .padding(.bottom, 10)
+
+                Button("Skip for now", action: onSkip)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                    .buttonStyle(.plain)
                     .padding(.bottom, 28)
             }
         }

@@ -57,10 +57,28 @@ struct OnboardingResponse: Decodable {
     let macroTargets: MacroTargets
 }
 
-struct MacroTargets: Decodable {
+struct MacroTargets: Codable, Equatable, Hashable {
     let protein: Int
     let carbs: Int
     let fat: Int
+}
+
+struct OnboardingProfileResponse: Decodable {
+    let goal: GoalOption
+    let dietPreference: String
+    let allergies: [String]
+    let units: UnitsOption
+    let activityLevel: ActivityLevelOption
+    let timezone: String
+    let age: Int?
+    let sex: String?
+    let heightCm: Double?
+    let weightKg: Double?
+    let pace: String?
+    let activityDetail: String?
+    let calorieTarget: Int
+    let macroTargets: MacroTargets
+    let updatedAt: String
 }
 
 struct ParseLogRequest: Encodable {
@@ -376,6 +394,7 @@ struct DayLogEntry: Codable, Identifiable {
     let loggedAt: String
     let rawText: String
     let inputKind: String
+    let imageRef: String?
     let confidence: Double
     let totals: NutritionTotals
     let items: [DayLogItem]

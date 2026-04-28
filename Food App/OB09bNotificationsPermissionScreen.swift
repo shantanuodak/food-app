@@ -55,6 +55,10 @@ struct OB09bNotificationsPermissionScreen: View {
                     .padding(.bottom, 14)
 
                 dialogPreview
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        requestOrContinue()
+                    }
 
                 if let notificationStatusMessage {
                     Text(notificationStatusMessage)
@@ -190,12 +194,7 @@ struct OB09bNotificationsPermissionScreen: View {
         let label = hasAnswered ? "Continue" : "Connect"
 
         return Button {
-            if hasAnswered {
-                onContinue()
-            } else {
-                hasRequestedPermission = true
-                onEnableNotifications()
-            }
+            requestOrContinue()
         } label: {
             Text(label)
                 .font(.system(size: 17, weight: .semibold))
@@ -204,5 +203,14 @@ struct OB09bNotificationsPermissionScreen: View {
                 .background(OnboardingGlassTheme.ctaBackground, in: Capsule())
         }
         .buttonStyle(.plain)
+    }
+
+    private func requestOrContinue() {
+        if enableNotifications || hasRequestedPermission {
+            onContinue()
+        } else {
+            hasRequestedPermission = true
+            onEnableNotifications()
+        }
     }
 }

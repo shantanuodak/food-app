@@ -51,6 +51,8 @@ struct OnboardingDraft: Codable, Equatable {
     var accountProvider: AccountProvider?
     var connectHealth = false
     var enableNotifications = false
+    var savedCalorieTarget: Int?
+    var savedMacroTargets: MacroTargets?
 
     var hasBaselineValues: Bool {
         guard sex != nil, units != nil else { return false }
@@ -332,10 +334,15 @@ extension OnboardingDraft {
         case baselineTouchedWeight
         case activity
         case pace
+        case experience
+        case challenge
         case preferences
+        case allergies
         case accountProvider
         case connectHealth
         case enableNotifications
+        case savedCalorieTarget
+        case savedMacroTargets
     }
 
     init(from decoder: Decoder) throws {
@@ -352,10 +359,72 @@ extension OnboardingDraft {
         baselineTouchedWeight = try container.decodeIfPresent(Bool.self, forKey: .baselineTouchedWeight) ?? false
         activity = try container.decodeIfPresent(ActivityChoice.self, forKey: .activity)
         pace = try container.decodeIfPresent(PaceChoice.self, forKey: .pace)
+        experience = try container.decodeIfPresent(ExperienceChoice.self, forKey: .experience)
+        challenge = try container.decodeIfPresent(ChallengeChoice.self, forKey: .challenge)
         preferences = try container.decodeIfPresent(Set<PreferenceChoice>.self, forKey: .preferences) ?? []
+        allergies = try container.decodeIfPresent(Set<AllergyChoice>.self, forKey: .allergies) ?? []
         accountProvider = try container.decodeIfPresent(AccountProvider.self, forKey: .accountProvider)
         connectHealth = try container.decodeIfPresent(Bool.self, forKey: .connectHealth) ?? false
         enableNotifications = try container.decodeIfPresent(Bool.self, forKey: .enableNotifications) ?? false
+        savedCalorieTarget = try container.decodeIfPresent(Int.self, forKey: .savedCalorieTarget)
+        savedMacroTargets = try container.decodeIfPresent(MacroTargets.self, forKey: .savedMacroTargets)
+    }
+
+    init(profile: OnboardingProfileResponse, accountProvider: AccountProvider?) {
+        goal = profile.goal
+        units = profile.units
+        age = profile.age.map(String.init) ?? ""
+        sex = profile.sex.flatMap(SexOption.init(rawValue:))
+        baselineTouchedAge = profile.age != nil
+        baselineTouchedSex = sex != nil
+        baselineTouchedHeight = profile.heightCm != nil
+        baselineTouchedWeight = profile.weightKg != nil
+        activity = profile.activityDetail.flatMap(ActivityChoice.init(rawValue:)) ??
+            Self.activityChoice(from: profile.activityLevel)
+        pace = profile.pace.flatMap(PaceChoice.init(rawValue:))
+        experience = nil
+        challenge = nil
+        preferences = Self.preferenceSet(from: profile.dietPreference)
+        allergies = Set(profile.allergies.compactMap(AllergyChoice.init(rawValue:)))
+        self.accountProvider = accountProvider
+        connectHealth = false
+        enableNotifications = false
+        savedCalorieTarget = profile.calorieTarget
+        savedMacroTargets = profile.macroTargets
+
+        let heightCm = profile.heightCm ?? Double(OnboardingBaselineRange.defaultHeightCm)
+        let weightKg = profile.weightKg ?? OnboardingBaselineRange.defaultWeightKg
+        switch profile.units {
+        case .metric:
+            height = String(Int(heightCm.rounded()))
+            weight = Self.displayString(weightKg)
+        case .imperial:
+            height = String(Int((heightCm / 2.54).rounded()))
+            weight = Self.displayString(weightKg / 0.453592)
+        }
+    }
+
+    private static func activityChoice(from level: ActivityLevelOption) -> ActivityChoice {
+        switch level {
+        case .low: return .mostlySitting
+        case .moderate: return .lightlyActive
+        case .high: return .veryActive
+        }
+    }
+
+    private static func preferenceSet(from payload: String) -> Set<PreferenceChoice> {
+        let values = payload
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        let resolved = Set(values.compactMap(PreferenceChoice.init(rawValue:)))
+        return resolved.isEmpty ? [.noPreference] : resolved
+    }
+
+    private static func displayString(_ value: Double) -> String {
+        if abs(value.rounded() - value) < 0.0001 {
+            return String(Int(value.rounded()))
+        }
+        return String(format: "%.1f", value)
     }
 }
 

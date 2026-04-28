@@ -8,6 +8,20 @@ struct PendingSaveDraft: Codable {
     let idempotencyKey: String
 }
 
+struct PendingSaveQueueItem: Codable, Identifiable {
+    let id: UUID
+    let rowID: UUID?
+    var request: SaveLogRequest
+    var fingerprint: String
+    var idempotencyKey: String
+    var dateString: String
+    var createdAt: Date
+    var imageUploadData: Data?
+    var imagePreviewData: Data?
+    var imageMimeType: String?
+    var serverLogId: String?
+}
+
 struct InFlightParseSnapshot {
     let text: String
     let requestSequence: Int
@@ -353,4 +367,3 @@ struct EditableParsedItem: Identifiable {
         (value * 10).rounded() / 10
     }
 }
-

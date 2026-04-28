@@ -1,6 +1,23 @@
 import Foundation
 import UserNotifications
 
+struct MealReminderTime: Codable, Equatable {
+    var hour: Int
+    var minute: Int
+}
+
+struct MealReminderSettings: Codable, Equatable {
+    var breakfast: MealReminderTime
+    var lunch: MealReminderTime
+    var dinner: MealReminderTime
+
+    static let `default` = MealReminderSettings(
+        breakfast: MealReminderTime(hour: 8, minute: 0),
+        lunch: MealReminderTime(hour: 12, minute: 30),
+        dinner: MealReminderTime(hour: 19, minute: 30)
+    )
+}
+
 /// Owns the lifecycle of all `UNNotificationRequest`s the app schedules.
 ///
 /// Notifications are challenge-driven: depending on which "biggest challenge"
@@ -23,6 +40,9 @@ import UserNotifications
 /// All identifiers are namespaced under `food-app.*` so future code (or
 /// future me) can list / clean / migrate them without ambiguity.
 enum FoodAppNotificationIdentifier {
+    static let mealBreakfast = "food-app.meal.breakfast"
+    static let mealLunch = "food-app.meal.lunch"
+    static let mealDinner = "food-app.meal.dinner"
     static let snackingNudge = "food-app.snacking.nudge"
     static let consistencyLunch = "food-app.consistency.lunch"
     static let consistencyDinner = "food-app.consistency.dinner"
@@ -62,17 +82,47 @@ final class NotificationScheduler {
             withIdentifiers: [
                 FoodAppNotificationIdentifier.snackingNudge,
                 FoodAppNotificationIdentifier.consistencyLunch,
-                FoodAppNotificationIdentifier.consistencyDinner
+                FoodAppNotificationIdentifier.consistencyDinner,
+                FoodAppNotificationIdentifier.mealBreakfast,
+                FoodAppNotificationIdentifier.mealLunch,
+                FoodAppNotificationIdentifier.mealDinner
             ]
         )
     }
 
     /// The single entry point — call after challenge changes, after permission
     /// grant, and on app launch. Idempotent.
-    func reconcile(challenge: ChallengeChoice?, authState: UNAuthorizationStatus) async {
+    func reconcile(
+        challenge: ChallengeChoice?,
+        authState: UNAuthorizationStatus,
+        mealReminders: MealReminderSettings = .default
+    ) async {
         cancelAll()
 
         guard authState == .authorized || authState == .provisional else { return }
+
+        await schedule(
+            identifier: FoodAppNotificationIdentifier.mealBreakfast,
+            title: "Breakfast check-in",
+            body: "Log breakfast when you have a minute.",
+            hour: mealReminders.breakfast.hour,
+            minute: mealReminders.breakfast.minute
+        )
+        await schedule(
+            identifier: FoodAppNotificationIdentifier.mealLunch,
+            title: "Lunch check-in",
+            body: "Anything to log so far today?",
+            hour: mealReminders.lunch.hour,
+            minute: mealReminders.lunch.minute
+        )
+        await schedule(
+            identifier: FoodAppNotificationIdentifier.mealDinner,
+            title: "Dinner check-in",
+            body: "Log dinner or anything else from today.",
+            hour: mealReminders.dinner.hour,
+            minute: mealReminders.dinner.minute
+        )
+
         guard let challenge else { return }
 
         switch challenge {
@@ -86,20 +136,8 @@ final class NotificationScheduler {
             )
 
         case .inconsistentMeals:
-            await schedule(
-                identifier: FoodAppNotificationIdentifier.consistencyLunch,
-                title: "Lunch check-in",
-                body: "Anything to log so far today?",
-                hour: 12,
-                minute: 30
-            )
-            await schedule(
-                identifier: FoodAppNotificationIdentifier.consistencyDinner,
-                title: "Day's almost done",
-                body: "Log what you ate when you have a sec.",
-                hour: 19,
-                minute: 30
-            )
+            // Meal reminders cover this challenge without duplicate nudges.
+            break
 
         case .emotionalEating, .portionControl, .eatingOut:
             // Handled in-app or by the parse flow itself.
