@@ -121,14 +121,23 @@ final class AuthService {
         }
 
         do {
-            _ = try await restoreSupabaseSession(
-                accessToken: storedSession.accessToken,
-                refreshToken: refreshToken,
-                metadata: storedSession
-            )
+            if sessionNeedsRefresh(storedSession) {
+                _ = try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
+            } else {
+                _ = try await restoreSupabaseSession(
+                    accessToken: storedSession.accessToken,
+                    refreshToken: refreshToken,
+                    metadata: storedSession
+                )
+            }
         } catch {
-            if isInvalidSessionRecoveryError(error) {
-                await clearStoredSession()
+            guard isInvalidSessionRecoveryError(error) else { return }
+            do {
+                _ = try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
+            } catch {
+                if isInvalidSessionRecoveryError(error) {
+                    await clearStoredSession()
+                }
             }
         }
     }
@@ -168,11 +177,7 @@ final class AuthService {
             }
 
             do {
-                let refreshedSession = try await restoreSupabaseSession(
-                    accessToken: accessToken,
-                    refreshToken: refreshToken,
-                    metadata: storedSession
-                )
+                let refreshedSession = try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
                 return refreshedSession.accessToken
             } catch {
                 if isInvalidSessionRecoveryError(error) {
@@ -201,11 +206,7 @@ final class AuthService {
         }
 
         do {
-            return try await restoreSupabaseSession(
-                accessToken: storedSession.accessToken,
-                refreshToken: refreshToken,
-                metadata: storedSession
-            )
+            return try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
         } catch {
             if isInvalidSessionRecoveryError(error) {
                 await clearStoredSession()
@@ -244,6 +245,11 @@ final class AuthService {
 
     func signOut() {
         sessionStore.clear()
+#if canImport(GoogleSignIn)
+        Task { @MainActor in
+            GIDSignIn.sharedInstance.signOut()
+        }
+#endif
     }
 
 #if canImport(GoogleSignIn)
@@ -420,7 +426,7 @@ final class AuthService {
 
         let rawNonce = UUID().uuidString
 
-        do {
+        func runSignInFlow() async throws -> GoogleSignInPayload {
             let signInResult: GIDSignInResult = try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<GIDSignInResult, Error>) in
                 GIDSignIn.sharedInstance.signIn(
@@ -453,9 +459,23 @@ final class AuthService {
                 email: signInResult.user.profile?.email,
                 firstName: signInResult.user.profile?.givenName
             )
+        }
+
+        do {
+            return try await runSignInFlow()
         } catch let error as AuthServiceError {
             throw error
         } catch {
+            if Self.isGoogleKeychainError(error) {
+                GIDSignIn.sharedInstance.signOut()
+                do {
+                    return try await runSignInFlow()
+                } catch let retryError as AuthServiceError {
+                    throw retryError
+                } catch {
+                    throw AuthServiceError.googleSignInFailed(error.localizedDescription)
+                }
+            }
             throw AuthServiceError.googleSignInFailed(error.localizedDescription)
         }
     }
@@ -724,6 +744,16 @@ final class AuthService {
 
         return "com.googleusercontent.apps.\(trimmed)"
     }
+
+#if canImport(GoogleSignIn)
+    private static func isGoogleKeychainError(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.code == -2, nsError.domain.localizedCaseInsensitiveContains("GIDSignIn") {
+            return true
+        }
+        return nsError.localizedDescription.localizedCaseInsensitiveContains("keychain")
+    }
+#endif
 
     private static func randomNonce(length: Int = 32) -> String {
         precondition(length > 0)
