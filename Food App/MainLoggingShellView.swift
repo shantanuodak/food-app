@@ -582,11 +582,18 @@ struct MainLoggingShellView: View {
     }
 
     private var pendingSyncItemCount: Int {
+        let unresolvedQueuedRowIDs = Set(
+            pendingSaveQueue
+                .filter { $0.serverLogId == nil }
+                .compactMap(\.rowID)
+        )
         let unsavedVisibleRows = inputRows.filter { row in
             guard !row.isSaved else { return false }
+            guard !unresolvedQueuedRowIDs.contains(row.id) else { return false }
             return row.calories != nil || !row.parsedItems.isEmpty || row.parsedItem != nil
         }.count
-        return unsavedVisibleRows + pendingSaveQueue.count + pendingPatchTasks.count
+        let unsyncedQueuedRows = pendingSaveQueue.filter { $0.serverLogId == nil }.count
+        return unsavedVisibleRows + unsyncedQueuedRows + pendingPatchTasks.count + pendingDeleteTasks.count
     }
 
     private var syncStatusTitle: String {
@@ -4183,9 +4190,16 @@ struct MainLoggingShellView: View {
     /// time so we always persist the latest scaled values even if multiple
     /// edits were debounced together.
     private func performPatchUpdate(rowID: UUID, serverLogId: String) async {
-        guard appStore.isNetworkReachable else { return }
+        guard appStore.isNetworkReachable else {
+            pendingPatchTasks[rowID] = nil
+            saveError = L10n.noNetworkSave
+            return
+        }
         guard let row = inputRows.first(where: { $0.id == rowID }),
-              !row.parsedItems.isEmpty else { return }
+              !row.parsedItems.isEmpty else {
+            pendingPatchTasks[rowID] = nil
+            return
+        }
 
         let items: [SaveParsedFoodItem] = row.parsedItems.map { item in
             SaveParsedFoodItem(
@@ -4823,35 +4837,11 @@ struct MainLoggingShellView: View {
             if let parsedDate = HomeLoggingDateUtils.summaryRequestFormatter.date(from: savedDay) {
                 selectedSummaryDate = parsedDate
             }
-            // Optimistically promote the active (composing) rows to "saved"
-            // state with the new server logId so the just-saved entry stays
-            // visible during the day-logs fetch roundtrip. Without this
-            // optimistic step, there's a 200–500 ms gap (and longer if the
-            // backend has read-after-write lag) where the entry is in
-            // neither `inputRows` nor `dayLogs` — the user sees the row
-            // disappear and the flagged-card not slide up until they
-            // navigate away and back. The reload below reconciles by
-            // replacing these rows with the canonical server entries via
-            // `syncInputRowsFromDayLogs` once the fetch returns.
-            //
-            // Multi-row case: when several active rows are saved as one log
-            // they all share the same `serverLogId` here. SwiftUI rendering
-            // is fine for the brief reconciliation window; the server fetch
-            // will collapse them to the single canonical entry.
-            for idx in inputRows.indices where !inputRows[idx].isSaved {
-                inputRows[idx].isSaved = true
-                inputRows[idx].serverLogId = response.logId
-                inputRows[idx].serverLoggedAt = effectiveRequest.parsedLog.loggedAt
-                inputRows[idx].parsePhase = .idle
-                // `savedAt` left at its existing value (nil-by-default for
-                // active rows, matching the convention used by
-                // `syncInputRowsFromDayLogs` when it materialises rows from
-                // the server response).
-            }
-            // Always leave a fresh empty row at the end so the composer is ready.
-            if inputRows.allSatisfy({ $0.isSaved }) {
-                inputRows.append(.empty())
-            }
+            promoteSavedRow(
+                for: effectiveRequest,
+                idempotencyKey: idempotencyKey,
+                logId: response.logId
+            )
             // Cancel prefetch to prevent it from re-populating cache with stale data
             prefetchTask?.cancel()
             invalidateDayCache(for: savedDay)
@@ -4879,6 +4869,59 @@ struct MainLoggingShellView: View {
                 durationMs: elapsedMs(since: startedAt),
                 isRetry: isRetry
             )
+        }
+    }
+
+    private func promoteSavedRow(for request: SaveLogRequest, idempotencyKey: UUID, logId: String) {
+        let queueKey = idempotencyKey.uuidString.lowercased()
+        let queuedItem = pendingSaveQueue.first { $0.idempotencyKey == queueKey }
+        let savedLoggedAt = request.parsedLog.loggedAt
+        var promotedRowID: UUID?
+
+        if let rowID = queuedItem?.rowID,
+           let index = inputRows.firstIndex(where: { $0.id == rowID }) {
+            promoteInputRow(at: index, logId: logId, loggedAt: savedLoggedAt, imageRef: request.parsedLog.imageRef)
+            promotedRowID = rowID
+        }
+
+        if promotedRowID == nil {
+            let requestText = normalizedRowText(request.parsedLog.rawText)
+            let isImageSave = normalizedInputKind(request.parsedLog.inputKind, fallback: latestParseInputKind) == "image"
+            if let index = inputRows.firstIndex(where: { row in
+                guard !row.isSaved else { return false }
+                if isImageSave, row.imagePreviewData != nil || row.imageRef != nil {
+                    return true
+                }
+                return !requestText.isEmpty && normalizedRowText(row.text) == requestText
+            }) {
+                promoteInputRow(at: index, logId: logId, loggedAt: savedLoggedAt, imageRef: request.parsedLog.imageRef)
+                promotedRowID = inputRows[index].id
+            }
+        }
+
+        if promotedRowID == nil, let queuedItem {
+            let optimisticRow = makePendingSaveRow(from: queuedItem)
+            if !inputRows.contains(where: { $0.serverLogId == logId }) {
+                let trailingEmptyIndex = inputRows.lastIndex { row in
+                    !row.isSaved && row.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                }
+                inputRows.insert(optimisticRow, at: trailingEmptyIndex ?? inputRows.count)
+            }
+        }
+
+        if inputRows.allSatisfy({ $0.isSaved }) {
+            inputRows.append(.empty())
+        }
+    }
+
+    private func promoteInputRow(at index: Int, logId: String, loggedAt: String, imageRef: String?) {
+        guard inputRows.indices.contains(index) else { return }
+        inputRows[index].isSaved = true
+        inputRows[index].serverLogId = logId
+        inputRows[index].serverLoggedAt = loggedAt
+        inputRows[index].parsePhase = .idle
+        if inputRows[index].imageRef == nil {
+            inputRows[index].imageRef = imageRef
         }
     }
 

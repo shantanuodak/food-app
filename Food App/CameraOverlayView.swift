@@ -10,16 +10,6 @@ struct CameraTopBar: View {
 
     var body: some View {
         HStack {
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
-
-            Spacer()
-
             Button(action: onFlashToggle) {
                 Image(systemName: flashMode.icon)
                     .font(.system(size: 17, weight: .semibold))
@@ -27,9 +17,19 @@ struct CameraTopBar: View {
                     .frame(width: 44, height: 44)
                     .background(.ultraThinMaterial, in: Circle())
             }
+
+            Spacer()
+
+            Button(action: onClose) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 44, height: 44)
+                    .background(.ultraThinMaterial, in: Circle())
+            }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 8)
+        .padding(.top, 20)
     }
 }
 

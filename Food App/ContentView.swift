@@ -172,54 +172,31 @@ struct HomeProfileScreen: View {
 
     @ViewBuilder
     private var summaryHeaderSection: some View {
-        Section {
-            if draft.hasBaselineValues, let goal = draft.goal {
-                let metrics = OnboardingCalculator.metrics(from: draft)
-                let calorieTarget = draft.savedCalorieTarget ?? metrics.targetKcal
-                let proteinTarget = draft.savedMacroTargets?.protein ?? metrics.proteinTarget
-                let carbTarget = draft.savedMacroTargets?.carbs ?? metrics.carbTarget
-                let fatTarget = draft.savedMacroTargets?.fat ?? metrics.fatTarget
-                VStack(spacing: 12) {
-                    VStack(spacing: 4) {
-                        Text("\(calorieTarget)")
-                            .font(.largeTitle.bold())
-                            .foregroundStyle(.primary)
-                        Text("kcal / day target")
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    HStack(spacing: 10) {
-                        macroPill("P", value: proteinTarget, color: .blue)
-                        macroPill("C", value: carbTarget, color: .orange)
-                        macroPill("F", value: fatTarget, color: .purple)
-                    }
-
-                    Text("\(L10n.goalLabel(goal)) · \(draft.pace?.title ?? "Balanced") pace")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 8)
-            } else {
+        if draft.hasBaselineValues, let goal = draft.goal {
+            let metrics = OnboardingCalculator.metrics(from: draft)
+            let calorieTarget = draft.savedCalorieTarget ?? metrics.targetKcal
+            let proteinTarget = draft.savedMacroTargets?.protein ?? metrics.proteinTarget
+            let carbTarget = draft.savedMacroTargets?.carbs ?? metrics.carbTarget
+            let fatTarget = draft.savedMacroTargets?.fat ?? metrics.fatTarget
+            Section {
+                LabeledContent("Daily target", value: "\(calorieTarget) kcal")
+                LabeledContent("Protein", value: "\(proteinTarget) g")
+                LabeledContent("Carbs", value: "\(carbTarget) g")
+                LabeledContent("Fat", value: "\(fatTarget) g")
+            } header: {
+                Text("Daily targets")
+            } footer: {
+                Text("\(L10n.goalLabel(goal)) · \(draft.pace?.title ?? "Balanced") pace")
+            }
+        } else {
+            Section {
                 ContentUnavailableView(
                     "Complete your profile",
-                    systemImage: "chart.bar.fill",
+                    systemImage: "chart.bar",
                     description: Text("Set your goal and body details to see your daily target.")
                 )
-                .padding(.vertical, 8)
             }
         }
-        .listRowBackground(Color.clear)
-    }
-
-    private func macroPill(_ label: String, value: Int, color: Color) -> some View {
-        HStack(spacing: 4) {
-            Text(label).font(.caption.weight(.bold)).foregroundStyle(color)
-            Text("\(value)g").font(.caption).foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 10).padding(.vertical, 6)
-        .background(Capsule().fill(color.opacity(0.12)))
     }
 
     @ViewBuilder
@@ -314,25 +291,9 @@ struct HomeProfileScreen: View {
         let activePrefs = draft.preferences.filter { $0 != .noPreference }
         Section {
             ForEach(PreferenceChoice.allCases.filter { $0 != .noPreference }) { pref in
-                Button {
-                    togglePreference(pref)
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: preferenceIconStyle(for: pref).symbol)
-                            .foregroundStyle(preferenceIconStyle(for: pref).color)
-                            .frame(width: 22)
-                        Text(pref.title)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if draft.preferences.contains(pref) {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                                .font(.body.weight(.semibold))
-                        }
-                    }
-                    .contentShape(Rectangle())
+                Toggle(isOn: preferenceToggleBinding(pref)) {
+                    Label(pref.title, systemImage: preferenceSymbol(for: pref))
                 }
-                .buttonStyle(.plain)
             }
         } header: {
             Text("Dietary Preferences")
@@ -347,25 +308,9 @@ struct HomeProfileScreen: View {
     private var allergiesSection: some View {
         Section {
             ForEach(AllergyChoice.allCases) { allergy in
-                Button {
-                    toggleAllergy(allergy)
-                } label: {
-                    HStack(spacing: 12) {
-                        Image(systemName: "exclamationmark.shield.fill")
-                            .foregroundStyle(.red.opacity(0.85))
-                            .frame(width: 22)
-                        Text(allergy.title)
-                            .foregroundStyle(.primary)
-                        Spacer()
-                        if draft.allergies.contains(allergy) {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(.tint)
-                                .font(.body.weight(.semibold))
-                        }
-                    }
-                    .contentShape(Rectangle())
+                Toggle(isOn: allergyToggleBinding(allergy)) {
+                    Label(allergy.title, systemImage: "exclamationmark.shield")
                 }
-                .buttonStyle(.plain)
             }
         } header: {
             Text("Allergies")
@@ -380,12 +325,7 @@ struct HomeProfileScreen: View {
     private var healthSection: some View {
         Section {
             Toggle(isOn: healthToggleBinding) {
-                HStack(spacing: 12) {
-                    Image(systemName: "heart.fill")
-                        .foregroundStyle(.pink)
-                        .frame(width: 22)
-                    Text("Apple Health")
-                }
+                Label("Apple Health", systemImage: "heart.fill")
             }
 
             if isRequestingHealthPermission {
@@ -406,101 +346,61 @@ struct HomeProfileScreen: View {
 
     // MARK: - Tracking Accuracy
 
+    @ViewBuilder
     private var trackingAccuracySection: some View {
         Section {
-            VStack(alignment: .leading, spacing: 14) {
+            if isLoadingAccuracy {
                 HStack {
-                    Label("Tracking Accuracy", systemImage: "chart.bar.fill")
-                        .font(.headline)
-                    Spacer()
-                    if isLoadingAccuracy {
-                        ProgressView().controlSize(.small)
-                    }
+                    ProgressView().controlSize(.small)
+                    Text("Loading…").foregroundStyle(.secondary)
+                }
+            } else if let accuracy = trackingAccuracy, accuracy.entryCount > 0 {
+                LabeledContent("All-time accuracy") {
+                    Text("\(Int(accuracy.averageConfidence * 100))%")
+                        .foregroundStyle(tierColor(accuracy.tier))
+                        .monospacedDigit()
                 }
 
-                if let accuracy = trackingAccuracy, accuracy.entryCount > 0 {
-                    // Tier message
-                    HStack(spacing: 8) {
-                        Circle()
-                            .fill(tierColor(accuracy.tier))
-                            .frame(width: 10, height: 10)
-                        Text(tierMessage(accuracy.tier))
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-                    }
+                ProgressView(value: accuracy.averageConfidence)
+                    .tint(tierColor(accuracy.tier))
 
-                    // Progress bar
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text("All time")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            Spacer()
-                            Text("\(Int(accuracy.averageConfidence * 100))%")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(tierColor(accuracy.tier))
-                        }
-                        GeometryReader { geo in
-                            ZStack(alignment: .leading) {
-                                Capsule()
-                                    .fill(Color(.systemGray5))
-                                    .frame(height: 8)
-                                Capsule()
-                                    .fill(tierColor(accuracy.tier))
-                                    .frame(width: max(0, geo.size.width * accuracy.averageConfidence), height: 8)
-                            }
-                        }
-                        .frame(height: 8)
+                LabeledContent("Entries logged", value: "\(accuracy.entryCount)")
 
-                        Text("\(accuracy.entryCount) entries logged")
-                            .font(.caption2)
-                            .foregroundStyle(.tertiary)
-                    }
-
-                    // Coaching suggestions
-                    if !accuracy.lowConfidenceEntries.isEmpty {
-                        Divider().padding(.vertical, 4)
-
-                        Text("Tips to improve")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .textCase(.uppercase)
-
-                        ForEach(accuracy.lowConfidenceEntries) { entry in
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Text("\"\(entry.rawText)\"")
-                                        .font(.subheadline)
-                                        .lineLimit(1)
-                                    Spacer()
-                                    Text("\(Int(entry.confidence * 100))%")
-                                        .font(.caption.weight(.medium))
-                                        .foregroundStyle(tierColor(
-                                            entry.confidence >= 0.70 ? "good" : "fair"
-                                        ))
-                                }
-                                HStack(spacing: 4) {
-                                    Image(systemName: "lightbulb.fill")
-                                        .font(.caption2)
-                                        .foregroundStyle(.yellow)
-                                    Text(entry.suggestion)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                        .lineLimit(2)
-                                }
-                            }
-                            .padding(.vertical, 2)
-                        }
-                    }
-                } else if !isLoadingAccuracy {
-                    Text("Log some food to see your tracking accuracy")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .padding(.vertical, 4)
-                }
+                Text(tierMessage(accuracy.tier))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                ContentUnavailableView(
+                    "No data yet",
+                    systemImage: "chart.bar",
+                    description: Text("Log some food to see your tracking accuracy.")
+                )
             }
         } header: {
-            Text("Insights")
+            Text("Tracking accuracy")
+        }
+
+        if let accuracy = trackingAccuracy, !accuracy.lowConfidenceEntries.isEmpty {
+            Section {
+                ForEach(accuracy.lowConfidenceEntries) { entry in
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text("\"\(entry.rawText)\"")
+                                .lineLimit(1)
+                            Spacer()
+                            Text("\(Int(entry.confidence * 100))%")
+                                .foregroundStyle(.secondary)
+                                .monospacedDigit()
+                        }
+                        Label(entry.suggestion, systemImage: "lightbulb")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+            } header: {
+                Text("Tips to improve")
+            }
         }
     }
 
@@ -590,12 +490,7 @@ struct HomeProfileScreen: View {
     private var adminSection: some View {
         Section("Admin") {
             Toggle(isOn: $adminGeminiEnabled) {
-                HStack(spacing: 12) {
-                    Image(systemName: "sparkles")
-                        .foregroundStyle(.purple)
-                        .frame(width: 22)
-                    Text("Gemini AI")
-                }
+                Label("Gemini AI", systemImage: "sparkles")
             }
             .onChange(of: adminGeminiEnabled) { _, _ in triggerAdminAutoSave() }
         }
@@ -659,25 +554,20 @@ struct HomeProfileScreen: View {
         }
     }
 
-    private struct FieldIconStyle {
-        let symbol: String
-        let color: Color
-    }
-
-    private func preferenceIconStyle(for preference: PreferenceChoice) -> FieldIconStyle {
+    private func preferenceSymbol(for preference: PreferenceChoice) -> String {
         switch preference {
-        case .highProtein: return FieldIconStyle(symbol: "bolt.fill", color: .orange)
-        case .vegetarian:  return FieldIconStyle(symbol: "leaf", color: .green)
-        case .vegan:       return FieldIconStyle(symbol: "leaf.fill", color: .mint)
-        case .pescatarian: return FieldIconStyle(symbol: "fish", color: .cyan)
-        case .lowCarb:     return FieldIconStyle(symbol: "minus.circle.fill", color: .teal)
-        case .keto:        return FieldIconStyle(symbol: "bolt.circle.fill", color: .yellow)
-        case .glutenFree:  return FieldIconStyle(symbol: "checkmark.circle.fill", color: .indigo)
-        case .dairyFree:   return FieldIconStyle(symbol: "drop.fill", color: .blue)
-        case .halal:       return FieldIconStyle(symbol: "moon.fill", color: .purple)
-        case .lowSodium:   return FieldIconStyle(symbol: "heart.text.square.fill", color: .pink)
-        case .mediterranean: return FieldIconStyle(symbol: "sun.max.fill", color: .red)
-        case .noPreference: return FieldIconStyle(symbol: "fork.knife", color: .secondary)
+        case .highProtein:   return "bolt.fill"
+        case .vegetarian:    return "leaf"
+        case .vegan:         return "leaf.fill"
+        case .pescatarian:   return "fish"
+        case .lowCarb:       return "minus.circle.fill"
+        case .keto:          return "bolt.circle.fill"
+        case .glutenFree:    return "checkmark.circle.fill"
+        case .dairyFree:     return "drop.fill"
+        case .halal:         return "moon.fill"
+        case .lowSodium:     return "heart.text.square.fill"
+        case .mediterranean: return "sun.max.fill"
+        case .noPreference:  return "fork.knife"
         }
     }
 
@@ -740,6 +630,20 @@ struct HomeProfileScreen: View {
         } else {
             draft.allergies.insert(allergy)
         }
+    }
+
+    private func preferenceToggleBinding(_ preference: PreferenceChoice) -> Binding<Bool> {
+        Binding(
+            get: { draft.preferences.contains(preference) },
+            set: { _ in togglePreference(preference) }
+        )
+    }
+
+    private func allergyToggleBinding(_ allergy: AllergyChoice) -> Binding<Bool> {
+        Binding(
+            get: { draft.allergies.contains(allergy) },
+            set: { _ in toggleAllergy(allergy) }
+        )
     }
 
     private var healthToggleBinding: Binding<Bool> {
@@ -924,17 +828,7 @@ private struct ProfileHubRow: View {
     let systemImage: String
 
     var body: some View {
-        HStack(spacing: 12) {
-            Image(systemName: systemImage)
-                .foregroundStyle(.primary)
-                .frame(width: 24)
-
-            Text(title)
-                .foregroundStyle(.primary)
-        }
-        .frame(minHeight: 44, alignment: .center)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
+        Label(title, systemImage: systemImage)
     }
 }
 
