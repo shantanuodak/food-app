@@ -4931,10 +4931,22 @@ struct MainLoggingShellView: View {
     /// Retries an image upload that failed during the inline path inside
     /// `prepareSaveRequestForNetwork`. By the time this runs, the food_log
     /// row is already saved without an image_ref — we just need to attach
-    /// the photo when storage cooperates. Best-effort: if the retry also
-    /// fails (e.g. the bucket genuinely doesn't exist), we drop the bytes
-    /// rather than burning forever. The meal is already logged; the photo
-    /// is a nice-to-have.
+    /// the photo when storage cooperates.
+    ///
+    /// Persistence model:
+    ///
+    ///   1. The bytes are written to the on-disk
+    ///      `DeferredImageUploadStore` keyed by `logId` BEFORE the retry
+    ///      task fires, so a force-quit between save success and the
+    ///      detached upload doesn't lose the photo.
+    ///   2. The detached task tries the upload + `PATCH /image-ref`. On
+    ///      success it removes the disk entry. On failure the entry stays;
+    ///      `AppStore.drainDeferredImageUploads()` picks it up at the next
+    ///      launch (or whenever the user re-auths).
+    ///   3. If the disk store is unavailable (init failed), behavior
+    ///      degrades to in-memory-only — same as before this commit.
+    ///
+    /// The meal is already logged; the photo is a best-effort attachment.
     private func scheduleDeferredImageUploadRetry(
         idempotencyKey: UUID,
         logId: String,
@@ -4949,18 +4961,23 @@ struct MainLoggingShellView: View {
         let storage = appStore.imageStorageService
         let api = appStore.apiClient
         let userIDHint = appStore.authSessionStore.session?.userID
+        let store = appStore.deferredImageUploadStore
 
         Task.detached(priority: .background) {
+            // Persist before attempting — if we crash mid-upload, the
+            // launch-time drain picks it up.
+            await store?.enqueue(logId: logId, imageData: imageData)
             do {
                 let imageRef = try await storage.uploadJPEG(imageData, userIdentifierHint: userIDHint)
                 _ = try await api.updateLogImageRef(id: logId, imageRef: imageRef)
+                await store?.remove(logId: logId)
                 NSLog("[MainLogging] Deferred image upload succeeded for log \(logId)")
             } catch {
-                // Swallow — meal is already saved with image_ref = NULL.
-                // A future enhancement could surface a non-blocking banner
-                // ("Photo couldn't sync"), but losing the photo silently is
-                // strictly better than losing the nutrition data.
-                NSLog("[MainLogging] Deferred image upload retry failed for log \(logId): \(error)")
+                // Leave the disk entry in place — drainDeferredImageUploads
+                // at next launch (or auth-restore) will retry. Strict
+                // improvement over before: meal is already saved, photo
+                // attaches when storage cooperates.
+                NSLog("[MainLogging] Deferred image upload retry failed for log \(logId); persisted for next launch: \(error)")
             }
         }
     }

@@ -39,22 +39,40 @@ landing entirely. xcodebuild-green is necessary, not sufficient.
 
 ## Image upload is decoupled from save
 
-After the fix in this commit, `ImageStorageService.uploadJPEG` failures
-no longer block `food_logs` from being persisted. The flow is:
+After the fix in commit 0443246, `ImageStorageService.uploadJPEG`
+failures no longer block `food_logs` from being persisted. The flow:
 
 1. `prepareSaveRequestForNetwork` attempts the upload inline.
 2. On success: the request goes out with `image_ref` populated.
 3. On any failure (missing bucket, expired Supabase JWT, RLS misconfig,
-   network blip): the bytes are stashed in `deferredImageUploads` keyed
-   by idempotency key, and the save proceeds with `image_ref = nil`.
-4. Once `submitSave` succeeds, `scheduleDeferredImageUploadRetry` runs
-   the upload + `PATCH /v1/logs/:id/image-ref` in a detached task.
+   network blip): the bytes are stashed in `deferredImageUploads` (an
+   in-memory dict keyed by idempotency key) and the save proceeds with
+   `image_ref = nil`.
+4. Once `submitSave` succeeds, `scheduleDeferredImageUploadRetry`:
+   - Persists the bytes to disk via `DeferredImageUploadStore` (keyed by
+     `logId`) BEFORE the upload attempt.
+   - Runs the upload + `PATCH /v1/logs/:id/image-ref` in a detached task.
+   - On success: removes the disk entry.
+   - On failure: leaves the disk entry; `AppStore.drainDeferredImageUploads`
+     picks it up next launch (or whenever `isSessionRestored` flips true).
+
+The disk store (`Food App/DeferredImageUploadStore.swift`) caps at 50
+entries with a 14-day TTL — bounded disk use even if storage is
+permanently broken. `Food_AppApp.swift` calls
+`drainDeferredImageUploads` once via `.task` and re-runs it whenever
+`isSessionRestored` becomes true (covers cold-start before auth).
 
 When debugging "my photo didn't attach":
-- Check `food_logs.image_ref` — if it's NULL, the deferred retry failed too.
-- Look at `NSLog` output for `[MainLogging] Deferred image upload retry failed`.
-- Most likely cause: Supabase storage bucket `food-images` doesn't exist
-  or its RLS policies block the user's folder.
+- Check `food_logs.image_ref` — if it's NULL, both inline upload and
+  the deferred retry failed.
+- Look at `NSLog` output for `[MainLogging] Deferred image upload retry
+  failed; persisted for next launch` (in-session retry failure) or
+  `[AppStore] Drain retry failed` (launch-time retry failure).
+- Inspect on-disk pending uploads:
+  `~/Library/Developer/CoreSimulator/.../Application Support/DeferredImageUploads/`
+- Most likely cause: Supabase storage bucket `food-images` doesn't exist,
+  its RLS policies don't match the iOS user's `auth.uid()`, or the
+  Supabase JWT used for the upload is missing storage scope.
 
 ## Schema cheat sheet (high-traffic tables)
 
