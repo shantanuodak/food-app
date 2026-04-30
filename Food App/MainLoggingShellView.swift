@@ -130,7 +130,6 @@ struct MainLoggingShellView: View {
     @State private var autoSavedParseIDs: Set<String> = []
     private let defaults = UserDefaults.standard
     private let autoSaveDelayNs: UInt64 = 1_500_000_000
-    private let autoSaveMinConfidence = 0.70
 
     private enum DetailsDrawerMode {
         case compact
@@ -597,7 +596,7 @@ struct MainLoggingShellView: View {
 
     private var syncStatusExplanation: String {
         if saveError != nil {
-            return "These items are visible here and included in your calories, but they have not fully synced yet. Check your connection and retry if needed."
+            return "These items are visible here and included in your calories. Sync is retrying in the background."
         }
 
         return "These items are visible here and included in your calories. They are still syncing and will be confirmed automatically."
@@ -1161,9 +1160,9 @@ struct MainLoggingShellView: View {
                 isSaving: isSaving,
                 parseDisabled: isParsing || !appStore.isNetworkReachable || trimmedNoteText.isEmpty,
                 openDetailsDisabled: parseResult == nil,
-                saveDisabled: isSaving || !appStore.isNetworkReachable || buildSaveDraftRequest() == nil || parseResult?.needsClarification == true,
+                saveDisabled: isSaving || !appStore.isNetworkReachable || buildSaveDraftRequest() == nil,
                 retryDisabled: isSaving || !appStore.isNetworkReachable || pendingSaveRequest == nil || pendingSaveIdempotencyKey == nil,
-                showSaveDisabledHint: parseResult?.needsClarification == true,
+                showSaveDisabledHint: false,
                 saveSuccessMessage: saveSuccessMessage,
                 lastTimeToLogLabel: lastTimeToLogMs.map { L10n.timeToLog($0 / 1000) },
                 saveError: saveError,
@@ -2948,7 +2947,7 @@ struct MainLoggingShellView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
-                .disabled(isSaving || buildSaveDraftRequest() == nil || parseResult.needsClarification)
+                .disabled(isSaving || buildSaveDraftRequest() == nil)
 
                 Button("Open Full Details") {
                     detailsDrawerMode = .full
@@ -2956,11 +2955,6 @@ struct MainLoggingShellView: View {
                 .buttonStyle(.bordered)
             }
 
-            if parseResult.needsClarification {
-                Text(L10n.saveDisabledNeedsClarification)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
-            }
         }
     }
 
@@ -3108,19 +3102,13 @@ struct MainLoggingShellView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.green)
-                .disabled(isSaving || buildSaveDraftRequest() == nil || parseResult.needsClarification)
+                .disabled(isSaving || buildSaveDraftRequest() == nil)
 
                 Button(L10n.retryLastSaveButton) {
                     retryLastSave()
                 }
                 .buttonStyle(.bordered)
                 .disabled(isSaving || pendingSaveRequest == nil || pendingSaveIdempotencyKey == nil)
-            }
-
-            if parseResult.needsClarification {
-                Text(L10n.saveDisabledNeedsClarification)
-                    .font(.caption)
-                    .foregroundStyle(.orange)
             }
 
             if let saveSuccessMessage {
@@ -4219,6 +4207,18 @@ struct MainLoggingShellView: View {
         let inputKind = normalizedInputKind(parseResult.inputKind, fallback: latestParseInputKind)
         let currentImageRef = pendingImageStorageRef ??
             inputRows.compactMap(\.imageRef).first
+        var saveItems = editableItems.map { $0.asSaveParsedFoodItem() }
+        if saveItems.isEmpty && hasVisibleUnsavedCalorieRows {
+            saveItems = [
+                fallbackSaveItem(
+                    rawText: rawText,
+                    totals: displayedTotals,
+                    confidence: parseResult.confidence,
+                    nutritionSourceId: parseResult.items.first?.nutritionSourceId
+                )
+            ]
+        }
+        guard !saveItems.isEmpty else { return nil }
 
         return SaveLogRequest(
             parseRequestId: parseResult.parseRequestId,
@@ -4232,7 +4232,7 @@ struct MainLoggingShellView: View {
                 totals: displayedTotals,
                 sourcesUsed: parseResult.sourcesUsed,
                 assumptions: parseResult.assumptions,
-                items: editableItems.map { $0.asSaveParsedFoodItem() }
+                items: saveItems
             )
         )
     }
@@ -4246,10 +4246,6 @@ struct MainLoggingShellView: View {
     private func startSaveFlow() {
         guard appStore.isNetworkReachable else {
             saveError = L10n.noNetworkSave
-            return
-        }
-        guard parseResult?.needsClarification != true else {
-            saveError = L10n.parseNeedsClarificationBeforeSave
             return
         }
 
@@ -4355,7 +4351,8 @@ struct MainLoggingShellView: View {
                 originalNutritionSourceId: item.originalNutritionSourceId,
                 sourceFamily: item.sourceFamily,
                 matchConfidence: item.matchConfidence,
-                needsClarification: item.needsClarification,
+                // Product rule: persist visible calorie rows without blocking on clarification.
+                needsClarification: false,
                 manualOverride: (item.manualOverride == true)
                     ? SaveManualOverride(enabled: true, reason: nil, editedFields: [])
                     : nil
@@ -4654,12 +4651,7 @@ struct MainLoggingShellView: View {
         autoSaveTask?.cancel()
         // Persist each pending row's context immediately so drafts survive
         // an app close during the auto-save delay window.
-        let saveableEntries = completedRowParses.filter {
-            $0.response.confidence >= autoSaveMinConfidence &&
-            $0.response.needsClarification != true &&
-            !$0.response.items.isEmpty &&
-            !autoSavedParseIDs.contains($0.parseRequestId)
-        }
+        let saveableEntries = completedRowParses.filter(isAutoSaveEligibleEntry(_:))
 
         for entry in saveableEntries {
             guard let request = buildRowSaveRequest(for: entry) else { continue }
@@ -4682,12 +4674,7 @@ struct MainLoggingShellView: View {
     }
 
     private var hasSaveableRowsPending: Bool {
-        completedRowParses.contains {
-            $0.response.confidence >= autoSaveMinConfidence &&
-            $0.response.needsClarification != true &&
-            !$0.response.items.isEmpty &&
-            !autoSavedParseIDs.contains($0.parseRequestId)
-        }
+        completedRowParses.contains(where: { isAutoSaveEligibleEntry($0) })
     }
 
     private func autoSaveIfNeeded() async {
@@ -4698,12 +4685,7 @@ struct MainLoggingShellView: View {
         // Save each completed row independently using the per-row rawText.
         // This fixes the 422 mismatch: each save request uses the exact rawText
         // that was stored in parse_requests on the backend.
-        let rowsToSave = completedRowParses.filter {
-            $0.response.confidence >= autoSaveMinConfidence &&
-            $0.response.needsClarification != true &&
-            !$0.response.items.isEmpty &&
-            !autoSavedParseIDs.contains($0.parseRequestId)
-        }
+        let rowsToSave = completedRowParses.filter(isAutoSaveEligibleEntry(_:))
 
         for entry in rowsToSave {
             guard let request = buildRowSaveRequest(for: entry) else { continue }
@@ -4747,9 +4729,8 @@ struct MainLoggingShellView: View {
         // completedRowParses. Fall back to the old single-request path when no
         // completedRowParses entries exist (e.g. image-mode logging).
         if completedRowParses.isEmpty {
-            guard let parseResult else { return }
-            guard parseResult.needsClarification != true else { return }
-            guard parseResult.confidence >= autoSaveMinConfidence else { return }
+            guard parseResult != nil else { return }
+            guard hasVisibleUnsavedCalorieRows else { return }
             guard let request = buildSaveDraftRequest() else { return }
             let contentFingerprint = autoSaveContentFingerprint(request)
             if contentFingerprint == lastAutoSavedContentFingerprint { return }
@@ -4773,16 +4754,10 @@ struct MainLoggingShellView: View {
     /// is eligible — it just returns quickly.
     private func flushPendingAutoSaveIfEligible() async {
         // Bail early if nothing to save
-        let hasCompletedRow = completedRowParses.contains { entry in
-            entry.response.confidence >= autoSaveMinConfidence &&
-            entry.response.needsClarification != true &&
-            !entry.response.items.isEmpty &&
-            !autoSavedParseIDs.contains(entry.parseRequestId)
-        }
+        let hasCompletedRow = completedRowParses.contains(where: { isAutoSaveEligibleEntry($0) })
         let hasLegacyParse = completedRowParses.isEmpty &&
             parseResult != nil &&
-            (parseResult?.needsClarification != true) &&
-            (parseResult?.confidence ?? 0) >= autoSaveMinConfidence
+            hasVisibleUnsavedCalorieRows
 
         guard hasCompletedRow || hasLegacyParse else { return }
 
@@ -4790,6 +4765,34 @@ struct MainLoggingShellView: View {
         autoSaveTask?.cancel()
         autoSaveTask = nil
         await autoSaveIfNeeded()
+    }
+
+    private func isAutoSaveEligibleEntry(
+        _ entry: (rowID: UUID, parseRequestId: String, parseVersion: String, rawText: String, response: ParseLogResponse, rowItems: [ParsedFoodItem])
+    ) -> Bool {
+        guard !autoSavedParseIDs.contains(entry.parseRequestId) else { return false }
+        if let row = inputRows.first(where: { $0.id == entry.rowID }) {
+            // Product rule: if calories are rendered for a row, persist it.
+            if row.calories != nil {
+                return true
+            }
+            return !row.parsedItems.isEmpty || row.parsedItem != nil
+        }
+
+        // Fallback for rows no longer mounted in `inputRows`.
+        if !entry.rowItems.isEmpty {
+            return true
+        }
+        if !entry.response.items.isEmpty {
+            return true
+        }
+        return entry.response.totals.calories > 0
+    }
+
+    private var hasVisibleUnsavedCalorieRows: Bool {
+        inputRows.contains { row in
+            !row.isSaved && row.calories != nil
+        }
     }
 
     /// Build a save request for one completed row using that row's individual rawText.
@@ -4806,61 +4809,64 @@ struct MainLoggingShellView: View {
         for entry: (rowID: UUID, parseRequestId: String, parseVersion: String, rawText: String, response: ParseLogResponse, rowItems: [ParsedFoodItem])
     ) -> SaveLogRequest? {
         let response = entry.response
+        let currentRow = inputRows.first(where: { $0.id == entry.rowID })
         let sourceItems: [ParsedFoodItem]
-        let mustRecomputeTotals: Bool
-        if let row = inputRows.first(where: { $0.id == entry.rowID }),
-           !row.parsedItems.isEmpty {
+        if let row = currentRow, !row.parsedItems.isEmpty {
             sourceItems = row.parsedItems
-            // Row items may have been scaled client-side, so response.totals
-            // is stale even if item counts match.
-            mustRecomputeTotals = true
+        } else if let row = currentRow, let singleItem = row.parsedItem {
+            sourceItems = [singleItem]
         } else if !entry.rowItems.isEmpty {
             sourceItems = entry.rowItems
-            mustRecomputeTotals = entry.rowItems.count != response.items.count
         } else {
             sourceItems = response.items
-            mustRecomputeTotals = false
         }
-        guard !sourceItems.isEmpty else { return nil }
         let effectiveLoggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
-        let items: [SaveParsedFoodItem] = sourceItems.map { item in
-            SaveParsedFoodItem(
-                name: item.name,
-                quantity: item.amount ?? item.quantity,
-                amount: item.amount ?? item.quantity,
-                unit: item.unitNormalized ?? item.unit,
-                unitNormalized: item.unitNormalized ?? item.unit,
-                grams: item.grams,
-                gramsPerUnit: item.gramsPerUnit,
-                calories: item.calories,
-                protein: item.protein,
-                carbs: item.carbs,
-                fat: item.fat,
-                nutritionSourceId: item.nutritionSourceId,
-                originalNutritionSourceId: item.originalNutritionSourceId,
-                sourceFamily: item.sourceFamily,
-                matchConfidence: item.matchConfidence,
-                needsClarification: item.needsClarification,
-                manualOverride: (item.manualOverride == true)
-                    ? SaveManualOverride(enabled: true, reason: nil, editedFields: [])
-                    : nil
-            )
-        }
-        // Totals: recompute from sourceItems whenever they came from the live
-        // row (client-side scaling may have changed them) or when they're a
-        // subset of response.items. Otherwise keep response.totals verbatim
-        // since it carries backend rounding/unit handling.
-        let rowTotals: NutritionTotals
-        if mustRecomputeTotals {
-            rowTotals = NutritionTotals(
-                calories: sourceItems.reduce(0) { $0 + $1.calories },
-                protein: sourceItems.reduce(0) { $0 + $1.protein },
-                carbs: sourceItems.reduce(0) { $0 + $1.carbs },
-                fat: sourceItems.reduce(0) { $0 + $1.fat }
-            )
+        let items: [SaveParsedFoodItem]
+        if sourceItems.isEmpty {
+            let hasDisplayedCalories = currentRow?.calories != nil || response.totals.calories > 0
+            guard hasDisplayedCalories else { return nil }
+            items = [
+                fallbackSaveItem(
+                    rawText: entry.rawText,
+                    totals: response.totals,
+                    confidence: response.confidence,
+                    nutritionSourceId: currentRow?.parsedItem?.nutritionSourceId ?? response.items.first?.nutritionSourceId
+                )
+            ]
         } else {
-            rowTotals = response.totals
+            items = sourceItems.map { item in
+                SaveParsedFoodItem(
+                    name: item.name,
+                    quantity: item.amount ?? item.quantity,
+                    amount: item.amount ?? item.quantity,
+                    unit: item.unitNormalized ?? item.unit,
+                    unitNormalized: item.unitNormalized ?? item.unit,
+                    grams: item.grams,
+                    gramsPerUnit: item.gramsPerUnit,
+                    calories: item.calories,
+                    protein: item.protein,
+                    carbs: item.carbs,
+                    fat: item.fat,
+                    nutritionSourceId: item.nutritionSourceId,
+                    originalNutritionSourceId: item.originalNutritionSourceId,
+                    sourceFamily: item.sourceFamily,
+                    matchConfidence: item.matchConfidence,
+                    // Product rule: persist visible calorie rows without blocking on clarification.
+                    needsClarification: false,
+                    manualOverride: (item.manualOverride == true)
+                        ? SaveManualOverride(enabled: true, reason: nil, editedFields: [])
+                        : nil
+                )
+            }
         }
+        guard !items.isEmpty else { return nil }
+        let rowTotals = NutritionTotals(
+            calories: roundOneDecimal(items.reduce(0) { $0 + $1.calories }),
+            protein: roundOneDecimal(items.reduce(0) { $0 + $1.protein }),
+            carbs: roundOneDecimal(items.reduce(0) { $0 + $1.carbs }),
+            fat: roundOneDecimal(items.reduce(0) { $0 + $1.fat })
+        )
+
         return SaveLogRequest(
             parseRequestId: entry.parseRequestId,
             parseVersion: entry.parseVersion,
@@ -4875,6 +4881,44 @@ struct MainLoggingShellView: View {
                 assumptions: response.assumptions,
                 items: items
             )
+        )
+    }
+
+    private func fallbackSaveItem(
+        rawText: String,
+        totals: NutritionTotals,
+        confidence: Double,
+        nutritionSourceId: String?
+    ) -> SaveParsedFoodItem {
+        let trimmedText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let itemName = trimmedText.isEmpty ? "Meal estimate" : trimmedText
+        let sourceId = nutritionSourceId?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedSourceId = (sourceId?.isEmpty == false) ? sourceId! : kUnresolvedPlaceholderSourceId
+
+        let calories = roundOneDecimal(max(0, totals.calories))
+        let protein = roundOneDecimal(max(0, totals.protein))
+        let carbs = roundOneDecimal(max(0, totals.carbs))
+        let fat = roundOneDecimal(max(0, totals.fat))
+        let clampedConfidence = min(max(confidence, 0), 1)
+
+        return SaveParsedFoodItem(
+            name: itemName,
+            quantity: 1,
+            amount: 1,
+            unit: "serving",
+            unitNormalized: "serving",
+            grams: max(1, calories),
+            gramsPerUnit: max(1, calories),
+            calories: calories,
+            protein: protein,
+            carbs: carbs,
+            fat: fat,
+            nutritionSourceId: resolvedSourceId,
+            originalNutritionSourceId: resolvedSourceId,
+            sourceFamily: nil,
+            matchConfidence: clampedConfidence,
+            needsClarification: false,
+            manualOverride: nil
         )
     }
 
