@@ -45,6 +45,7 @@ final class AppStore: ObservableObject {
     private let challengeKey = "app.challenge.choice.v1"
     private let mealReminderSettingsKey = "app.meal.reminder.settings.v1"
     private let networkMonitor: NetworkStatusMonitor
+    private var onboardingProfileRefreshTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -152,13 +153,13 @@ final class AppStore: ObservableObject {
                 await authService.restoreSessionIfPossible()
                 await MainActor.run {
                     self?.isSessionRestored = true
-                    Task { await self?.refreshOnboardingCompletionFromBackend() }
+                    self?.scheduleLaunchOnboardingProfileRefreshIfNeeded()
                 }
             }
         } else {
             isSessionRestored = true
             if sessionStore.session != nil {
-                Task { await refreshOnboardingCompletionFromBackend() }
+                scheduleLaunchOnboardingProfileRefreshIfNeeded()
             }
         }
     }
@@ -175,6 +176,8 @@ final class AppStore: ObservableObject {
     }
 
     func signOut() {
+        onboardingProfileRefreshTask?.cancel()
+        onboardingProfileRefreshTask = nil
         authService.signOut()
         isOnboardingComplete = false
         defaults.set(false, forKey: onboardingKey)
@@ -208,6 +211,25 @@ final class AppStore: ObservableObject {
             // Render cold-starts and transient network errors must not wipe
             // the session; real auth failures will surface on the next
             // user-driven request and be handled there.
+        }
+    }
+
+    private func scheduleLaunchOnboardingProfileRefreshIfNeeded() {
+        guard authSessionStore.session != nil else { return }
+
+        onboardingProfileRefreshTask?.cancel()
+        onboardingProfileRefreshTask = Task { [weak self] in
+            guard let self else { return }
+
+            // If this device already knows onboarding is complete, the
+            // profile sync is useful but not urgent for first paint. Give
+            // the home screen a short head start so sign-in feels faster.
+            if self.isOnboardingComplete {
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+            }
+
+            guard !Task.isCancelled else { return }
+            await self.refreshOnboardingCompletionFromBackend()
         }
     }
 
