@@ -197,6 +197,21 @@ final class APIClient {
         )
     }
 
+    /// Attaches (or clears) the storage object path for a previously-saved
+    /// food log. Used by the post-save image upload path so that a failed
+    /// or slow image upload never blocks the food_log row from landing.
+    /// Pass `imageRef = nil` to clear an abandoned ref.
+    @discardableResult
+    func updateLogImageRef(id: String, imageRef: String?) async throws -> UpdateLogImageRefResponse {
+        struct Body: Encodable { let imageRef: String? }
+        return try await request(
+            path: "/v1/logs/\(id)/image-ref",
+            method: "PATCH",
+            body: Body(imageRef: imageRef),
+            requiresAuth: true
+        )
+    }
+
     func getDaySummary(date: String, timezone: String = TimeZone.current.identifier) async throws -> DaySummaryResponse {
         try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [
             URLQueryItem(name: "date", value: date),

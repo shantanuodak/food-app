@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { deleteFoodLog, saveFoodLogStrict, updateFoodLog } from '../services/logService.js';
+import { deleteFoodLog, saveFoodLogStrict, updateFoodLog, updateFoodLogImageRef } from '../services/logService.js';
 import { getDaySummary, getDaySummaryRange } from '../services/daySummaryService.js';
 import { getDayLogs, getDayLogsRange } from '../services/dayLogsService.js';
 import { getProgressSummary } from '../services/progressService.js';
@@ -16,6 +16,7 @@ import {
   logIdParamSchema,
   normalizeManualOverride,
   normalizeRawText,
+  patchLogImageRefSchema,
   patchLogSchema,
   progressQuerySchema,
   roundOneDecimal,
@@ -259,6 +260,35 @@ router.patch('/:id', async (req, res, next) => {
       }))
     });
 
+    res.status(200).json(updated);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Lightweight endpoint to attach (or clear) an image ref on an already-
+ * saved food_log. The iOS client uses this to decouple image upload from
+ * save: the meal lands first (with image_ref NULL), the photo gets
+ * uploaded to Supabase Storage in the background, and we PATCH the ref
+ * once it's there. This way, image upload failures never block nutrition
+ * data from being persisted.
+ *
+ * Note: this is intentionally NOT the full PATCH /:id route — that
+ * requires a complete parsedLog body and re-validates totals/items, which
+ * would be wasteful for a one-field tweak. Permissions are still scoped
+ * to the row's owner via WHERE user_id = $1.
+ */
+router.patch('/:id/image-ref', async (req, res, next) => {
+  try {
+    const { id: logId } = logIdParamSchema.parse(req.params);
+    const body = patchLogImageRefSchema.parse(req.body);
+    const auth = res.locals.auth as { userId: string };
+    const updated = await updateFoodLogImageRef({
+      logId,
+      userId: auth.userId,
+      imageRef: body.imageRef
+    });
     res.status(200).json(updated);
   } catch (err) {
     next(err);

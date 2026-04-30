@@ -73,6 +73,17 @@ export const patchLogSchema = z.object({
   })
 });
 
+/**
+ * Body for `PATCH /v1/logs/:id/image-ref`. Image upload is decoupled from
+ * save: the food_log lands first (without image_ref), then the client
+ * uploads the photo to storage and calls this endpoint to attach the
+ * resulting object path. `imageRef: null` is allowed so callers can clear
+ * a stale ref if the upload is later abandoned.
+ */
+export const patchLogImageRefSchema = z.object({
+  imageRef: z.string().trim().min(1).max(500).nullable()
+});
+
 const dateQuery = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be in YYYY-MM-DD format');
 
 export const summaryQuerySchema = z.object({

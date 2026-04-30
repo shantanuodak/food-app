@@ -341,6 +341,13 @@ struct DeleteLogResponse: Decodable {
     let healthSync: HealthSyncResponse?
 }
 
+/// Response for `PATCH /v1/logs/:id/image-ref` — the lightweight endpoint
+/// used by the post-save image upload path.
+struct UpdateLogImageRefResponse: Decodable {
+    let logId: String
+    let imageRef: String?
+}
+
 /// PATCH /v1/logs/:id — parse references are optional so the client-side
 /// quantity fast path (no new parse) can reuse the same schema.
 struct PatchLogRequest: Codable {

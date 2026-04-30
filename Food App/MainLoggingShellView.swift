@@ -82,6 +82,11 @@ struct MainLoggingShellView: View {
     @State private var pendingImagePreviewData: Data?
     @State private var pendingImageMimeType: String?
     @State private var pendingImageStorageRef: String?
+    /// Image data captured for post-save retry when the inline upload during
+    /// `prepareSaveRequestForNetwork` fails. The food_log lands without an
+    /// image_ref; once it's saved we kick off a background upload + PATCH.
+    /// Keyed by idempotency key so concurrent saves don't clobber each other.
+    @State private var deferredImageUploads: [String: Data] = [:]
     @State private var latestParseInputKind: String = "text"
     @State private var suppressDebouncedParseOnce = false
     @State private var isCalendarPresented = false
@@ -249,7 +254,7 @@ struct MainLoggingShellView: View {
             .sheet(isPresented: $isStreakDrawerPresented) {
                 HomeStreakDrawerView()
                     .environmentObject(appStore)
-                    .presentationDetents([.medium, .large])
+                    .presentationDetents([.fraction(0.8), .large])
                     .presentationDragIndicator(.visible)
             }
             .padding()
@@ -4765,14 +4770,29 @@ struct MainLoggingShellView: View {
                !existingRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 prepared = requestWithImageRef(prepared, imageRef: existingRef)
             } else if let imageData = pendingImageData ?? queuedItem?.imageUploadData ?? inputRows.compactMap(\.imagePreviewData).first {
-                let imageRef = try await appStore.imageStorageService.uploadJPEG(
-                    imageData,
-                    userIdentifierHint: appStore.authSessionStore.session?.userID
-                )
-                pendingImageStorageRef = imageRef
-                prepared = requestWithImageRef(prepared, imageRef: imageRef)
-                for index in inputRows.indices where inputRows[index].imagePreviewData != nil {
-                    inputRows[index].imageRef = imageRef
+                // Image upload is decoupled from save: nutrition data must
+                // never be lost just because Supabase Storage is unhappy.
+                // We attempt the upload inline so the food_log can land
+                // with image_ref populated on the happy path; if anything
+                // throws (missing bucket, expired Supabase JWT, network
+                // blip, RLS misconfig…), we stash the bytes and retry the
+                // upload + PATCH /v1/logs/:id/image-ref once the save
+                // succeeds. The user gets their meal logged either way.
+                do {
+                    let imageRef = try await appStore.imageStorageService.uploadJPEG(
+                        imageData,
+                        userIdentifierHint: appStore.authSessionStore.session?.userID
+                    )
+                    pendingImageStorageRef = imageRef
+                    prepared = requestWithImageRef(prepared, imageRef: imageRef)
+                    for index in inputRows.indices where inputRows[index].imagePreviewData != nil {
+                        inputRows[index].imageRef = imageRef
+                    }
+                } catch {
+                    let queueKey = idempotencyKey.uuidString.lowercased()
+                    deferredImageUploads[queueKey] = imageData
+                    NSLog("[MainLogging] Inline image upload failed; deferring to post-save retry: \(error)")
+                    // Leave prepared with imageRef = nil so the save proceeds.
                 }
             }
         }
@@ -4847,6 +4867,18 @@ struct MainLoggingShellView: View {
                 logId: response.logId,
                 preparedRequest: effectiveRequest
             )
+            // If the inline image upload failed during
+            // prepareSaveRequestForNetwork (Supabase storage unhappy, network
+            // blip, expired storage JWT, missing bucket), the bytes were
+            // stashed in deferredImageUploads. Now that the food_log row is
+            // durable, retry the upload + PATCH the image_ref in a detached
+            // task so the user's meal is saved and the photo attaches when
+            // storage cooperates.
+            scheduleDeferredImageUploadRetry(
+                idempotencyKey: idempotencyKey,
+                logId: response.logId,
+                inputKind: effectiveRequest.parsedLog.inputKind ?? latestParseInputKind
+            )
             clearPendingSaveContext()
             if intent != .auto {
                 flowStartedAt = nil
@@ -4893,6 +4925,43 @@ struct MainLoggingShellView: View {
                 durationMs: elapsedMs(since: startedAt),
                 isRetry: isRetry
             )
+        }
+    }
+
+    /// Retries an image upload that failed during the inline path inside
+    /// `prepareSaveRequestForNetwork`. By the time this runs, the food_log
+    /// row is already saved without an image_ref — we just need to attach
+    /// the photo when storage cooperates. Best-effort: if the retry also
+    /// fails (e.g. the bucket genuinely doesn't exist), we drop the bytes
+    /// rather than burning forever. The meal is already logged; the photo
+    /// is a nice-to-have.
+    private func scheduleDeferredImageUploadRetry(
+        idempotencyKey: UUID,
+        logId: String,
+        inputKind: String?
+    ) {
+        let queueKey = idempotencyKey.uuidString.lowercased()
+        guard let imageData = deferredImageUploads[queueKey] else { return }
+        deferredImageUploads.removeValue(forKey: queueKey)
+        let kind = normalizedInputKind(inputKind, fallback: latestParseInputKind)
+        guard kind == "image" else { return }
+
+        let storage = appStore.imageStorageService
+        let api = appStore.apiClient
+        let userIDHint = appStore.authSessionStore.session?.userID
+
+        Task.detached(priority: .background) {
+            do {
+                let imageRef = try await storage.uploadJPEG(imageData, userIdentifierHint: userIDHint)
+                _ = try await api.updateLogImageRef(id: logId, imageRef: imageRef)
+                NSLog("[MainLogging] Deferred image upload succeeded for log \(logId)")
+            } catch {
+                // Swallow — meal is already saved with image_ref = NULL.
+                // A future enhancement could surface a non-blocking banner
+                // ("Photo couldn't sync"), but losing the photo silently is
+                // strictly better than losing the nutrition data.
+                NSLog("[MainLogging] Deferred image upload retry failed for log \(logId): \(error)")
+            }
         }
     }
 

@@ -423,6 +423,32 @@ export async function updateFoodLog(input: UpdateLogInput): Promise<UpdateLogRes
   }
 }
 
+/**
+ * Lightweight update for image_ref only — used by the iOS post-save image
+ * upload path. Image upload is decoupled from save (so a missing storage
+ * bucket / network blip / 401 on Supabase Storage never blocks nutrition
+ * data from landing). After the food_log row is persisted with image_ref
+ * NULL, the client retries the upload in the background and calls this
+ * endpoint to attach the resulting object path.
+ */
+export async function updateFoodLogImageRef(input: {
+  logId: string;
+  userId: string;
+  imageRef: string | null;
+}): Promise<{ logId: string; imageRef: string | null }> {
+  const result = await pool.query<{ id: string; image_ref: string | null }>(
+    `UPDATE food_logs
+       SET image_ref = $1, updated_at = NOW()
+     WHERE id = $2 AND user_id = $3
+     RETURNING id, image_ref`,
+    [input.imageRef, input.logId, input.userId]
+  );
+  if (result.rowCount === 0) {
+    throw new ApiError(404, 'LOG_NOT_FOUND', 'Food log not found');
+  }
+  return { logId: result.rows[0].id, imageRef: result.rows[0].image_ref };
+}
+
 export async function deleteFoodLog(input: { logId: string; userId: string }): Promise<DeleteLogResponse> {
   const client = await pool.connect();
   try {
