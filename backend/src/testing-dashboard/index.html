@@ -916,6 +916,38 @@ async function renderAttention(data, alertItems) {
     }
   }
 
+  // Save-health: surfaces users with parse activity but no/few saves in
+  // the last 7 days. Designed to catch silent save-path regressions
+  // (e.g. the 18-day image-save outage fixed in commit 0443246) within
+  // hours instead of weeks. Top offenders are listed inline so the team
+  // can investigate immediately from the overview tab.
+  try {
+    const saveHealth = await api('/save-health');
+    const offenders = (saveHealth.users || []).slice(0, 5);
+    if (saveHealth.summary?.criticalCount) {
+      const labels = offenders
+        .filter(u => u.severity === 'critical')
+        .map(u => `${u.email} (${u.parseCount} parses, 0 saves)`)
+        .join('; ');
+      items.push({
+        tone: 'red',
+        title: `${saveHealth.summary.criticalCount} user${saveHealth.summary.criticalCount === 1 ? '' : 's'} parsing but not saving`,
+        body: labels
+          ? `Investigate immediately — likely save-path regression. ${labels}`
+          : 'Investigate immediately — likely save-path regression.'
+      });
+    }
+    if (saveHealth.summary?.warningCount) {
+      items.push({
+        tone: 'yellow',
+        title: `${saveHealth.summary.warningCount} user${saveHealth.summary.warningCount === 1 ? '' : 's'} with very low save rate`,
+        body: 'Save rate < 10% over 10+ parses in the last week. Could be retry stalls or UX confusion.'
+      });
+    }
+  } catch (err) {
+    console.warn('save-health load failed', err);
+  }
+
   if (!items.length) {
     items.push({ tone: 'green', title: 'No urgent issues', body: 'The latest dashboard signals look usable. Keep adding varied food cases.' });
   }

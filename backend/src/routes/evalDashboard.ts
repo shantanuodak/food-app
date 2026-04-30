@@ -10,6 +10,7 @@ import {
   getEvalRunHistory,
   getEvalRunById
 } from '../services/evalService.js';
+import { getSaveHealthReport } from '../services/saveHealthService.js';
 import { pool } from '../db.js';
 
 const router = Router();
@@ -436,6 +437,39 @@ router.get('/cache-stats', async (req, res, next) => {
       entriesLast24h: Number(recent?.entries_last_24h ?? 0),
       topEntries
     });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /v1/internal/dashboard/save-health
+//
+// Surfaces users with meaningful parse activity but disproportionately few
+// saves over a configurable window. Designed to catch the failure mode
+// where a backend or client regression silently aborts saves while parses
+// keep landing — the exact pattern that hid the 18-day image-save outage
+// fixed in commit 0443246.
+//
+// Query params:
+//   windowDays  — defaults to 7, clamped to 1..30
+//   include     — "all" to also return healthy users (default: critical+warning only)
+// ---------------------------------------------------------------------------
+
+const saveHealthQuerySchema = z.object({
+  windowDays: z.coerce.number().int().min(1).max(30).optional(),
+  include: z.enum(['all', 'unhealthy']).optional()
+});
+
+router.get('/save-health', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const params = saveHealthQuerySchema.parse(req.query);
+    const report = await getSaveHealthReport({
+      windowDays: params.windowDays,
+      includeHealthy: params.include === 'all'
+    });
+    res.json(report);
   } catch (err) {
     next(err);
   }
