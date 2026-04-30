@@ -45,7 +45,7 @@ const parseItemSchema = z.object({
   explanation: z.string().optional()
 });
 
-const parseResultSchema = z.object({
+export const parseResultSchema = z.object({
   confidence: z.number().min(0).max(1),
   assumptions: z.array(z.string()),
   items: z.array(parseItemSchema),
@@ -57,7 +57,7 @@ const parseResultSchema = z.object({
   })
 });
 
-function buildGeminiFallbackPrompt(inputText: string, initialResult: ParseResult): string {
+export function buildGeminiFallbackPrompt(inputText: string, initialResult: ParseResult): string {
   const segments = splitFoodTextSegments(inputText);
 
   return [

@@ -312,6 +312,26 @@
       background: var(--surface2);
       color: var(--text);
     }
+    .prompt-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); gap: 16px; }
+    .prompt-editor,
+    .prompt-output {
+      width: 100%;
+      min-height: 480px;
+      resize: vertical;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.55;
+      padding: 14px;
+      outline: none;
+      white-space: pre-wrap;
+    }
+    .prompt-editor:focus { border-color: var(--accent); }
+    .prompt-output { overflow: auto; }
+    @media (max-width: 1000px) { .prompt-layout { grid-template-columns: 1fr; } }
     .text-muted { color: var(--muted); }
     .text-green { color: var(--green); }
     .text-red { color: var(--red); }
@@ -347,6 +367,7 @@
       <button class="active" onclick="switchTab('overview', this)">Health</button>
       <button onclick="switchTab('eval-runner', this)">Food Quality</button>
       <button onclick="switchTab('benchmarks', this)">Benchmarks</button>
+      <button onclick="switchTab('prompt-lab', this)">Prompt Lab</button>
       <button onclick="switchTab('eval-history', this)">History</button>
       <button onclick="switchTab('advanced', this)">Advanced</button>
     </nav>
@@ -508,6 +529,47 @@
         <p class="text-muted">
           A case is only trustworthy when it has a usable truth source. If the eval says “Needs benchmark,” that case should not be treated as a parser failure yet.
         </p>
+      </div>
+    </div>
+
+    <!-- ==================== PROMPT LAB ==================== -->
+    <div id="tab-prompt-lab" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <h2 style="margin:0">Prompt Lab</h2>
+          <button class="btn btn-ghost" onclick="loadPromptLab()">Load Production Prompt</button>
+          <button class="btn btn-primary" id="prompt-test-btn" onclick="testDraftPrompt()">Test Draft</button>
+          <span id="prompt-test-msg" style="display:none; color:var(--muted); font-size:13px;">
+            <span class="spinner"></span>&nbsp;Testing draft…
+          </span>
+        </div>
+        <p class="text-muted" style="font-size:13px; margin-bottom:16px;">
+          Edit and test a draft prompt safely. This does not save, deploy, or promote the prompt to production.
+        </p>
+        <div class="eval-controls">
+          <div class="eval-control" style="flex:1; min-width:280px;">
+            <label for="prompt-input-text">Sample food text</label>
+            <input id="prompt-input-text" type="text" value="cold coffee 8 oz" />
+          </div>
+          <div class="eval-control">
+            <label>Production version</label>
+            <div class="badge badge-muted" id="prompt-version">—</div>
+          </div>
+          <div class="eval-control">
+            <label>Model</label>
+            <div class="badge badge-blue" id="prompt-model">—</div>
+          </div>
+        </div>
+      </div>
+      <div class="prompt-layout">
+        <div class="section">
+          <h3>Draft Prompt</h3>
+          <textarea id="prompt-editor" class="prompt-editor" spellcheck="false"></textarea>
+        </div>
+        <div class="section">
+          <h3>Test Result</h3>
+          <pre id="prompt-result" class="prompt-output">Load the production prompt, edit it, then test a draft.</pre>
+        </div>
       </div>
     </div>
 
@@ -744,6 +806,7 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   currentTab = name;
   if (name === 'eval-history') loadEvalHistory();
+  if (name === 'prompt-lab') loadPromptLab();
   if (name === 'advanced') {
     showAdvancedSection(advancedSection);
   }
@@ -1102,6 +1165,53 @@ function renderEvalResult(result) {
         <td><span class="badge ${c.benchmarkConfidence === 'high' ? 'badge-green' : c.benchmarkConfidence === 'medium' ? 'badge-blue' : 'badge-muted'}">${benchmarkSource}</span></td>
         <td>${statusBadge}</td>
       </tr>`;
+  }
+}
+
+/* ====================================================================== */
+/* PROMPT LAB */
+/* ====================================================================== */
+async function loadPromptLab() {
+  const input = document.getElementById('prompt-input-text').value.trim() || 'cold coffee 8 oz';
+  document.getElementById('prompt-result').textContent = 'Loading production prompt…';
+  try {
+    const data = await api('/prompt-lab?inputText=' + encodeURIComponent(input));
+    document.getElementById('prompt-input-text').value = data.inputText;
+    document.getElementById('prompt-version').textContent = data.promptVersion || '—';
+    document.getElementById('prompt-model').textContent = data.model || '—';
+    document.getElementById('prompt-editor').value = data.prompt || '';
+    document.getElementById('prompt-result').textContent = JSON.stringify({
+      baseline: data.baseline,
+      temperature: data.temperature
+    }, null, 2);
+  } catch (e) {
+    document.getElementById('prompt-result').textContent = 'Could not load prompt: ' + e.message;
+  }
+}
+
+async function testDraftPrompt() {
+  const btn = document.getElementById('prompt-test-btn');
+  const msg = document.getElementById('prompt-test-msg');
+  const inputText = document.getElementById('prompt-input-text').value.trim();
+  const prompt = document.getElementById('prompt-editor').value.trim();
+  if (!inputText || !prompt) {
+    alert('Add sample food text and a prompt first.');
+    return;
+  }
+  btn.disabled = true;
+  msg.style.display = 'inline-flex';
+  document.getElementById('prompt-result').textContent = 'Testing draft prompt…';
+  try {
+    const data = await api('/prompt-lab/test', {
+      method: 'POST',
+      body: JSON.stringify({ inputText, prompt })
+    });
+    document.getElementById('prompt-result').textContent = JSON.stringify(data, null, 2);
+  } catch (e) {
+    document.getElementById('prompt-result').textContent = 'Prompt test failed: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    msg.style.display = 'none';
   }
 }
 

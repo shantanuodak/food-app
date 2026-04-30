@@ -4,6 +4,9 @@ import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import { getMetricsSnapshot } from '../services/metricsService.js';
 import { getAlertSnapshot } from '../services/alertRulesService.js';
+import { parseFoodText } from '../services/deterministicParser.js';
+import { buildGeminiFallbackPrompt, parseResultSchema } from '../services/aiNormalizerService.js';
+import { generateGeminiJsonWithDiagnostics } from '../services/geminiFlashClient.js';
 import {
   runGoldenSetEval,
   saveEvalRun,
@@ -19,6 +22,11 @@ const evalRunRequestSchema = z.object({
   cacheMode: z.enum(['cached', 'fresh']).optional().default('cached'),
   benchmarkProviders: z.array(z.enum(['usda', 'fatsecret', 'curated'])).optional().default(['usda', 'fatsecret', 'curated']),
   maxCases: z.number().int().min(1).max(500).optional()
+});
+
+const promptLabTestSchema = z.object({
+  inputText: z.string().trim().min(1).max(500),
+  prompt: z.string().trim().min(20).max(30_000)
 });
 
 // ---------------------------------------------------------------------------
@@ -90,6 +98,76 @@ router.get('/overview', async (req, res, next) => {
       todayCostUsd,
       todayParses,
       latestEval
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /v1/internal/dashboard/prompt-lab
+// Shows the current production prompt for a sample input. This is read-only.
+// ---------------------------------------------------------------------------
+
+router.get('/prompt-lab', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const inputText = z.string().trim().min(1).max(500).catch('cold coffee 8 oz').parse(req.query.inputText);
+    const baseline = parseFoodText(inputText);
+    res.json({
+      inputText,
+      model: config.aiFallbackModelName || config.geminiFlashModel,
+      promptVersion: config.parsePromptVersion,
+      temperature: 0.1,
+      baseline,
+      prompt: buildGeminiFallbackPrompt(inputText, baseline)
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /v1/internal/dashboard/prompt-lab/test
+// Runs an edited prompt once. Does not save or promote anything.
+// ---------------------------------------------------------------------------
+
+router.post('/prompt-lab/test', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    if (!config.geminiApiKey) {
+      throw new ApiError(503, 'GEMINI_DISABLED', 'Gemini API key is not configured');
+    }
+
+    const body = promptLabTestSchema.parse(req.body ?? {});
+    const response = await generateGeminiJsonWithDiagnostics({
+      model: config.aiFallbackModelName || config.geminiFlashModel,
+      prompt: body.prompt,
+      temperature: 0.1
+    });
+
+    if (!response) {
+      throw new ApiError(503, 'PROMPT_TEST_UNAVAILABLE', 'Gemini did not return a response');
+    }
+    if ('failureReason' in response) {
+      res.json({
+        ok: false,
+        inputText: body.inputText,
+        failureReason: response.failureReason
+      });
+      return;
+    }
+
+    const parsed = parseResultSchema.parse(JSON.parse(response.jsonText));
+    res.json({
+      ok: true,
+      inputText: body.inputText,
+      model: response.usage.model,
+      usage: response.usage,
+      result: {
+        ...parsed,
+        assumptions: []
+      }
     });
   } catch (err) {
     next(err);
