@@ -1902,12 +1902,14 @@ struct HomeStreakDrawerView: View {
                                 days: Array(response.days.reversed()),
                                 range: selectedRange,
                                 todayKey: todayKey,
+                                timezone: response.timezone,
                                 selectedDay: $selectedDay
                             )
                         case .year:
                             StreakYearGridView(
                                 days: Array(response.days.reversed()),
                                 todayKey: todayKey,
+                                timezone: response.timezone,
                                 selectedDay: $selectedDay
                             )
                         }
@@ -2047,6 +2049,7 @@ private struct StreakContributionCalendarView: View {
     let days: [StreakDay]
     let range: HomeStreakDrawerRange
     let todayKey: String
+    let timezone: String
     @Binding var selectedDay: StreakDay?
 
     var body: some View {
@@ -2065,6 +2068,7 @@ private struct StreakContributionCalendarView: View {
                     day: day,
                     cornerRadius: cellRadius,
                     isToday: day.date == todayKey,
+                    timezone: timezone,
                     selectedDay: $selectedDay
                 )
             }
@@ -2092,6 +2096,7 @@ private struct StreakContributionCalendarView: View {
 private struct StreakYearGridView: View {
     let days: [StreakDay]
     let todayKey: String
+    let timezone: String
     @Binding var selectedDay: StreakDay?
 
     var body: some View {
@@ -2115,6 +2120,7 @@ private struct StreakYearGridView: View {
                                 day: day,
                                 cornerRadius: 5,
                                 isToday: day.date == todayKey,
+                                timezone: timezone,
                                 selectedDay: $selectedDay
                             )
                         }
@@ -2184,6 +2190,7 @@ private struct StreakDayCell: View {
     let day: StreakDay
     let cornerRadius: CGFloat
     let isToday: Bool
+    let timezone: String
     @Binding var selectedDay: StreakDay?
 
     var body: some View {
@@ -2207,7 +2214,7 @@ private struct StreakDayCell: View {
                     if !newValue { selectedDay = nil }
                 }
             )) {
-                StreakDayPopover(day: day, isToday: isToday)
+                StreakDayPopover(day: day, isToday: isToday, timezone: timezone)
                     .presentationCompactAdaptation(.popover)
             }
             .accessibilityLabel(Text(accessibilityLabel))
@@ -2224,6 +2231,7 @@ private struct StreakDayCell: View {
 private struct StreakDayPopover: View {
     let day: StreakDay
     let isToday: Bool
+    let timezone: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -2264,23 +2272,32 @@ private struct StreakDayPopover: View {
     }
 
     private var formattedDate: String {
-        guard let date = Self.dateParser.date(from: day.date) else { return day.date }
-        return Self.dateDisplay.string(from: date)
+        Self.formatDate(day.date, timezone: timezone)
     }
-
-    private static let dateParser: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(secondsFromGMT: 0)
-        f.dateFormat = "yyyy-MM-dd"
-        return f
-    }()
 
     private static let dateDisplay: DateFormatter = {
         let f = DateFormatter()
+        f.calendar = Calendar(identifier: .gregorian)
         f.locale = .current
         f.dateFormat = "EEE, MMM d"
         return f
     }()
+
+    private static func formatDate(_ value: String, timezone: String) -> String {
+        let effectiveTimezone = TimeZone(identifier: timezone) ?? .current
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = effectiveTimezone
+        let parts = value.split(separator: "-").compactMap { Int($0) }
+        guard parts.count == 3 else { return value }
+        var components = DateComponents()
+        components.calendar = calendar
+        components.timeZone = effectiveTimezone
+        components.year = parts[0]
+        components.month = parts[1]
+        components.day = parts[2]
+        components.hour = 12
+        guard let date = calendar.date(from: components) else { return value }
+        dateDisplay.timeZone = effectiveTimezone
+        return dateDisplay.string(from: date)
+    }
 }

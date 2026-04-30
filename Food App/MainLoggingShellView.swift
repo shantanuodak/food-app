@@ -54,6 +54,8 @@ struct MainLoggingShellView: View {
     @State private var dayCacheSummary: [String: DaySummaryResponse] = [:]
     @State private var dayCacheLogs: [String: DayLogsResponse] = [:]
     @State private var prefetchTask: Task<Void, Never>?
+    @State private var initialHomeBootstrapTask: Task<Void, Never>?
+    @State private var hasBootstrappedAuthenticatedHome = false
     /// Per-row debounced PATCH task. A key is added when the client-side
     /// quantity fast path scales a row that already has a `serverLogId`; the
     /// task fires after `patchDebounceNs` and issues a `PATCH /v1/logs/:id`
@@ -61,6 +63,8 @@ struct MainLoggingShellView: View {
     /// so a user adjusting 3 → 4 → 5 → 6 only results in one network call.
     @State private var pendingPatchTasks: [UUID: Task<Void, Never>] = [:]
     @State private var pendingDeleteTasks: [UUID: Task<Void, Never>] = [:]
+    @State private var locallyDeletedPendingRowIDs: Set<UUID> = []
+    @State private var locallyDeletedPendingSaveKeys: Set<String> = []
     private let patchDebounceNs: UInt64 = 1_500_000_000
     @FocusState private var isNoteEditorFocused: Bool
     @State private var flowStartedAt: Date?
@@ -70,6 +74,8 @@ struct MainLoggingShellView: View {
     @State private var inputMode: HomeInputMode = .text
     @State private var detailsDrawerMode: DetailsDrawerMode = .full
     @State private var selectedRowDetails: RowCalorieDetails?
+    @State private var rowDetailsPendingDeleteID: UUID?
+    @State private var isRowDetailsDeleteConfirmationPresented = false
     /// Per-(row, itemIndex) retry tracking for unresolved placeholders.
     /// Key format: "<rowUUID>-<itemIndex>". Drives the in-flight spinner
     /// on Retry buttons in the drawer + dedupes concurrent taps.
@@ -295,20 +301,8 @@ struct MainLoggingShellView: View {
             }
             .onAppear {
                 restorePendingSaveContextIfNeeded()
-                // Load cached day logs from disk instantly (no network wait)
-                let todayStr = summaryDateString
-                if dayLogs == nil, let cached = loadDayLogsFromCache(date: todayStr) {
-                    dayLogs = cached
-                    dayCacheLogs[todayStr] = cached
-                    syncInputRowsFromDayLogs(cached.logs, for: cached.date)
-                }
-                if appStore.isSessionRestored {
-                    submitRestoredPendingSaveIfPossible()
-                    refreshDaySummary()
-                    refreshDayLogs()
-                    refreshCurrentStreak()
-                    prefetchAdjacentDays(around: selectedSummaryDate)
-                }
+                hydrateVisibleDayLogsFromDiskIfNeeded()
+                bootstrapAuthenticatedHomeIfNeeded()
                 // Surface the mindful-pause sheet once per day for emotional-eating users.
                 if appStore.selectedChallenge == .emotionalEating, MindfulPauseGate.shouldShow() {
                     isMindfulPausePresented = true
@@ -316,24 +310,15 @@ struct MainLoggingShellView: View {
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
                 guard ready else { return }
-                // Also try disk cache here in case onAppear ran before session was ready
-                let todayStr = summaryDateString
-                if dayLogs == nil, let cached = loadDayLogsFromCache(date: todayStr) {
-                    dayLogs = cached
-                    dayCacheLogs[todayStr] = cached
-                    syncInputRowsFromDayLogs(cached.logs, for: cached.date)
-                }
-                refreshDaySummary()
-                refreshDayLogs()
-                refreshCurrentStreak()
-                submitRestoredPendingSaveIfPossible()
-                prefetchAdjacentDays(around: selectedSummaryDate)
+                hydrateVisibleDayLogsFromDiskIfNeeded()
+                bootstrapAuthenticatedHomeIfNeeded()
             }
             .onDisappear {
                 debounceTask?.cancel()
                 parseTask?.cancel()
                 autoSaveTask?.cancel()
                 prefetchTask?.cancel()
+                initialHomeBootstrapTask?.cancel()
                 unresolvedRetryTask?.cancel()
                 // Drop any pending PATCH tasks; inputRows state is cleared
                 // on the next load anyway.
@@ -1367,6 +1352,17 @@ struct MainLoggingShellView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
+                    if let loggedAtLabel = drawerLoggedAtLabel(from: parseResult?.loggedAt) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "clock")
+                                .font(.caption)
+                            Text("Logged at \(loggedAtLabel)")
+                                .font(.footnote)
+                        }
+                        .foregroundStyle(.secondary)
+                        .padding(.bottom, 2)
+                    }
+
                     if detailsDrawerMode == .manualAdd {
                         manualAddDrawerContent
                     } else if let parseResult {
@@ -1386,13 +1382,54 @@ struct MainLoggingShellView: View {
             .navigationTitle(L10n.parseDetailsTitle)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L10n.doneButton) {
+                    drawerCheckmarkButton(accessibilityLabel: L10n.doneButton) {
                         isDetailsDrawerPresented = false
                     }
                 }
             }
         }
     }
+
+    private func drawerLoggedAtLabel(from loggedAtISO: String?) -> String? {
+        guard let date = drawerLoggedAtDate(from: loggedAtISO) else { return nil }
+        return Self.drawerLoggedAtDisplayFormatter.string(from: date)
+    }
+
+    private func drawerLoggedAtDate(from loggedAtISO: String?) -> Date? {
+        if let raw = loggedAtISO?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !raw.isEmpty {
+            if let parsed = HomeLoggingDateUtils.loggedAtFormatter.date(from: raw) {
+                return parsed
+            }
+            if let parsed = Self.loggedAtNoFractionFormatter.date(from: raw) {
+                return parsed
+            }
+            if let parsed = Self.loggedAtGenericFormatter.date(from: raw) {
+                return parsed
+            }
+        }
+        return draftLoggedAt ?? draftTimestampForSelectedDate()
+    }
+
+    private static let drawerLoggedAtDisplayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = .current
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter
+    }()
+
+    private static let loggedAtNoFractionFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let loggedAtGenericFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
 
     @ViewBuilder
     private func rowCalorieDetailsSheet(_ details: RowCalorieDetails) -> some View {
@@ -1581,14 +1618,55 @@ struct MainLoggingShellView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button(L10n.doneButton) {
-                        selectedRowDetails = nil
+                    HStack(spacing: 10) {
+                        Button(role: .destructive) {
+                            rowDetailsPendingDeleteID = liveDetails.id
+                            isRowDetailsDeleteConfirmationPresented = true
+                        } label: {
+                            Label("Delete", systemImage: "trash")
+                                .font(.subheadline.weight(.semibold))
+                                .padding(.horizontal, 12)
+                                .frame(height: 36)
+                                .glassEffect(.regular.interactive(), in: .capsule)
+                        }
+                        .buttonStyle(.plain)
+                        .tint(.red)
+                        .disabled(isRowDetailsDeleteDisabled(rowID: liveDetails.id))
+                        .accessibilityHint(Text("Deletes this food entry and updates your totals."))
+
+                        drawerCheckmarkButton(accessibilityLabel: L10n.doneButton) {
+                            selectedRowDetails = nil
+                        }
                     }
                 }
             }
         }
+        .alert("How sure are you that you want to delete this entry?", isPresented: $isRowDetailsDeleteConfirmationPresented) {
+            Button("Delete", role: .destructive) {
+                if let rowID = rowDetailsPendingDeleteID {
+                    confirmRowDetailsDelete(rowID: rowID)
+                }
+                rowDetailsPendingDeleteID = nil
+            }
+            Button("Cancel", role: .cancel) {
+                rowDetailsPendingDeleteID = nil
+            }
+        } message: {
+            Text("This removes the food from your log, updates your calories, and deletes the database row when it has already synced.")
+        }
         .presentationDetents([.fraction(0.62), .large])
         .presentationDragIndicator(.visible)
+    }
+
+    private func drawerCheckmarkButton(accessibilityLabel: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: "checkmark")
+                .font(.headline.weight(.semibold))
+                .frame(width: 36, height: 36)
+                .glassEffect(.regular.interactive(), in: .capsule)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text(accessibilityLabel))
     }
 
     @ViewBuilder
@@ -1993,6 +2071,50 @@ struct MainLoggingShellView: View {
             return fallback
         }
         return refreshed
+    }
+
+    private func isRowDetailsDeleteDisabled(rowID: UUID) -> Bool {
+        guard let row = inputRows.first(where: { $0.id == rowID }) else { return true }
+        return row.isDeleting || pendingDeleteTasks[rowID] != nil
+    }
+
+    private func confirmRowDetailsDelete(rowID: UUID) {
+        guard let row = inputRows.first(where: { $0.id == rowID }) else {
+            selectedRowDetails = nil
+            return
+        }
+
+        selectedRowDetails = nil
+        rowDetailsPendingDeleteID = nil
+
+        if serverBackedDeleteContext(for: row) != nil {
+            handleServerBackedRowCleared(row)
+        } else {
+            removeLocalRowFromDetails(rowID: rowID)
+        }
+    }
+
+    private func removeLocalRowFromDetails(rowID: UUID) {
+        clearTransientWorkForDeletedRow(rowID: rowID)
+        locallyDeletedPendingRowIDs.insert(rowID)
+        let removedKeys = removePendingSaveQueueItems(forRowID: rowID)
+        locallyDeletedPendingSaveKeys.formUnion(removedKeys)
+
+        if let index = inputRows.firstIndex(where: { $0.id == rowID }) {
+            withAnimation(.easeOut(duration: 0.14)) {
+                inputRows.remove(at: index)
+                if inputRows.isEmpty || inputRows.allSatisfy({ $0.isSaved }) {
+                    inputRows.append(.empty())
+                }
+            }
+        }
+
+        if hasSaveableRowsPending {
+            scheduleAutoSave()
+        } else {
+            autoSaveTask?.cancel()
+            autoSaveTask = nil
+        }
     }
 
     private func makeRowCalorieDetails(for row: HomeLogRow) -> RowCalorieDetails? {
@@ -4362,19 +4484,23 @@ struct MainLoggingShellView: View {
     // MARK: - Delete Saved Row
 
     private func handleServerBackedRowCleared(_ row: HomeLogRow) {
-        guard let serverLogId = row.serverLogId else { return }
+        guard let deleteContext = serverBackedDeleteContext(for: row) else { return }
+        let serverLogId = deleteContext.serverLogId
 
         isNoteEditorFocused = false
         activeEditingRowID = nil
         NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
 
-        pendingPatchTasks[row.id]?.cancel()
-        pendingPatchTasks[row.id] = nil
+        clearTransientWorkForDeletedRow(rowID: row.id)
+        _ = removePendingSaveQueueItems(forRowID: row.id)
+        locallyDeletedPendingRowIDs.remove(row.id)
         pendingDeleteTasks[row.id]?.cancel()
 
         let originalIndex = inputRows.firstIndex(where: { $0.id == row.id }) ?? inputRows.count
         var restoredRow = row
+        restoredRow.serverLogId = serverLogId
+        restoredRow.serverLoggedAt = restoredRow.serverLoggedAt ?? deleteContext.savedDay
         restoredRow.isSaved = true
         restoredRow.parsePhase = .idle
         restoredRow.isDeleting = false
@@ -4384,7 +4510,7 @@ struct MainLoggingShellView: View {
             inputRows[index].isDeleting = true
         }
 
-        let savedDay = String((row.serverLoggedAt ?? summaryDateString).prefix(10))
+        let savedDay = deleteContext.savedDay
         removeDeletedLogFromVisibleDayLogs(logId: serverLogId, dateString: savedDay)
         saveError = nil
 
@@ -4405,6 +4531,43 @@ struct MainLoggingShellView: View {
             )
         }
         pendingDeleteTasks[row.id] = task
+    }
+
+    private func serverBackedDeleteContext(for row: HomeLogRow) -> (serverLogId: String, savedDay: String)? {
+        if let serverLogId = row.serverLogId {
+            return (serverLogId, String((row.serverLoggedAt ?? summaryDateString).prefix(10)))
+        }
+
+        guard let queuedItem = pendingSaveQueue.first(where: { $0.rowID == row.id }),
+              let serverLogId = queuedItem.serverLogId else {
+            return nil
+        }
+
+        return (serverLogId, queuedItem.dateString)
+    }
+
+    private func clearTransientWorkForDeletedRow(rowID: UUID) {
+        pendingPatchTasks[rowID]?.cancel()
+        pendingPatchTasks[rowID] = nil
+
+        if activeParseRowID == rowID {
+            parseTask?.cancel()
+            parseTask = nil
+            activeParseRowID = nil
+        }
+        queuedParseRowIDs.removeAll { $0 == rowID }
+        if inFlightParseSnapshot?.activeRowID == rowID {
+            inFlightParseSnapshot = nil
+        }
+
+        let removedParseIDs = completedRowParses
+            .filter { $0.rowID == rowID }
+            .map(\.parseRequestId)
+        if !removedParseIDs.isEmpty {
+            autoSavedParseIDs.subtract(removedParseIDs)
+            completedRowParses.removeAll { $0.rowID == rowID }
+        }
+        synchronizeParseOwnership()
     }
 
     private func deleteServerBackedRow(
@@ -4515,6 +4678,15 @@ struct MainLoggingShellView: View {
             try? await Task.sleep(nanoseconds: autoSaveDelayNs)
             guard !Task.isCancelled else { return }
             await autoSaveIfNeeded()
+        }
+    }
+
+    private var hasSaveableRowsPending: Bool {
+        completedRowParses.contains {
+            $0.response.confidence >= autoSaveMinConfidence &&
+            $0.response.needsClarification != true &&
+            !$0.response.items.isEmpty &&
+            !autoSavedParseIDs.contains($0.parseRequestId)
         }
     }
 
@@ -4819,6 +4991,8 @@ struct MainLoggingShellView: View {
     }
 
     private func submitSave(request: SaveLogRequest, idempotencyKey: UUID, isRetry: Bool, intent: SaveIntent) async {
+        let queueKey = idempotencyKey.uuidString.lowercased()
+        let submittedRowID = pendingSaveQueue.first { $0.idempotencyKey == queueKey }?.rowID
         let startedAt = Date()
         isSaving = true
         saveError = nil
@@ -4830,6 +5004,10 @@ struct MainLoggingShellView: View {
             effectiveRequest = try await prepareSaveRequestForNetwork(request, idempotencyKey: idempotencyKey)
             let response = try await appStore.apiClient.saveLog(effectiveRequest, idempotencyKey: idempotencyKey)
             let savedDay = String(effectiveRequest.parsedLog.loggedAt.prefix(10))
+            if shouldDiscardCompletedSave(queueKey: queueKey, rowID: submittedRowID) {
+                await deleteLateArrivingSave(logId: response.logId, savedDay: savedDay, queueKey: queueKey, rowID: submittedRowID)
+                return
+            }
             let prefix = isRetry ? L10n.retrySucceededPrefix : L10n.savedSuccessfullyPrefix
             let timeToLogMs = flowStartedAt.map { elapsedMs(since: $0) }
             if intent == .auto {
@@ -4925,6 +5103,34 @@ struct MainLoggingShellView: View {
                 durationMs: elapsedMs(since: startedAt),
                 isRetry: isRetry
             )
+        }
+    }
+
+    private func shouldDiscardCompletedSave(queueKey: String, rowID: UUID?) -> Bool {
+        locallyDeletedPendingSaveKeys.contains(queueKey) ||
+            rowID.map { locallyDeletedPendingRowIDs.contains($0) } == true
+    }
+
+    private func deleteLateArrivingSave(logId: String, savedDay: String, queueKey: String, rowID: UUID?) async {
+        removePendingSave(idempotencyKey: queueKey)
+        locallyDeletedPendingSaveKeys.remove(queueKey)
+        if let rowID {
+            locallyDeletedPendingRowIDs.remove(rowID)
+        }
+
+        do {
+            _ = try await appStore.apiClient.deleteLog(id: logId)
+            invalidateDayCache(for: savedDay)
+            await loadDaySummary(forcedDate: savedDay, skipCache: true)
+            await loadDayLogs(forcedDate: savedDay, skipCache: true)
+            NotificationCenter.default.post(
+                name: .nutritionProgressDidChange,
+                object: nil,
+                userInfo: ["savedDay": savedDay]
+            )
+        } catch {
+            handleAuthFailureIfNeeded(error)
+            saveError = userFriendlySaveError(error)
         }
     }
 
@@ -5221,6 +5427,30 @@ struct MainLoggingShellView: View {
 
     private func elapsedMs(since startedAt: Date) -> Double {
         (Date().timeIntervalSince(startedAt) * 1000).rounded()
+    }
+
+    private func hydrateVisibleDayLogsFromDiskIfNeeded() {
+        let dateString = summaryDateString
+        guard dayLogs == nil, let cached = loadDayLogsFromCache(date: dateString) else { return }
+        dayLogs = cached
+        dayCacheLogs[dateString] = cached
+        syncInputRowsFromDayLogs(cached.logs, for: cached.date)
+    }
+
+    private func bootstrapAuthenticatedHomeIfNeeded() {
+        guard appStore.isSessionRestored, !hasBootstrappedAuthenticatedHome else { return }
+        hasBootstrappedAuthenticatedHome = true
+
+        submitRestoredPendingSaveIfPossible()
+        refreshDaySummary()
+
+        initialHomeBootstrapTask?.cancel()
+        initialHomeBootstrapTask = Task { @MainActor in
+            await loadDayLogs(skipCache: true)
+            guard !Task.isCancelled else { return }
+            refreshCurrentStreak()
+            prefetchAdjacentDays(around: selectedSummaryDate)
+        }
     }
 
     private func refreshDaySummary() {
@@ -5834,6 +6064,21 @@ struct MainLoggingShellView: View {
         pendingSaveQueue.removeAll { $0.idempotencyKey == idempotencyKey }
         persistPendingSaveQueue()
         refreshRetryStateFromPendingQueue()
+    }
+
+    @discardableResult
+    private func removePendingSaveQueueItems(forRowID rowID: UUID) -> Set<String> {
+        let removedKeys = Set(
+            pendingSaveQueue
+                .filter { $0.rowID == rowID }
+                .map(\.idempotencyKey)
+        )
+        guard !removedKeys.isEmpty else { return [] }
+
+        pendingSaveQueue.removeAll { $0.rowID == rowID }
+        persistPendingSaveQueue()
+        refreshRetryStateFromPendingQueue()
+        return removedKeys
     }
 
     private func reconcilePendingSaveQueue(with logs: [DayLogEntry], for dateString: String) {
