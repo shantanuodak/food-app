@@ -536,6 +536,7 @@
               <tr>
                 <th>Time</th>
                 <th>Input</th>
+                <th>Status</th>
                 <th>Cal</th>
                 <th>P (g)</th>
                 <th>C (g)</th>
@@ -545,7 +546,7 @@
               </tr>
             </thead>
             <tbody id="parses-tbody">
-              <tr><td colspan="8" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+              <tr><td colspan="9" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1137,13 +1138,13 @@ async function toggleHistoryDetail(runId) {
 /* ====================================================================== */
 async function loadRecentParses() {
   const tbody = document.getElementById('parses-tbody');
-  tbody.innerHTML = '<tr><td colspan="8" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="9" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
   try {
     const data = await api('/recent-parses');
     allParsesData = data.parses;
     renderParses(allParsesData);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="9" class="text-red" style="padding:16px">${e.message}</td></tr>`;
   }
 }
 
@@ -1159,7 +1160,7 @@ function filterParses() {
 function renderParses(parses) {
   const tbody = document.getElementById('parses-tbody');
   if (!parses.length) {
-    tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="icon">📭</div>No parse requests found.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state"><div class="icon">📭</div>No parse requests found.</div></td></tr>';
     return;
   }
   tbody.innerHTML = '';
@@ -1170,11 +1171,15 @@ function renderParses(parses) {
     const clarBadge = p.needsClarification
       ? '<span class="badge badge-yellow">Yes</span>'
       : '<span class="badge badge-muted">No</span>';
+    const saveBadge = p.saveStatus === 'saved'
+      ? '<span class="badge badge-green" title="Matched to a saved food_log">Saved</span>'
+      : '<span class="badge badge-yellow" title="Parsed, but no saved food_log is linked yet">Parse only</span>';
     const time = new Date(p.createdAt).toLocaleTimeString() + ' ' + new Date(p.createdAt).toLocaleDateString();
     tbody.innerHTML += `
       <tr>
         <td class="mono text-muted" style="font-size:12px; white-space:nowrap">${time}</td>
         <td class="truncate" title="${escHtml(p.rawText)}">${escHtml(p.rawText)}</td>
+        <td>${saveBadge}</td>
         <td class="mono">${p.calories !== null ? fmt(p.calories) : '—'}</td>
         <td class="mono">${p.proteinG !== null ? fmt(p.proteinG, 1) : '—'}</td>
         <td class="mono">${p.carbsG !== null ? fmt(p.carbsG, 1) : '—'}</td>

@@ -241,6 +241,8 @@ router.get('/recent-parses', async (req, res, next) => {
       created_at: Date;
       needs_clarification: boolean;
       parse_version: string;
+      log_id: string | null;
+      saved_at: Date | null;
       total_calories: string | null;
       total_protein_g: string | null;
       total_carbs_g: string | null;
@@ -253,16 +255,33 @@ router.get('/recent-parses', async (req, res, next) => {
          pr.created_at,
          pr.needs_clarification,
          pr.parse_version,
+         fl.id AS log_id,
+         fl.created_at AS saved_at,
          fl.total_calories::text,
          fl.total_protein_g::text,
          fl.total_carbs_g::text,
          fl.total_fat_g::text,
          fl.parse_confidence::text
        FROM parse_requests pr
-       LEFT JOIN food_logs fl
-         ON fl.user_id = pr.user_id
-         AND fl.created_at BETWEEN pr.created_at - INTERVAL '5 seconds'
-                               AND pr.created_at + INTERVAL '30 seconds'
+       LEFT JOIN LATERAL (
+         SELECT fl.*
+         FROM food_logs fl
+         WHERE fl.user_id = pr.user_id
+           AND (
+             fl.parse_request_id = pr.request_id
+             OR (
+               fl.parse_request_id IS NULL
+               AND LOWER(REGEXP_REPLACE(TRIM(fl.raw_text), '\\s+', ' ', 'g')) =
+                   LOWER(REGEXP_REPLACE(TRIM(pr.raw_text), '\\s+', ' ', 'g'))
+               AND fl.created_at BETWEEN pr.created_at - INTERVAL '5 seconds'
+                                     AND pr.created_at + INTERVAL '10 minutes'
+             )
+           )
+         ORDER BY
+           CASE WHEN fl.parse_request_id = pr.request_id THEN 0 ELSE 1 END,
+           ABS(EXTRACT(EPOCH FROM (fl.created_at - pr.created_at)))
+         LIMIT 1
+       ) fl ON true
        ORDER BY pr.created_at DESC
        LIMIT 50`
     );
@@ -273,6 +292,9 @@ router.get('/recent-parses', async (req, res, next) => {
       createdAt: r.created_at.toISOString(),
       needsClarification: r.needs_clarification,
       parseVersion: r.parse_version,
+      saveStatus: r.log_id ? 'saved' : 'parse_only',
+      logId: r.log_id,
+      savedAt: r.saved_at ? r.saved_at.toISOString() : null,
       calories: r.total_calories !== null ? Number(r.total_calories) : null,
       proteinG: r.total_protein_g !== null ? Number(r.total_protein_g) : null,
       carbsG: r.total_carbs_g !== null ? Number(r.total_carbs_g) : null,

@@ -344,6 +344,24 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(typeof saveResponse.body.healthSync?.healthWriteKey).toBe('string');
     expect(saveResponse.body.healthSync?.healthWriteKey?.length).toBeGreaterThan(10);
 
+    const provenanceRows = await pool.query<{ parse_request_id: string | null; parse_version: string | null }>(
+      `SELECT parse_request_id, parse_version FROM food_logs WHERE id = $1`,
+      [saveResponse.body.logId]
+    );
+    expect(provenanceRows.rows[0]?.parse_request_id).toBe(parseResponse.body.parseRequestId);
+    expect(provenanceRows.rows[0]?.parse_version).toBe(parseResponse.body.parseVersion);
+
+    const dashboardParses = await request(app)
+      .get('/v1/internal/dashboard/recent-parses')
+      .set('x-internal-metrics-key', 'metrics-test-key');
+    expect(dashboardParses.status).toBe(200);
+    const savedParse = dashboardParses.body.parses.find(
+      (parse: { requestId: string }) => parse.requestId === parseResponse.body.parseRequestId
+    );
+    expect(savedParse?.saveStatus).toBe('saved');
+    expect(savedParse?.logId).toBe(saveResponse.body.logId);
+    expect(savedParse?.calories).toBeGreaterThan(0);
+
     const dayLogsResponse = await request(app)
       .get('/v1/logs/day-logs')
       .set(authHeader)

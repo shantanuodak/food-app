@@ -29,6 +29,8 @@ type SaveLogInput = {
   userId: string;
   authProvider?: string | null;
   userEmail?: string | null;
+  parseRequestId?: string | null;
+  parseVersion?: string | null;
   rawText: string;
   loggedAt: string;
   mealType?: string;
@@ -83,9 +85,10 @@ export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse>
       INSERT INTO food_logs (
         user_id, logged_at, meal_type, raw_text,
         total_calories, total_protein_g, total_carbs_g, total_fat_g,
-        parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind, created_at, updated_at
+        parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind,
+        parse_request_id, parse_version, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, NOW(), NOW())
       RETURNING id
       `,
       [
@@ -101,7 +104,9 @@ export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse>
         JSON.stringify(input.sourcesUsed || []),
         JSON.stringify(input.assumptions || []),
         input.imageRef ?? null,
-        input.inputKind ?? 'text'
+        input.inputKind ?? 'text',
+        input.parseRequestId ?? null,
+        input.parseVersion ?? null
       ]
     );
 
@@ -193,9 +198,10 @@ export async function saveFoodLogStrict(input: {
       INSERT INTO food_logs (
         user_id, logged_at, meal_type, raw_text,
         total_calories, total_protein_g, total_carbs_g, total_fat_g,
-        parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind, created_at, updated_at
+        parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind,
+        parse_request_id, parse_version, created_at, updated_at
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, NOW(), NOW())
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, NOW(), NOW())
       RETURNING id
       `,
       [
@@ -211,7 +217,9 @@ export async function saveFoodLogStrict(input: {
         JSON.stringify(input.log.sourcesUsed || []),
         JSON.stringify(input.log.assumptions || []),
         input.log.imageRef ?? null,
-        input.log.inputKind ?? 'text'
+        input.log.inputKind ?? 'text',
+        input.log.parseRequestId ?? null,
+        input.log.parseVersion ?? null
       ]
     );
 
@@ -276,6 +284,8 @@ export async function saveFoodLogStrict(input: {
 type UpdateLogInput = {
   logId: string;
   userId: string;
+  parseRequestId?: string | null;
+  parseVersion?: string | null;
   rawText: string;
   loggedAt?: string;
   mealType?: string;
@@ -337,8 +347,10 @@ export async function updateFoodLog(input: UpdateLogInput): Promise<UpdateLogRes
         input_kind = COALESCE($10, input_kind),
         meal_type = COALESCE($11, meal_type),
         logged_at = COALESCE($12::timestamptz, logged_at),
+        parse_request_id = COALESCE($13, parse_request_id),
+        parse_version = COALESCE($14, parse_version),
         updated_at = NOW()
-      WHERE id = $13 AND user_id = $14
+      WHERE id = $15 AND user_id = $16
       `,
       [
         input.rawText,
@@ -353,6 +365,8 @@ export async function updateFoodLog(input: UpdateLogInput): Promise<UpdateLogRes
         input.inputKind ?? null,
         input.mealType ?? null,
         input.loggedAt ?? null,
+        input.parseRequestId ?? null,
+        input.parseVersion ?? null,
         input.logId,
         input.userId
       ]

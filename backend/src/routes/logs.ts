@@ -122,6 +122,8 @@ router.post('/', async (req, res, next) => {
         userId,
         authProvider: auth.authProvider,
         userEmail: auth.email,
+        parseRequestId: body.parseRequestId,
+        parseVersion: body.parseVersion,
         rawText: body.parsedLog.rawText,
         loggedAt: body.parsedLog.loggedAt,
         mealType: body.parsedLog.mealType,
@@ -225,6 +227,8 @@ router.patch('/:id', async (req, res, next) => {
     const updated = await updateFoodLog({
       logId,
       userId,
+      parseRequestId: body.parseRequestId,
+      parseVersion: body.parseVersion,
       rawText: body.parsedLog.rawText,
       loggedAt: body.parsedLog.loggedAt,
       mealType: body.parsedLog.mealType,

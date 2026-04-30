@@ -4484,20 +4484,27 @@ struct MainLoggingShellView: View {
 
     private func scheduleAutoSave() {
         autoSaveTask?.cancel()
-        // Persist the first pending row's context immediately so the draft survives
-        // an app close during the 10-second delay window (Bug fix: previously the draft
-        // was only written to UserDefaults inside autoSaveIfNeeded after the sleep).
-        if let firstSaveable = completedRowParses.first(where: {
+        // Persist each pending row's context immediately so drafts survive
+        // an app close during the auto-save delay window.
+        let saveableEntries = completedRowParses.filter {
             $0.response.confidence >= autoSaveMinConfidence &&
             $0.response.needsClarification != true &&
             !$0.response.items.isEmpty &&
             !autoSavedParseIDs.contains($0.parseRequestId)
-        }), let request = buildRowSaveRequest(for: firstSaveable) {
-            let key = pendingSaveIdempotencyKey ?? UUID()
-            pendingSaveFingerprint = saveRequestFingerprint(request)
-            pendingSaveRequest = request
-            pendingSaveIdempotencyKey = key
-            persistPendingSaveContext(rowID: firstSaveable.rowID)
+        }
+
+        for entry in saveableEntries {
+            guard let request = buildRowSaveRequest(for: entry) else { continue }
+            let existingRowKey = pendingSaveQueue.first { item in
+                item.rowID == entry.rowID && item.serverLogId == nil
+            }?.idempotencyKey
+            let key = existingRowKey.flatMap(UUID.init(uuidString:)) ?? UUID()
+            upsertPendingSaveQueueItem(
+                request: request,
+                fingerprint: saveRequestFingerprint(request),
+                idempotencyKey: key,
+                rowID: entry.rowID
+            )
         }
         autoSaveTask = Task {
             try? await Task.sleep(nanoseconds: autoSaveDelayNs)
