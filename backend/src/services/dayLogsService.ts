@@ -120,7 +120,7 @@ export async function getDayLogsRange(
      WHERE user_id = $1
        AND (logged_at AT TIME ZONE $2)::date >= $3::date
        AND (logged_at AT TIME ZONE $2)::date <= $4::date
-     ORDER BY logged_at ASC`,
+     ORDER BY logged_at ASC, created_at ASC, id ASC`,
     [userId, effectiveTimezone, from, to]
   );
 
@@ -278,7 +278,7 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
     FROM food_logs
     WHERE user_id = $1
       AND (logged_at AT TIME ZONE $2)::date = $3::date
-    ORDER BY logged_at ASC
+    ORDER BY logged_at ASC, created_at ASC, id ASC
     `,
     [userId, effectiveTimezone, date]
   );

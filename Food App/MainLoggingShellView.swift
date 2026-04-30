@@ -28,6 +28,7 @@ struct MainLoggingShellView: View {
     @State private var isDetailsDrawerPresented = false
     @State private var editableItems: [EditableParsedItem] = []
     @State private var isSaving = false
+    @State private var isSubmittingRestoredPendingSaves = false
     @State private var saveError: String?
     @State private var saveSuccessMessage: String?
     @State private var pendingSaveRequest: SaveLogRequest?
@@ -88,6 +89,7 @@ struct MainLoggingShellView: View {
     @State private var isNutritionSummaryPresented = false
     @State private var currentFoodLogStreak: Int?
     @State private var isLoadingFoodLogStreak = false
+    @State private var isStreakDrawerPresented = false
     @State private var isKeyboardVisible = false
     @State private var isSyncInfoPresented = false
     /// Slide direction for day transitions: negative = slide left (going forward), positive = slide right (going back)
@@ -242,6 +244,12 @@ struct MainLoggingShellView: View {
             .sheet(isPresented: $isNutritionSummaryPresented) {
                 nutritionSummarySheet
                     .presentationDetents([.medium])
+                    .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isStreakDrawerPresented) {
+                HomeStreakDrawerView()
+                    .environmentObject(appStore)
+                    .presentationDetents([.medium, .large])
                     .presentationDragIndicator(.visible)
             }
             .padding()
@@ -582,18 +590,15 @@ struct MainLoggingShellView: View {
     }
 
     private var pendingSyncItemCount: Int {
-        let unresolvedQueuedRowIDs = Set(
-            pendingSaveQueue
-                .filter { $0.serverLogId == nil }
-                .compactMap(\.rowID)
-        )
-        let unsavedVisibleRows = inputRows.filter { row in
+        let unresolvedQueueItems = pendingSaveQueue.filter { $0.serverLogId == nil }
+        let unresolvedQueuedRowIDs = Set(unresolvedQueueItems.compactMap(\.rowID))
+        let unsavedVisibleRows = saveError == nil ? inputRows.filter { row in
             guard !row.isSaved else { return false }
             guard !unresolvedQueuedRowIDs.contains(row.id) else { return false }
             return row.calories != nil || !row.parsedItems.isEmpty || row.parsedItem != nil
-        }.count
-        let unsyncedQueuedRows = pendingSaveQueue.filter { $0.serverLogId == nil }.count
-        return unsavedVisibleRows + unsyncedQueuedRows + pendingPatchTasks.count + pendingDeleteTasks.count
+        }.count : 0
+        let activeQueueSyncRows = (isSaving || isSubmittingRestoredPendingSaves) ? unresolvedQueueItems.count : 0
+        return unsavedVisibleRows + activeQueueSyncRows + pendingPatchTasks.count + pendingDeleteTasks.count
     }
 
     private var syncStatusTitle: String {
@@ -609,29 +614,34 @@ struct MainLoggingShellView: View {
     }
 
     private var streakDockIndicator: some View {
-        ZStack(alignment: .bottomTrailing) {
-            Image(systemName: "calendar")
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(.primary)
-                .frame(width: 60, height: 60)
-
-            if isLoadingFoodLogStreak && currentFoodLogStreak == nil {
-                ProgressView()
-                    .controlSize(.mini)
-                    .padding(8)
-            } else {
-                Text("\(currentFoodLogStreak ?? 0)")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .monospacedDigit()
+        Button {
+            isStreakDrawerPresented = true
+        } label: {
+            ZStack(alignment: .bottomTrailing) {
+                Image(systemName: "calendar")
+                    .font(.system(size: 20, weight: .medium))
                     .foregroundStyle(.primary)
-                    .frame(minWidth: 20, minHeight: 20)
-                    .background(.regularMaterial, in: Circle())
-                    .padding(8)
+                    .frame(width: 60, height: 60)
+
+                if isLoadingFoodLogStreak && currentFoodLogStreak == nil {
+                    ProgressView()
+                        .controlSize(.mini)
+                        .padding(8)
+                } else {
+                    Text("\(currentFoodLogStreak ?? 0)")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.primary)
+                        .frame(minWidth: 20, minHeight: 20)
+                        .background(.regularMaterial, in: Circle())
+                        .padding(8)
+                }
             }
         }
-        .glassEffect(.regular, in: .circle)
+        .buttonStyle(.plain)
+        .glassEffect(.regular.interactive(), in: .circle)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(currentFoodLogStreak ?? 0)-day food streak"))
+        .accessibilityLabel(Text("Open \(currentFoodLogStreak ?? 0)-day food streak"))
     }
 
     private func bottomDockButton(
@@ -4785,6 +4795,7 @@ struct MainLoggingShellView: View {
         let startedAt = Date()
         isSaving = true
         saveError = nil
+        markPendingSaveAttemptStarted(idempotencyKey: idempotencyKey)
         defer { isSaving = false }
 
         var effectiveRequest = request
@@ -4863,6 +4874,12 @@ struct MainLoggingShellView: View {
             }
             saveError = message
             appStore.setError(message)
+            await handlePendingSaveFailure(
+                idempotencyKey: idempotencyKey,
+                request: effectiveRequest,
+                error: error,
+                message: message
+            )
             emitSaveTelemetryFailure(
                 request: effectiveRequest,
                 error: error,
@@ -5156,18 +5173,14 @@ struct MainLoggingShellView: View {
 
             let calendar = Calendar.current
             let today = calendar.startOfDay(for: Date())
-            guard let start = calendar.date(byAdding: .day, value: -179, to: today) else {
-                return
-            }
-
             let formatter = HomeLoggingDateUtils.summaryRequestFormatter
             do {
-                let response = try await appStore.apiClient.getProgress(
-                    from: formatter.string(from: start),
+                let response = try await appStore.apiClient.getStreaks(
+                    range: 30,
                     to: formatter.string(from: today),
                     timezone: TimeZone.current.identifier
                 )
-                currentFoodLogStreak = response.streaks.currentDays
+                currentFoodLogStreak = response.currentDays
             } catch {
                 handleAuthFailureIfNeeded(error)
             }
@@ -5305,7 +5318,19 @@ struct MainLoggingShellView: View {
 
     private func syncInputRowsFromDayLogs(_ entries: [DayLogEntry], for dateString: String) {
         reconcilePendingSaveQueue(with: entries, for: dateString)
-        let savedRows: [HomeLogRow] = entries.map { entry in
+        let currentActiveRows = inputRows.filter { !$0.isSaved }
+        let shouldKeepActiveRows = draftDayString() == dateString || (draftLoggedAt == nil && dateString == summaryDateString)
+        let activeServerLogIds = shouldKeepActiveRows
+            ? Set(currentActiveRows.compactMap(\.serverLogId))
+            : []
+        let currentSavedRowOrder: [String: Int] = Dictionary(
+            uniqueKeysWithValues: inputRows.enumerated().compactMap { index, row in
+                row.serverLogId.map { ($0, index) }
+            }
+        )
+        let savedRows: [HomeLogRow] = entries
+            .filter { !activeServerLogIds.contains($0.id) }
+            .map { entry in
             let items: [ParsedFoodItem] = entry.items.map { item in
                 ParsedFoodItem(
                     name: item.foodName,
@@ -5353,20 +5378,36 @@ struct MainLoggingShellView: View {
                 serverLoggedAt: entry.loggedAt
             )
         }
+        let orderedSavedRows = savedRows.enumerated()
+            .sorted { lhs, rhs in
+                let lhsOrder = lhs.element.serverLogId.flatMap { currentSavedRowOrder[$0] }
+                let rhsOrder = rhs.element.serverLogId.flatMap { currentSavedRowOrder[$0] }
+
+                switch (lhsOrder, rhsOrder) {
+                case let (lhs?, rhs?):
+                    return lhs < rhs
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    return lhs.offset < rhs.offset
+                }
+            }
+            .map(\.element)
 
         // Full replace: remove ALL old saved rows and replace with the requested
         // day's entries. Keep active drafts only when their draft timestamp belongs
         // to the same day; otherwise a today draft visually leaks into yesterday.
-        let currentActiveRows = inputRows.filter { !$0.isSaved }
         let pendingRows = pendingRowsForDate(dateString, excluding: entries)
         let pendingRowIDs = Set(pendingRows.map(\.id))
         let activeRows: [HomeLogRow]
-        if draftDayString() == dateString || (draftLoggedAt == nil && dateString == summaryDateString) {
+        if shouldKeepActiveRows {
             activeRows = currentActiveRows.filter { !pendingRowIDs.contains($0.id) }
         } else {
             activeRows = []
         }
-        inputRows = savedRows + pendingRows + activeRows
+        inputRows = orderedSavedRows + pendingRows + activeRows
 
         // Ensure there's always at least one empty active row for input
         if inputRows.allSatisfy({ $0.isSaved }) {
@@ -5618,6 +5659,70 @@ struct MainLoggingShellView: View {
         pendingSaveIdempotencyKey = key
     }
 
+    private func markPendingSaveAttemptStarted(idempotencyKey: UUID) {
+        let key = idempotencyKey.uuidString.lowercased()
+        guard let index = pendingSaveQueue.firstIndex(where: { $0.idempotencyKey == key }) else {
+            return
+        }
+
+        pendingSaveQueue[index].attemptCount = (pendingSaveQueue[index].attemptCount ?? 0) + 1
+        pendingSaveQueue[index].lastAttemptAt = Date()
+        pendingSaveQueue[index].lastErrorMessage = nil
+        persistPendingSaveQueue()
+    }
+
+    private func markPendingSaveFailed(idempotencyKey: UUID, message: String) {
+        let key = idempotencyKey.uuidString.lowercased()
+        guard let index = pendingSaveQueue.firstIndex(where: { $0.idempotencyKey == key }) else {
+            refreshRetryStateFromPendingQueue()
+            return
+        }
+
+        pendingSaveQueue[index].lastAttemptAt = Date()
+        pendingSaveQueue[index].lastErrorMessage = message
+        persistPendingSaveQueue()
+        refreshRetryStateFromPendingQueue()
+    }
+
+    private func handlePendingSaveFailure(
+        idempotencyKey: UUID,
+        request: SaveLogRequest,
+        error: Error,
+        message: String
+    ) async {
+        if isNonRetryableSaveError(error) {
+            removePendingSave(idempotencyKey: idempotencyKey.uuidString.lowercased())
+            let failedDay = String(request.parsedLog.loggedAt.prefix(10))
+            invalidateDayCache(for: failedDay)
+            await loadDaySummary(forcedDate: failedDay, skipCache: true)
+            await loadDayLogs(forcedDate: failedDay, skipCache: true)
+            return
+        }
+
+        markPendingSaveFailed(idempotencyKey: idempotencyKey, message: message)
+    }
+
+    private func isNonRetryableSaveError(_ error: Error) -> Bool {
+        guard let apiError = error as? APIClientError else {
+            return false
+        }
+
+        switch apiError {
+        case let .server(statusCode, payload):
+            if [400, 404, 409, 422].contains(statusCode) {
+                return true
+            }
+            let code = payload.code.uppercased()
+            return code.contains("INVALID") ||
+                code.contains("CONFLICT") ||
+                code.contains("NOT_FOUND")
+        case let .unexpectedStatus(statusCode):
+            return [400, 404, 409, 422].contains(statusCode)
+        default:
+            return false
+        }
+    }
+
     private func markPendingSaveSucceeded(idempotencyKey: UUID, logId: String, preparedRequest: SaveLogRequest) {
         let key = idempotencyKey.uuidString.lowercased()
         guard let index = pendingSaveQueue.firstIndex(where: { $0.idempotencyKey == key }) else {
@@ -5627,6 +5732,7 @@ struct MainLoggingShellView: View {
         pendingSaveQueue[index].request = preparedRequest
         pendingSaveQueue[index].fingerprint = saveRequestFingerprint(preparedRequest)
         pendingSaveQueue[index].serverLogId = logId
+        pendingSaveQueue[index].lastErrorMessage = nil
         persistPendingSaveQueue()
         refreshRetryStateFromPendingQueue()
     }
@@ -5837,16 +5943,22 @@ struct MainLoggingShellView: View {
         guard pendingSaveQueue.isEmpty else {
             return
         }
-        pendingSaveQueue = HomePendingSaveStore.loadQueue(defaults: defaults)
+        let loadedQueue = HomePendingSaveStore.loadQueue(defaults: defaults)
+        pendingSaveQueue = loadedQueue.filter(isRecoverablePendingSaveItem)
+        if pendingSaveQueue.count != loadedQueue.count {
+            persistPendingSaveQueue()
+        }
         refreshRetryStateFromPendingQueue()
     }
 
     private func submitRestoredPendingSaveIfPossible() {
-        guard appStore.isNetworkReachable, !isSaving else { return }
+        guard appStore.isNetworkReachable, !isSaving, !isSubmittingRestoredPendingSaves else { return }
         let itemsToSubmit = pendingSaveQueue.filter { $0.serverLogId == nil }
         guard !itemsToSubmit.isEmpty else { return }
 
         Task { @MainActor in
+            isSubmittingRestoredPendingSaves = true
+            defer { isSubmittingRestoredPendingSaves = false }
             for item in itemsToSubmit {
                 guard let key = UUID(uuidString: item.idempotencyKey) else {
                     removePendingSave(idempotencyKey: item.idempotencyKey)
@@ -5860,6 +5972,27 @@ struct MainLoggingShellView: View {
                 )
             }
         }
+    }
+
+    private func isRecoverablePendingSaveItem(_ item: PendingSaveQueueItem) -> Bool {
+        if item.serverLogId != nil {
+            return true
+        }
+
+        guard UUID(uuidString: item.idempotencyKey) != nil else {
+            return false
+        }
+
+        let body = item.request.parsedLog
+        let rawText = body.rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !rawText.isEmpty {
+            return true
+        }
+
+        let inputKind = normalizedInputKind(body.inputKind, fallback: "text")
+        let imageRef = body.imageRef?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return inputKind == "image" &&
+            ((imageRef?.isEmpty == false) || item.imageUploadData != nil || item.imagePreviewData != nil)
     }
 
     private func saveDraftPreviewJSON() -> String {

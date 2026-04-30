@@ -756,12 +756,12 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
 
     expect(onboarding.status).toBe(200);
 
-    const saveForDate = async (dateIso: string, idempotencyKey: string) => {
+    const saveForDate = async (dateIso: string, idempotencyKey: string, text = 'apple') => {
       const parse = await request(app)
         .post('/v1/logs/parse')
         .set(authHeader)
         .send({
-          text: '2 eggs, toast',
+          text,
           loggedAt: dateIso
         });
 
@@ -775,7 +775,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
           parseRequestId: parse.body.parseRequestId,
           parseVersion: parse.body.parseVersion,
           parsedLog: {
-            rawText: '2 eggs, toast',
+            rawText: text,
             loggedAt: dateIso,
             confidence: parse.body.confidence,
             totals: parse.body.totals,
@@ -819,6 +819,107 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(dayWithoutLogs.logsCount).toBe(0);
     expect(dayWithoutLogs.totals.calories).toBe(0);
     expect(dayWithoutLogs.adherence.caloriesPct).toBe(0);
+  });
+
+  test('streak endpoint returns current streak, status, and food-count intensity levels', async () => {
+    const onboarding = await request(app)
+      .post('/v1/onboarding')
+      .set(authHeader)
+      .send({
+        goal: 'maintain',
+        dietPreference: 'none',
+        allergies: [],
+        units: 'imperial',
+        activityLevel: 'moderate',
+        timezone: 'America/Los_Angeles'
+      });
+
+    expect(onboarding.status).toBe(200);
+
+    const insertStreakLog = async (dateIso: string, itemCount: number) => {
+      const log = await pool.query<{ id: string }>(
+        `
+        INSERT INTO food_logs (
+          user_id, logged_at, raw_text, total_calories, total_protein_g,
+          total_carbs_g, total_fat_g, parse_confidence, input_kind,
+          parse_sources_used_json, assumptions_json
+        )
+        VALUES ($1, $2, $3, $4, $5, $6, $7, 0.9, 'text', '[]'::jsonb, '[]'::jsonb)
+        RETURNING id
+        `,
+        [
+          userId,
+          dateIso,
+          `${itemCount} streak test foods`,
+          itemCount * 100,
+          itemCount * 5,
+          itemCount * 10,
+          itemCount * 2
+        ]
+      );
+
+      for (let index = 0; index < itemCount; index += 1) {
+        await pool.query(
+          `
+          INSERT INTO food_log_items (
+            food_log_id, food_name, quantity, amount, unit, unit_normalized,
+            grams, grams_per_unit, calories, protein_g, carbs_g, fat_g,
+            nutrition_source_id, original_nutrition_source_id, source_family,
+            match_confidence, needs_clarification
+          )
+          VALUES (
+            $1, $2, 1, 1, 'serving', 'serving',
+            100, 100, 100, 5, 10, 2,
+            'streak_test_food', 'streak_test_food', 'manual',
+            0.9, false
+          )
+          `,
+          [log.rows[0].id, `streak food ${index + 1}`]
+        );
+      }
+    };
+
+    await insertStreakLog('2026-02-19T13:00:00.000Z', 1);
+    await insertStreakLog('2026-02-20T13:00:00.000Z', 4);
+    await insertStreakLog('2026-02-21T13:00:00.000Z', 7);
+
+    const streaks = await request(app)
+      .get('/v1/logs/streaks')
+      .set(authHeader)
+      .query({
+        range: 30,
+        to: '2026-02-22'
+      });
+
+    expect(streaks.status).toBe(200);
+    expect(streaks.body.range).toBe(30);
+    expect(streaks.body.timezone).toBe('America/Los_Angeles');
+    expect(streaks.body.days.length).toBe(30);
+    expect(streaks.body.currentDays).toBe(3);
+    expect(streaks.body.longestDays).toBe(3);
+    expect(streaks.body.todayHasLog).toBe(false);
+    expect(streaks.body.status).toBe('at_risk_today');
+    expect(streaks.body.lastLoggedDate).toBe('2026-02-21');
+
+    const lightDay = streaks.body.days.find((day: { date: string }) => day.date === '2026-02-19');
+    expect(lightDay.logsCount).toBe(1);
+    expect(lightDay.foodsCount).toBe(1);
+    expect(lightDay.level).toBe(1);
+
+    const mediumDay = streaks.body.days.find((day: { date: string }) => day.date === '2026-02-20');
+    expect(mediumDay.logsCount).toBe(1);
+    expect(mediumDay.foodsCount).toBe(4);
+    expect(mediumDay.level).toBe(2);
+
+    const darkDay = streaks.body.days.find((day: { date: string }) => day.date === '2026-02-21');
+    expect(darkDay.logsCount).toBe(1);
+    expect(darkDay.foodsCount).toBe(7);
+    expect(darkDay.level).toBe(3);
+
+    const neutralDay = streaks.body.days.find((day: { date: string }) => day.date === '2026-02-22');
+    expect(neutralDay.logsCount).toBe(0);
+    expect(neutralDay.foodsCount).toBe(0);
+    expect(neutralDay.level).toBe(0);
   });
 
   test('progress endpoint matches day-summary totals for the same day and tz', async () => {

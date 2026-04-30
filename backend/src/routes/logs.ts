@@ -3,6 +3,7 @@ import { deleteFoodLog, saveFoodLogStrict, updateFoodLog } from '../services/log
 import { getDaySummary, getDaySummaryRange } from '../services/daySummaryService.js';
 import { getDayLogs, getDayLogsRange } from '../services/dayLogsService.js';
 import { getProgressSummary } from '../services/progressService.js';
+import { getFoodLogStreaks } from '../services/streakService.js';
 import { assertLoggedAtNotInFutureForUser } from '../services/dateIntegrityService.js';
 import { buildHealthSyncContract } from '../services/healthSyncContractService.js';
 import { getParseRequestForUser, isParseRequestStale } from '../services/parseRequestService.js';
@@ -19,6 +20,7 @@ import {
   progressQuerySchema,
   roundOneDecimal,
   saveLogSchema,
+  streakQuerySchema,
   summaryQuerySchema,
   totalsFromItems
 } from './logSchemas.js';
@@ -315,6 +317,21 @@ router.get('/progress', async (req, res, next) => {
     const userId = res.locals.auth.userId as string;
     const progress = await getProgressSummary(userId, query.from, query.to, query.tz);
     res.status(200).json(progress);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/streaks', async (req, res, next) => {
+  try {
+    if (!config.progressFeatureEnabled) {
+      throw new ApiError(404, 'FEATURE_DISABLED', 'Progress feature is disabled');
+    }
+    const query = streakQuerySchema.parse(req.query);
+    const userId = res.locals.auth.userId as string;
+    const range = query.range === 365 ? 365 : 30;
+    const streaks = await getFoodLogStreaks(userId, range, query.tz, query.to);
+    res.status(200).json(streaks);
   } catch (err) {
     next(err);
   }

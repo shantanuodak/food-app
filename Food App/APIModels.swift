@@ -472,6 +472,29 @@ struct ProgressMetricDelta: Decodable {
     let deltaPct: Double?
 }
 
+struct StreakResponse: Decodable {
+    let from: String
+    let to: String
+    let timezone: String
+    let range: Int
+    let currentDays: Int
+    let longestDays: Int
+    let todayHasLog: Bool
+    let status: String
+    let lastLoggedDate: String?
+    let days: [StreakDay]
+}
+
+struct StreakDay: Decodable, Identifiable {
+    let date: String
+    let logsCount: Int
+    let foodsCount: Int
+    let level: Int
+
+    var id: String { date }
+    var hasLogs: Bool { logsCount > 0 }
+}
+
 struct AdminFeatureFlags: Codable {
     let geminiEnabled: Bool
 }

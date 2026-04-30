@@ -1845,3 +1845,394 @@ struct HM04ClarificationEscalationSection: View {
         }
     }
 }
+
+private enum HomeStreakDrawerRange: Int, CaseIterable, Identifiable {
+    case days30 = 30
+    case year = 365
+
+    var id: Int { rawValue }
+
+    var title: String {
+        switch self {
+        case .days30: return "30 days"
+        case .year: return "Year"
+        }
+    }
+}
+
+struct HomeStreakDrawerView: View {
+    @EnvironmentObject private var appStore: AppStore
+
+    @State private var selectedRange: HomeStreakDrawerRange = .days30
+    @State private var response: StreakResponse?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
+                header
+
+                Picker("Streak range", selection: $selectedRange) {
+                    ForEach(HomeStreakDrawerRange.allCases) { range in
+                        Text(range.title).tag(range)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                if !appStore.configuration.progressFeatureEnabled {
+                    disabledCard
+                } else if isLoading && response == nil {
+                    loadingCard
+                } else if let response {
+                    StreakContributionCalendarView(
+                        days: response.days,
+                        range: selectedRange,
+                        timezone: response.timezone
+                    )
+
+                    legend
+                } else if let errorMessage {
+                    errorCard(errorMessage)
+                }
+            }
+            .padding(20)
+        }
+        .background(Color(.systemGroupedBackground))
+        .task {
+            await loadStreaks()
+        }
+        .onChange(of: selectedRange) { _, _ in
+            Task { await loadStreaks() }
+        }
+        .refreshable {
+            await loadStreaks()
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("\(response?.currentDays ?? 0) day streak")
+                    .font(.system(size: 32, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+
+                Spacer()
+
+                Text("LONGEST STREAK | \(response?.longestDays ?? 0) \(response?.longestDays == 1 ? "DAY" : "DAYS")")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .tracking(1.2)
+                    .foregroundStyle(.secondary)
+            }
+
+            Text(statusMessage)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(statusColor)
+        }
+    }
+
+    private var statusMessage: String {
+        guard let response else {
+            return "Your streak counts days where you saved at least one food."
+        }
+
+        switch response.status {
+        case "completed_today":
+            return "You logged today. Streak protected."
+        case "at_risk_today":
+            return "Log one food today to keep your streak."
+        default:
+            return "Start a new streak today."
+        }
+    }
+
+    private var statusColor: Color {
+        guard let response else { return .secondary }
+
+        switch response.status {
+        case "completed_today":
+            return Color(red: 0.07, green: 0.43, blue: 0.35)
+        case "at_risk_today":
+            return .orange
+        default:
+            return .secondary
+        }
+    }
+
+    private var loadingCard: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+            Text("Loading streak history...")
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+    }
+
+    private var disabledCard: some View {
+        Text("Streaks are temporarily disabled.")
+            .font(.subheadline)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(.secondarySystemGroupedBackground))
+            )
+    }
+
+    private func errorCard(_ message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text(message)
+                .font(.subheadline)
+                .foregroundStyle(.red)
+
+            Button("Retry") {
+                Task { await loadStreaks() }
+            }
+            .font(.subheadline.weight(.semibold))
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+    }
+
+    private var legend: some View {
+        HStack(spacing: 8) {
+            Text("Less")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            ForEach(0...3, id: \.self) { level in
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(StreakContributionCalendarView.color(for: level))
+                    .frame(width: 18, height: 18)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .stroke(Color.black.opacity(level == 0 ? 0.05 : 0), lineWidth: 1)
+                    )
+            }
+
+            Text("More")
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+
+            Spacer()
+
+            Text("Based on foods logged")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    @MainActor
+    private func loadStreaks() async {
+        guard appStore.configuration.progressFeatureEnabled else { return }
+
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+
+        do {
+            response = try await appStore.apiClient.getStreaks(
+                range: selectedRange.rawValue,
+                timezone: TimeZone.current.identifier
+            )
+        } catch let apiError as APIClientError {
+            errorMessage = apiError.errorDescription ?? "Could not load streaks."
+        } catch {
+            errorMessage = "Could not load streaks."
+        }
+    }
+}
+
+private struct StreakContributionCalendarView: View {
+    let days: [StreakDay]
+    let range: HomeStreakDrawerRange
+    let timezone: String
+
+    private let calendar = Calendar.current
+    private let weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+
+    var body: some View {
+        let weeks = weekColumns(from: days)
+        let cellSize = range == .year ? CGFloat(11) : CGFloat(18)
+        let columnSpacing = range == .year ? CGFloat(4) : CGFloat(7)
+        let rowSpacing = range == .year ? CGFloat(4) : CGFloat(7)
+
+        VStack(alignment: .leading, spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 6) {
+                    monthHeader(weeks: weeks, cellSize: cellSize, columnSpacing: columnSpacing)
+
+                    HStack(alignment: .top, spacing: 8) {
+                        VStack(alignment: .trailing, spacing: rowSpacing) {
+                            ForEach(weekdayLabels, id: \.self) { label in
+                                Text(label)
+                                    .font(.system(size: range == .year ? 9 : 11, weight: .medium, design: .rounded))
+                                    .foregroundStyle(.secondary)
+                                    .frame(height: cellSize)
+                            }
+                        }
+
+                        HStack(alignment: .top, spacing: columnSpacing) {
+                            ForEach(Array(weeks.enumerated()), id: \.offset) { _, week in
+                                VStack(spacing: rowSpacing) {
+                                    ForEach(0..<7, id: \.self) { row in
+                                        contributionCell(day: week[row], size: cellSize)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                .padding(.vertical, 2)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+                .shadow(color: .black.opacity(0.04), radius: 18, x: 0, y: 8)
+        )
+    }
+
+    @ViewBuilder
+    private func contributionCell(day: StreakDay?, size: CGFloat) -> some View {
+        if let day {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Self.color(for: day.level))
+                .frame(width: size, height: size)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .stroke(Color.black.opacity(day.level == 0 ? 0.04 : 0), lineWidth: 1)
+                )
+                .accessibilityLabel(Text(accessibilityLabel(for: day)))
+        } else {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Color.clear)
+                .frame(width: size, height: size)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func monthHeader(weeks: [[StreakDay?]], cellSize: CGFloat, columnSpacing: CGFloat) -> some View {
+        HStack(spacing: columnSpacing) {
+            Text("")
+                .frame(width: 32)
+
+            ForEach(monthSegments(for: weeks), id: \.id) { segment in
+                Text(segment.title)
+                    .font(.system(size: range == .year ? 10 : 11, weight: .medium, design: .rounded))
+                    .foregroundStyle(.secondary)
+                    .frame(width: segmentWidth(columns: segment.columnCount, cellSize: cellSize, spacing: columnSpacing), alignment: .leading)
+            }
+        }
+    }
+
+    private func weekColumns(from days: [StreakDay]) -> [[StreakDay?]] {
+        var weeks: [[StreakDay?]] = []
+        var currentWeek = Array<StreakDay?>(repeating: nil, count: 7)
+
+        for day in days {
+            guard let date = Self.parseDate(day.date) else { continue }
+            let weekdayIndex = max(0, calendar.component(.weekday, from: date) - 1)
+
+            if weekdayIndex == 0 && currentWeek.contains(where: { $0 != nil }) {
+                weeks.append(currentWeek)
+                currentWeek = Array<StreakDay?>(repeating: nil, count: 7)
+            }
+
+            currentWeek[weekdayIndex] = day
+        }
+
+        if currentWeek.contains(where: { $0 != nil }) {
+            weeks.append(currentWeek)
+        }
+
+        return weeks
+    }
+
+    private func monthSegments(for weeks: [[StreakDay?]]) -> [MonthSegment] {
+        var segments: [MonthSegment] = []
+
+        for week in weeks {
+            guard let firstDay = week.compactMap({ $0 }).first,
+                  let date = Self.parseDate(firstDay.date) else {
+                continue
+            }
+
+            let month = calendar.component(.month, from: date)
+            let year = calendar.component(.year, from: date)
+            let title = Self.monthFormatter.string(from: date)
+
+            if let last = segments.last, last.month == month, last.year == year {
+                segments[segments.count - 1].columnCount += 1
+            } else {
+                segments.append(MonthSegment(month: month, year: year, title: title, columnCount: 1))
+            }
+        }
+
+        return segments
+    }
+
+    private func segmentWidth(columns: Int, cellSize: CGFloat, spacing: CGFloat) -> CGFloat {
+        CGFloat(columns) * cellSize + CGFloat(max(columns - 1, 0)) * spacing
+    }
+
+    private func accessibilityLabel(for day: StreakDay) -> String {
+        let foods = day.foodsCount == 1 ? "1 food" : "\(day.foodsCount) foods"
+        let logs = day.logsCount == 1 ? "1 log" : "\(day.logsCount) logs"
+        return "\(day.date): \(foods), \(logs)"
+    }
+
+    static func color(for level: Int) -> Color {
+        switch level {
+        case 1:
+            return Color(red: 0.67, green: 0.86, blue: 0.79)
+        case 2:
+            return Color(red: 0.30, green: 0.68, blue: 0.58)
+        case 3:
+            return Color(red: 0.08, green: 0.42, blue: 0.35)
+        default:
+            return Color(red: 0.91, green: 0.90, blue: 0.86)
+        }
+    }
+
+    private static func parseDate(_ value: String) -> Date? {
+        dateFormatter.date(from: value)
+    }
+
+    private static let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }()
+
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "MMM"
+        return formatter
+    }()
+
+    private struct MonthSegment: Identifiable {
+        let id = UUID()
+        let month: Int
+        let year: Int
+        let title: String
+        var columnCount: Int
+    }
+}

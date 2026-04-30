@@ -86,6 +86,14 @@ export const progressQuerySchema = z.object({
   tz: z.string().trim().min(1).max(100).optional()
 });
 
+export const streakQuerySchema = z.object({
+  range: z.coerce.number().int().refine((value) => value === 30 || value === 365, {
+    message: 'range must be 30 or 365'
+  }).default(30),
+  to: dateQuery.optional(),
+  tz: z.string().trim().min(1).max(100).optional()
+});
+
 export const dayRangeQuerySchema = z.object({
   from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'from must be in YYYY-MM-DD format'),
   to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'to must be in YYYY-MM-DD format'),

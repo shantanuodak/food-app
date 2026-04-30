@@ -20,6 +20,9 @@ struct PendingSaveQueueItem: Codable, Identifiable {
     var imagePreviewData: Data?
     var imageMimeType: String?
     var serverLogId: String?
+    var attemptCount: Int? = nil
+    var lastAttemptAt: Date? = nil
+    var lastErrorMessage: String? = nil
 }
 
 struct InFlightParseSnapshot {

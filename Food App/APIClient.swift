@@ -235,6 +235,23 @@ final class APIClient {
         )
     }
 
+    func getStreaks(range: Int, to: String? = nil, timezone: String) async throws -> StreakResponse {
+        var queryItems = [
+            URLQueryItem(name: "range", value: String(range)),
+            URLQueryItem(name: "tz", value: timezone)
+        ]
+        if let to {
+            queryItems.append(URLQueryItem(name: "to", value: to))
+        }
+
+        return try await request(
+            path: "/v1/logs/streaks",
+            method: "GET",
+            queryItems: queryItems,
+            requiresAuth: true
+        )
+    }
+
     func getAdminFeatureFlags() async throws -> AdminFeatureFlagsResponse {
         try await request(path: "/v1/admin/feature-flags", method: "GET", requiresAuth: true)
     }
