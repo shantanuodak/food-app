@@ -33,6 +33,11 @@ final class AppStore: ObservableObject {
     let imageStorageService: ImageStorageService
     let healthKitService: HealthKitService
     let notificationScheduler: NotificationScheduler
+    /// Persistent backup for photo bytes that couldn't be uploaded inline
+    /// during save. Drained on launch and whenever auth becomes valid.
+    /// Optional because instantiation can fail if the file system is
+    /// unwritable; in that case we degrade to in-memory-only behavior.
+    let deferredImageUploadStore: DeferredImageUploadStore?
 
     private let defaults: UserDefaults
     private let onboardingKey = "app.onboarding.completed"
@@ -74,6 +79,12 @@ final class AppStore: ObservableObject {
                 try await authService.validAccessToken()
             }
         )
+        do {
+            self.deferredImageUploadStore = try DeferredImageUploadStore()
+        } catch {
+            NSLog("[AppStore] DeferredImageUploadStore init failed; in-memory retries only: \(error)")
+            self.deferredImageUploadStore = nil
+        }
         let healthKitService = HealthKitService()
         self.healthKitService = healthKitService
         self.defaults = defaults
@@ -274,6 +285,55 @@ final class AppStore: ObservableObject {
         notificationAuthState = status
         await reconcileNotifications()
         return status
+    }
+
+    /// Drain any photo uploads that were stashed to disk by the
+    /// "decoupled image upload" save path but never finished — e.g.
+    /// because the user force-quit the app between save success and the
+    /// background upload firing. Each entry's food_log row is already
+    /// saved on the server; we just need to attach the photo via the
+    /// lightweight `PATCH /v1/logs/:id/image-ref` route.
+    ///
+    /// Safe to call repeatedly: `drain()` is destructive and entries
+    /// only re-enqueue if a new save's inline upload also fails. Bails
+    /// early if there's no auth — no point trying without a Supabase
+    /// session, and the entries stay on disk for the next attempt.
+    func drainDeferredImageUploads() async {
+        guard let store = deferredImageUploadStore else { return }
+        guard authSessionStore.session != nil else { return }
+        let entries = await store.drain()
+        guard !entries.isEmpty else { return }
+        NSLog("[AppStore] Draining \(entries.count) deferred image upload(s)")
+
+        let storage = imageStorageService
+        let api = apiClient
+        let userIDHint = authSessionStore.session?.userID
+
+        // Re-enqueue helper closure that goes through the actor — needed
+        // when a single drained entry's retry fails so it survives to the
+        // next launch.
+        let reenqueue: (String, Data) async -> Void = { logId, data in
+            await store.enqueue(logId: logId, imageData: data)
+        }
+
+        for (offset, entry) in entries.enumerated() {
+            do {
+                let imageRef = try await storage.uploadJPEG(entry.imageData, userIdentifierHint: userIDHint)
+                _ = try await api.updateLogImageRef(id: entry.logId, imageRef: imageRef)
+                NSLog("[AppStore] Drained deferred image upload for log \(entry.logId)")
+            } catch {
+                NSLog("[AppStore] Drain retry failed for log \(entry.logId); re-enqueueing remaining \(entries.count - offset): \(error)")
+                // Drain is destructive — disk store is empty now. Put
+                // every still-unprocessed entry back so they survive to
+                // the next launch. Stop trying further uploads in this
+                // pass: if storage is broken, the rest will fail too and
+                // burn battery / data for nothing.
+                for unprocessed in entries[offset...] {
+                    await reenqueue(unprocessed.logId, unprocessed.imageData)
+                }
+                break
+            }
+        }
     }
 
     /// Idempotent — cancels stale requests, schedules per-challenge nudges
