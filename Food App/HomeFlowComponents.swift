@@ -524,6 +524,9 @@ struct HM01LogComposerSection: View {
         .onReceive(NotificationCenter.default.publisher(for: .dismissKeyboardFromTabBar)) { _ in
             focusedMinimalRowID = nil
         }
+        .onReceive(NotificationCenter.default.publisher(for: .focusComposerInputFromBackgroundTap)) { _ in
+            focusLastEditableRow()
+        }
     }
 
     private var joinedRowText: String {
@@ -684,6 +687,22 @@ struct HM01LogComposerSection: View {
         guard focusedMinimalRowID != rowID else { return }
         focusedMinimalRowID = rowID
         onFocusedRowChanged(rowID)
+    }
+
+    private func focusLastEditableRow() {
+        onInputTapped()
+
+        if minimalStyle {
+            if rows.allSatisfy(\.isSaved) {
+                rows.append(.empty())
+            }
+
+            guard let targetRowID = rows.last(where: { !$0.isSaved && !$0.isDeleting })?.id else { return }
+            setFocusedMinimalRowID(targetRowID)
+            return
+        }
+
+        focusBinding.wrappedValue = true
     }
 
     @ViewBuilder

@@ -210,6 +210,9 @@ struct MainLoggingShellView: View {
                     }
             )
             .scrollDismissesKeyboard(.interactively)
+            .onTapGesture {
+                focusComposerInputFromBackgroundTap()
+            }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .top) {
@@ -679,6 +682,22 @@ struct MainLoggingShellView: View {
             return "Today"
         }
         return HomeLoggingDateUtils.topDateFormatter.string(from: selectedSummaryDate)
+    }
+
+    private func focusComposerInputFromBackgroundTap() {
+        guard !isVoiceOverlayPresented,
+              !isDetailsDrawerPresented,
+              !isProfilePresented,
+              !isCalendarPresented,
+              !isNutritionSummaryPresented,
+              !isStreakDrawerPresented,
+              !isCustomCameraPresented,
+              !isCameraAnalysisSheetPresented else {
+            return
+        }
+
+        inputMode = .text
+        NotificationCenter.default.post(name: .focusComposerInputFromBackgroundTap, object: nil)
     }
 
     private var loggedInFirstName: String? {

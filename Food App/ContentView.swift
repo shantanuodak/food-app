@@ -41,6 +41,7 @@ extension Notification.Name {
     static let openNutritionSummaryFromTabBar = Notification.Name("openNutritionSummaryFromTabBar")
     static let voiceRecordingStateChanged = Notification.Name("voiceRecordingStateChanged")
     static let dismissKeyboardFromTabBar = Notification.Name("dismissKeyboardFromTabBar")
+    static let focusComposerInputFromBackgroundTap = Notification.Name("focusComposerInputFromBackgroundTap")
 }
 
 // MARK: - Profile Screen
