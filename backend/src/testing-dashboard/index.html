@@ -289,6 +289,29 @@
       cursor: pointer;
     }
     .provider-toggle input { min-width: 0; width: 14px; height: 14px; padding: 0; }
+    .segment-control {
+      display: inline-flex;
+      gap: 2px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 3px;
+      margin-bottom: 18px;
+    }
+    .segment-control button {
+      background: transparent;
+      border: none;
+      color: var(--muted);
+      cursor: pointer;
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 14px;
+    }
+    .segment-control button.active {
+      background: var(--surface2);
+      color: var(--text);
+    }
     .text-muted { color: var(--muted); }
     .text-green { color: var(--green); }
     .text-red { color: var(--red); }
@@ -517,6 +540,18 @@
       </div>
     </div>
 
+    <!-- ==================== ADVANCED ==================== -->
+    <div id="tab-advanced" class="tab-panel">
+      <div class="section" style="margin-bottom: 12px;">
+        <h2 style="margin-bottom:10px">Advanced</h2>
+        <div class="segment-control" id="advanced-segments">
+          <button class="active" type="button" data-section="recent-parses" onclick="showAdvancedSection('recent-parses')">Recent Parses</button>
+          <button type="button" data-section="costs" onclick="showAdvancedSection('costs')">Costs</button>
+          <button type="button" data-section="cache" onclick="showAdvancedSection('cache')">Cache</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== RECENT PARSES ==================== -->
     <div id="tab-recent-parses" class="tab-panel">
       <div class="section">
@@ -697,13 +732,12 @@ async function api(path, opts = {}) {
 /* TAB SWITCHING */
 /* ====================================================================== */
 let currentTab = 'overview';
+let advancedSection = 'recent-parses';
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
   if (name === 'advanced') {
-    document.getElementById('tab-recent-parses').classList.add('active');
-    document.getElementById('tab-costs').classList.add('active');
-    document.getElementById('tab-cache').classList.add('active');
+    document.getElementById('tab-advanced').classList.add('active');
   } else {
     document.getElementById('tab-' + name).classList.add('active');
   }
@@ -711,10 +745,22 @@ function switchTab(name, btn) {
   currentTab = name;
   if (name === 'eval-history') loadEvalHistory();
   if (name === 'advanced') {
-    loadRecentParses();
-    loadCosts();
-    loadCache();
+    showAdvancedSection(advancedSection);
   }
+}
+
+function showAdvancedSection(name) {
+  advancedSection = name;
+  ['recent-parses', 'costs', 'cache'].forEach(section => {
+    const panel = document.getElementById('tab-' + section);
+    if (panel) panel.classList.toggle('active', section === name);
+  });
+  document.querySelectorAll('#advanced-segments button').forEach(button => {
+    button.classList.toggle('active', button.dataset.section === name);
+  });
+  if (name === 'recent-parses') loadRecentParses();
+  if (name === 'costs') loadCosts();
+  if (name === 'cache') loadCache();
 }
 
 /* ====================================================================== */
