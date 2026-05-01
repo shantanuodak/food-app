@@ -173,6 +173,15 @@ export async function saveFoodLogStrict(input: {
 
     // Transaction lock per (user, key) to avoid duplicate save races.
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', [input.userId, input.idempotencyKey]);
+    const normalizedParseRequestId = input.log.parseRequestId?.trim() || null;
+    if (normalizedParseRequestId) {
+      // Serialize saves for the same parse request even when callers use different
+      // idempotency keys. This closes duplicate-write races at the source.
+      await client.query('SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))', [
+        input.userId,
+        `parse_request:${normalizedParseRequestId}`
+      ]);
+    }
 
     const requestedPayloadHash = payloadHash(input.payload);
     const existing = await getSaveIdempotencyRecord(client, input.userId, input.idempotencyKey);
@@ -192,6 +201,34 @@ export async function saveFoodLogStrict(input: {
       },
       client
     );
+
+    if (normalizedParseRequestId) {
+      const existingByParse = await client.query<{ id: string }>(
+        `
+        SELECT id
+        FROM food_logs
+        WHERE user_id = $1
+          AND parse_request_id = $2
+        ORDER BY created_at ASC
+        LIMIT 1
+        FOR UPDATE
+        `,
+        [input.userId, normalizedParseRequestId]
+      );
+      const existingLogId = existingByParse.rows[0]?.id;
+      if (existingLogId) {
+        const response = withHealthSync(input.userId, existingLogId);
+        await insertSaveIdempotencyRecord(client, {
+          userId: input.userId,
+          idempotencyKey: input.idempotencyKey,
+          payloadHash: requestedPayloadHash,
+          logId: existingLogId,
+          responseJson: response
+        });
+        await client.query('COMMIT');
+        return response;
+      }
+    }
 
     const logInsert = await client.query<{ id: string }>(
       `
@@ -218,7 +255,7 @@ export async function saveFoodLogStrict(input: {
         JSON.stringify(input.log.assumptions || []),
         input.log.imageRef ?? null,
         input.log.inputKind ?? 'text',
-        input.log.parseRequestId ?? null,
+        normalizedParseRequestId,
         input.log.parseVersion ?? null
       ]
     );

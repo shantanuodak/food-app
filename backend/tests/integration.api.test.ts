@@ -1406,6 +1406,56 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(second.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
   });
 
+  test('saving the same parseRequestId with a different idempotency key does not create duplicate logs', async () => {
+    const parse = await request(app)
+      .post('/v1/logs/parse')
+      .set(authHeader)
+      .send({
+        text: '1 egg',
+        loggedAt: '2026-02-15T11:30:00.000Z'
+      });
+
+    expect(parse.status).toBe(200);
+
+    const payload = {
+      parseRequestId: parse.body.parseRequestId,
+      parseVersion: parse.body.parseVersion,
+      parsedLog: {
+        rawText: '1 egg',
+        loggedAt: '2026-02-15T11:30:00.000Z',
+        confidence: parse.body.confidence,
+        totals: parse.body.totals,
+        items: parse.body.items
+      }
+    };
+
+    const first = await request(app)
+      .post('/v1/logs')
+      .set(authHeader)
+      .set('Idempotency-Key', '0f1d9603-d9d6-4e20-8f38-d6df5a56a2c1')
+      .send(payload);
+    expect(first.status).toBe(200);
+
+    const second = await request(app)
+      .post('/v1/logs')
+      .set(authHeader)
+      .set('Idempotency-Key', '3d09eb66-7587-49a8-b849-918ce212f53d')
+      .send(payload);
+    expect(second.status).toBe(200);
+    expect(second.body.logId).toBe(first.body.logId);
+
+    const countResult = await pool.query<{ total: string }>(
+      `
+      SELECT COUNT(*)::text AS total
+      FROM food_logs
+      WHERE user_id = $1
+        AND parse_request_id = $2
+      `,
+      [userId, parse.body.parseRequestId]
+    );
+    expect(Number(countResult.rows[0]?.total ?? 0)).toBe(1);
+  });
+
   test('unknown parseRequestId is rejected on save', async () => {
     const save = await request(app)
       .post('/v1/logs')

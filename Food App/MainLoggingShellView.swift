@@ -4732,7 +4732,12 @@ struct MainLoggingShellView: View {
                 continue
             }
 
-            let idempotencyKey = UUID()
+            // Reuse the queued key for this row so retries / repeated auto-save
+            // passes cannot create duplicate rows with new idempotency keys.
+            let existingRowKey = pendingSaveQueue.first { item in
+                item.rowID == entry.rowID && item.serverLogId == nil
+            }?.idempotencyKey
+            let idempotencyKey = existingRowKey.flatMap(UUID.init(uuidString:)) ?? UUID()
             pendingSaveFingerprint = saveRequestFingerprint(request)
             pendingSaveRequest = request
             pendingSaveIdempotencyKey = idempotencyKey
@@ -4759,12 +4764,18 @@ struct MainLoggingShellView: View {
             guard let request = buildSaveDraftRequest() else { return }
             let contentFingerprint = autoSaveContentFingerprint(request)
             if contentFingerprint == lastAutoSavedContentFingerprint { return }
-            let idempotencyKey = UUID()
+            let pendingImageRowID = inputRows.first(where: { !$0.isSaved && $0.imagePreviewData != nil })?.id
+            let existingRowKey = pendingImageRowID.flatMap { rowID in
+                pendingSaveQueue.first { item in
+                    item.rowID == rowID && item.serverLogId == nil
+                }?.idempotencyKey
+            }
+            let idempotencyKey = existingRowKey.flatMap(UUID.init(uuidString:)) ?? UUID()
             pendingSaveFingerprint = saveRequestFingerprint(request)
             pendingSaveRequest = request
             pendingSaveIdempotencyKey = idempotencyKey
             persistPendingSaveContext(
-                rowID: inputRows.first(where: { !$0.isSaved && $0.imagePreviewData != nil })?.id,
+                rowID: pendingImageRowID,
                 imageUploadData: pendingImageData,
                 imagePreviewData: pendingImagePreviewData,
                 imageMimeType: pendingImageMimeType
