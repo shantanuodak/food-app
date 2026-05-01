@@ -7,6 +7,7 @@ struct ParseSnapshot {
     let parseRequestId: String
     let parseVersion: String
     let rawText: String
+    let loggedAt: String
     let response: ParseLogResponse
     let rowItems: [ParsedFoodItem]
     let capturedAt: Date

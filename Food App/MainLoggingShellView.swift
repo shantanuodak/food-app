@@ -65,6 +65,8 @@ struct MainLoggingShellView: View {
     /// so a user adjusting 3 → 4 → 5 → 6 only results in one network call.
     @State private var pendingPatchTasks: [UUID: Task<Void, Never>] = [:]
     @State private var pendingDeleteTasks: [UUID: Task<Void, Never>] = [:]
+    @State private var dateChangeDraftTasks: [UUID: Task<Void, Never>] = [:]
+    @State private var dateTransitionResetHandled = false
     @State private var locallyDeletedPendingRowIDs: Set<UUID> = []
     @State private var locallyDeletedPendingSaveKeys: Set<String> = []
     private let patchDebounceNs: UInt64 = 1_500_000_000
@@ -172,6 +174,17 @@ struct MainLoggingShellView: View {
         }
     }
 
+    private var summaryDateSelectionBinding: Binding<Date> {
+        Binding(
+            get: { selectedSummaryDate },
+            set: { newValue in
+                Task { @MainActor in
+                    await transitionToSummaryDate(newValue)
+                }
+            }
+        )
+    }
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -248,8 +261,8 @@ struct MainLoggingShellView: View {
                             .font(.headline)
                         Spacer()
                         Button("Today") {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedSummaryDate = Calendar.current.startOfDay(for: Date())
+                            Task { @MainActor in
+                                await transitionToSummaryDate(Calendar.current.startOfDay(for: Date()))
                             }
                             isCalendarPresented = false
                         }
@@ -260,7 +273,7 @@ struct MainLoggingShellView: View {
 
                     DatePicker(
                         "",
-                        selection: $selectedSummaryDate,
+                        selection: summaryDateSelectionBinding,
                         in: ...Calendar.current.startOfDay(for: Date()),
                         displayedComponents: .date
                     )
@@ -317,7 +330,13 @@ struct MainLoggingShellView: View {
                 }
                 // Only reset parse state when actually moving to a different calendar day
                 if !Calendar.current.isDate(oldValue, inSameDayAs: newValue) {
-                    resetActiveParseStateForDateChange()
+                    if dateTransitionResetHandled {
+                        dateTransitionResetHandled = false
+                    } else {
+                        let drafts = captureDateChangeDraftRows()
+                        startDateChangeDraftPersistence(drafts)
+                        resetActiveParseStateForDateChange()
+                    }
                 }
                 refreshDaySummary()
                 refreshDayLogs()
@@ -360,6 +379,8 @@ struct MainLoggingShellView: View {
                 pendingPatchTasks.removeAll()
                 for task in pendingDeleteTasks.values { task.cancel() }
                 pendingDeleteTasks.removeAll()
+                for task in dateChangeDraftTasks.values { task.cancel() }
+                dateChangeDraftTasks.removeAll()
                 clearParseSchedulerState()
                 if useParseCoordinator {
                     parseCoordinator.clearAll()
@@ -912,6 +933,8 @@ struct MainLoggingShellView: View {
         // entries don't get lost when the user swipes away mid-debounce.
         Task { @MainActor in
             await flushPendingAutoSaveIfEligible()
+            let drafts = captureDateChangeDraftRows()
+            startDateChangeDraftPersistence(drafts)
 
             // Reset transient parse/flow state so it doesn't leak across days.
             resetActiveParseStateForDateChange()
@@ -936,11 +959,28 @@ struct MainLoggingShellView: View {
                 daySummaryError = nil
             }
 
+            dateTransitionResetHandled = true
             selectedSummaryDate = normalized
             dayTransitionOffset = -slideOut * 0.6
             withAnimation(.spring(response: 0.35, dampingFraction: 0.82)) {
                 dayTransitionOffset = 0
             }
+        }
+    }
+
+    @MainActor
+    private func transitionToSummaryDate(_ rawDate: Date) async {
+        let normalized = clampedSummaryDate(rawDate)
+        guard !Calendar.current.isDate(normalized, inSameDayAs: selectedSummaryDate) else { return }
+
+        await flushPendingAutoSaveIfEligible()
+        let drafts = captureDateChangeDraftRows()
+        startDateChangeDraftPersistence(drafts)
+        resetActiveParseStateForDateChange()
+
+        dateTransitionResetHandled = true
+        withAnimation(.easeInOut(duration: 0.2)) {
+            selectedSummaryDate = normalized
         }
     }
 
@@ -960,6 +1000,76 @@ struct MainLoggingShellView: View {
 
     private func draftDayString() -> String? {
         draftLoggedAt.map { HomeLoggingDateUtils.summaryRequestFormatter.string(from: $0) }
+    }
+
+    private func currentDraftLoggedAtString(reference: Date = Date()) -> String {
+        HomeLoggingDateUtils.loggedAtFormatter.string(
+            from: draftLoggedAt ?? draftTimestampForSelectedDate(reference: reference)
+        )
+    }
+
+    private func captureDateChangeDraftRows() -> [DateChangeDraftRow] {
+        let snapshotRowIDs = Set(activeParseSnapshots.map(\.rowID))
+        let loggedAt = currentDraftLoggedAtString()
+
+        return inputRows.compactMap { row in
+            guard !row.isSaved else { return nil }
+            guard !snapshotRowIDs.contains(row.id) else { return nil }
+
+            let text = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else { return nil }
+
+            return DateChangeDraftRow(
+                rowID: row.id,
+                text: text,
+                loggedAt: loggedAt,
+                inputKind: normalizedInputKind(latestParseInputKind, fallback: "text")
+            )
+        }
+    }
+
+    private func startDateChangeDraftPersistence(_ drafts: [DateChangeDraftRow]) {
+        for draft in drafts {
+            dateChangeDraftTasks[draft.rowID]?.cancel()
+            dateChangeDraftTasks[draft.rowID] = Task { @MainActor in
+                await persistDateChangeDraft(draft)
+                dateChangeDraftTasks[draft.rowID] = nil
+            }
+        }
+    }
+
+    @MainActor
+    private func persistDateChangeDraft(_ draft: DateChangeDraftRow) async {
+        guard appStore.isNetworkReachable else { return }
+
+        do {
+            let response = try await appStore.apiClient.parseLog(
+                ParseLogRequest(text: draft.text, loggedAt: draft.loggedAt)
+            )
+            guard let request = buildDateChangeDraftSaveRequest(
+                draft: draft,
+                response: response
+            ) else {
+                return
+            }
+
+            let idempotencyKey = resolveIdempotencyKey(forRowID: draft.rowID)
+            upsertPendingSaveQueueItem(
+                request: request,
+                fingerprint: saveRequestFingerprint(request),
+                idempotencyKey: idempotencyKey,
+                rowID: draft.rowID
+            )
+
+            _ = await submitSave(
+                request: request,
+                idempotencyKey: idempotencyKey,
+                isRetry: false,
+                intent: .dateChangeBackground
+            )
+        } catch {
+            handleAuthFailureIfNeeded(error)
+        }
     }
 
     private func clampedSummaryDate(_ date: Date) -> Date {
@@ -2980,6 +3090,7 @@ struct MainLoggingShellView: View {
         rowID: UUID,
         response: ParseLogResponse,
         fallbackRawText: String,
+        loggedAt: String? = nil,
         rowItems: [ParsedFoodItem]? = nil
     ) {
         let rowItemsSnapshot = rowItems
@@ -2990,6 +3101,7 @@ struct MainLoggingShellView: View {
             parseRequestId: response.parseRequestId,
             parseVersion: response.parseVersion,
             rawText: canonicalParseRawText(response: response, fallbackRawText: fallbackRawText),
+            loggedAt: loggedAt ?? currentDraftLoggedAtString(),
             response: response,
             rowItems: rowItemsSnapshot,
             capturedAt: Date()
@@ -3415,10 +3527,7 @@ struct MainLoggingShellView: View {
             }
         }
 
-        let request = ParseLogRequest(
-            text: text,
-            loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
-        )
+        let request = ParseLogRequest(text: text, loggedAt: snapshot.loggedAt)
 
         do {
             let response = try await appStore.apiClient.parseLog(request)
@@ -3505,6 +3614,7 @@ struct MainLoggingShellView: View {
                 rowID: snapshot.activeRowID,
                 response: response,
                 fallbackRawText: text,
+                loggedAt: snapshot.loggedAt,
                 rowItems: rowItemsSnapshot
             )
 
@@ -3645,8 +3755,10 @@ struct MainLoggingShellView: View {
         dirtyRowIDs: [UUID]
     ) {
         parseRequestSequence += 1
+        let loggedAt = currentDraftLoggedAtString()
         inFlightParseSnapshot = InFlightParseSnapshot(
             text: text,
+            loggedAt: loggedAt,
             requestSequence: parseRequestSequence,
             activeRowID: activeRowID,
             dirtyRowIDsAtDispatch: dirtyRowIDs
@@ -4374,6 +4486,14 @@ struct MainLoggingShellView: View {
         case manual
         case retry
         case auto
+        case dateChangeBackground
+    }
+
+    private struct DateChangeDraftRow {
+        let rowID: UUID
+        let text: String
+        let loggedAt: String
+        let inputKind: String
     }
 
     private func startSaveFlow() {
@@ -5047,7 +5167,7 @@ struct MainLoggingShellView: View {
         } else {
             sourceItems = response.items
         }
-        let effectiveLoggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+        let effectiveLoggedAt = entry.loggedAt
         let items: [SaveParsedFoodItem]
         if sourceItems.isEmpty {
             let hasDisplayedCalories = currentRow?.calories != nil || response.totals.calories > 0
@@ -5107,6 +5227,75 @@ struct MainLoggingShellView: View {
                 rawText: entry.rawText,
                 loggedAt: effectiveLoggedAt,
                 inputKind: normalizedInputKind(response.inputKind, fallback: "text"),
+                imageRef: nil,
+                confidence: response.confidence,
+                totals: rowTotals,
+                sourcesUsed: response.sourcesUsed,
+                assumptions: response.assumptions,
+                items: items
+            )
+        )
+    }
+
+    private func buildDateChangeDraftSaveRequest(
+        draft: DateChangeDraftRow,
+        response: ParseLogResponse
+    ) -> SaveLogRequest? {
+        let sourceItems = response.items
+        let items: [SaveParsedFoodItem]
+
+        if sourceItems.isEmpty {
+            guard response.totals.calories > 0 else { return nil }
+            items = [
+                fallbackSaveItem(
+                    rawText: draft.text,
+                    totals: response.totals,
+                    confidence: response.confidence,
+                    nutritionSourceId: response.items.first?.nutritionSourceId
+                )
+            ]
+        } else {
+            items = sourceItems.map { item in
+                SaveParsedFoodItem(
+                    name: item.name,
+                    quantity: item.amount ?? item.quantity,
+                    amount: item.amount ?? item.quantity,
+                    unit: item.unitNormalized ?? item.unit,
+                    unitNormalized: item.unitNormalized ?? item.unit,
+                    grams: item.grams,
+                    gramsPerUnit: item.gramsPerUnit,
+                    calories: item.calories,
+                    protein: item.protein,
+                    carbs: item.carbs,
+                    fat: item.fat,
+                    nutritionSourceId: item.nutritionSourceId,
+                    originalNutritionSourceId: item.originalNutritionSourceId,
+                    sourceFamily: item.sourceFamily,
+                    matchConfidence: item.matchConfidence,
+                    needsClarification: false,
+                    manualOverride: (item.manualOverride == true)
+                        ? SaveManualOverride(enabled: true, reason: nil, editedFields: [])
+                        : nil
+                )
+            }
+        }
+
+        guard !items.isEmpty else { return nil }
+
+        let rowTotals = NutritionTotals(
+            calories: roundOneDecimal(items.reduce(0) { $0 + $1.calories }),
+            protein: roundOneDecimal(items.reduce(0) { $0 + $1.protein }),
+            carbs: roundOneDecimal(items.reduce(0) { $0 + $1.carbs }),
+            fat: roundOneDecimal(items.reduce(0) { $0 + $1.fat })
+        )
+
+        return SaveLogRequest(
+            parseRequestId: response.parseRequestId,
+            parseVersion: response.parseVersion,
+            parsedLog: SaveLogBody(
+                rawText: canonicalParseRawText(response: response, fallbackRawText: draft.text),
+                loggedAt: draft.loggedAt,
+                inputKind: draft.inputKind,
                 imageRef: nil,
                 confidence: response.confidence,
                 totals: rowTotals,
@@ -5367,6 +5556,8 @@ struct MainLoggingShellView: View {
         if intent == .auto {
             saveSuccessMessage = nil
             lastAutoSavedContentFingerprint = autoSaveContentFingerprint(effectiveRequest)
+        } else if intent == .dateChangeBackground {
+            saveSuccessMessage = nil
         } else {
             if let timeToLogMs {
                 saveSuccessMessage = L10n.saveSuccessWithTTL(prefix: prefix, logID: response.logId, day: savedDay, ttlSeconds: timeToLogMs / 1000)
@@ -5419,22 +5610,36 @@ struct MainLoggingShellView: View {
             logId: response.logId,
             inputKind: effectiveRequest.parsedLog.inputKind ?? latestParseInputKind
         )
-        clearPendingSaveContext()
-        if intent != .auto {
+        if intent != .dateChangeBackground {
+            clearPendingSaveContext()
+        }
+        if intent == .manual || intent == .retry {
             flowStartedAt = nil
             draftLoggedAt = nil
         }
-        if let parsedDate = HomeLoggingDateUtils.summaryRequestFormatter.date(from: savedDay) {
+        if intent != .dateChangeBackground,
+           let parsedDate = HomeLoggingDateUtils.summaryRequestFormatter.date(from: savedDay) {
             selectedSummaryDate = parsedDate
         }
-        promoteSavedRow(
-            for: effectiveRequest,
-            idempotencyKey: idempotencyKey,
-            logId: response.logId
-        )
+        if intent != .dateChangeBackground || savedDay == summaryDateString {
+            promoteSavedRow(
+                for: effectiveRequest,
+                idempotencyKey: idempotencyKey,
+                logId: response.logId
+            )
+        }
         // Cancel prefetch to prevent it from re-populating cache with stale data
         prefetchTask?.cancel()
-        await refreshDayAfterMutation(savedDay)
+        if intent == .dateChangeBackground, savedDay != summaryDateString {
+            invalidateDayCache(for: savedDay)
+            NotificationCenter.default.post(
+                name: .nutritionProgressDidChange,
+                object: nil,
+                userInfo: ["savedDay": savedDay]
+            )
+        } else {
+            await refreshDayAfterMutation(savedDay)
+        }
     }
 
     private func handleSubmitSaveFailure(
@@ -5454,6 +5659,33 @@ struct MainLoggingShellView: View {
             message = (error as? LocalizedError)?.errorDescription ?? "Image upload failed."
         } else {
             message = userFriendlySaveError(error)
+        }
+        if intent == .dateChangeBackground {
+            if useSaveCoordinator {
+                _ = saveCoordinator.handleFailure(
+                    idempotencyKey: idempotencyKey,
+                    message: message,
+                    error: error
+                )
+                syncPendingQueueFromCoordinator(refreshRetryState: true)
+            } else {
+                markPendingSaveFailed(idempotencyKey: idempotencyKey, message: message)
+            }
+            emitSaveTelemetryFailure(
+                request: effectiveRequest,
+                error: error,
+                durationMs: elapsedMs(since: startedAt),
+                isRetry: isRetry
+            )
+            saveAttemptTelemetry.emit(
+                parseRequestId: effectiveRequest.parseRequestId,
+                rowID: telemetryRowID,
+                outcome: .failed,
+                errorCode: saveAttemptErrorCode(error),
+                latencyMs: Int(elapsedMs(since: startedAt)),
+                source: telemetrySource(for: intent)
+            )
+            return
         }
         saveError = message
         appStore.setError(message)
@@ -5814,7 +6046,7 @@ struct MainLoggingShellView: View {
             return .manual
         case .retry:
             return .retry
-        case .auto:
+        case .auto, .dateChangeBackground:
             return .auto
         }
     }

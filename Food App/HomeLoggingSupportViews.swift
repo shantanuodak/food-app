@@ -27,6 +27,7 @@ struct PendingSaveQueueItem: Codable, Identifiable {
 
 struct InFlightParseSnapshot {
     let text: String
+    let loggedAt: String
     let requestSequence: Int
     let activeRowID: UUID
     let dirtyRowIDsAtDispatch: [UUID]

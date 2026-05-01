@@ -20,3 +20,4 @@ backend/benchmarks/eval-runs/
 DerivedData/
 *.xcuserstate
 xcuserdata/
+app-exports/
