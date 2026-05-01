@@ -88,3 +88,27 @@ export async function insertSaveIdempotencyRecord(
     [input.idempotencyKey, input.userId, input.payloadHash, input.logId, JSON.stringify(input.responseJson)]
   );
 }
+
+export async function hasSavedPayloadHashForLog(
+  client: PoolClient,
+  input: {
+    userId: string;
+    logId: string;
+    payloadHash: string;
+  }
+): Promise<boolean> {
+  const result = await client.query<{ exists: boolean }>(
+    `
+    SELECT EXISTS(
+      SELECT 1
+      FROM log_save_idempotency
+      WHERE user_id = $1
+        AND log_id = $2
+        AND payload_hash = $3
+    ) AS exists
+    `,
+    [input.userId, input.logId, input.payloadHash]
+  );
+
+  return result.rows[0]?.exists === true;
+}

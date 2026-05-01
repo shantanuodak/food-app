@@ -213,7 +213,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
 
   beforeEach(async () => {
     await pool.query(
-      'TRUNCATE TABLE food_log_items, food_logs, onboarding_profiles, users, admin_feature_flags, parse_cache, parse_requests, log_save_idempotency, ai_cost_events RESTART IDENTITY CASCADE'
+      'TRUNCATE TABLE save_attempts, food_log_items, food_logs, onboarding_profiles, users, admin_feature_flags, parse_cache, parse_requests, log_save_idempotency, ai_cost_events RESTART IDENTITY CASCADE'
     );
 
     await pool.query(
@@ -359,6 +359,10 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
       (parse: { requestId: string }) => parse.requestId === parseResponse.body.parseRequestId
     );
     expect(savedParse?.saveStatus).toBe('saved');
+    expect(savedParse?.saveAttempted).toBe(true);
+    expect(savedParse?.saveAttemptCount).toBeGreaterThanOrEqual(2);
+    expect(savedParse?.latestSaveOutcome).toBe('succeeded');
+    expect(savedParse?.latestSaveErrorCode).toBeNull();
     expect(savedParse?.logId).toBe(saveResponse.body.logId);
     expect(savedParse?.calories).toBeGreaterThan(0);
 
@@ -1456,6 +1460,71 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(Number(countResult.rows[0]?.total ?? 0)).toBe(1);
   });
 
+  test('saving the same parseRequestId with a different payload returns an idempotency conflict', async () => {
+    const parse = await request(app)
+      .post('/v1/logs/parse')
+      .set(authHeader)
+      .send({
+        text: '1 egg',
+        loggedAt: '2026-02-15T11:30:00.000Z'
+      });
+
+    expect(parse.status).toBe(200);
+
+    const firstPayload = {
+      parseRequestId: parse.body.parseRequestId,
+      parseVersion: parse.body.parseVersion,
+      parsedLog: {
+        rawText: '1 egg',
+        loggedAt: '2026-02-15T11:30:00.000Z',
+        confidence: parse.body.confidence,
+        totals: parse.body.totals,
+        items: parse.body.items
+      }
+    };
+
+    const first = await request(app)
+      .post('/v1/logs')
+      .set(authHeader)
+      .set('Idempotency-Key', 'f5c2dcb2-11f1-4f9f-a6b2-8539ef57b440')
+      .send(firstPayload);
+    expect(first.status).toBe(200);
+
+    const modifiedPayload = {
+      ...firstPayload,
+      parsedLog: {
+        ...firstPayload.parsedLog,
+        totals: {
+          ...firstPayload.parsedLog.totals,
+          calories: firstPayload.parsedLog.totals.calories + 10
+        },
+        items: firstPayload.parsedLog.items.map((item: typeof firstPayload.parsedLog.items[number]) => ({
+          ...item,
+          calories: item.calories + 10
+        }))
+      }
+    };
+
+    const second = await request(app)
+      .post('/v1/logs')
+      .set(authHeader)
+      .set('Idempotency-Key', '4d9b8f23-f817-45e3-9a4b-f93e8c795e67')
+      .send(modifiedPayload);
+    expect(second.status).toBe(409);
+    expect(second.body.error.code).toBe('IDEMPOTENCY_CONFLICT');
+
+    const countResult = await pool.query<{ total: string }>(
+      `
+      SELECT COUNT(*)::text AS total
+      FROM food_logs
+      WHERE user_id = $1
+        AND parse_request_id = $2
+      `,
+      [userId, parse.body.parseRequestId]
+    );
+    expect(Number(countResult.rows[0]?.total ?? 0)).toBe(1);
+  });
+
   test('unknown parseRequestId is rejected on save', async () => {
     const save = await request(app)
       .post('/v1/logs')
@@ -1683,6 +1752,60 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(metrics.body.metrics).toHaveProperty('ai_estimated_cost_usd_total');
     expect(metrics.body.metrics).toHaveProperty('cache_hit_ratio');
     expect(metrics.body.metrics.parse_requests_total).toBeGreaterThan(0);
+  });
+
+  test('internal save-attempt ingest is key-protected and persists diagnostics', async () => {
+    const noKey = await request(app)
+      .post('/v1/internal/save-attempts')
+      .send({
+        parseRequestId: 'parse-test-1',
+        source: 'auto',
+        outcome: 'failed',
+        errorCode: 'NETWORK_FAILURE'
+      });
+    expect(noKey.status).toBe(403);
+
+    const accepted = await request(app)
+      .post('/v1/internal/save-attempts')
+      .set('x-internal-metrics-key', 'metrics-test-key')
+      .send({
+        userId,
+        parseRequestId: 'parse-test-1',
+        rowId: 'row-test-1',
+        idempotencyKey: 'idem-test-1',
+        source: 'auto',
+        outcome: 'failed',
+        errorCode: 'NETWORK_FAILURE',
+        latencyMs: 123,
+        clientBuild: 'test-build',
+        backendCommit: 'test-commit',
+        metadata: { scenario: 'integration' }
+      });
+
+    expect(accepted.status).toBe(202);
+    expect(accepted.body.status).toBe('accepted');
+
+    const rows = await pool.query<{
+      parse_request_id: string;
+      outcome: string;
+      error_code: string | null;
+      latency_ms: number | null;
+      metadata_json: { scenario?: string };
+    }>(
+      `
+      SELECT parse_request_id, outcome, error_code, latency_ms, metadata_json
+      FROM save_attempts
+      WHERE parse_request_id = 'parse-test-1'
+      ORDER BY created_at DESC
+      LIMIT 1
+      `
+    );
+
+    expect(rows.rows[0]?.parse_request_id).toBe('parse-test-1');
+    expect(rows.rows[0]?.outcome).toBe('failed');
+    expect(rows.rows[0]?.error_code).toBe('NETWORK_FAILURE');
+    expect(rows.rows[0]?.latency_ms).toBe(123);
+    expect(rows.rows[0]?.metadata_json?.scenario).toBe('integration');
   });
 
   test('internal alerts endpoint evaluates thresholds and includes runbook links', async () => {

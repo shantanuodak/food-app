@@ -1,7 +1,12 @@
 import type { PoolClient } from 'pg';
 import { pool } from '../db.js';
 import { ApiError } from '../utils/errors.js';
-import { getSaveIdempotencyRecord, insertSaveIdempotencyRecord, payloadHash } from './idempotencyService.js';
+import {
+  getSaveIdempotencyRecord,
+  hasSavedPayloadHashForLog,
+  insertSaveIdempotencyRecord,
+  payloadHash
+} from './idempotencyService.js';
 import { buildHealthSyncContract, type HealthSyncContract } from './healthSyncContractService.js';
 import { ensureUserExists } from './userService.js';
 
@@ -217,6 +222,18 @@ export async function saveFoodLogStrict(input: {
       );
       const existingLogId = existingByParse.rows[0]?.id;
       if (existingLogId) {
+        const isMatchingReplay = await hasSavedPayloadHashForLog(client, {
+          userId: input.userId,
+          logId: existingLogId,
+          payloadHash: requestedPayloadHash
+        });
+        if (!isMatchingReplay) {
+          throw new ApiError(
+            409,
+            'IDEMPOTENCY_CONFLICT',
+            'parseRequestId already saved with a different payload'
+          );
+        }
         const response = withHealthSync(input.userId, existingLogId);
         await insertSaveIdempotencyRecord(client, {
           userId: input.userId,

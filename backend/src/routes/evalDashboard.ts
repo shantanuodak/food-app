@@ -326,6 +326,12 @@ router.get('/recent-parses', async (req, res, next) => {
       total_carbs_g: string | null;
       total_fat_g: string | null;
       parse_confidence: string | null;
+      save_attempted: boolean;
+      save_attempt_count: string | null;
+      latest_save_outcome: string | null;
+      latest_save_error_code: string | null;
+      latest_save_latency_ms: number | null;
+      latest_save_attempt_at: Date | null;
     }>(
       `SELECT
          pr.request_id,
@@ -339,7 +345,13 @@ router.get('/recent-parses', async (req, res, next) => {
          fl.total_protein_g::text,
          fl.total_carbs_g::text,
          fl.total_fat_g::text,
-         fl.parse_confidence::text
+         fl.parse_confidence::text,
+         COALESCE(sa.save_attempt_count, 0) > 0 AS save_attempted,
+         sa.save_attempt_count::text,
+         sa.latest_save_outcome,
+         sa.latest_save_error_code,
+         sa.latest_save_latency_ms,
+         sa.latest_save_attempt_at
        FROM parse_requests pr
        LEFT JOIN LATERAL (
          SELECT fl.*
@@ -360,6 +372,16 @@ router.get('/recent-parses', async (req, res, next) => {
            ABS(EXTRACT(EPOCH FROM (fl.created_at - pr.created_at)))
          LIMIT 1
        ) fl ON true
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(*) AS save_attempt_count,
+           (ARRAY_AGG(outcome ORDER BY created_at DESC))[1] AS latest_save_outcome,
+           (ARRAY_AGG(error_code ORDER BY created_at DESC))[1] AS latest_save_error_code,
+           (ARRAY_AGG(latency_ms ORDER BY created_at DESC))[1] AS latest_save_latency_ms,
+           MAX(created_at) AS latest_save_attempt_at
+         FROM save_attempts sa
+         WHERE sa.parse_request_id = pr.request_id
+       ) sa ON true
        ORDER BY pr.created_at DESC
        LIMIT 50`
     );
@@ -377,7 +399,13 @@ router.get('/recent-parses', async (req, res, next) => {
       proteinG: r.total_protein_g !== null ? Number(r.total_protein_g) : null,
       carbsG: r.total_carbs_g !== null ? Number(r.total_carbs_g) : null,
       fatG: r.total_fat_g !== null ? Number(r.total_fat_g) : null,
-      confidence: r.parse_confidence !== null ? Number(r.parse_confidence) : null
+      confidence: r.parse_confidence !== null ? Number(r.parse_confidence) : null,
+      saveAttempted: r.save_attempted,
+      saveAttemptCount: r.save_attempt_count !== null ? Number(r.save_attempt_count) : 0,
+      latestSaveOutcome: r.latest_save_outcome,
+      latestSaveErrorCode: r.latest_save_error_code,
+      latestSaveLatencyMs: r.latest_save_latency_ms,
+      latestSaveAttemptAt: r.latest_save_attempt_at ? r.latest_save_attempt_at.toISOString() : null
     }));
 
     res.json({ parses });

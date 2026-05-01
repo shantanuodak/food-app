@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { deleteFoodLog, saveFoodLogStrict, updateFoodLog, updateFoodLogImageRef } from '../services/logService.js';
 import { getDaySummary, getDaySummaryRange } from '../services/daySummaryService.js';
 import { getDayLogs, getDayLogsRange } from '../services/dayLogsService.js';
@@ -8,6 +9,7 @@ import { assertLoggedAtNotInFutureForUser } from '../services/dateIntegrityServi
 import { buildHealthSyncContract } from '../services/healthSyncContractService.js';
 import { getParseRequestForUser, isParseRequestStale } from '../services/parseRequestService.js';
 import { getSaveIdempotencyRecordForUser, payloadHash } from '../services/idempotencyService.js';
+import { recordSaveAttempt } from '../services/saveAttemptService.js';
 import { ApiError } from '../utils/errors.js';
 import { config } from '../config.js';
 import {
@@ -28,11 +30,25 @@ import {
 
 const router = Router();
 
+async function safeRecordSaveAttempt(input: Parameters<typeof recordSaveAttempt>[0]): Promise<void> {
+  try {
+    await recordSaveAttempt(input);
+  } catch (error) {
+    console.warn('[save_attempt_record_failed]', error);
+  }
+}
+
 router.post('/', async (req, res, next) => {
+  const startedAt = process.hrtime.bigint();
+  let parsedBody: z.infer<typeof saveLogSchema> | null = null;
+  let telemetryUserId: string | null = null;
+  let telemetryIdempotencyKey: string | null = null;
   try {
     const body = saveLogSchema.parse(req.body);
+    parsedBody = body;
     const auth = res.locals.auth as { userId: string; authProvider?: string; email?: string | null };
     const userId = auth.userId;
+    telemetryUserId = userId;
     const idempotencyKey = req.header('idempotency-key');
     if (!idempotencyKey || !idempotencyKey.trim()) {
       throw new ApiError(400, 'MISSING_IDEMPOTENCY_KEY', 'Idempotency-Key header is required');
@@ -40,6 +56,16 @@ router.post('/', async (req, res, next) => {
 
     // Contract precedence: idempotency conflict/replay takes priority over deep payload validation.
     const normalizedKey = idempotencyKey.trim();
+    telemetryIdempotencyKey = normalizedKey;
+    await safeRecordSaveAttempt({
+      userId,
+      parseRequestId: body.parseRequestId,
+      idempotencyKey: normalizedKey,
+      source: 'server',
+      outcome: 'attempted',
+      backendCommit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || null,
+      metadata: { route: 'POST /v1/logs' }
+    });
     const requestedPayloadHash = payloadHash(body);
     const existing = await getSaveIdempotencyRecordForUser(userId, normalizedKey);
     if (existing) {
@@ -54,6 +80,17 @@ router.post('/', async (req, res, next) => {
           ? payload.healthSync
           : buildHealthSyncContract(userId, resolvedLogId);
 
+      await safeRecordSaveAttempt({
+        userId,
+        parseRequestId: body.parseRequestId,
+        idempotencyKey: normalizedKey,
+        source: 'server',
+        outcome: 'skipped_duplicate',
+        logId: resolvedLogId,
+        latencyMs: Number(process.hrtime.bigint() - startedAt) / 1_000_000,
+        backendCommit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || null,
+        metadata: { route: 'POST /v1/logs', replay: true }
+      });
       res.status(200).json({
         logId: resolvedLogId,
         status: resolvedStatus,
@@ -152,8 +189,33 @@ router.post('/', async (req, res, next) => {
       }
     });
 
+    await safeRecordSaveAttempt({
+      userId,
+      parseRequestId: body.parseRequestId,
+      idempotencyKey: normalizedKey,
+      source: 'server',
+      outcome: 'succeeded',
+      logId: saved.logId,
+      latencyMs: Number(process.hrtime.bigint() - startedAt) / 1_000_000,
+      backendCommit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || null,
+      metadata: { route: 'POST /v1/logs' }
+    });
     res.status(200).json(saved);
   } catch (err) {
+    const code = err instanceof ApiError ? err.code : err instanceof Error ? err.name : 'UNKNOWN_ERROR';
+    if (parsedBody?.parseRequestId || telemetryUserId || telemetryIdempotencyKey) {
+      safeRecordSaveAttempt({
+        userId: telemetryUserId,
+        parseRequestId: parsedBody?.parseRequestId,
+        idempotencyKey: telemetryIdempotencyKey,
+        source: 'server',
+        outcome: 'failed',
+        errorCode: code,
+        latencyMs: Number(process.hrtime.bigint() - startedAt) / 1_000_000,
+        backendCommit: process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || null,
+        metadata: { route: 'POST /v1/logs' }
+      });
+    }
     next(err);
   }
 });

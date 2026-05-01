@@ -12,6 +12,7 @@ import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js';
 import healthRoutes from './routes/health.js';
 import trackingAccuracyRoutes from './routes/trackingAccuracy.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
+import { getLatestAppliedMigration } from './db/schemaMetadata.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -25,8 +26,24 @@ export function createApp() {
   // (e.g. config.aiImageMaxBytes in the image parse handler).
   app.use(express.json({ limit: '10mb' }));
 
-  app.get('/health', (_req, res) => {
-    res.json({ status: 'ok' });
+  app.get('/health', async (_req, res) => {
+    const commit = process.env.RENDER_GIT_COMMIT || process.env.GIT_COMMIT || 'unknown';
+    try {
+      const schemaVersion = await getLatestAppliedMigration();
+      res.json({
+        status: 'ok',
+        commit,
+        schemaVersion: schemaVersion ?? 'unknown'
+      });
+    } catch {
+      // Health must stay cheap and resilient — do not fail this endpoint if DB
+      // metadata probing has a transient issue.
+      res.json({
+        status: 'ok',
+        commit,
+        schemaVersion: 'unknown'
+      });
+    }
   });
 
   // Testing dashboard — served as a static HTML page

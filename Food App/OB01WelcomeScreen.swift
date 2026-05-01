@@ -84,7 +84,7 @@ struct OB01WelcomeScreen: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Log you food with")
+            Text("Log your food with")
                 .font(OnboardingTypography.onboardingHeadline(size: 44))
                 .foregroundStyle(titleColor)
 
@@ -155,8 +155,8 @@ struct OB01WelcomeScreen: View {
                     .stroke(Color.white, lineWidth: 6.4)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(shimmerStrokeGradient(width: width), lineWidth: 2)
+                shimmerBorderHighlight(width: width)
+                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             )
             .shadow(color: Color.black.opacity(0.55), radius: 6, y: 3.2)
             .rotationEffect(.degrees(rotation))
@@ -187,16 +187,15 @@ struct OB01WelcomeScreen: View {
         }
     }
 
-    private func shimmerStrokeGradient(width: CGFloat) -> some ShapeStyle {
-        AngularGradient(
-            stops: [
-                .init(color: Color.white.opacity(0.0), location: 0.0),
-                .init(color: Color.white.opacity(0.0), location: max(0, (shimmerPhase + 1) / 2 - 0.1)),
-                .init(color: Color.white.opacity(0.9), location: (shimmerPhase + 1) / 2),
-                .init(color: Color.white.opacity(0.0), location: min(1, (shimmerPhase + 1) / 2 + 0.1)),
-                .init(color: Color.white.opacity(0.0), location: 1.0)
-            ],
-            center: .center
-        )
+    private func shimmerBorderHighlight(width: CGFloat) -> some View {
+        GeometryReader { geo in
+            let sweepWidth = geo.size.width * 0.55
+
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(Color.white.opacity(0.85), lineWidth: 2)
+                .frame(width: sweepWidth)
+                .offset(x: shimmerPhase * (geo.size.width + sweepWidth) - sweepWidth)
+                .allowsHitTesting(false)
+        }
     }
 }
