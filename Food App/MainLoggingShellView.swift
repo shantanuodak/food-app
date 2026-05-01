@@ -4854,7 +4854,14 @@ struct MainLoggingShellView: View {
     }
 
     private var hasSaveableRowsPending: Bool {
-        activeParseSnapshots.contains(where: { isAutoSaveEligibleEntry($0) })
+        activeParseSnapshots.contains(where: { isAutoSaveEligibleEntry($0) }) ||
+            hasQueuedPendingSaves
+    }
+
+    private var hasQueuedPendingSaves: Bool {
+        pendingSaveQueue.contains { item in
+            item.serverLogId == nil && UUID(uuidString: item.idempotencyKey) != nil
+        }
     }
 
     private func autoSaveIfNeeded() async {
@@ -4863,6 +4870,10 @@ struct MainLoggingShellView: View {
             if hasSaveableRowsPending {
                 rescheduleAutoSaveAfterActiveSave()
             }
+            return
+        }
+
+        if await flushQueuedPendingSavesIfNeeded() {
             return
         }
 
@@ -4955,6 +4966,30 @@ struct MainLoggingShellView: View {
         }
     }
 
+    @discardableResult
+    private func flushQueuedPendingSavesIfNeeded() async -> Bool {
+        let candidates: [PendingSubmissionCandidate]
+        if useSaveCoordinator {
+            candidates = saveCoordinator.consumeSubmissionCandidates()
+            syncPendingQueueFromCoordinator(refreshRetryState: true)
+        } else {
+            candidates = legacyPendingSubmissionCandidates()
+        }
+
+        guard !candidates.isEmpty else { return false }
+
+        for candidate in candidates {
+            _ = await submitSave(
+                request: candidate.item.request,
+                idempotencyKey: candidate.idempotencyKey,
+                isRetry: (candidate.item.attemptCount ?? 0) > 0,
+                intent: .auto
+            )
+        }
+
+        return true
+    }
+
     /// Forces a pending auto-save to fire RIGHT NOW instead of waiting for the
     /// 10-second debounce. Called before a date change so typed entries aren't
     /// lost when the user swipes away mid-debounce. Safe to call even if nothing
@@ -4967,7 +5002,7 @@ struct MainLoggingShellView: View {
             parseResult != nil &&
             hasVisibleUnsavedCalorieRows
 
-        guard hasCompletedRow || hasLegacyParse else { return }
+        guard hasCompletedRow || hasLegacyParse || hasQueuedPendingSaves else { return }
 
         // Cancel the debounced auto-save task and run immediately
         autoSaveTask?.cancel()
@@ -5969,7 +6004,7 @@ struct MainLoggingShellView: View {
             normalizedTextAtParse: normalizedRowText(displayText),
             imagePreviewData: item.imagePreviewData,
             imageRef: body.imageRef,
-            isSaved: true,
+            isSaved: item.serverLogId != nil,
             savedAt: nil,
             serverLogId: item.serverLogId,
             serverLoggedAt: body.loggedAt
