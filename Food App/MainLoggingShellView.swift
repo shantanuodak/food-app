@@ -4844,13 +4844,27 @@ struct MainLoggingShellView: View {
         }
     }
 
+    private func rescheduleAutoSaveAfterActiveSave() {
+        autoSaveTask?.cancel()
+        autoSaveTask = Task {
+            try? await Task.sleep(nanoseconds: 500_000_000)
+            guard !Task.isCancelled else { return }
+            await autoSaveIfNeeded()
+        }
+    }
+
     private var hasSaveableRowsPending: Bool {
         activeParseSnapshots.contains(where: { isAutoSaveEligibleEntry($0) })
     }
 
     private func autoSaveIfNeeded() async {
         guard appStore.isNetworkReachable else { return }
-        guard !isSaving else { return }
+        guard !isSaving else {
+            if hasSaveableRowsPending {
+                rescheduleAutoSaveAfterActiveSave()
+            }
+            return
+        }
 
         // Save each completed row independently using the per-row rawText.
         // This fixes the 422 mismatch: each save request uses the exact rawText
@@ -5003,10 +5017,16 @@ struct MainLoggingShellView: View {
         if sourceItems.isEmpty {
             let hasDisplayedCalories = currentRow?.calories != nil || response.totals.calories > 0
             guard hasDisplayedCalories else { return nil }
+            let fallbackTotals = NutritionTotals(
+                calories: Double(currentRow?.calories ?? Int(response.totals.calories.rounded())),
+                protein: response.totals.protein,
+                carbs: response.totals.carbs,
+                fat: response.totals.fat
+            )
             items = [
                 fallbackSaveItem(
                     rawText: entry.rawText,
-                    totals: response.totals,
+                    totals: fallbackTotals,
                     confidence: response.confidence,
                     nutritionSourceId: currentRow?.parsedItem?.nutritionSourceId ?? response.items.first?.nutritionSourceId
                 )
