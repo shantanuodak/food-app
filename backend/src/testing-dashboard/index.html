@@ -312,6 +312,208 @@
       background: var(--surface2);
       color: var(--text);
     }
+    .saved-logs-shell {
+      position: relative;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 12% 0%, rgba(129,140,248,0.16), transparent 30%),
+        radial-gradient(circle at 88% 10%, rgba(34,197,94,0.08), transparent 24%),
+        linear-gradient(180deg, rgba(26,29,39,0.96), rgba(15,17,23,0.98));
+      border: 1px solid rgba(99,102,241,0.28);
+      border-radius: 18px;
+      padding: 22px;
+      box-shadow: 0 24px 70px rgba(0,0,0,0.28);
+    }
+    .saved-logs-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image: radial-gradient(rgba(255,255,255,0.075) 1px, transparent 1px);
+      background-size: 22px 22px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.45), transparent 45%);
+    }
+    .saved-logs-shell > * { position: relative; z-index: 1; }
+    .saved-logs-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    .saved-logs-kicker {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--green);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 7px;
+    }
+    .saved-logs-kicker::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 999px;
+      background: var(--green);
+      box-shadow: 0 0 14px rgba(34,197,94,0.85);
+    }
+    .saved-logs-title h2 {
+      font-size: 24px;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      margin: 0 0 8px;
+    }
+    .saved-logs-title p {
+      color: var(--muted);
+      font-size: 13px;
+      max-width: 620px;
+      margin: 0;
+    }
+    .saved-logs-controls {
+      display: flex;
+      align-items: end;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+      min-width: 460px;
+    }
+    .saved-control {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .saved-control label {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+    }
+    .dashboard-input {
+      min-height: 38px;
+      background: rgba(34,38,58,0.88);
+      border: 1px solid rgba(99,102,241,0.30);
+      color: var(--text);
+      border-radius: 10px;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: var(--font-mono);
+      outline: none;
+      transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    }
+    .dashboard-input:focus {
+      border-color: var(--accent2);
+      box-shadow: 0 0 0 3px rgba(99,102,241,0.18);
+      background: rgba(34,38,58,1);
+    }
+    .saved-quick-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .saved-summary {
+      display: grid;
+      grid-template-columns: 1.15fr repeat(4, 1fr);
+      gap: 12px;
+      margin: 0 0 18px;
+    }
+    .metric-card {
+      position: relative;
+      overflow: hidden;
+      background: rgba(20,23,34,0.82);
+      border: 1px solid rgba(99,102,241,0.22);
+      border-radius: 16px;
+      padding: 15px 16px;
+      min-height: 92px;
+    }
+    .metric-card::after {
+      content: "";
+      position: absolute;
+      right: -24px;
+      top: -28px;
+      width: 70px;
+      height: 70px;
+      border-radius: 50%;
+      background: rgba(129,140,248,0.10);
+      filter: blur(2px);
+    }
+    .metric-card .label {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 9px;
+    }
+    .metric-card .value {
+      color: var(--text);
+      font-family: var(--font-mono);
+      font-size: 25px;
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+    .metric-card.primary .value {
+      color: var(--green);
+      text-shadow: 0 0 18px rgba(34,197,94,0.16);
+    }
+    .saved-table {
+      border-radius: 16px;
+      border-color: rgba(99,102,241,0.26);
+      background: rgba(11,13,20,0.72);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.03);
+    }
+    .saved-table table { font-size: 14px; }
+    .saved-table thead th {
+      background: rgba(26,29,39,0.96);
+      padding-top: 13px;
+      padding-bottom: 13px;
+    }
+    .saved-table tbody td { padding: 14px 14px; }
+    .saved-table tbody tr:hover { background: rgba(34,38,58,0.52); }
+    .saved-time {
+      color: var(--muted);
+      white-space: nowrap;
+      font-size: 12px;
+    }
+    .saved-food {
+      font-weight: 650;
+      color: #f0f2fb;
+      max-width: 390px;
+      white-space: normal;
+      line-height: 1.35;
+    }
+    .number-cell {
+      font-family: var(--font-mono);
+      font-weight: 700;
+      color: #f3f4fb;
+      white-space: nowrap;
+    }
+    .id-chip {
+      font-family: var(--font-mono);
+      color: var(--muted);
+      background: rgba(129,140,248,0.10);
+      border: 1px solid rgba(129,140,248,0.14);
+      border-radius: 999px;
+      padding: 4px 8px;
+      white-space: nowrap;
+    }
+    @media (max-width: 1100px) {
+      .saved-logs-header { flex-direction: column; }
+      .saved-logs-controls { justify-content: flex-start; min-width: 0; width: 100%; }
+      .saved-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      main { padding: 16px; }
+      .saved-logs-shell { padding: 16px; border-radius: 14px; }
+      .saved-summary { grid-template-columns: 1fr; }
+      .saved-control, .saved-logs-controls .btn, .dashboard-input { width: 100%; }
+      .saved-quick-actions { width: 100%; }
+      .saved-quick-actions .btn { flex: 1; justify-content: center; }
+    }
     .prompt-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(320px, 0.85fr); gap: 16px; }
     .prompt-editor,
     .prompt-output {
@@ -617,28 +819,39 @@
 
     <!-- ==================== SAVED LOGS ==================== -->
     <div id="tab-saved-logs" class="tab-panel">
-      <div class="section">
-        <div class="row-actions">
-          <div>
-            <h2 style="margin:0">Saved Logs</h2>
-            <p class="text-muted" style="font-size:13px; margin:4px 0 0;">
+      <div class="section saved-logs-shell">
+        <div class="saved-logs-header">
+          <div class="saved-logs-title">
+            <div class="saved-logs-kicker">Source of truth</div>
+            <h2>Saved Logs</h2>
+            <p>
               Source of truth from <code>food_logs</code>. This should match the app's selected day.
             </p>
           </div>
-          <button class="btn btn-ghost" onclick="setSavedLogsDate(-1)">Yesterday</button>
-          <button class="btn btn-ghost" onclick="setSavedLogsDate(0)">Today</button>
-          <input id="saved-logs-date" type="date" onchange="loadSavedLogs()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;" />
-          <input id="saved-logs-tz" type="text" onchange="loadSavedLogs()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;min-width:190px;" />
-          <button class="btn btn-ghost" onclick="loadSavedLogs()">↻ Refresh</button>
+          <div class="saved-logs-controls">
+            <div class="saved-quick-actions">
+              <button class="btn btn-ghost" onclick="setSavedLogsDate(-1)">Yesterday</button>
+              <button class="btn btn-ghost" onclick="setSavedLogsDate(0)">Today</button>
+            </div>
+            <div class="saved-control">
+              <label for="saved-logs-date">Day</label>
+              <input id="saved-logs-date" class="dashboard-input" type="date" onchange="loadSavedLogs()" />
+            </div>
+            <div class="saved-control">
+              <label for="saved-logs-tz">Timezone</label>
+              <input id="saved-logs-tz" class="dashboard-input" type="text" onchange="loadSavedLogs()" />
+            </div>
+            <button class="btn btn-ghost" onclick="loadSavedLogs()">Refresh</button>
+          </div>
         </div>
-        <div class="cards" style="margin:16px 0;">
+        <div class="saved-summary">
+          <div class="metric-card primary"><div class="label">Calories</div><div class="value" id="saved-calories">—</div></div>
           <div class="metric-card"><div class="label">Rows</div><div class="value" id="saved-count">—</div></div>
-          <div class="metric-card"><div class="label">Calories</div><div class="value" id="saved-calories">—</div></div>
           <div class="metric-card"><div class="label">Protein</div><div class="value" id="saved-protein">—</div></div>
           <div class="metric-card"><div class="label">Carbs</div><div class="value" id="saved-carbs">—</div></div>
           <div class="metric-card"><div class="label">Fat</div><div class="value" id="saved-fat">—</div></div>
         </div>
-        <div class="table-wrap">
+        <div class="table-wrap saved-table">
           <table>
             <thead>
               <tr>
@@ -652,7 +865,7 @@
                 <th>Items</th>
                 <th>Input Kind</th>
                 <th>Log ID</th>
-                <th>Parse Request</th>
+                <th>Parse ID</th>
               </tr>
             </thead>
             <tbody id="saved-logs-tbody">
@@ -687,7 +900,6 @@
               <tr>
                 <th>Time</th>
                 <th>Input</th>
-                <th>Status</th>
                 <th>Attempt</th>
                 <th>Cal</th>
                 <th>P (g)</th>
@@ -1411,17 +1623,17 @@ function renderSavedLogs(data) {
     const parseId = log.parseRequestId ? log.parseRequestId.slice(0, 8) : '—';
     tbody.innerHTML += `
       <tr>
-        <td class="mono text-muted" style="font-size:12px; white-space:nowrap">${time}</td>
-        <td class="truncate" title="${escHtml(log.rawText)}">${escHtml(log.rawText)}</td>
-        <td class="mono">${fmt(log.calories)}</td>
-        <td class="mono">${fmt(log.proteinG, 1)}</td>
-        <td class="mono">${fmt(log.carbsG, 1)}</td>
-        <td class="mono">${fmt(log.fatG, 1)}</td>
+        <td class="mono saved-time">${time}</td>
+        <td class="saved-food" title="${escHtml(log.rawText)}">${escHtml(log.rawText)}</td>
+        <td class="number-cell">${fmt(log.calories)}</td>
+        <td class="number-cell">${fmt(log.proteinG, 1)}</td>
+        <td class="number-cell">${fmt(log.carbsG, 1)}</td>
+        <td class="number-cell">${fmt(log.fatG, 1)}</td>
         <td>${confCell}</td>
-        <td class="mono">${fmt(log.itemCount)}</td>
+        <td class="number-cell">${fmt(log.itemCount)}</td>
         <td><span class="badge badge-muted">${escHtml(log.inputKind || 'text')}</span></td>
-        <td class="mono text-muted" title="${escHtml(log.id)}">${escHtml(logId)}</td>
-        <td class="mono text-muted" title="${escHtml(log.parseRequestId || '')}">${escHtml(parseId)}</td>
+        <td><span class="id-chip" title="${escHtml(log.id)}">${escHtml(logId)}</span></td>
+        <td><span class="id-chip" title="${escHtml(log.parseRequestId || '')}">${escHtml(parseId)}</span></td>
       </tr>`;
   }
 }
