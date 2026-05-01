@@ -62,10 +62,6 @@ router.post('/', async (req, res, next) => {
       return;
     }
 
-    if (body.parseVersion !== config.parseVersion) {
-      throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'parseVersion does not match current parser version');
-    }
-
     const parseRequest = await getParseRequestForUser(userId, body.parseRequestId);
     if (!parseRequest) {
       throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'Unknown parseRequestId');
@@ -173,9 +169,6 @@ router.patch('/:id', async (req, res, next) => {
     // POST does. For pure client-side edits (quantity fast path) these are
     // omitted and we skip straight to totals validation + persistence.
     if (body.parseRequestId && body.parseVersion) {
-      if (body.parseVersion !== config.parseVersion) {
-        throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'parseVersion does not match current parser version');
-      }
       const parseRequest = await getParseRequestForUser(userId, body.parseRequestId);
       if (!parseRequest) {
         throw new ApiError(422, 'INVALID_PARSE_REFERENCE', 'Unknown parseRequestId');

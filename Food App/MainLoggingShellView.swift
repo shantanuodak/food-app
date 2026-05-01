@@ -3430,8 +3430,10 @@ struct MainLoggingShellView: View {
 
             if remainingDirtyRowIDs.isEmpty {
                 scheduleDetailsDrawer(for: response)
-                scheduleAutoSave()
             }
+            // Save completed rows even if other rows are still dirty/queued.
+            // This prevents visible calorie rows from being left unsaved.
+            scheduleAutoSave()
         } catch {
             let durationMs = elapsedMs(since: startedAt)
             if error is CancellationError || Task.isCancelled {
@@ -3449,6 +3451,11 @@ struct MainLoggingShellView: View {
             parseError = message
             appStore.setError(message)
             emitParseTelemetryFailure(error: error, durationMs: durationMs, uiApplied: true)
+            // Parse failure on one row should not block autosave for already
+            // parsed rows that have visible calories.
+            if hasSaveableRowsPending {
+                scheduleAutoSave()
+            }
         }
     }
 
@@ -4699,7 +4706,6 @@ struct MainLoggingShellView: View {
     private func autoSaveIfNeeded() async {
         guard appStore.isNetworkReachable else { return }
         guard !isSaving else { return }
-        guard parseError == nil else { return }
 
         // Save each completed row independently using the per-row rawText.
         // This fixes the 422 mismatch: each save request uses the exact rawText
@@ -4926,8 +4932,12 @@ struct MainLoggingShellView: View {
             amount: 1,
             unit: "serving",
             unitNormalized: "serving",
-            grams: max(1, calories),
-            gramsPerUnit: max(1, calories),
+            // This is a synthetic fallback item for a displayed calorie
+            // estimate, not a real serving-weight measurement. Persist a
+            // neutral placeholder instead of corrupting grams with calorie
+            // values (e.g. 650 cal -> 650 g).
+            grams: 1,
+            gramsPerUnit: 1,
             calories: calories,
             protein: protein,
             carbs: carbs,
