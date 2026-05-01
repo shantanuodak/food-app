@@ -607,9 +607,58 @@
       <div class="section" style="margin-bottom: 12px;">
         <h2 style="margin-bottom:10px">Advanced</h2>
         <div class="segment-control" id="advanced-segments">
-          <button class="active" type="button" data-section="recent-parses" onclick="showAdvancedSection('recent-parses')">Recent Parses</button>
+          <button class="active" type="button" data-section="saved-logs" onclick="showAdvancedSection('saved-logs')">Saved Logs</button>
+          <button type="button" data-section="recent-parses" onclick="showAdvancedSection('recent-parses')">Parse Debug</button>
           <button type="button" data-section="costs" onclick="showAdvancedSection('costs')">Costs</button>
           <button type="button" data-section="cache" onclick="showAdvancedSection('cache')">Cache</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== SAVED LOGS ==================== -->
+    <div id="tab-saved-logs" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <div>
+            <h2 style="margin:0">Saved Logs</h2>
+            <p class="text-muted" style="font-size:13px; margin:4px 0 0;">
+              Source of truth from <code>food_logs</code>. This should match the app's selected day.
+            </p>
+          </div>
+          <button class="btn btn-ghost" onclick="setSavedLogsDate(-1)">Yesterday</button>
+          <button class="btn btn-ghost" onclick="setSavedLogsDate(0)">Today</button>
+          <input id="saved-logs-date" type="date" onchange="loadSavedLogs()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;" />
+          <input id="saved-logs-tz" type="text" onchange="loadSavedLogs()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;min-width:190px;" />
+          <button class="btn btn-ghost" onclick="loadSavedLogs()">↻ Refresh</button>
+        </div>
+        <div class="cards" style="margin:16px 0;">
+          <div class="metric-card"><div class="label">Rows</div><div class="value" id="saved-count">—</div></div>
+          <div class="metric-card"><div class="label">Calories</div><div class="value" id="saved-calories">—</div></div>
+          <div class="metric-card"><div class="label">Protein</div><div class="value" id="saved-protein">—</div></div>
+          <div class="metric-card"><div class="label">Carbs</div><div class="value" id="saved-carbs">—</div></div>
+          <div class="metric-card"><div class="label">Fat</div><div class="value" id="saved-fat">—</div></div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Logged Time</th>
+                <th>Input</th>
+                <th>Cal</th>
+                <th>P (g)</th>
+                <th>C (g)</th>
+                <th>F (g)</th>
+                <th>Confidence</th>
+                <th>Items</th>
+                <th>Input Kind</th>
+                <th>Log ID</th>
+                <th>Parse Request</th>
+              </tr>
+            </thead>
+            <tbody id="saved-logs-tbody">
+              <tr><td colspan="11" class="text-muted" style="padding:24px; text-align:center;">Choose a day to load saved logs.</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -618,7 +667,12 @@
     <div id="tab-recent-parses" class="tab-panel">
       <div class="section">
         <div class="row-actions">
-          <h2 style="margin:0">Recent Parse Requests</h2>
+          <div>
+            <h2 style="margin:0">Parse Debug Trace</h2>
+            <p class="text-muted" style="font-size:13px; margin:4px 0 0;">
+              Instrumentation only. Superseded typing parses can appear here without becoming saved food logs.
+            </p>
+          </div>
           <select id="conf-filter" onchange="filterParses()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;cursor:pointer;">
             <option value="all">All confidence levels</option>
             <option value="high">High (&gt;0.8)</option>
@@ -795,7 +849,7 @@ async function api(path, opts = {}) {
 /* TAB SWITCHING */
 /* ====================================================================== */
 let currentTab = 'overview';
-let advancedSection = 'recent-parses';
+let advancedSection = 'saved-logs';
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -815,13 +869,14 @@ function switchTab(name, btn) {
 
 function showAdvancedSection(name) {
   advancedSection = name;
-  ['recent-parses', 'costs', 'cache'].forEach(section => {
+  ['saved-logs', 'recent-parses', 'costs', 'cache'].forEach(section => {
     const panel = document.getElementById('tab-' + section);
     if (panel) panel.classList.toggle('active', section === name);
   });
   document.querySelectorAll('#advanced-segments button').forEach(button => {
     button.classList.toggle('active', button.dataset.section === name);
   });
+  if (name === 'saved-logs') loadSavedLogs();
   if (name === 'recent-parses') loadRecentParses();
   if (name === 'costs') loadCosts();
   if (name === 'cache') loadCache();
@@ -865,6 +920,12 @@ function fmtUsdShort(n) {
 function fmtTime(iso) {
   if (!iso) return '—';
   return new Date(iso).toLocaleString();
+}
+function localDateString(date = new Date()) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 function fmtDuration(ms) {
   if (!ms) return '—';
@@ -1043,6 +1104,18 @@ async function renderAttention(data, alertItems) {
 /* ====================================================================== */
 let lastEvalResult = null;
 let allParsesData = [];
+let savedLogsInitialized = false;
+
+function ensureSavedLogControls() {
+  if (savedLogsInitialized) return;
+  const dateInput = document.getElementById('saved-logs-date');
+  const tzInput = document.getElementById('saved-logs-tz');
+  if (dateInput && !dateInput.value) dateInput.value = localDateString();
+  if (tzInput && !tzInput.value) {
+    tzInput.value = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  }
+  savedLogsInitialized = true;
+}
 
 async function runEval() {
   const btn = document.getElementById('run-eval-btn');
@@ -1287,6 +1360,69 @@ async function toggleHistoryDetail(runId) {
     } catch (e) {
       panel.innerHTML = `<span class="text-red">${e.message}</span>`;
     }
+  }
+}
+
+/* ====================================================================== */
+/* SAVED LOGS */
+/* ====================================================================== */
+function setSavedLogsDate(offsetDays) {
+  ensureSavedLogControls();
+  const date = new Date();
+  date.setDate(date.getDate() + offsetDays);
+  document.getElementById('saved-logs-date').value = localDateString(date);
+  loadSavedLogs();
+}
+
+async function loadSavedLogs() {
+  ensureSavedLogControls();
+  const tbody = document.getElementById('saved-logs-tbody');
+  const date = document.getElementById('saved-logs-date').value || localDateString();
+  const tz = document.getElementById('saved-logs-tz').value || 'UTC';
+  tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="padding:24px;text-align:center;">Loading saved logs…</td></tr>';
+  try {
+    const data = await api(`/saved-logs?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(tz)}`);
+    renderSavedLogs(data);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="11" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+function renderSavedLogs(data) {
+  document.getElementById('saved-count').textContent = fmt(data.count);
+  document.getElementById('saved-calories').textContent = fmt(data.totals.calories);
+  document.getElementById('saved-protein').textContent = fmt(data.totals.proteinG, 1) + 'g';
+  document.getElementById('saved-carbs').textContent = fmt(data.totals.carbsG, 1) + 'g';
+  document.getElementById('saved-fat').textContent = fmt(data.totals.fatG, 1) + 'g';
+
+  const tbody = document.getElementById('saved-logs-tbody');
+  if (!data.logs.length) {
+    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="icon">🍽️</div>No saved food logs for this day.</div></td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = '';
+  for (const log of data.logs) {
+    const confCell = log.confidence !== null
+      ? `<span class="mono ${confClass(log.confidence)}">${fmt(log.confidence, 2)}</span>`
+      : '<span class="text-muted">—</span>';
+    const time = new Date(log.loggedAt).toLocaleTimeString();
+    const logId = log.id ? log.id.slice(0, 8) : '—';
+    const parseId = log.parseRequestId ? log.parseRequestId.slice(0, 8) : '—';
+    tbody.innerHTML += `
+      <tr>
+        <td class="mono text-muted" style="font-size:12px; white-space:nowrap">${time}</td>
+        <td class="truncate" title="${escHtml(log.rawText)}">${escHtml(log.rawText)}</td>
+        <td class="mono">${fmt(log.calories)}</td>
+        <td class="mono">${fmt(log.proteinG, 1)}</td>
+        <td class="mono">${fmt(log.carbsG, 1)}</td>
+        <td class="mono">${fmt(log.fatG, 1)}</td>
+        <td>${confCell}</td>
+        <td class="mono">${fmt(log.itemCount)}</td>
+        <td><span class="badge badge-muted">${escHtml(log.inputKind || 'text')}</span></td>
+        <td class="mono text-muted" title="${escHtml(log.id)}">${escHtml(logId)}</td>
+        <td class="mono text-muted" title="${escHtml(log.parseRequestId || '')}">${escHtml(parseId)}</td>
+      </tr>`;
   }
 }
 

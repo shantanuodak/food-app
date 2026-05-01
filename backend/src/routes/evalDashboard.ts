@@ -415,6 +415,103 @@ router.get('/recent-parses', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /v1/internal/dashboard/saved-logs
+// Source-of-truth food_logs view for a single app day.
+// ---------------------------------------------------------------------------
+
+router.get('/saved-logs', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+
+    const timezone = z.string().trim().min(1).max(80).catch('UTC').parse(req.query.tz);
+    const date = z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{2}-\d{2}$/)
+      .catch(new Date().toISOString().slice(0, 10))
+      .parse(req.query.date);
+
+    try {
+      new Intl.DateTimeFormat('en-US', { timeZone: timezone });
+    } catch {
+      throw new ApiError(400, 'INVALID_TIMEZONE', 'Invalid timezone');
+    }
+
+    const { rows } = await pool.query<{
+      id: string;
+      user_id: string;
+      raw_text: string;
+      logged_at: Date;
+      created_at: Date;
+      input_kind: string;
+      parse_request_id: string | null;
+      parse_version: string | null;
+      total_calories: string;
+      total_protein_g: string;
+      total_carbs_g: string;
+      total_fat_g: string;
+      parse_confidence: string;
+      item_count: string;
+    }>(
+      `SELECT
+         fl.id,
+         fl.user_id,
+         fl.raw_text,
+         fl.logged_at,
+         fl.created_at,
+         fl.input_kind,
+         fl.parse_request_id,
+         fl.parse_version,
+         fl.total_calories::text,
+         fl.total_protein_g::text,
+         fl.total_carbs_g::text,
+         fl.total_fat_g::text,
+         fl.parse_confidence::text,
+         COUNT(fli.id)::text AS item_count
+       FROM food_logs fl
+       LEFT JOIN food_log_items fli ON fli.food_log_id = fl.id
+       WHERE (fl.logged_at AT TIME ZONE $1)::date = $2::date
+       GROUP BY fl.id
+       ORDER BY fl.logged_at ASC, fl.created_at ASC, fl.id ASC
+       LIMIT 250`,
+      [timezone, date]
+    );
+
+    const logs = rows.map((r) => ({
+      id: r.id,
+      userId: r.user_id,
+      rawText: r.raw_text,
+      loggedAt: r.logged_at.toISOString(),
+      createdAt: r.created_at.toISOString(),
+      inputKind: r.input_kind,
+      parseRequestId: r.parse_request_id,
+      parseVersion: r.parse_version,
+      calories: Number(r.total_calories),
+      proteinG: Number(r.total_protein_g),
+      carbsG: Number(r.total_carbs_g),
+      fatG: Number(r.total_fat_g),
+      confidence: Number(r.parse_confidence),
+      itemCount: Number(r.item_count)
+    }));
+
+    const totals = logs.reduce(
+      (acc, log) => {
+        acc.calories += log.calories;
+        acc.proteinG += log.proteinG;
+        acc.carbsG += log.carbsG;
+        acc.fatG += log.fatG;
+        return acc;
+      },
+      { calories: 0, proteinG: 0, carbsG: 0, fatG: 0 }
+    );
+
+    res.json({ date, timezone, count: logs.length, totals, logs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /v1/internal/dashboard/cost-breakdown
 // 7-day cost by feature per day
 // ---------------------------------------------------------------------------
