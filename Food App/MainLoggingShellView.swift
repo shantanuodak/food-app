@@ -5626,7 +5626,7 @@ struct MainLoggingShellView: View {
             return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
 
-        if isAuthTokenError(apiError) {
+        if apiError.isAuthTokenError(treatForbiddenAsAuthFailure: true, treatSessionExpiredMessageAsAuthFailure: false) {
             return L10n.authSessionExpired
         }
 
@@ -5792,7 +5792,7 @@ struct MainLoggingShellView: View {
             return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
 
-        if isAuthTokenError(apiError) {
+        if apiError.isAuthTokenError(treatForbiddenAsAuthFailure: true, treatSessionExpiredMessageAsAuthFailure: false) {
             return L10n.authSessionExpired
         }
 
@@ -5820,7 +5820,7 @@ struct MainLoggingShellView: View {
             return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
 
-        if isAuthTokenError(apiError) {
+        if apiError.isAuthTokenError(treatForbiddenAsAuthFailure: true, treatSessionExpiredMessageAsAuthFailure: false) {
             return L10n.authSessionExpired
         }
 
@@ -5840,7 +5840,7 @@ struct MainLoggingShellView: View {
             return (message, nil)
         }
 
-        if isAuthTokenError(apiError) {
+        if apiError.isAuthTokenError(treatForbiddenAsAuthFailure: true, treatSessionExpiredMessageAsAuthFailure: false) {
             return (L10n.authSessionExpired, nil)
         }
 
@@ -5862,33 +5862,6 @@ struct MainLoggingShellView: View {
             return (L10n.escalationNetworkFailure, nil)
         default:
             return (apiError.errorDescription ?? L10n.escalationFailure, nil)
-        }
-    }
-
-    private func isAuthTokenError(_ apiError: APIClientError) -> Bool {
-        switch apiError {
-        case .missingAuthToken:
-            return true
-        case let .server(statusCode, payload):
-            if statusCode == 401 || statusCode == 403 {
-                return true
-            }
-
-            let code = payload.code.uppercased()
-            if code == "UNAUTHORIZED" || code.contains("TOKEN") || code.contains("AUTH") {
-                return true
-            }
-
-            let message = payload.message.lowercased()
-            if message.contains("invalid token") ||
-                message.contains("missing bearer token") ||
-                message.contains("jwt") ||
-                message.contains("unauthorized") {
-                return true
-            }
-            return false
-        default:
-            return false
         }
     }
 

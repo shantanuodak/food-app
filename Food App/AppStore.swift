@@ -244,7 +244,7 @@ final class AppStore: ObservableObject {
         if case .missingAuthToken = apiError, authSessionStore.session != nil {
             return false
         }
-        guard Self.isAuthTokenError(apiError) else {
+        guard apiError.isAuthTokenError() else {
             return false
         }
         signOut()
@@ -411,31 +411,6 @@ final class AppStore: ObservableObject {
             _ = try? await apiClient.postHealthActivity(request)
         } catch {
             // Silently ignore read failures — card will show stale or zero values
-        }
-    }
-
-    private static func isAuthTokenError(_ apiError: APIClientError) -> Bool {
-        switch apiError {
-        case .missingAuthToken:
-            return true
-        case let .server(statusCode, payload):
-            if statusCode == 401 {
-                return true
-            }
-
-            let code = payload.code.uppercased()
-            if code == "UNAUTHORIZED" || code.contains("TOKEN") || code.contains("AUTH") {
-                return true
-            }
-
-            let message = payload.message.lowercased()
-            return message.contains("invalid token") ||
-                message.contains("missing bearer token") ||
-                message.contains("jwt") ||
-                message.contains("unauthorized") ||
-                message.contains("session expired")
-        default:
-            return false
         }
     }
 
