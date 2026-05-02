@@ -1744,7 +1744,13 @@ struct MainLoggingShellView: View {
             ? nil
             : itemConfidenceValues.reduce(0, +) / Double(itemConfidenceValues.count)
         let primaryConfidence = itemConfidence ?? parseConfidence
-        let sourceLabel = sourceLabelForRowItems(resolvedItems, route: parseResult?.route)
+        let route = parseResult?.route
+        let routeDisplayName = route.map { L10n.routeDisplayName($0) }
+        let sourceLabel = HomeLoggingDisplayText.sourceLabelForRowItems(
+            resolvedItems,
+            route: route,
+            routeDisplayName: routeDisplayName
+        )
         let hasManualOverride = resolvedItems.contains {
             ($0.manualOverride ?? false) || ($0.sourceFamily?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "manual")
         }
@@ -2006,54 +2012,6 @@ struct MainLoggingShellView: View {
         inputRows[rowIndex].calorieRangeText = inputRows[rowIndex].isApproximate
             ? estimatedCalorieRangeText(for: calories)
             : nil
-    }
-
-    private func sourceLabelForRowItems(_ items: [ParsedFoodItem], route: String?) -> String {
-        guard !items.isEmpty else {
-            return nutritionSourceDisplayName(nil, route: route)
-        }
-
-        let labels = Array(Set(items.map { nutritionSourceDisplayName($0.nutritionSourceId, route: route) })).sorted()
-        if labels.count == 1, let label = labels.first {
-            return label
-        }
-        return labels.joined(separator: ", ")
-    }
-
-    private func nutritionSourceDisplayName(_ nutritionSourceId: String?, route: String?) -> String {
-        let upstreamSource = upstreamNutritionSourceDisplayName(nutritionSourceId)
-
-        guard let route else {
-            return upstreamSource ?? "Estimate"
-        }
-
-        let normalizedRoute = route.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        if normalizedRoute == "cache" {
-            if let upstreamSource {
-                return "Cache (\(upstreamSource))"
-            }
-            return "Cache"
-        }
-
-        return upstreamSource ?? L10n.routeDisplayName(route)
-    }
-
-    private func upstreamNutritionSourceDisplayName(_ nutritionSourceId: String?) -> String? {
-        guard let nutritionSourceId else { return nil }
-        let trimmed = nutritionSourceId.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return nil }
-
-        let normalized = trimmed.lowercased()
-        if normalized.contains("gemini") {
-            return "Gemini"
-        }
-        if normalized.contains("manual") {
-            return "Manual"
-        }
-        if normalized.contains("cache") {
-            return "Cache"
-        }
-        return nil
     }
 
     // MARK: - Voice Input

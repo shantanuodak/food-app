@@ -28,6 +28,64 @@ enum HomeLoggingDisplayText {
         return rawSourceID
     }
 
+    nonisolated static func sourceLabelForRowItems(
+        _ items: [ParsedFoodItem],
+        route: String?,
+        routeDisplayName: String?
+    ) -> String {
+        guard !items.isEmpty else {
+            return nutritionSourceDisplayName(nil, route: route, routeDisplayName: routeDisplayName)
+        }
+
+        let labels = Array(Set(items.map {
+            nutritionSourceDisplayName($0.nutritionSourceId, route: route, routeDisplayName: routeDisplayName)
+        })).sorted()
+        if labels.count == 1, let label = labels.first {
+            return label
+        }
+        return labels.joined(separator: ", ")
+    }
+
+    nonisolated static func nutritionSourceDisplayName(
+        _ nutritionSourceId: String?,
+        route: String?,
+        routeDisplayName: String?
+    ) -> String {
+        let upstreamSource = upstreamNutritionSourceDisplayName(nutritionSourceId)
+
+        guard let route else {
+            return upstreamSource ?? "Estimate"
+        }
+
+        let normalizedRoute = route.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if normalizedRoute == "cache" {
+            if let upstreamSource {
+                return "Cache (\(upstreamSource))"
+            }
+            return "Cache"
+        }
+
+        return upstreamSource ?? routeDisplayName ?? route
+    }
+
+    nonisolated static func upstreamNutritionSourceDisplayName(_ nutritionSourceId: String?) -> String? {
+        guard let nutritionSourceId else { return nil }
+        let trimmed = nutritionSourceId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let normalized = trimmed.lowercased()
+        if normalized.contains("gemini") {
+            return "Gemini"
+        }
+        if normalized.contains("manual") {
+            return "Manual"
+        }
+        if normalized.contains("cache") {
+            return "Cache"
+        }
+        return nil
+    }
+
     nonisolated static func normalizedLookupValue(_ value: String) -> String {
         value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
