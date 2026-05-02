@@ -3669,7 +3669,20 @@ struct MainLoggingShellView: View {
 
     private func shouldHoldUnresolvedResponse(_ response: ParseLogResponse) -> Bool {
         guard response.items.isEmpty else { return false }
+        if isTrustedZeroNutritionResponse(response) {
+            return false
+        }
         return response.route == "unresolved" || response.route == "gemini"
+    }
+
+    private func isTrustedZeroNutritionResponse(_ response: ParseLogResponse) -> Bool {
+        guard response.items.isEmpty else { return false }
+        guard !response.needsClarification else { return false }
+        guard response.confidence >= 0.70 else { return false }
+        return response.totals.calories <= 0.05 &&
+            response.totals.protein <= 0.05 &&
+            response.totals.carbs <= 0.05 &&
+            response.totals.fat <= 0.05
     }
 
     private func scheduleUnresolvedRetryIfNeeded(
@@ -5245,7 +5258,9 @@ struct MainLoggingShellView: View {
         let items: [SaveParsedFoodItem]
 
         if sourceItems.isEmpty {
-            guard response.totals.calories > 0 else { return nil }
+            guard response.totals.calories > 0 || isTrustedZeroNutritionResponse(response) else {
+                return nil
+            }
             items = [
                 fallbackSaveItem(
                     rawText: draft.text,
