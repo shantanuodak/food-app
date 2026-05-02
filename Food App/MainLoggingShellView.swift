@@ -1556,7 +1556,7 @@ struct MainLoggingShellView: View {
 
     private func servingSizeEntries(for details: RowCalorieDetails) -> [(offset: Int, item: ParsedFoodItem, options: [ParsedServingOption])] {
         Array(details.parsedItems.enumerated()).compactMap { itemOffset, item in
-            if isGeminiParsedItem(item) {
+            if HomeLoggingServingOptionUtils.isGeminiParsedItem(item) {
                 return nil
             }
             guard let servingOptions = rowServingOptions(rowID: details.id, itemOffset: itemOffset, fallback: item),
@@ -1565,12 +1565,6 @@ struct MainLoggingShellView: View {
             }
             return (offset: itemOffset, item: item, options: servingOptions)
         }
-    }
-
-    private func isGeminiParsedItem(_ item: ParsedFoodItem) -> Bool {
-        let source = HomeLoggingDisplayText.normalizedLookupValue(item.nutritionSourceId)
-        let family = HomeLoggingDisplayText.normalizedLookupValue(item.sourceFamily ?? "")
-        return source.contains("gemini") || family == "gemini"
     }
 
     @ViewBuilder
@@ -1856,70 +1850,16 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func isServingOptionSelected(rowID: UUID, itemOffset: Int, option: ParsedServingOption) -> Bool {
+    private func selectedServingOptionOffset(rowID: UUID, itemOffset: Int, servingOptions: [ParsedServingOption]) -> Int? {
         guard let rowIndex = inputRows.firstIndex(where: { $0.id == rowID }),
               inputRows[rowIndex].parsedItems.indices.contains(itemOffset) else {
-            return false
+            return nil
         }
         let rowItem = inputRows[rowIndex].parsedItems[itemOffset]
-        let rowSource = HomeLoggingDisplayText.normalizedLookupValue(rowItem.nutritionSourceId)
-        let optionSource = HomeLoggingDisplayText.normalizedLookupValue(option.nutritionSourceId)
-        if !rowSource.isEmpty, !optionSource.isEmpty, rowSource != optionSource {
-            return false
-        }
-
-        let rowQuantity = max(rowItem.quantity, 0.0001)
-        let optionQuantity = servingOptionUsesServingBasis(option) ? 1.0 : max(option.quantity, 0.0001)
-        let rowGramsPerUnit = rowItem.gramsPerUnit ?? (rowItem.grams / rowQuantity)
-        let optionGramsPerUnit = servingOptionUsesServingBasis(option)
-            ? option.grams
-            : (option.grams / optionQuantity)
-        let rowCaloriesPerUnit = rowItem.calories / rowQuantity
-        let optionCaloriesPerUnit = servingOptionUsesServingBasis(option)
-            ? option.calories
-            : (option.calories / optionQuantity)
-        let rowProteinPerUnit = rowItem.protein / rowQuantity
-        let optionProteinPerUnit = servingOptionUsesServingBasis(option)
-            ? option.protein
-            : (option.protein / optionQuantity)
-        let rowCarbsPerUnit = rowItem.carbs / rowQuantity
-        let optionCarbsPerUnit = servingOptionUsesServingBasis(option)
-            ? option.carbs
-            : (option.carbs / optionQuantity)
-        let rowFatPerUnit = rowItem.fat / rowQuantity
-        let optionFatPerUnit = servingOptionUsesServingBasis(option)
-            ? option.fat
-            : (option.fat / optionQuantity)
-
-        return nearlyEqual(rowGramsPerUnit, optionGramsPerUnit, tolerance: 0.2) &&
-            nearlyEqual(rowCaloriesPerUnit, optionCaloriesPerUnit, tolerance: 0.2) &&
-            nearlyEqual(rowProteinPerUnit, optionProteinPerUnit, tolerance: 0.2) &&
-            nearlyEqual(rowCarbsPerUnit, optionCarbsPerUnit, tolerance: 0.2) &&
-            nearlyEqual(rowFatPerUnit, optionFatPerUnit, tolerance: 0.2)
-    }
-
-    private func servingOptionUsesServingBasis(_ option: ParsedServingOption) -> Bool {
-        if abs(option.quantity - 1) > 0.0001 {
-            return true
-        }
-        return isWeightOrVolumeServingUnit(option.unit)
-    }
-
-    private func isWeightOrVolumeServingUnit(_ value: String) -> Bool {
-        let normalized = value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return normalized == "g" || normalized == "gram" || normalized == "grams" ||
-            normalized == "ml" || normalized == "milliliter" || normalized == "milliliters" ||
-            normalized == "oz" || normalized == "ounce" || normalized == "ounces"
-    }
-
-    private func selectedServingOptionOffset(rowID: UUID, itemOffset: Int, servingOptions: [ParsedServingOption]) -> Int? {
-        servingOptions.firstIndex { option in
-            isServingOptionSelected(rowID: rowID, itemOffset: itemOffset, option: option)
-        }
-    }
-
-    private func nearlyEqual(_ lhs: Double, _ rhs: Double, tolerance: Double) -> Bool {
-        abs(lhs - rhs) <= tolerance
+        return HomeLoggingServingOptionUtils.selectedServingOptionOffset(
+            rowItem: rowItem,
+            servingOptions: servingOptions
+        )
     }
 
     private func applyRowParsedItemEdit(
