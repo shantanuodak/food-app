@@ -191,7 +191,7 @@ struct ParsedFoodItem: Codable, Hashable {
         nutritionSourceId == kUnresolvedPlaceholderSourceId
     }
 
-    init(
+    nonisolated init(
         name: String,
         quantity: Double,
         unit: String,

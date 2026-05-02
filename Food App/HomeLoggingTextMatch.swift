@@ -1,7 +1,7 @@
 import Foundation
 
 enum HomeLoggingTextMatch {
-    static func rowItemMatchScore(rowText: String, itemName: String) -> Double {
+    nonisolated static func rowItemMatchScore(rowText: String, itemName: String) -> Double {
         let rowTokens = Set(normalizedMatchTokens(from: rowText))
         let itemTokens = Set(normalizedMatchTokens(from: itemName))
         guard !rowTokens.isEmpty, !itemTokens.isEmpty else { return 0.0 }
@@ -49,14 +49,14 @@ enum HomeLoggingTextMatch {
         return min(score, 1.0)
     }
 
-    static func normalizedRowText(_ text: String) -> String {
+    nonisolated static func normalizedRowText(_ text: String) -> String {
         text
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }
 
-    private static func fuzzyTokenSimilarity(_ lhs: String, _ rhs: String) -> Double {
+    nonisolated private static func fuzzyTokenSimilarity(_ lhs: String, _ rhs: String) -> Double {
         if lhs == rhs {
             return 1.0
         }
@@ -74,7 +74,7 @@ enum HomeLoggingTextMatch {
         return max(0, 1.0 - Double(distance) / Double(maxLength))
     }
 
-    private static func levenshteinDistance(_ lhs: String, _ rhs: String) -> Int {
+    nonisolated private static func levenshteinDistance(_ lhs: String, _ rhs: String) -> Int {
         if lhs == rhs {
             return 0
         }
@@ -105,7 +105,7 @@ enum HomeLoggingTextMatch {
         return previous[rhsChars.count]
     }
 
-    private static func normalizedMatchTokens(from text: String) -> [String] {
+    nonisolated private static func normalizedMatchTokens(from text: String) -> [String] {
         text.lowercased()
             .components(separatedBy: CharacterSet.alphanumerics.inverted)
             .filter { $0.count > 1 }
