@@ -95,7 +95,7 @@ final class NotificationScheduler {
     func reconcile(
         challenge: ChallengeChoice?,
         authState: UNAuthorizationStatus,
-        mealReminders: MealReminderSettings = .default
+        mealReminders: MealReminderSettings
     ) async {
         cancelAll()
 
