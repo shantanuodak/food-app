@@ -1007,7 +1007,7 @@ struct MainLoggingShellView: View {
             }
 
             if let sources = result.sourcesUsed, !sources.isEmpty {
-                Text("Sources: \(sources.map(sourceDisplayName).joined(separator: ", "))")
+                Text("Sources: \(sources.map(HomeLoggingDisplayText.sourceDisplayName).joined(separator: ", "))")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -1017,19 +1017,6 @@ struct MainLoggingShellView: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(Color.gray.opacity(0.08))
         )
-    }
-
-    private func sourceDisplayName(_ source: String) -> String {
-        switch source.lowercased() {
-        case "gemini":
-            return "Gemini"
-        case "cache":
-            return "Cache"
-        case "manual":
-            return "Manual"
-        default:
-            return source
-        }
     }
 
     private var detailPrimaryTextColor: Color {
@@ -1276,11 +1263,11 @@ struct MainLoggingShellView: View {
                            let fat = liveDetails.fat {
                             HStack(spacing: 10) {
                                 statPill(title: "Calories", value: "\(liveDetails.calories)")
-                                statPill(title: "Protein", value: formatOneDecimal(protein) + "g")
+                                statPill(title: "Protein", value: HomeLoggingDisplayText.formatOneDecimal(protein) + "g")
                             }
                             HStack(spacing: 10) {
-                                statPill(title: "Carbs", value: formatOneDecimal(carbs) + "g")
-                                statPill(title: "Fat", value: formatOneDecimal(fat) + "g")
+                                statPill(title: "Carbs", value: HomeLoggingDisplayText.formatOneDecimal(carbs) + "g")
+                                statPill(title: "Fat", value: HomeLoggingDisplayText.formatOneDecimal(fat) + "g")
                             }
                         } else {
                             Text("Macro breakdown is not available for this row yet.")
@@ -1312,7 +1299,7 @@ struct MainLoggingShellView: View {
                                             if let protein = Optional(item.protein),
                                                let carbs = Optional(item.carbs),
                                                let fat = Optional(item.fat) {
-                                                Text("P \(formatOneDecimal(protein))g · C \(formatOneDecimal(carbs))g · F \(formatOneDecimal(fat))g")
+                                                Text("P \(HomeLoggingDisplayText.formatOneDecimal(protein))g · C \(HomeLoggingDisplayText.formatOneDecimal(carbs))g · F \(HomeLoggingDisplayText.formatOneDecimal(fat))g")
                                                     .font(.caption2)
                                                     .foregroundStyle(.secondary)
                                             }
@@ -1561,7 +1548,7 @@ struct MainLoggingShellView: View {
     }
 
     private func shouldShowServingSizeSection(_ details: RowCalorieDetails) -> Bool {
-        if normalizedLookupValue(parseResult?.route ?? "") == "gemini" {
+        if HomeLoggingDisplayText.normalizedLookupValue(parseResult?.route ?? "") == "gemini" {
             return false
         }
         return !servingSizeEntries(for: details).isEmpty
@@ -1581,23 +1568,9 @@ struct MainLoggingShellView: View {
     }
 
     private func isGeminiParsedItem(_ item: ParsedFoodItem) -> Bool {
-        let source = normalizedLookupValue(item.nutritionSourceId)
-        let family = normalizedLookupValue(item.sourceFamily ?? "")
+        let source = HomeLoggingDisplayText.normalizedLookupValue(item.nutritionSourceId)
+        let family = HomeLoggingDisplayText.normalizedLookupValue(item.sourceFamily ?? "")
         return source.contains("gemini") || family == "gemini"
-    }
-
-    private func sourceReferenceLabel(for rawSourceID: String) -> String {
-        let normalized = normalizedLookupValue(rawSourceID)
-        if normalized.contains("gemini") {
-            return "Gemini nutrition estimate"
-        }
-        if normalized.contains("cache") {
-            return "Cached nutrition result"
-        }
-        if normalized.contains("manual") {
-            return "Manual nutrition edit"
-        }
-        return rawSourceID
     }
 
     @ViewBuilder
@@ -1798,7 +1771,12 @@ struct MainLoggingShellView: View {
             primaryConfidence: min(max(primaryConfidence, 0), 1),
             hasManualOverride: hasManualOverride,
             sourceLabel: sourceLabel,
-            thoughtProcess: thoughtProcessText(for: row, sourceLabel: sourceLabel, items: resolvedItems),
+            thoughtProcess: HomeLoggingDisplayText.thoughtProcessText(
+                for: row,
+                sourceLabel: sourceLabel,
+                items: resolvedItems,
+                needsClarification: parseResult?.needsClarification == true
+            ),
             parsedItems: resolvedItems,
             manualEditedFields: overridePreview.editedFields,
             manualOriginalSources: overridePreview.originalSources,
@@ -1829,14 +1807,14 @@ struct MainLoggingShellView: View {
                     let label = fallbackMap[field] ?? field
                     editedFieldSet.insert(label)
                 }
-            } else if item.manualOverride == true || normalizedLookupValue(item.sourceFamily ?? "") == "manual" {
+            } else if item.manualOverride == true || HomeLoggingDisplayText.normalizedLookupValue(item.sourceFamily ?? "") == "manual" {
                 editedFieldSet.insert("nutrition")
             }
 
             let originalSourceID = (item.originalNutritionSourceId ?? item.nutritionSourceId)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             if !originalSourceID.isEmpty {
-                originalSourceSet.insert(sourceReferenceLabel(for: originalSourceID))
+                originalSourceSet.insert(HomeLoggingDisplayText.sourceReferenceLabel(for: originalSourceID))
             }
         }
 
@@ -1878,8 +1856,8 @@ struct MainLoggingShellView: View {
             return false
         }
         let rowItem = inputRows[rowIndex].parsedItems[itemOffset]
-        let rowSource = normalizedLookupValue(rowItem.nutritionSourceId)
-        let optionSource = normalizedLookupValue(option.nutritionSourceId)
+        let rowSource = HomeLoggingDisplayText.normalizedLookupValue(rowItem.nutritionSourceId)
+        let optionSource = HomeLoggingDisplayText.normalizedLookupValue(option.nutritionSourceId)
         if !rowSource.isEmpty, !optionSource.isEmpty, rowSource != optionSource {
             return false
         }
@@ -1993,24 +1971,24 @@ struct MainLoggingShellView: View {
         }
 
         let rowItem = inputRows[rowIndex].parsedItems[itemOffset]
-        let normalizedSource = normalizedLookupValue(rowItem.nutritionSourceId)
-        let normalizedName = normalizedLookupValue(rowItem.name)
+        let normalizedSource = HomeLoggingDisplayText.normalizedLookupValue(rowItem.nutritionSourceId)
+        let normalizedName = HomeLoggingDisplayText.normalizedLookupValue(rowItem.name)
 
         if let exact = editableItems.firstIndex(where: { item in
-            normalizedLookupValue(item.nutritionSourceId) == normalizedSource &&
-                normalizedLookupValue(item.name) == normalizedName
+            HomeLoggingDisplayText.normalizedLookupValue(item.nutritionSourceId) == normalizedSource &&
+                HomeLoggingDisplayText.normalizedLookupValue(item.name) == normalizedName
         }) {
             return exact
         }
 
         if let bySource = editableItems.firstIndex(where: {
-            normalizedLookupValue($0.nutritionSourceId) == normalizedSource
+            HomeLoggingDisplayText.normalizedLookupValue($0.nutritionSourceId) == normalizedSource
         }) {
             return bySource
         }
 
         if let byName = editableItems.firstIndex(where: {
-            normalizedLookupValue($0.name) == normalizedName
+            HomeLoggingDisplayText.normalizedLookupValue($0.name) == normalizedName
         }) {
             return byName
         }
@@ -2028,10 +2006,6 @@ struct MainLoggingShellView: View {
         inputRows[rowIndex].calorieRangeText = inputRows[rowIndex].isApproximate
             ? estimatedCalorieRangeText(for: calories)
             : nil
-    }
-
-    private func normalizedLookupValue(_ value: String) -> String {
-        value.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
     }
 
     private func sourceLabelForRowItems(_ items: [ParsedFoodItem], route: String?) -> String {
@@ -2080,43 +2054,6 @@ struct MainLoggingShellView: View {
             return "Cache"
         }
         return nil
-    }
-
-    private func thoughtProcessText(for row: HomeLogRow, sourceLabel: String, items: [ParsedFoodItem]) -> String {
-        let rowText = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if items.count > 1 {
-            let itemNames = items.map(\.name)
-            let previewNames: String
-            if itemNames.count <= 3 {
-                previewNames = itemNames.joined(separator: ", ")
-            } else {
-                previewNames = itemNames.prefix(3).joined(separator: ", ") + " +\(itemNames.count - 3) more"
-            }
-            let estimatedCalories = Int(items.reduce(0) { $0 + $1.calories }.rounded())
-            var thought = "Interpreted “\(rowText)” as multiple items: \(previewNames). "
-            thought += "Used \(sourceLabel) nutrition data to estimate \(estimatedCalories) kcal total."
-            if row.isApproximate || (parseResult?.needsClarification == true) {
-                thought += " This is marked as approximate because confidence is below the strict threshold."
-            }
-            return thought
-        }
-
-        if let item = items.first {
-            if let explanation = item.explanation, !explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return explanation
-            }
-            var thought = "Interpreted “\(rowText)” as “\(item.name)”. "
-            thought += "Used \(formatOneDecimal(item.quantity)) \(item.unit) (~\(formatOneDecimal(item.grams)) g) "
-            thought += "with \(sourceLabel) nutrition data to estimate \(Int(item.calories.rounded())) kcal and scale macros."
-            if row.isApproximate || (parseResult?.needsClarification == true) {
-                thought += " This is marked as approximate because confidence is below the strict threshold."
-            }
-            return thought
-        }
-
-        var fallback = "A calorie estimate is available for this row, but no fully matched nutrition item was retained."
-        fallback += " Re-parse or open Parse Details to refine mapping and macro breakdown."
-        return fallback
     }
 
     // MARK: - Voice Input
@@ -2381,7 +2318,7 @@ struct MainLoggingShellView: View {
         // Populate the input row with a short display name.
         // Full detail (brand, protein content, flavor, etc.) lives in the items
         // and is shown in the details drawer — the home screen just needs a readable label.
-        let rowText = shortenedFoodLabel(items: items, extractedText: response.extractedText)
+        let rowText = HomeLoggingDisplayText.shortenedFoodLabel(items: items, extractedText: response.extractedText)
 
         var row = HomeLogRow.empty()
         row.text = rowText
@@ -3749,10 +3686,10 @@ struct MainLoggingShellView: View {
         let carbs = editableItems.reduce(0.0) { $0 + $1.carbs }
         let fat = editableItems.reduce(0.0) { $0 + $1.fat }
         return NutritionTotals(
-            calories: roundOneDecimal(calories),
-            protein: roundOneDecimal(protein),
-            carbs: roundOneDecimal(carbs),
-            fat: roundOneDecimal(fat)
+            calories: HomeLoggingDisplayText.roundOneDecimal(calories),
+            protein: HomeLoggingDisplayText.roundOneDecimal(protein),
+            carbs: HomeLoggingDisplayText.roundOneDecimal(carbs),
+            fat: HomeLoggingDisplayText.roundOneDecimal(fat)
         )
     }
 
@@ -4564,10 +4501,10 @@ struct MainLoggingShellView: View {
         }
         guard !items.isEmpty else { return nil }
         let rowTotals = NutritionTotals(
-            calories: roundOneDecimal(items.reduce(0) { $0 + $1.calories }),
-            protein: roundOneDecimal(items.reduce(0) { $0 + $1.protein }),
-            carbs: roundOneDecimal(items.reduce(0) { $0 + $1.carbs }),
-            fat: roundOneDecimal(items.reduce(0) { $0 + $1.fat })
+            calories: HomeLoggingDisplayText.roundOneDecimal(items.reduce(0) { $0 + $1.calories }),
+            protein: HomeLoggingDisplayText.roundOneDecimal(items.reduce(0) { $0 + $1.protein }),
+            carbs: HomeLoggingDisplayText.roundOneDecimal(items.reduce(0) { $0 + $1.carbs }),
+            fat: HomeLoggingDisplayText.roundOneDecimal(items.reduce(0) { $0 + $1.fat })
         )
 
         return SaveLogRequest(
@@ -4635,10 +4572,10 @@ struct MainLoggingShellView: View {
         guard !items.isEmpty else { return nil }
 
         let rowTotals = NutritionTotals(
-            calories: roundOneDecimal(items.reduce(0) { $0 + $1.calories }),
-            protein: roundOneDecimal(items.reduce(0) { $0 + $1.protein }),
-            carbs: roundOneDecimal(items.reduce(0) { $0 + $1.carbs }),
-            fat: roundOneDecimal(items.reduce(0) { $0 + $1.fat })
+            calories: HomeLoggingDisplayText.roundOneDecimal(items.reduce(0) { $0 + $1.calories }),
+            protein: HomeLoggingDisplayText.roundOneDecimal(items.reduce(0) { $0 + $1.protein }),
+            carbs: HomeLoggingDisplayText.roundOneDecimal(items.reduce(0) { $0 + $1.carbs }),
+            fat: HomeLoggingDisplayText.roundOneDecimal(items.reduce(0) { $0 + $1.fat })
         )
 
         return SaveLogRequest(
@@ -4669,10 +4606,10 @@ struct MainLoggingShellView: View {
         let sourceId = nutritionSourceId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let resolvedSourceId = (sourceId?.isEmpty == false) ? sourceId! : kUnresolvedPlaceholderSourceId
 
-        let calories = roundOneDecimal(max(0, totals.calories))
-        let protein = roundOneDecimal(max(0, totals.protein))
-        let carbs = roundOneDecimal(max(0, totals.carbs))
-        let fat = roundOneDecimal(max(0, totals.fat))
+        let calories = HomeLoggingDisplayText.roundOneDecimal(max(0, totals.calories))
+        let protein = HomeLoggingDisplayText.roundOneDecimal(max(0, totals.protein))
+        let carbs = HomeLoggingDisplayText.roundOneDecimal(max(0, totals.carbs))
+        let fat = HomeLoggingDisplayText.roundOneDecimal(max(0, totals.fat))
         let clampedConfidence = min(max(confidence, 0), 1)
 
         return SaveParsedFoodItem(
@@ -5985,52 +5922,6 @@ struct MainLoggingShellView: View {
         }
     }
 
-    /// Produces a short, readable label from parsed food items for the home screen row.
-    /// Example: "Chobani Complete 20g Protein Zero Added Sugar Mixed Berry..." → "Chobani Protein Drink"
-    /// Full detail lives in the parsedItems and is shown in the details drawer.
-    private func shortenedFoodLabel(items: [ParsedFoodItem], extractedText: String?) -> String {
-        if items.isEmpty {
-            let fallback = (extractedText ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-            return fallback.isEmpty ? "Photo meal" : truncateLabel(fallback, maxWords: 4)
-        }
-
-        if items.count == 1 {
-            return truncateLabel(items[0].name, maxWords: 4)
-        }
-
-        // Multiple items — take the first 3 words of each, join with ", "
-        let shortened = items.prefix(3).map { truncateLabel($0.name, maxWords: 3) }
-        let label = shortened.joined(separator: ", ")
-        if items.count > 3 {
-            return "\(label) + \(items.count - 3) more"
-        }
-        return label
-    }
-
-    /// Keeps only the first N words of a string. Strips noise words like "g", "oz", "added", "zero".
-    private func truncateLabel(_ text: String, maxWords: Int) -> String {
-        let noise: Set<String> = ["g", "oz", "ml", "mg", "added", "zero", "sugar", "free", "with", "no", "of"]
-        let words = text
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-            .split(separator: " ")
-            .map(String.init)
-
-        // Keep meaningful words only, up to maxWords
-        var kept: [String] = []
-        for word in words {
-            // Skip pure numbers with units like "20g", "0g", "12oz"
-            let lowered = word.lowercased().trimmingCharacters(in: .punctuationCharacters)
-            if lowered.isEmpty { continue }
-            let isNumericUnit = lowered.allSatisfy({ $0.isNumber || $0 == "." }) || noise.contains(lowered)
-            if isNumericUnit && !kept.isEmpty { continue } // allow first word even if numeric (e.g. "2% Milk")
-
-            kept.append(word)
-            if kept.count >= maxWords { break }
-        }
-
-        return kept.isEmpty ? text.prefix(30).trimmingCharacters(in: .whitespacesAndNewlines) : kept.joined(separator: " ")
-    }
-
     private func userFriendlyParseError(_ error: Error) -> String {
         guard let apiError = error as? APIClientError else {
             return (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -6195,14 +6086,6 @@ struct MainLoggingShellView: View {
             return "{}"
         }
         return text
-    }
-
-    private func formatOneDecimal(_ value: Double) -> String {
-        String(format: "%.1f", value)
-    }
-
-    private func roundOneDecimal(_ value: Double) -> Double {
-        (value * 10).rounded() / 10
     }
 
 }
