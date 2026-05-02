@@ -1,11 +1,17 @@
 import { Router } from 'express';
+import { createHash } from 'crypto';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import { getMetricsSnapshot } from '../services/metricsService.js';
 import { getAlertSnapshot } from '../services/alertRulesService.js';
 import { parseFoodText } from '../services/deterministicParser.js';
-import { buildGeminiFallbackPrompt, parseResultSchema } from '../services/aiNormalizerService.js';
+import {
+  buildGeminiFallbackPromptTemplate,
+  buildGeminiFallbackRuntimeContext,
+  parseResultSchema,
+  renderGeminiFallbackPrompt
+} from '../services/aiNormalizerService.js';
 import { generateGeminiJsonWithDiagnostics } from '../services/geminiFlashClient.js';
 import {
   runGoldenSetEval,
@@ -14,6 +20,7 @@ import {
   getEvalRunById
 } from '../services/evalService.js';
 import { pool } from '../db.js';
+import { splitFoodTextSegments } from '../services/foodTextSegmentation.js';
 
 const router = Router();
 
@@ -26,8 +33,20 @@ const evalRunRequestSchema = z.object({
 
 const promptLabTestSchema = z.object({
   inputText: z.string().trim().min(1).max(500),
-  prompt: z.string().trim().min(20).max(30_000)
+  promptTemplate: z.string().trim().min(20).max(30_000).optional(),
+  prompt: z.string().trim().min(20).max(30_000).optional()
+}).superRefine((value, ctx) => {
+  if (!value.promptTemplate && !value.prompt) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: 'A prompt template is required'
+    });
+  }
 });
+
+function promptHash(prompt: string): string {
+  return createHash('sha256').update(prompt).digest('hex').slice(0, 12);
+}
 
 // ---------------------------------------------------------------------------
 // Auth helper (same pattern as internalMetrics.ts)
@@ -114,13 +133,21 @@ router.get('/prompt-lab', async (req, res, next) => {
     requireInternalKey(req.header('x-internal-metrics-key'));
     const inputText = z.string().trim().min(1).max(500).catch('cold coffee 8 oz').parse(req.query.inputText);
     const baseline = parseFoodText(inputText);
+    const segments = splitFoodTextSegments(inputText);
+    const promptTemplate = buildGeminiFallbackPromptTemplate();
+    const runtimeContext = buildGeminiFallbackRuntimeContext(inputText, baseline);
+    const renderedPrompt = renderGeminiFallbackPrompt(promptTemplate, inputText, baseline);
     res.json({
       inputText,
       model: config.aiFallbackModelName || config.geminiFlashModel,
       promptVersion: config.parsePromptVersion,
       temperature: 0.1,
       baseline,
-      prompt: buildGeminiFallbackPrompt(inputText, baseline)
+      segments,
+      promptTemplate,
+      runtimeContext,
+      renderedPrompt,
+      promptHash: promptHash(renderedPrompt)
     });
   } catch (err) {
     next(err);
@@ -140,9 +167,14 @@ router.post('/prompt-lab/test', async (req, res, next) => {
     }
 
     const body = promptLabTestSchema.parse(req.body ?? {});
+    const promptTemplate = body.promptTemplate ?? body.prompt ?? '';
+    const baseline = parseFoodText(body.inputText);
+    const segments = splitFoodTextSegments(body.inputText);
+    const runtimeContext = buildGeminiFallbackRuntimeContext(body.inputText, baseline);
+    const renderedPrompt = renderGeminiFallbackPrompt(promptTemplate, body.inputText, baseline);
     const response = await generateGeminiJsonWithDiagnostics({
       model: config.aiFallbackModelName || config.geminiFlashModel,
-      prompt: body.prompt,
+      prompt: renderedPrompt,
       temperature: 0.1
     });
 
@@ -153,21 +185,53 @@ router.post('/prompt-lab/test', async (req, res, next) => {
       res.json({
         ok: false,
         inputText: body.inputText,
-        failureReason: response.failureReason
+        failureReason: response.failureReason,
+        runtime: {
+          segments,
+          baseline,
+          runtimeContext,
+          renderedPrompt,
+          promptHash: promptHash(renderedPrompt)
+        }
       });
       return;
     }
 
     const parsed = parseResultSchema.parse(JSON.parse(response.jsonText));
+    const result = {
+      ...parsed,
+      assumptions: []
+    };
     res.json({
       ok: true,
       inputText: body.inputText,
       model: response.usage.model,
+      promptVersion: config.parsePromptVersion,
       usage: response.usage,
-      result: {
-        ...parsed,
-        assumptions: []
-      }
+      runtime: {
+        segments,
+        baseline,
+        runtimeContext,
+        renderedPrompt,
+        promptHash: promptHash(renderedPrompt)
+      },
+      summary: {
+        confidence: result.confidence,
+        totals: result.totals,
+        items: result.items.map((item) => ({
+          name: item.name,
+          quantity: item.amount ?? item.quantity,
+          unit: item.unitNormalized ?? item.unit,
+          calories: item.calories,
+          protein: item.protein,
+          carbs: item.carbs,
+          fat: item.fat,
+          matchConfidence: item.matchConfidence,
+          foodDescription: item.foodDescription ?? '',
+          explanation: item.explanation ?? ''
+        }))
+      },
+      result
     });
   } catch (err) {
     next(err);

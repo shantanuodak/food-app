@@ -534,6 +534,129 @@
     .prompt-editor:focus { border-color: var(--accent); }
     .prompt-output { overflow: auto; }
     @media (max-width: 1000px) { .prompt-layout { grid-template-columns: 1fr; } }
+    .prompt-runtime-shell,
+    .prompt-result-shell {
+      margin-top: 14px;
+      display: grid;
+      gap: 12px;
+    }
+    .prompt-runtime-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .prompt-preview-pane,
+    .prompt-output-compact {
+      min-height: 220px;
+    }
+    .prompt-placeholder {
+      padding: 14px 16px;
+      background: rgba(20,23,34,0.72);
+      border: 1px dashed rgba(129,140,248,0.22);
+      border-radius: 12px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+    .prompt-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+    }
+    .prompt-metric-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .prompt-item-list {
+      display: grid;
+      gap: 12px;
+    }
+    .prompt-item-card {
+      background: rgba(20,23,34,0.82);
+      border: 1px solid rgba(99,102,241,0.18);
+      border-radius: 14px;
+      padding: 14px 16px;
+    }
+    .prompt-item-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .prompt-item-name {
+      font-size: 15px;
+      font-weight: 700;
+      color: #f3f4fb;
+      margin-bottom: 4px;
+    }
+    .prompt-item-meta {
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .prompt-item-macros {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+    .prompt-macro-chip {
+      background: rgba(34,38,58,0.78);
+      border: 1px solid rgba(129,140,248,0.12);
+      border-radius: 10px;
+      padding: 8px 10px;
+    }
+    .prompt-macro-chip .label {
+      color: var(--muted);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 4px;
+    }
+    .prompt-macro-chip .value {
+      color: #f3f4fb;
+      font-family: var(--font-mono);
+      font-weight: 700;
+      font-size: 13px;
+    }
+    .prompt-item-copy {
+      color: #d7daf0;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .prompt-item-copy strong {
+      display: block;
+      color: #f3f4fb;
+      margin-bottom: 4px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+    .prompt-json-details {
+      background: rgba(17,20,31,0.66);
+      border: 1px solid rgba(99,102,241,0.16);
+      border-radius: 12px;
+      overflow: hidden;
+    }
+    .prompt-json-details summary {
+      cursor: pointer;
+      list-style: none;
+      padding: 12px 14px;
+      color: #f3f4fb;
+      font-weight: 600;
+      border-bottom: 1px solid rgba(99,102,241,0.12);
+    }
+    .prompt-json-details summary::-webkit-details-marker {
+      display: none;
+    }
+    @media (max-width: 900px) {
+      .prompt-metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .prompt-item-macros { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 600px) {
+      .prompt-metric-grid,
+      .prompt-item-macros { grid-template-columns: 1fr; }
+    }
     .text-muted { color: var(--muted); }
     .text-green { color: var(--green); }
     .text-red { color: var(--red); }
@@ -1075,7 +1198,7 @@
         <div class="eval-controls">
           <div class="eval-control" style="flex:1; min-width:280px;">
             <label for="prompt-input-text">Sample food text</label>
-            <input id="prompt-input-text" type="text" value="cold coffee 8 oz" />
+            <input id="prompt-input-text" type="text" value="cold coffee 8 oz" oninput="queuePromptLabRuntimeRefresh(); markPromptLabResultDirty();" />
           </div>
           <div class="eval-control">
             <label>Production version</label>
@@ -1089,12 +1212,26 @@
       </div>
       <div class="prompt-layout">
         <div class="section">
-          <h3>Draft Prompt</h3>
-          <textarea id="prompt-editor" class="prompt-editor" spellcheck="false"></textarea>
+          <h3>Draft Prompt Template</h3>
+          <div class="prompt-note">
+            Edit only the reusable instruction template here. The runtime context for the sample food text is generated separately so changing the top input never leaves stale meal text inside the draft.
+          </div>
+          <textarea id="prompt-editor" class="prompt-editor" spellcheck="false" oninput="markPromptLabResultDirty();"></textarea>
+          <div class="prompt-runtime-shell">
+            <h3 style="margin-bottom:0;">Runtime Context Preview</h3>
+            <div class="prompt-runtime-meta" id="prompt-runtime-meta"></div>
+            <pre id="prompt-runtime-preview" class="prompt-output prompt-preview-pane">Load the production prompt to preview the runtime context for the current sample food text.</pre>
+          </div>
         </div>
         <div class="section">
           <h3>Test Result</h3>
-          <pre id="prompt-result" class="prompt-output">Load the production prompt, edit it, then test a draft.</pre>
+          <div id="prompt-result-summary" class="prompt-result-shell">
+            <div class="prompt-placeholder">Load the production prompt, edit the template if needed, then test a draft.</div>
+          </div>
+          <details class="prompt-json-details">
+            <summary>Raw JSON</summary>
+            <pre id="prompt-result" class="prompt-output prompt-output-compact">Load the production prompt, edit it, then test a draft.</pre>
+          </details>
         </div>
       </div>
     </div>
@@ -1386,6 +1523,9 @@ async function api(path, opts = {}) {
 /* ====================================================================== */
 let currentTab = 'overview';
 let advancedSection = 'saved-logs';
+let promptLabLoaded = false;
+let promptLabRuntimeRefreshToken = 0;
+let promptLabRuntimeRefreshTimer = null;
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -1397,7 +1537,13 @@ function switchTab(name, btn) {
   btn.classList.add('active');
   currentTab = name;
   if (name === 'eval-history') loadEvalHistory();
-  if (name === 'prompt-lab') loadPromptLab();
+  if (name === 'prompt-lab') {
+    if (!promptLabLoaded) {
+      loadPromptLab();
+    } else {
+      queuePromptLabRuntimeRefresh();
+    }
+  }
   if (name === 'advanced') {
     showAdvancedSection(advancedSection);
   }
@@ -1781,43 +1927,190 @@ function renderEvalResult(result) {
 /* ====================================================================== */
 /* PROMPT LAB */
 /* ====================================================================== */
-async function loadPromptLab() {
+function promptLabConfidenceBadge(value) {
+  if (value === null || value === undefined) {
+    return '<span class="badge badge-muted">Confidence —</span>';
+  }
+  if (value >= 0.8) {
+    return `<span class="badge badge-green">Confidence ${escapeHtml(fmtPct(value))}</span>`;
+  }
+  if (value >= 0.5) {
+    return `<span class="badge badge-yellow">Confidence ${escapeHtml(fmtPct(value))}</span>`;
+  }
+  return `<span class="badge badge-red">Confidence ${escapeHtml(fmtPct(value))}</span>`;
+}
+
+function renderPromptLabIdleState(message) {
+  document.getElementById('prompt-result-summary').innerHTML =
+    `<div class="prompt-placeholder">${escapeHtml(message)}</div>`;
+}
+
+function markPromptLabResultDirty() {
+  if (!promptLabLoaded) return;
+  renderPromptLabIdleState('Sample food text or prompt template changed. Click "Test Draft" to generate a fresh result.');
+  document.getElementById('prompt-result').textContent =
+    'Result stale — click "Test Draft" to regenerate the result for the current sample food text and prompt template.';
+}
+
+function renderPromptLabRuntimeContext(data) {
+  const runtimeContext = data.runtimeContext || data.runtime?.runtimeContext || 'No runtime context available.';
+  const promptHash = data.promptHash || data.runtime?.promptHash || '—';
+  const segments = data.segments || data.runtime?.segments || [];
+  const baseline = data.baseline || data.runtime?.baseline || null;
+  const baselineConfidence = baseline && baseline.confidence !== undefined ? baseline.confidence : null;
+
+  document.getElementById('prompt-runtime-meta').innerHTML = [
+    `<span class="badge badge-muted">${segments.length} segment${segments.length === 1 ? '' : 's'}</span>`,
+    promptLabConfidenceBadge(baselineConfidence),
+    `<span class="badge badge-blue">Prompt ${escapeHtml(promptHash)}</span>`
+  ].join('');
+  document.getElementById('prompt-runtime-preview').textContent = runtimeContext;
+}
+
+async function refreshPromptLabRuntimePreview(options = {}) {
+  const { overwriteTemplate = false, showLoading = false } = options;
   const input = document.getElementById('prompt-input-text').value.trim() || 'cold coffee 8 oz';
-  document.getElementById('prompt-result').textContent = 'Loading production prompt…';
+  const token = ++promptLabRuntimeRefreshToken;
+
+  if (showLoading) {
+    document.getElementById('prompt-runtime-preview').textContent = 'Loading runtime context…';
+  }
+
   try {
     const data = await api('/prompt-lab?inputText=' + encodeURIComponent(input));
+    if (token !== promptLabRuntimeRefreshToken) return null;
+
     document.getElementById('prompt-input-text').value = data.inputText;
     document.getElementById('prompt-version').textContent = data.promptVersion || '—';
     document.getElementById('prompt-model').textContent = data.model || '—';
-    document.getElementById('prompt-editor').value = data.prompt || '';
+    if (overwriteTemplate) {
+      document.getElementById('prompt-editor').value = data.promptTemplate || '';
+    }
+    renderPromptLabRuntimeContext(data);
+    return data;
+  } catch (e) {
+    if (token !== promptLabRuntimeRefreshToken) return null;
+    document.getElementById('prompt-runtime-meta').innerHTML = '';
+    document.getElementById('prompt-runtime-preview').textContent = 'Could not load runtime context: ' + e.message;
+    throw e;
+  }
+}
+
+function queuePromptLabRuntimeRefresh() {
+  if (!promptLabLoaded) return;
+  clearTimeout(promptLabRuntimeRefreshTimer);
+  promptLabRuntimeRefreshTimer = setTimeout(() => {
+    refreshPromptLabRuntimePreview().catch(() => {});
+  }, 250);
+}
+
+async function loadPromptLab() {
+  promptLabLoaded = true;
+  document.getElementById('prompt-result').textContent = 'Loading production prompt…';
+  renderPromptLabIdleState('Loading production prompt template…');
+  try {
+    const data = await refreshPromptLabRuntimePreview({ overwriteTemplate: true, showLoading: true });
     document.getElementById('prompt-result').textContent = JSON.stringify({
+      inputText: data.inputText,
+      segments: data.segments,
       baseline: data.baseline,
+      promptHash: data.promptHash,
       temperature: data.temperature
     }, null, 2);
+    renderPromptLabIdleState('Production prompt template loaded. Edit it if needed, then click "Test Draft" to run the current sample food text.');
   } catch (e) {
+    promptLabLoaded = false;
     document.getElementById('prompt-result').textContent = 'Could not load prompt: ' + e.message;
+    renderPromptLabIdleState('Could not load the production prompt template.');
   }
+}
+
+function renderPromptLabTestResult(data) {
+  const summary = data.summary || {};
+  const totals = summary.totals || {};
+  const items = Array.isArray(summary.items) ? summary.items : [];
+  const usageBadges = [
+    promptLabConfidenceBadge(summary.confidence),
+    `<span class="badge badge-blue">${escapeHtml(data.model || 'model')}</span>`,
+    `<span class="badge badge-muted">${escapeHtml((data.runtime?.segments || []).length)} segment${(data.runtime?.segments || []).length === 1 ? '' : 's'}</span>`,
+    `<span class="badge badge-muted">${escapeHtml(String(data.usage?.inputTokens ?? '—'))} in</span>`,
+    `<span class="badge badge-muted">${escapeHtml(String(data.usage?.outputTokens ?? '—'))} out</span>`,
+    `<span class="badge badge-blue">Prompt ${escapeHtml(data.runtime?.promptHash || '—')}</span>`
+  ].join('');
+
+  const metrics = `
+    <div class="prompt-metric-grid">
+      <div class="metric-card primary"><div class="label">Calories</div><div class="value">${escapeHtml(fmt(totals.calories, 1))}</div></div>
+      <div class="metric-card"><div class="label">Protein</div><div class="value">${escapeHtml(fmt(totals.protein, 1))}</div></div>
+      <div class="metric-card"><div class="label">Carbs</div><div class="value">${escapeHtml(fmt(totals.carbs, 1))}</div></div>
+      <div class="metric-card"><div class="label">Fat</div><div class="value">${escapeHtml(fmt(totals.fat, 1))}</div></div>
+      <div class="metric-card"><div class="label">Confidence</div><div class="value">${escapeHtml(fmtPct(summary.confidence))}</div></div>
+    </div>
+  `;
+
+  const itemsHtml = items.length
+    ? `<div class="prompt-item-list">${items.map((item, index) => `
+        <div class="prompt-item-card">
+          <div class="prompt-item-header">
+            <div>
+              <div class="prompt-item-name">${escapeHtml(`${index + 1}. ${item.name || 'Unnamed item'}`)}</div>
+              <div class="prompt-item-meta">${escapeHtml(`${item.quantity ?? '—'} ${item.unit || ''}`.trim())} · Match ${escapeHtml(fmtPct(item.matchConfidence))}</div>
+            </div>
+          </div>
+          <div class="prompt-item-macros">
+            <div class="prompt-macro-chip"><div class="label">Calories</div><div class="value">${escapeHtml(fmt(item.calories, 1))}</div></div>
+            <div class="prompt-macro-chip"><div class="label">Protein</div><div class="value">${escapeHtml(fmt(item.protein, 1))}</div></div>
+            <div class="prompt-macro-chip"><div class="label">Carbs</div><div class="value">${escapeHtml(fmt(item.carbs, 1))}</div></div>
+            <div class="prompt-macro-chip"><div class="label">Fat</div><div class="value">${escapeHtml(fmt(item.fat, 1))}</div></div>
+          </div>
+          ${item.foodDescription ? `<div class="prompt-item-copy" style="margin-bottom:10px;"><strong>Food description</strong>${escapeHtml(item.foodDescription)}</div>` : ''}
+          <div class="prompt-item-copy"><strong>How it came up with this</strong>${escapeHtml(item.explanation || 'No explanation returned.')}</div>
+        </div>
+      `).join('')}</div>`
+    : '<div class="prompt-placeholder">The model returned no items for this test run.</div>';
+
+  document.getElementById('prompt-result-summary').innerHTML = `
+    ${metrics}
+    <div class="prompt-runtime-meta">${usageBadges}</div>
+    ${itemsHtml}
+  `;
+}
+
+function renderPromptLabFailure(data) {
+  const reason = data.failureReason || 'unknown_failure';
+  document.getElementById('prompt-result-summary').innerHTML = `
+    <div class="prompt-placeholder">Prompt test failed: ${escapeHtml(reason)}.</div>
+  `;
 }
 
 async function testDraftPrompt() {
   const btn = document.getElementById('prompt-test-btn');
   const msg = document.getElementById('prompt-test-msg');
   const inputText = document.getElementById('prompt-input-text').value.trim();
-  const prompt = document.getElementById('prompt-editor').value.trim();
-  if (!inputText || !prompt) {
+  const promptTemplate = document.getElementById('prompt-editor').value.trim();
+  if (!inputText || !promptTemplate) {
     alert('Add sample food text and a prompt first.');
     return;
   }
   btn.disabled = true;
   msg.style.display = 'inline-flex';
   document.getElementById('prompt-result').textContent = 'Testing draft prompt…';
+  renderPromptLabIdleState('Testing the current sample food text against the current draft prompt template…');
   try {
     const data = await api('/prompt-lab/test', {
       method: 'POST',
-      body: JSON.stringify({ inputText, prompt })
+      body: JSON.stringify({ inputText, promptTemplate })
     });
+    renderPromptLabRuntimeContext(data.runtime || {});
+    if (data.ok) {
+      renderPromptLabTestResult(data);
+    } else {
+      renderPromptLabFailure(data);
+    }
     document.getElementById('prompt-result').textContent = JSON.stringify(data, null, 2);
   } catch (e) {
+    document.getElementById('prompt-result-summary').innerHTML =
+      `<div class="prompt-placeholder">Prompt test failed: ${escapeHtml(e.message)}.</div>`;
     document.getElementById('prompt-result').textContent = 'Prompt test failed: ' + e.message;
   } finally {
     btn.disabled = false;

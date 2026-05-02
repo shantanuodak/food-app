@@ -57,9 +57,10 @@ export const parseResultSchema = z.object({
   })
 });
 
-export function buildGeminiFallbackPrompt(inputText: string, initialResult: ParseResult): string {
-  const segments = splitFoodTextSegments(inputText);
+const GEMINI_FALLBACK_DYNAMIC_RULES_TOKEN = '{{DYNAMIC_RULES}}';
+const GEMINI_FALLBACK_RUNTIME_CONTEXT_TOKEN = '{{RUNTIME_CONTEXT}}';
 
+export function buildGeminiFallbackPromptTemplate(): string {
   return [
     'You are a nutrition parsing assistant.',
     'Return strict JSON only. No markdown, no explanation.',
@@ -72,7 +73,7 @@ export function buildGeminiFallbackPrompt(inputText: string, initialResult: Pars
     '- keep items practical for meal logging',
     '- input may contain spelling mistakes; infer the intended common food item',
     '- preserve user-entered order of food mentions',
-    `- you MUST return exactly ${segments.length} item(s) — one per input segment, in the same order`,
+    GEMINI_FALLBACK_DYNAMIC_RULES_TOKEN,
     '- each segment is a separate food item even if joined by "and", "&", or "with"; never merge two segments into one item',
     '- if uncertain about a segment, still return a best-guess item with a lower matchConfidence',
     '- assumptions must always be an empty array',
@@ -80,10 +81,51 @@ export function buildGeminiFallbackPrompt(inputText: string, initialResult: Pars
     '- for each item, include a short foodDescription and a 3-5 sentence explanation of how you interpreted the item and estimated nutrition',
     '- do not include chain-of-thought or step-by-step reasoning; keep explanations user-friendly',
     '',
+    GEMINI_FALLBACK_RUNTIME_CONTEXT_TOKEN
+  ].join('\n');
+}
+
+function buildGeminiFallbackDynamicRule(inputText: string): string {
+  const segments = splitFoodTextSegments(inputText);
+  return `- you MUST return exactly ${segments.length} item(s) — one per input segment, in the same order`;
+}
+
+export function buildGeminiFallbackRuntimeContext(inputText: string, initialResult: ParseResult): string {
+  const segments = splitFoodTextSegments(inputText);
+  return [
     `Input segments (${segments.length}): ${JSON.stringify(segments)}`,
     `User meal text: ${inputText}`,
     `Current baseline parse (improve if possible): ${JSON.stringify(initialResult)}`
   ].join('\n');
+}
+
+export function renderGeminiFallbackPrompt(
+  promptTemplate: string,
+  inputText: string,
+  initialResult: ParseResult
+): string {
+  const dynamicRule = buildGeminiFallbackDynamicRule(inputText);
+  const runtimeContext = buildGeminiFallbackRuntimeContext(inputText, initialResult);
+  const normalizedTemplate = promptTemplate.trim();
+
+  if (!normalizedTemplate) {
+    return [dynamicRule, runtimeContext].join('\n\n');
+  }
+
+  if (
+    normalizedTemplate.includes(GEMINI_FALLBACK_DYNAMIC_RULES_TOKEN) ||
+    normalizedTemplate.includes(GEMINI_FALLBACK_RUNTIME_CONTEXT_TOKEN)
+  ) {
+    return normalizedTemplate
+      .replaceAll(GEMINI_FALLBACK_DYNAMIC_RULES_TOKEN, dynamicRule)
+      .replaceAll(GEMINI_FALLBACK_RUNTIME_CONTEXT_TOKEN, runtimeContext);
+  }
+
+  return [normalizedTemplate, dynamicRule, runtimeContext].join('\n\n');
+}
+
+export function buildGeminiFallbackPrompt(inputText: string, initialResult: ParseResult): string {
+  return renderGeminiFallbackPrompt(buildGeminiFallbackPromptTemplate(), inputText, initialResult);
 }
 
 async function tryGeminiFallback(inputText: string, initialResult: ParseResult): Promise<FallbackAttemptResult> {
