@@ -639,18 +639,24 @@ struct MainLoggingShellView: View {
 
     private var pendingSyncItemCount: Int {
         let unresolvedQueueItems = unresolvedPendingQueueItems
-        let unresolvedQueuedRowIDs = Set(unresolvedQueueItems.compactMap(\.rowID))
+        var pendingKeys = Set(unresolvedQueueItems.map { pendingSyncKey(for: $0) })
+        pendingKeys.formUnion(pendingPatchTasks.keys.map { "patch:\($0.uuidString)" })
+        pendingKeys.formUnion(pendingDeleteTasks.keys.map { "delete:\($0.uuidString)" })
+
         let unsavedVisibleRows = saveError == nil ? inputRows.filter { row in
             guard !row.isSaved else { return false }
-            guard !unresolvedQueuedRowIDs.contains(row.id) else { return false }
+            guard !pendingKeys.contains("row:\(row.id.uuidString)") else { return false }
             return row.calories != nil || !row.parsedItems.isEmpty || row.parsedItem != nil
-        }.count : 0
-        let activeQueueSyncRows = (isSaving || isSubmittingRestoredPendingSaves) ? unresolvedQueueItems.count : 0
-        return unsavedVisibleRows + activeQueueSyncRows + pendingPatchTasks.count + pendingDeleteTasks.count
+        } : []
+        pendingKeys.formUnion(unsavedVisibleRows.map { "row:\($0.id.uuidString)" })
+        return pendingKeys.count
     }
 
     private var syncStatusTitle: String {
-        "\(pendingSyncItemCount) \(pendingSyncItemCount == 1 ? "item" : "items") syncing"
+        if saveError != nil {
+            return pendingSyncItemCount == 1 ? "1 item waiting" : "\(pendingSyncItemCount) items waiting"
+        }
+        return pendingSyncItemCount == 1 ? "Saving 1 item" : "Saving \(pendingSyncItemCount) items"
     }
 
     private var syncStatusExplanation: String {
@@ -659,6 +665,13 @@ struct MainLoggingShellView: View {
         }
 
         return "These items are visible here and included in your calories. They are still syncing and will be confirmed automatically."
+    }
+
+    private func pendingSyncKey(for item: PendingSaveQueueItem) -> String {
+        if let rowID = item.rowID {
+            return "row:\(rowID.uuidString)"
+        }
+        return "key:\(item.idempotencyKey)"
     }
 
     private var streakDockIndicator: some View {
@@ -6221,10 +6234,23 @@ struct MainLoggingShellView: View {
         let serverLogIds = Set(serverEntries.map(\.id))
         return pendingSaveQueue
             .filter { item in
-                item.dateString == dateString && item.serverLogId.map { !serverLogIds.contains($0) } ?? true
+                guard item.dateString == dateString else { return false }
+                if item.serverLogId.map({ serverLogIds.contains($0) }) == true {
+                    return false
+                }
+                return !serverEntries.contains { pendingSaveItem(item, matchesServerLog: $0) }
             }
             .sorted { $0.createdAt < $1.createdAt }
             .map(makePendingSaveRow)
+    }
+
+    private func pendingSaveItem(_ item: PendingSaveQueueItem, matchesServerLog log: DayLogEntry) -> Bool {
+        let pending = item.request.parsedLog
+        guard normalizedRowText(pending.rawText) == normalizedRowText(log.rawText) else { return false }
+        guard normalizedInputKind(pending.inputKind, fallback: "text") == normalizedInputKind(log.inputKind, fallback: "text") else {
+            return false
+        }
+        return abs(pending.totals.calories - log.totals.calories) <= 0.5
     }
 
     private func makePendingSaveRow(from item: PendingSaveQueueItem) -> HomeLogRow {
@@ -6371,12 +6397,28 @@ struct MainLoggingShellView: View {
         } else {
             activeRows = []
         }
-        inputRows = orderedSavedRows + pendingRows + activeRows
+        let nextRows = orderedSavedRows + pendingRows + activeRows
+        if inputRowsSyncSignature(inputRows) != inputRowsSyncSignature(nextRows) {
+            inputRows = nextRows
+        }
 
         // Ensure there's always at least one empty active row for input
         if inputRows.allSatisfy({ $0.isSaved }) {
             inputRows.append(.empty())
         }
+    }
+
+    private func inputRowsSyncSignature(_ rows: [HomeLogRow]) -> String {
+        rows.map { row in
+            [
+                row.id.uuidString,
+                row.serverLogId ?? "",
+                normalizedRowText(row.text),
+                row.calories.map(String.init) ?? "",
+                row.isSaved ? "saved" : "draft"
+            ].joined(separator: "|")
+        }
+        .joined(separator: "\n")
     }
 
     private func stableUUID(from string: String) -> uuid_t {

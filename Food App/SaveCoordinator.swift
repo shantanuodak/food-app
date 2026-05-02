@@ -318,11 +318,37 @@ final class SaveCoordinator: ObservableObject {
         let serverLogIds = Set(logs.map(\.id))
         let beforeCount = pendingItems.count
         pendingItems.removeAll { item in
-            item.dateString == dateString && item.serverLogId.map { serverLogIds.contains($0) } == true
+            guard item.dateString == dateString else { return false }
+            if item.serverLogId.map({ serverLogIds.contains($0) }) == true {
+                return true
+            }
+            return logs.contains { log in
+                Self.pendingItem(item, matchesServerLog: log)
+            }
         }
         if pendingItems.count != beforeCount {
             persistence?.saveQueue(pendingItems)
         }
+    }
+
+    private static func pendingItem(_ item: PendingSaveQueueItem, matchesServerLog log: DayLogEntry) -> Bool {
+        let pending = item.request.parsedLog
+        guard normalize(pending.rawText) == normalize(log.rawText) else { return false }
+        guard normalizedInputKind(pending.inputKind) == normalizedInputKind(log.inputKind) else { return false }
+        return abs(pending.totals.calories - log.totals.calories) <= 0.5
+    }
+
+    private static func normalize(_ value: String) -> String {
+        value
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+    }
+
+    private static func normalizedInputKind(_ value: String?) -> String {
+        let kind = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return kind.isEmpty ? "text" : kind
     }
 
     func executeSave(
