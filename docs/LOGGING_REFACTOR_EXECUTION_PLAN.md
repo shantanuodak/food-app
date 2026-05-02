@@ -1,17 +1,33 @@
 # Logging Refactor: Execution Plan
 
-## Current status (2026-05-01)
+## Current status (2026-05-02)
 - Phase 0: Complete
 - Phase 1: Complete
-- Phase 2: Complete (flagged path shipped; legacy fallback still present by design)
-- Phase 3: Complete (flagged ParseCoordinator path wired; image/text/voice now converge through shared snapshot persistence)
-- Phase 4: Blocked by rollout rule (do not remove legacy branches until Phase 2/3 flagged paths have baked cleanly)
+- Phase 2: Complete (SaveCoordinator is now the active iOS save path)
+- Phase 3: Complete (ParseCoordinator is now the active iOS parse snapshot path; image/text/voice converge through shared snapshot persistence)
+- Phase 4: Implemented locally; awaiting release/manual gate verification
 - Phase 5: Complete (save_attempts telemetry table, ingest endpoint, server-side save-route recording)
 - Phase 6: Complete (recent-parses endpoint/dashboard now show save-attempt state)
 
+### Phase 4 implementation notes
+1. Removed live save/parse feature-flag branching from `MainLoggingShellView`; active behavior now runs through `SaveCoordinator` and `ParseCoordinator`.
+2. Removed the obsolete iOS `LoggingFeatureFlags` helper after the coordinator-only cutover.
+3. Fixed batch autosave throughput by preserving an existing autosave timer instead of restarting it for every completed row.
+4. Batch queue drains now defer full-day refresh until the batch completes, avoiding `loadDaySummary` + `loadDayLogs` after every saved row.
+5. The normal bottom sync pill is hidden during healthy saves. The app only surfaces the bottom sync pill for exception states where a save error exists and pending work remains.
+6. Extracted display-only helpers out of `MainLoggingShellView`:
+   - `MainLoggingDockViews.swift`
+   - `MainLoggingNutritionViews.swift`
+   - `AuthSessionDisplayName.swift`
+   - `HomeLoggingTextMatch.swift`
+7. Validation run:
+   - iOS build: `xcodebuild ... build` succeeded.
+   - Manual 12-item batch test saved cleanly while staying on the same day.
+8. Constraint: `MainLoggingShellView` is still above the long-term LOC target, but was reduced from 6,948 to 6,216 lines in the local cleanup pass. Deeper extraction remains Phase 7/code-shrink work.
+
 ### Phase 3 completion notes
-1. Added `ParseCoordinator` and parse feature flag wiring (`use_parse_coordinator` / `feature.useParseCoordinator`).
-2. Parse snapshot ownership now flows through a single helper path, and autosave consumers read coordinator snapshots when the flag is enabled.
+1. Added `ParseCoordinator`; the original feature flag wiring was removed during the Phase 4 coordinator-only cutover.
+2. Parse snapshot ownership now flows through a single helper path, and autosave consumers read coordinator snapshots directly.
 3. Image and voice flows now use the same snapshot/autosave pipeline used by text parsing.
 4. Canonical parse raw-text capture is enforced for save payload provenance (fixes parse-reference drift that causes `parse_only` persistence gaps).
 5. Validation run:
@@ -63,10 +79,8 @@ This document converts the architecture plan into an execution sequence with shi
 ### Branching and release strategy
 1. Use short-lived branches per task PR: `phase-0-1-save-telemetry`, etc.
 2. Squash merge to `main` only after task acceptance is met.
-3. Use runtime feature flags:
-   - `use_save_coordinator`
-   - `use_parse_coordinator`
-4. Keep legacy path in code until flag-on stability windows are complete.
+3. Historical note: Phases 2 and 3 shipped behind runtime feature flags.
+4. Current state: after Phase 4, the iOS app runs the coordinator paths directly and the legacy feature flag helper has been removed.
 
 ### Non-negotiable quality gates
 1. iOS build: `xcodebuild` green.
@@ -115,26 +129,24 @@ This document converts the architecture plan into an execution sequence with shi
 - Replace tuple-based `completedRowParses` with typed model.
 - No functional change.
 
-## Phase 2 (SaveCoordinator, behind flag)
+## Phase 2 (SaveCoordinator)
 ### PR 2.1 — Create coordinator + protocols
 - Build `SaveCoordinator` with injected API/storage/telemetry deps.
 - Move queue state ownership into coordinator.
 
-### PR 2.2 — Wire coordinator under flag
-- Keep legacy path as `legacy_*`.
-- New path only when `use_save_coordinator` enabled.
+### PR 2.2 — Wire coordinator
+- Historical rollout used a feature flag.
+- Current behavior is coordinator-only after Phase 4.
 
 ### PR 2.3 — Unit tests
 - Happy path, retries, duplicates, image failure fallback, patch, delete.
 
 ### Release gate for Phase 2
-1. Ship with flag OFF.
-2. Enable for staff/internal account.
-3. 48h bake.
-4. If stable, enable for all users.
-5. Keep legacy code until 7 days clean.
+1. Historical rollout used a flag-off, staff-only, bake, then all-user sequence.
+2. Current behavior is coordinator-only after Phase 4.
+3. Rollback is now commit-level rollback of the Phase 4 cutover, not runtime flag toggling.
 
-## Phase 3 (ParseCoordinator, behind flag)
+## Phase 3 (ParseCoordinator)
 ### PR 3.1 — Coordinator + row snapshot ownership
 - Move debounce/in-flight/queue/snapshot logic from view.
 
@@ -145,23 +157,24 @@ This document converts the architecture plan into an execution sequence with shi
 - Debounce, cancellation, snapshot creation, enqueue trigger behavior.
 
 ### Release gate for Phase 3
-1. Ship with flag OFF.
-2. Enable staff-only.
-3. 48h bake.
-4. Gradual 100% rollout.
-5. Keep legacy parse path 7 days clean.
+1. Historical rollout used a flag-off, staff-only, bake, then gradual all-user sequence.
+2. Current behavior is coordinator-only after Phase 4.
+3. Rollback is now commit-level rollback of the Phase 4 cutover, not runtime flag toggling.
 
 ## Phase 4 (view slimming and legacy removal)
 ### PR 4.1 — Remove legacy save/parse branches
 - Remove `legacy_*` only after Phase 2+3 stability windows.
 - Reduce `MainLoggingShellView` state surface.
+- Fix batch autosave throughput so completed rows do not rely on day-switch navigation to flush quickly.
+- Remove unnecessary per-row day refreshes during large autosave batches when the refresh pattern is the cause of delayed saved-state reconciliation.
 
 ### PR 4.2 — Update docs and runbook
 - Update `CLAUDE.md` and verification checklist.
 
 ### Acceptance
-- `MainLoggingShellView` at/below target LOC.
+- `MainLoggingShellView` materially reduced; final target LOC remains Phase 7/code-shrink work.
 - No save success-rate regression.
+- Multi-row batch save behaves the same while staying on Today as it does after switching away and back; navigation should not be required to accelerate save reconciliation.
 
 ## Phase 5/6 (backend telemetry and dashboard, parallel track)
 ### PR 5.1 — `save_attempts` migration + ingest endpoint
@@ -200,7 +213,7 @@ Start only after 14-day stable soak post-Phase 4.
 
 ## Rollback playbook
 
-1. For Phase 2/3 regressions: flip feature flag OFF immediately.
+1. For Phase 2/3 regressions after Phase 4: revert or roll back the coordinator-only cutover build.
 2. For backend telemetry regressions: disable internal ingest route use (non-user-facing).
 3. For migration issues: halt deploy and restore last healthy release.
 4. Never rollback by destructive DB reset; use forward fixes or controlled deploy rollback.

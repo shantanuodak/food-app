@@ -335,6 +335,7 @@ final class SaveCoordinator: ObservableObject {
         let pending = item.request.parsedLog
         guard normalize(pending.rawText) == normalize(log.rawText) else { return false }
         guard normalizedInputKind(pending.inputKind) == normalizedInputKind(log.inputKind) else { return false }
+        guard pending.loggedAt == log.loggedAt else { return false }
         return abs(pending.totals.calories - log.totals.calories) <= 0.5
     }
 

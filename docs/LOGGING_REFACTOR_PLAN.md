@@ -236,7 +236,7 @@ This is the unit `completedRowParses` already uses (it's an unnamed tuple). Prom
 
 **Estimate:** 3–4 days.
 
-**Feature flag:** `FeatureFlag.useSaveCoordinator` defaulting to `false`. Wire both legacy and new paths; choose at runtime. Flip to `true` for staff/internal users first via a `defaults set` override, then to all users after 48h soak.
+**Rollout note:** This phase originally shipped behind `FeatureFlag.useSaveCoordinator`. After the Phase 4 cutover, the coordinator path is the active path and the iOS feature flag helper has been removed.
 
 ### Task 2.1 — Create `SaveCoordinator.swift`
 
@@ -272,18 +272,9 @@ Owns:
 
 `MainLoggingShellView` keeps a `@StateObject` reference and calls `coordinator.enqueue(snapshot:row:)` instead of running the queue logic inline.
 
-### Task 2.2 — Behind-the-flag wiring
+### Task 2.2 — Coordinator wiring
 
-```swift
-// Inside MainLoggingShellView body init
-if FeatureFlag.useSaveCoordinator {
-    saveCoordinator.enqueue(snapshot: snapshot, row: row)
-} else {
-    legacy_scheduleAutoSave()  // rename existing function, keep path alive
-}
-```
-
-Both code paths must remain callable in this phase. Do NOT delete the legacy save logic yet.
+Historical rollout kept both coordinator and legacy paths callable behind a flag. After Phase 4, the iOS app runs through `SaveCoordinator` directly and the feature flag helper has been removed.
 
 ### Task 2.3 — Unit tests for `SaveCoordinator`
 
@@ -301,15 +292,13 @@ Mock `APIClient` and `ImageStorageService` (protocols, inject them). Tests:
 
 ### Task 2.4 — Production rollout
 
-1. Ship with flag off. Bake for 48h.
-2. Enable for 1 staff user via `defaults write com.welldoc.foodapp use_save_coordinator -bool true`.
-3. Verify: image-save and text-save both land on the staff account, telemetry shows the new code path.
-4. Enable for 100% via remote config (or hardcoded `true`).
-5. After 7 days no regressions: delete legacy paths in Phase 4.
+1. Historical rollout shipped behind a local flag and baked on staff/internal usage first.
+2. Phase 4 removed the iOS feature flag helper and legacy save/parse fallback branches from `MainLoggingShellView`.
+3. Current verification should focus on real save success rate, queue reconciliation, and dashboard save-attempt state.
 
 **Acceptance:** Production save success rate (saved / parse_attempts where parse confidence ≥ 0.7) does not drop. Run the diagnostic from `CLAUDE.md` schema cheat sheet to compare before/after.
 
-**Rollback:** Flip flag to false. No DB migrations involved.
+**Rollback:** Revert the Phase 4 iOS cutover commit. No DB migrations involved.
 
 ---
 
@@ -319,7 +308,7 @@ Mock `APIClient` and `ImageStorageService` (protocols, inject them). Tests:
 
 **Estimate:** 3–4 days.
 
-**Feature flag:** `FeatureFlag.useParseCoordinator`.
+**Rollout note:** This phase originally shipped behind `FeatureFlag.useParseCoordinator`. After the Phase 4 cutover, the coordinator path is the active path and the iOS feature flag helper has been removed.
 
 ### Task 3.1 — Create `ParseCoordinator.swift`
 
@@ -386,9 +375,12 @@ Voice: same pattern. Voice transcribes to text, then runs through `textChanged`.
 2. Delete every `@State` variable that's now owned by a coordinator (`pendingSaveQueue`, `completedRowParses`, `parseTask`, etc.).
 3. The view should be < 1500 lines after this phase. Track LOC before and after; if it's still > 2000, something's still leaked.
 4. Replace `pendingSaveQueue.first { ... }` patterns with `saveCoordinator.pendingItems.first { ... }`.
-5. Update CLAUDE.md to reflect the new architecture.
+5. Eliminate the current batch-save lag path where completed rows visibly show calories but do not flush to saved state until the user changes days. After the coordinator cutover, completed rows should drain through the save queue without requiring navigation-triggered `flushPendingAutoSaveIfEligible()`.
+6. Remove per-row full-day refresh behavior on successful batch autosaves when it is not needed for correctness. Batch saves should reconcile promptly, but the app must not refetch the full day after every single row in a large queue if that is what is delaying visible saved state.
+7. Remove normal-operation sync pill anxiety: healthy saves should happen quietly, while exception states still surface actionable retry/waiting information.
+8. Update CLAUDE.md to reflect the new architecture.
 
-**Acceptance:** Build green. No new failures in production save success rate. View LOC ≤ 1500.
+**Acceptance:** Build green. No new failures in production save success rate. In a multi-row batch, completed rows move to saved/reconciled state without requiring a day switch. Switching to Yesterday and back to Today must not be measurably faster than staying on Today for the same batch flush. The bottom sync pill should stay hidden during healthy saves and appear only when a real exception requires user awareness. The original `View LOC <= 1500` target remains a Phase 7/code-shrink target after the coordinator-only path bakes cleanly.
 
 ---
 
@@ -728,10 +720,10 @@ Adopted from handoff section 12.3 plus explicit performance numbers from Phases 
 15. **Gemini cost reduction:** Gemini route share of `parse_requests` drops **≥ 20% week-over-week** with no regression in `parse_only` rate.
 
 Each criterion is independently testable. The refactor is "done" when:
-- Criteria 1–7 (correctness) pass for 7 consecutive days with both feature flags on.
+- Criteria 1–7 (correctness) pass for 7 consecutive days on the coordinator-only build.
 - Criteria 8–15 (efficiency) pass on the post-Phase-10 build.
 
-If any criterion regresses, the responsible phase is rolled back via feature flag (or reverted commit for non-flagged phases).
+If any criterion regresses, the responsible phase is rolled back by reverting the coordinator-only cutover or the specific non-cutover change that introduced the regression.
 
 ---
 
@@ -741,7 +733,7 @@ If any criterion regresses, the responsible phase is rolled back via feature fla
 - Do not rename any public API endpoints, request/response fields, or DB columns.
 - Do not rewrite tests that already pass — keep the existing `backend/tests/*.unit.test.ts` and `Food App/Food AppTests/*.swift` green throughout.
 - Do not commit changes that fail `xcodebuild build` or `npx tsc --noEmit`.
-- Do not delete legacy code paths in the same PR that introduces their replacement. Always two-phase: ship behind flag → bake → delete.
+- Do not delete legacy code paths in the same PR that introduces their replacement. Always two-phase: ship behind a safe rollout control → bake → delete.
 - Do not modify `Food App/CLAUDE.md` to weaken the save-path verification rule.
 
 ---

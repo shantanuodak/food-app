@@ -37,6 +37,24 @@ photo attached. The bug surfaced loudly only when a separate fix
 silently swallowing the upload error — at which point image saves stopped
 landing entirely. xcodebuild-green is necessary, not sufficient.
 
+## Logging architecture note
+
+As of the Phase 4 cleanup on 2026-05-02, the iOS logging flow is
+coordinator-first:
+
+- `ParseCoordinator` owns per-row parse snapshots.
+- `SaveCoordinator` owns pending save queue state, retry state, queue
+  persistence, save execution, success/failure marking, reconciliation,
+  delete calls, and deferred image-upload retry scheduling.
+- `MainLoggingShellView` still contains substantial UI and orchestration
+  code, but it should not reintroduce feature-flagged save/parse fallback
+  branches.
+
+Healthy autosaves should be quiet. Completed rows may be visible before
+the server refresh returns, but they must either be server-saved or backed
+by the durable pending queue. The bottom sync pill is reserved for
+exception states where a real save error exists and pending work remains.
+
 ## Image upload is decoupled from save
 
 After the fix in commit 0443246, `ImageStorageService.uploadJPEG`
