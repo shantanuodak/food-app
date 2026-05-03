@@ -56,7 +56,7 @@ function normalizeForEscalation(text: string): string {
     .trim();
 }
 
-function buildGeminiEscalationPrompt(inputText: string): string {
+export function buildGeminiEscalationPrompt(inputText: string): string {
   return [
     'You are a nutrition parsing assistant for food logging.',
     'Return strict JSON only. No markdown, no explanation.',
@@ -66,9 +66,20 @@ function buildGeminiEscalationPrompt(inputText: string): string {
     '- all numeric fields are non-negative',
     '- confidence and matchConfidence are in [0,1]',
     '- totals are sums of item values rounded to 1 decimal',
-    '- prefer practical food names and realistic portions',
+    '- keep food names and portions practical for meal logging',
+    '- input may contain spelling mistakes; infer the intended common food item',
+    '- preserve user-entered order of food mentions',
+    '- for recognizable branded or chain restaurant items, use the official label/menu serving when possible',
+    '- for generic foods, use USDA-style common serving estimates',
+    '- when quantity is missing, assume one practical serving',
+    '- default servings: egg=1 large, banana=1 medium, apple=1 medium, bread=1 slice, rice/pasta=1 cooked cup, milk=1 cup, oil=1 tbsp, bar/package/menu item=1 labeled serving',
+    '- set matchConfidence based on food identity and portion confidence, not JSON validity',
+    '- use matchConfidence 0.9-1.0 for exact clear matches, 0.7-0.89 for reasonable common estimates, 0.4-0.69 for ambiguous portions or typo recovery',
+    '- calories and macros must be realistic and internally consistent; check calories roughly agree with macros using 4 kcal/g protein, 4 kcal/g carbs, and 9 kcal/g fat',
+    '- if uncertain, still return a best-guess item with a lower matchConfidence',
     '- assumptions must always be an empty array',
-    '- for each item, include a short foodDescription and a 3-5 sentence explanation of how you interpreted the item and estimated nutrition',
+    '- avoid zero-calorie outputs unless the item is truly near-zero',
+    '- for each item, include a short foodDescription and one short user-facing explanation sentence',
     '- do not include chain-of-thought or step-by-step reasoning; keep explanations user-friendly',
     '',
     `User meal text: ${inputText}`

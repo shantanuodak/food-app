@@ -322,6 +322,9 @@ final class SaveCoordinator: ObservableObject {
             if item.serverLogId.map({ serverLogIds.contains($0) }) == true {
                 return true
             }
+            if item.serverLogId != nil, Date().timeIntervalSince(item.createdAt) > 120 {
+                return true
+            }
             return logs.contains { log in
                 Self.pendingItem(item, matchesServerLog: log)
             }

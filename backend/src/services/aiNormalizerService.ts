@@ -70,15 +70,24 @@ export function buildGeminiFallbackPromptTemplate(): string {
     '- all numeric fields are non-negative',
     '- confidence and matchConfidence are in [0,1]',
     '- totals are sums of item values rounded to 1 decimal',
-    '- keep items practical for meal logging',
+    '- keep food names and portions practical for meal logging',
     '- input may contain spelling mistakes; infer the intended common food item',
     '- preserve user-entered order of food mentions',
     GEMINI_FALLBACK_DYNAMIC_RULES_TOKEN,
-    '- each segment is a separate food item even if joined by "and", "&", or "with"; never merge two segments into one item',
+    '- use the provided input segments as the source of truth',
+    '- return exactly one item per input segment; do not split, merge, add, or drop segments',
+    '- use the baseline parse only as a hint; correct wrong food matches, quantities, grams, and macros when the input implies a better interpretation',
+    '- for recognizable branded or chain restaurant items, use the official label/menu serving when possible',
+    '- for generic foods, use USDA-style common serving estimates',
+    '- when quantity is missing, assume one practical serving',
+    '- default servings: egg=1 large, banana=1 medium, apple=1 medium, bread=1 slice, rice/pasta=1 cooked cup, milk=1 cup, oil=1 tbsp, bar/package/menu item=1 labeled serving',
+    '- set matchConfidence based on food identity and portion confidence, not JSON validity',
+    '- use matchConfidence 0.9-1.0 for exact clear matches, 0.7-0.89 for reasonable common estimates, 0.4-0.69 for ambiguous portions or typo recovery',
+    '- calories and macros must be realistic and internally consistent; check calories roughly agree with macros using 4 kcal/g protein, 4 kcal/g carbs, and 9 kcal/g fat',
     '- if uncertain about a segment, still return a best-guess item with a lower matchConfidence',
     '- assumptions must always be an empty array',
     '- avoid zero-calorie outputs unless the item is truly near-zero',
-    '- for each item, include a short foodDescription and a 3-5 sentence explanation of how you interpreted the item and estimated nutrition',
+    '- for each item, include a short foodDescription and one short user-facing explanation sentence',
     '- do not include chain-of-thought or step-by-step reasoning; keep explanations user-friendly',
     '',
     GEMINI_FALLBACK_RUNTIME_CONTEXT_TOKEN
@@ -95,7 +104,7 @@ export function buildGeminiFallbackRuntimeContext(inputText: string, initialResu
   return [
     `Input segments (${segments.length}): ${JSON.stringify(segments)}`,
     `User meal text: ${inputText}`,
-    `Current baseline parse (improve if possible): ${JSON.stringify(initialResult)}`
+    `Current baseline parse (hint only; improve or replace inaccurate values): ${JSON.stringify(initialResult)}`
   ].join('\n');
 }
 

@@ -127,7 +127,7 @@ export const config = {
   parseProviderRouteVersion: process.env.PARSE_PROVIDER_ROUTE_VERSION || 'r2',
   parsePromptVersion:
     process.env.PARSE_PROMPT_VERSION ||
-    `${process.env.AI_FALLBACK_MODEL_NAME || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash'}:v2`,
+    `${process.env.AI_FALLBACK_MODEL_NAME || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash'}:v3`,
   parseRequestTtlHours: numberWithDefault('PARSE_REQUEST_TTL_HOURS', 24),
   alertEscalationRateThreshold: numberWithDefault('ALERT_ESCALATION_RATE_THRESHOLD', 0.08),
   alertEscalationWindowMinutes: numberWithDefault('ALERT_ESCALATION_WINDOW_MINUTES', 15),

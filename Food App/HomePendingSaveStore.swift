@@ -29,9 +29,21 @@ enum HomePendingSaveStore {
 
     static func loadQueue(defaults: UserDefaults = .standard) -> [PendingSaveQueueItem] {
         var items: [PendingSaveQueueItem] = []
+        var shouldPersistMigratedQueue = false
         if let data = defaults.data(forKey: queueKey),
            let decoded = try? JSONDecoder().decode([PendingSaveQueueItem].self, from: data) {
-            items = decoded
+            items = decoded.map { item in
+                let normalizedDateString = HomeLoggingDateUtils.summaryDayString(
+                    fromLoggedAt: item.request.parsedLog.loggedAt,
+                    fallback: item.dateString
+                )
+                guard normalizedDateString != item.dateString else { return item }
+
+                var updated = item
+                updated.dateString = normalizedDateString
+                shouldPersistMigratedQueue = true
+                return updated
+            }
         }
 
         if let legacy = load(defaults: defaults),
@@ -50,6 +62,10 @@ enum HomePendingSaveStore {
                 serverLogId: nil
             )
             items.append(legacyItem)
+            shouldPersistMigratedQueue = true
+        }
+
+        if shouldPersistMigratedQueue {
             saveQueue(items, defaults: defaults)
         }
 
