@@ -42,7 +42,7 @@ enum HomePendingSaveStore {
                 request: legacy.request,
                 fingerprint: legacy.fingerprint,
                 idempotencyKey: legacy.idempotencyKey,
-                dateString: String(legacy.request.parsedLog.loggedAt.prefix(10)),
+                dateString: HomeLoggingDateUtils.summaryDayString(fromLoggedAt: legacy.request.parsedLog.loggedAt),
                 createdAt: Date(),
                 imageUploadData: nil,
                 imagePreviewData: nil,

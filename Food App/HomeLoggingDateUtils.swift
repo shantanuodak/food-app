@@ -39,4 +39,17 @@ enum HomeLoggingDateUtils {
         let today = Calendar.current.startOfDay(for: Date())
         return min(normalized, today)
     }
+
+    static func summaryDayString(fromLoggedAt loggedAt: String, fallback: String? = nil) -> String {
+        if let parsed = loggedAtFormatter.date(from: loggedAt) ??
+            ISO8601DateFormatter().date(from: loggedAt) {
+            return summaryRequestFormatter.string(from: parsed)
+        }
+
+        if loggedAt.count >= 10 {
+            return String(loggedAt.prefix(10))
+        }
+
+        return fallback ?? summaryRequestFormatter.string(from: Date())
+    }
 }

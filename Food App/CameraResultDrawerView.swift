@@ -202,132 +202,53 @@ struct CameraResultDrawerView: View {
 
     private func parsedContent(image: UIImage, items: [ParsedFoodItem], totals: NutritionTotals) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Full-width image
+            // Hero image with re-parse + close icons
             ZStack(alignment: .topTrailing) {
                 Image(uiImage: image)
                     .resizable()
                     .scaledToFill()
                     .frame(maxWidth: .infinity)
-                    .frame(height: 260)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                    .frame(height: 224)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-                Button { onDiscard() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(.black.opacity(0.45), in: Circle())
+                HStack(spacing: 8) {
+                    Button { onRetry() } label: {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(.black.opacity(0.42), in: Circle())
+                    }
+                    Button { onDiscard() } label: {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(.black.opacity(0.42), in: Circle())
+                    }
                 }
-                .padding(14)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-
-            // Food name
-            Text(foodDisplayName(items: items))
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
-
-            // Calorie hero row
-            HStack(alignment: .firstTextBaseline, spacing: 0) {
-                Image(systemName: "flame.fill")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(
-                        LinearGradient(colors: [.orange, Color(red: 1, green: 0.45, blue: 0.1)],
-                                       startPoint: .top, endPoint: .bottom)
-                    )
-                    .padding(.trailing, 6)
-                    .padding(.bottom, 3)
-
-                Text("\(Int(totals.calories))")
-                    .font(.system(size: 42, weight: .bold))
-                    .foregroundStyle(.primary)
-
-                Text(" cal")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .padding(.bottom, 4)
-            }
-            .padding(.horizontal, 20)
-            .padding(.top, 6)
-
-            // Macro cards
-            HStack(spacing: 10) {
-                macroCard(
-                    icon: "bolt.fill",
-                    value: "\(Int(totals.protein))g",
-                    label: "Protein",
-                    color: Color(red: 0.380, green: 0.333, blue: 0.961),
-                    bgColor: Color(red: 0.380, green: 0.333, blue: 0.961).opacity(0.08)
-                )
-                macroCard(
-                    icon: "leaf.fill",
-                    value: "\(Int(totals.carbs))g",
-                    label: "Carbs",
-                    color: .green,
-                    bgColor: Color.green.opacity(0.08)
-                )
-                macroCard(
-                    icon: "drop.fill",
-                    value: "\(Int(totals.fat))g",
-                    label: "Fat",
-                    color: .blue,
-                    bgColor: Color.blue.opacity(0.08)
-                )
+                .padding(13)
             }
             .padding(.horizontal, 20)
             .padding(.top, 16)
 
-            // Items list (if multiple)
-            if items.count > 1 {
-                VStack(spacing: 0) {
-                    Divider()
-                        .padding(.horizontal, 20)
-                        .padding(.top, 20)
+            LoggingResultDrawerBody(
+                foodName: foodDisplayName(items: items),
+                totals: totals,
+                items: items,
+                thoughtProcess: cameraThoughtProcess(items: items),
+                onItemQuantityChange: nil,
+                onRecalculate: onRetry
+            )
 
-                    VStack(alignment: .leading, spacing: 0) {
-                        Text("Detected items")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.secondary)
-                            .padding(.bottom, 12)
-
-                        ForEach(Array(items.prefix(5).enumerated()), id: \.offset) { idx, item in
-                            HStack {
-                                Text(item.name)
-                                    .font(.system(size: 14))
-                                    .foregroundStyle(.primary)
-                                    .lineLimit(1)
-                                Spacer()
-                                Text("\(Int(item.calories)) cal")
-                                    .font(.system(size: 14, weight: .medium))
-                                    .foregroundStyle(.secondary)
-                            }
-                            .padding(.bottom, idx < min(items.count, 5) - 1 ? 12 : 0)
-                        }
-
-                        if items.count > 5 {
-                            Text("+\(items.count - 5) more")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .padding(.top, 10)
-                        }
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 16)
-                }
-            }
-
-            // Action buttons
-            VStack(spacing: 8) {
+            // CTA
+            VStack(spacing: 4) {
                 Button(action: onLogIt) {
                     Text("Log it")
-                        .font(.system(size: 16, weight: .semibold))
+                        .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 16)
+                        .frame(height: 54)
                         .background(
                             LinearGradient(
                                 colors: [Color(red: 0.420, green: 0.370, blue: 1.0),
@@ -341,10 +262,10 @@ struct CameraResultDrawerView: View {
 
                 Button(action: onDiscard) {
                     Text("Discard")
-                        .font(.system(size: 15, weight: .medium))
+                        .font(.system(size: 15, weight: .regular))
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
+                        .frame(height: 44)
                 }
             }
             .padding(.horizontal, 20)
@@ -353,24 +274,24 @@ struct CameraResultDrawerView: View {
         }
     }
 
-    @ViewBuilder
-    private func macroCard(icon: String, value: String, label: String, color: Color, bgColor: Color) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(color)
-
-            Text(value)
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.primary)
-
-            Text(label)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
+    private func cameraThoughtProcess(items: [ParsedFoodItem]) -> String {
+        if items.count > 1 {
+            let names = items.prefix(3).map(\.name)
+            let preview = names.count <= 2
+                ? names.joined(separator: " & ")
+                : "\(names[0]), \(names[1]) & more"
+            let total = Int(items.reduce(0) { $0 + $1.calories }.rounded())
+            return "Detected \(items.count) items from the photo: \(preview). Estimated \(total) kcal using standard nutrition data."
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
-        .background(bgColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        if let item = items.first {
+            if let explanation = item.explanation,
+               !explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return explanation
+            }
+            let qty = HomeLoggingDisplayText.formatOneDecimal(item.quantity)
+            return "Identified \"\(item.name)\" from the photo — \(Int(item.calories.rounded())) kcal using a \(qty) \(item.unit) standard portion."
+        }
+        return "Photo analyzed. A calorie estimate is available."
     }
 
     // MARK: - Error State

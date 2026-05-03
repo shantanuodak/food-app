@@ -146,9 +146,9 @@ final class SaveCoordinator: ObservableObject {
         serverLogId: String?
     ) {
         let key = idempotencyKey.uuidString.lowercased()
-        let dateString = String(request.parsedLog.loggedAt.prefix(10))
+        let dateString = HomeLoggingDateUtils.summaryDayString(fromLoggedAt: request.parsedLog.loggedAt)
         let existingIndex = pendingItems.firstIndex { item in
-            item.idempotencyKey == key || (rowID != nil && item.rowID == rowID && item.serverLogId == nil)
+            item.idempotencyKey == key || (rowID != nil && item.rowID == rowID)
         }
         let existing = existingIndex.map { pendingItems[$0] }
         let item = PendingSaveQueueItem(

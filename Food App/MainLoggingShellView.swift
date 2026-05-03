@@ -136,7 +136,6 @@ struct MainLoggingShellView: View {
     }
 
     private enum DetailsDrawerMode {
-        case compact
         case full
         case manualAdd
     }
@@ -1097,45 +1096,82 @@ struct MainLoggingShellView: View {
 
     @ViewBuilder
     private var detailsDrawer: some View {
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 12) {
-                    if let loggedAtLabel = drawerLoggedAtLabel(from: parseResult?.loggedAt) {
-                        HStack(spacing: 6) {
-                            Image(systemName: "clock")
-                                .font(.caption)
-                            Text("Logged at \(loggedAtLabel)")
-                                .font(.footnote)
-                        }
-                        .foregroundStyle(.secondary)
-                        .padding(.bottom, 2)
-                    }
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                if detailsDrawerMode == .manualAdd {
+                    manualAddDrawerContent
+                        .padding()
+                } else if let parseResult {
+                    Text("Food App Result")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .textCase(.uppercase)
+                        .tracking(0.5)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 22)
 
-                    if detailsDrawerMode == .manualAdd {
-                        manualAddDrawerContent
-                    } else if let parseResult {
-                        if detailsDrawerMode == .compact {
-                            compactDrawerContent(parseResult)
-                        } else {
-                            fullDrawerContent(parseResult)
+                    LoggingResultDrawerBody(
+                        foodName: drawerFoodName(from: parseResult),
+                        totals: displayedTotals,
+                        items: displayedDrawerItems,
+                        thoughtProcess: drawerThoughtProcess(for: parseResult),
+                        onItemQuantityChange: { itemOffset, quantity in
+                            applyActiveParseItemQuantity(itemOffset: itemOffset, quantity: quantity)
+                        },
+                        onRecalculate: {
+                            isDetailsDrawerPresented = false
+                            triggerParseNow()
                         }
-                    } else {
-                        Text(L10n.parseFirstHint)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .padding()
-            }
-            .navigationTitle(L10n.parseDetailsTitle)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    drawerCheckmarkButton(accessibilityLabel: L10n.doneButton) {
-                        isDetailsDrawerPresented = false
-                    }
+                    )
+                    .padding(.bottom, 44)
+                } else {
+                    Text(L10n.parseFirstHint)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .padding()
                 }
             }
         }
+        .presentationDragIndicator(.visible)
+    }
+
+    private func drawerFoodName(from result: ParseLogResponse) -> String {
+        let names = result.items.prefix(3).map(\.name)
+        if names.isEmpty { return "Food" }
+        if names.count == 1 { return names[0] }
+        if names.count == 2 { return "\(names[0]) & \(names[1])" }
+        return "\(names[0]), \(names[1]) & more"
+    }
+
+    private func drawerThoughtProcess(for result: ParseLogResponse) -> String {
+        let sourceLabel = HomeLoggingDisplayText.sourceLabelForRowItems(
+            result.items, route: result.route, routeDisplayName: nil
+        )
+        let isApprox = result.confidence < 0.85 || result.needsClarification
+
+        if result.items.count > 1 {
+            let names = result.items.prefix(3).map(\.name)
+            let preview = names.count <= 2
+                ? names.joined(separator: " & ")
+                : "\(names[0]), \(names[1]) & more"
+            let total = Int(result.totals.calories.rounded())
+            var text = "Interpreted as \(result.items.count) items: \(preview). Used \(sourceLabel) to estimate \(total) kcal total."
+            if isApprox { text += " Result is marked approximate." }
+            return text
+        }
+
+        if let item = result.items.first {
+            if let explanation = item.explanation,
+               !explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return explanation
+            }
+            let qty = HomeLoggingDisplayText.formatOneDecimal(item.quantity)
+            var text = "Interpreted as \"\(item.name)\". Used \(qty) \(item.unit) with \(sourceLabel) to estimate \(Int(item.calories.rounded())) kcal."
+            if isApprox { text += " Result is marked approximate." }
+            return text
+        }
+
+        return "A calorie estimate is available but no matched item was retained. Re-parse to refine."
     }
 
     private func drawerLoggedAtLabel(from loggedAtISO: String?) -> String? {
@@ -1182,187 +1218,55 @@ struct MainLoggingShellView: View {
     @ViewBuilder
     private func rowCalorieDetailsSheet(_ details: RowCalorieDetails) -> some View {
         let liveDetails = liveRowCalorieDetails(for: details.id, fallback: details)
+        let totals = NutritionTotals(
+            calories: Double(liveDetails.calories),
+            protein: liveDetails.protein ?? 0,
+            carbs: liveDetails.carbs ?? 0,
+            fat: liveDetails.fat ?? 0
+        )
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Hero image — shown when a food photo is available
                     if let imageData = liveDetails.imagePreviewData,
                        let uiImage = UIImage(data: imageData) {
                         Image(uiImage: uiImage)
                             .resizable()
                             .scaledToFill()
                             .frame(maxWidth: .infinity)
-                            .frame(height: 180)
-                            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                            .frame(height: 224)
+                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16)
+                    } else {
+                        // Text-entry eyebrow when there is no photo
+                        Text("Food App Result")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                            .textCase(.uppercase)
+                            .tracking(0.5)
+                            .padding(.horizontal, 20)
+                            .padding(.top, 22)
+                    }
+
+                    LoggingResultDrawerBody(
+                        foodName: liveDetails.displayName,
+                        totals: totals,
+                        items: liveDetails.parsedItems,
+                        thoughtProcess: liveDetails.thoughtProcess,
+                        onItemQuantityChange: { itemOffset, quantity in
+                            applyRowItemQuantity(
+                                rowID: liveDetails.id,
+                                itemOffset: itemOffset,
+                                quantity: quantity
                             )
-                    } else if let imageRef = liveDetails.imageRef,
-                              !imageRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("Food Photo")
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(.secondary)
-                            Text("Stored as \(imageRef)")
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(2)
-                        }
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(detailMutedFillColor)
-                                .overlay(
-                                    RoundedRectangle(cornerRadius: 10)
-                                        .stroke(detailBorderColor, lineWidth: 1)
-                                )
-                        )
-                    }
-
-                    HStack(alignment: .top, spacing: 12) {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(liveDetails.displayName)
-                                .font(.title3.weight(.semibold))
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Text("\(liveDetails.calories) cal")
-                                .font(.title2.weight(.bold))
-                        }
-
-                        Spacer(minLength: 0)
-
-                        VStack(alignment: .trailing, spacing: 6) {
-                            if liveDetails.hasManualOverride {
-                                Text("Manual Override")
-                                    .font(.caption2.weight(.semibold))
-                                    .foregroundStyle(.orange)
-                                    .padding(.horizontal, 8)
-                                    .padding(.vertical, 4)
-                                    .background(
-                                        Capsule()
-                                            .fill(Color.orange.opacity(0.15))
-                                    )
-                            }
-                            if !liveDetails.hasManualOverride {
-                                Text(liveDetails.itemConfidence == nil ? "Confidence" : "Match Confidence")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                Text("\(Int((liveDetails.primaryConfidence * 100).rounded()))%")
-                                    .font(.headline.weight(.semibold))
-                                    .foregroundStyle(liveDetails.primaryConfidence >= 0.7 ? .green : .orange)
-                            }
-                        }
-                    }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Macro Breakdown")
-                            .font(.headline)
-
-                        if let protein = liveDetails.protein,
-                           let carbs = liveDetails.carbs,
-                           let fat = liveDetails.fat {
-                            HStack(spacing: 10) {
-                                statPill(title: "Calories", value: "\(liveDetails.calories)")
-                                statPill(title: "Protein", value: HomeLoggingDisplayText.formatOneDecimal(protein) + "g")
-                            }
-                            HStack(spacing: 10) {
-                                statPill(title: "Carbs", value: HomeLoggingDisplayText.formatOneDecimal(carbs) + "g")
-                                statPill(title: "Fat", value: HomeLoggingDisplayText.formatOneDecimal(fat) + "g")
-                            }
-                        } else {
-                            Text("Macro breakdown is not available for this row yet.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-
-                    if liveDetails.parsedItems.count > 1 {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text("Items")
-                                .font(.headline)
-                            ForEach(Array(liveDetails.parsedItems.enumerated()), id: \.offset) { idx, item in
-                                if item.isUnresolvedPlaceholder {
-                                    unresolvedItemRow(rowID: liveDetails.id, itemIndex: idx, item: item)
-                                } else {
-                                    HStack(alignment: .center, spacing: 10) {
-                                        VStack(alignment: .leading, spacing: 2) {
-                                            Text(item.name)
-                                                .font(.subheadline.weight(.medium))
-                                            Text("\(item.quantity.formatted()) \(item.unit)")
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                        Spacer()
-                                        VStack(alignment: .trailing, spacing: 2) {
-                                            Text("\(Int(item.calories.rounded())) cal")
-                                                .font(.subheadline.weight(.semibold))
-                                            if let protein = Optional(item.protein),
-                                               let carbs = Optional(item.carbs),
-                                               let fat = Optional(item.fat) {
-                                                Text("P \(HomeLoggingDisplayText.formatOneDecimal(protein))g · C \(HomeLoggingDisplayText.formatOneDecimal(carbs))g · F \(HomeLoggingDisplayText.formatOneDecimal(fat))g")
-                                                    .font(.caption2)
-                                                    .foregroundStyle(.secondary)
-                                            }
-                                        }
-                                    }
-                                    .padding(.vertical, 8)
-                                    .padding(.horizontal, 12)
-                                    .background(
-                                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                            .fill(detailCardFillColor)
-                                            .overlay(
-                                                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                                    .stroke(detailBorderColor, lineWidth: 1)
-                                            )
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    if liveDetails.hasManualOverride {
-                        manualOverrideSection(liveDetails)
-                    }
-
-                    if shouldShowServingSizeSection(liveDetails) {
-                        rowServingSizeSection(liveDetails)
-                    }
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        HStack {
-                            Text("Why this match")
-                                .font(.headline)
-                            Spacer()
-                            Text(liveDetails.sourceLabel)
-                                .font(.caption.weight(.semibold))
-                                .foregroundStyle(detailSecondaryTextColor)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(
-                                    Capsule()
-                                        .fill(detailMetadataPillFillColor)
-                                )
-                        }
-                        Text(liveDetails.thoughtProcess)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .padding(14)
-                    .background(
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(detailCardFillColor)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(detailBorderColor, lineWidth: 1)
-                            )
+                        },
+                        onRecalculate: nil
                     )
-
-
+                    .padding(.bottom, 44)
                 }
-                .padding()
             }
-            .navigationTitle("Item Details")
+            .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
@@ -1842,12 +1746,40 @@ struct MainLoggingShellView: View {
         return inputRows[rowIndex].parsedItems[itemOffset].servingOptions
     }
 
+    private var displayedDrawerItems: [ParsedFoodItem] {
+        if editableItems.isEmpty {
+            return parseResult?.items ?? []
+        }
+        return editableItems.map { $0.asParsedFoodItem() }
+    }
+
+    @MainActor
+    private func applyActiveParseItemQuantity(itemOffset: Int, quantity: Double) {
+        if editableItems.isEmpty, let items = parseResult?.items, items.indices.contains(itemOffset) {
+            editableItems = items.map(EditableParsedItem.init(apiItem:))
+        }
+        guard editableItems.indices.contains(itemOffset) else { return }
+        editableItems[itemOffset].updateQuantity(quantity)
+        scheduleAutoSave()
+    }
+
+    @MainActor
+    private func applyRowItemQuantity(rowID: UUID, itemOffset: Int, quantity: Double) {
+        guard let rowIndex = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
+        guard inputRows[rowIndex].parsedItems.indices.contains(itemOffset) else { return }
+        applyRowParsedItemEdit(rowIndex: rowIndex, itemOffset: itemOffset) { editable in
+            editable.updateQuantity(quantity)
+        }
+        handleQuantityFastPathUpdate(rowID: rowID)
+    }
+
     private func applyRowServingOption(rowID: UUID, itemOffset: Int, option: ParsedServingOption) {
         guard let rowIndex = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
         guard inputRows[rowIndex].parsedItems.indices.contains(itemOffset) else { return }
         applyRowParsedItemEdit(rowIndex: rowIndex, itemOffset: itemOffset) { editable in
             editable.applyServingOption(option)
         }
+        handleQuantityFastPathUpdate(rowID: rowID)
     }
 
     private func selectedServingOptionOffset(rowID: UUID, itemOffset: Int, servingOptions: [ParsedServingOption]) -> Int? {
@@ -2262,106 +2194,34 @@ struct MainLoggingShellView: View {
 
     @MainActor
     private func handlePickedImage(_ image: UIImage) async {
+        // Dismiss the picker sheet first, then open the analysis drawer —
+        // identical flow to the camera capture path so both feel the same.
         isImagePickerPresented = false
+        inputMode = .text
+        selectedCameraSource = nil
+
         debounceTask?.cancel()
         parseTask?.cancel()
         cancelAutoSaveTask()
         parseRequestSequence += 1
-
-        guard let prepared = prepareImagePayload(from: image) else {
-            parseError = "Unable to process this image. Please try another photo."
-            inputMode = .text
-            selectedCameraSource = nil
-            return
-        }
-
-        ensureDraftTimingStarted()
-
-        pendingImageData = prepared.uploadData
-        pendingImagePreviewData = prepared.previewData
-        pendingImageMimeType = prepared.mimeType
-        pendingImageStorageRef = nil
-        latestParseInputKind = "image"
-
-        parseInfoMessage = "Analyzing photo…"
+        parseCoordinator.clearAll()
+        autoSavedParseIDs = []
+        clearPendingSaveContext()
+        appStore.setError(nil)
         parseError = nil
         saveError = nil
         saveSuccessMessage = nil
         escalationError = nil
         escalationInfoMessage = nil
         escalationBlockedCode = nil
-        parseCoordinator.clearAll()
-        autoSavedParseIDs = []
-        clearPendingSaveContext()
-        appStore.setError(nil)
 
-        parseInFlightCount += 1
-        let startedAt = Date()
-        defer {
-            parseInFlightCount = max(0, parseInFlightCount - 1)
-            inputMode = .text
-            selectedCameraSource = nil
-        }
+        // iOS needs a beat between sheet dismissal and the next sheet presentation.
+        try? await Task.sleep(for: .milliseconds(350))
 
-        do {
-            let response = try await appStore.apiClient.parseImageLog(
-                imageData: prepared.uploadData,
-                mimeType: prepared.mimeType,
-                loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
-            )
-            let durationMs = elapsedMs(since: startedAt)
-
-            var rowText = (response.extractedText ?? "")
-                .trimmingCharacters(in: .whitespacesAndNewlines)
-            if rowText.isEmpty {
-                rowText = response.items.map(\.name).joined(separator: ", ")
-            }
-            if rowText.isEmpty {
-                rowText = "Photo meal"
-            }
-
-            var row = HomeLogRow.empty()
-            row.text = rowText
-            row.imagePreviewData = prepared.previewData
-            row.imageRef = pendingImageStorageRef
-            suppressDebouncedParseOnce = true
-
-            let savedRows = inputRows.filter { $0.isSaved }
-            let unsavedNonEmpty = inputRows.filter {
-                !$0.isSaved && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            }
-            inputRows = savedRows + unsavedNonEmpty + [row]
-            clearParseSchedulerState()
-
-            parseResult = response
-            latestParseInputKind = normalizedInputKind(response.inputKind, fallback: "image")
-            editableItems = response.items.map(EditableParsedItem.init(apiItem:))
-            let imageRowIDs: Set<UUID> = [row.id]
-            applyRowParseResult(response, targetRowIDs: imageRowIDs)
-            if let idx = inputRows.lastIndex(where: { $0.id == row.id }) {
-                inputRows[idx].imagePreviewData = prepared.previewData
-                inputRows[idx].imageRef = pendingImageStorageRef
-            }
-            parseInfoMessage = nil
-            parseError = nil
-            saveError = nil
-            appStore.setError(nil)
-            upsertParseSnapshot(
-                rowID: row.id,
-                response: response,
-                fallbackRawText: rowText
-            )
-            scheduleDetailsDrawer(for: response)
-            emitParseTelemetrySuccess(response: response, durationMs: durationMs, uiApplied: true)
-            scheduleAutoSave()
-        } catch {
-            let durationMs = elapsedMs(since: startedAt)
-            handleAuthFailureIfNeeded(error)
-            parseInfoMessage = nil
-            parseError = userFriendlyParseError(error)
-            appStore.setError(parseError)
-            emitParseTelemetryFailure(error: error, durationMs: durationMs, uiApplied: true)
-        }
+        cameraDrawerImage = image
+        cameraDrawerState = .analyzing(image)
+        isCameraAnalysisSheetPresented = true
+        await parseAndUpdateDrawer(image)
     }
 
     private func clearImageContext() {
@@ -2455,226 +2315,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    @ViewBuilder
-    private func compactDrawerContent(_ parseResult: ParseLogResponse) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Quick Confirmation")
-                .font(.headline)
-            HStack(spacing: 0) {
-                Text("Confidence: ")
-                RollingNumberText(value: parseResult.confidence, fractionDigits: 3)
-            }
-            .font(.footnote)
-            .foregroundStyle(.secondary)
 
-            HM03ParseSummarySection(
-                totals: displayedTotals,
-                hasEditedItems: !editableItems.isEmpty
-            )
-
-            HStack(spacing: 12) {
-                Button(L10n.saveLogButton) {
-                    startSaveFlow()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .disabled(isSaving || buildSaveDraftRequest() == nil)
-
-                Button("Open Full Details") {
-                    detailsDrawerMode = .full
-                }
-                .buttonStyle(.bordered)
-            }
-
-        }
-    }
-
-    @ViewBuilder
-    private func fullDrawerContent(_ parseResult: ParseLogResponse) -> some View {
-        HM03ParseSummarySection(
-            totals: displayedTotals,
-            hasEditedItems: !editableItems.isEmpty
-        )
-
-        parseMetaCard(parseResult)
-
-        if !isParsing && appStore.isNetworkReachable {
-            Button(L10n.retryParseButton) {
-                isDetailsDrawerPresented = false
-                triggerParseNow()
-            }
-            .font(.system(size: 14, weight: .semibold))
-            .buttonStyle(.bordered)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-
-        parseActionSection
-
-        if let parseError {
-            Text(parseError)
-                .font(.footnote)
-                .foregroundStyle(.red)
-        }
-
-        daySummarySection
-
-        Group {
-            Text(L10n.parseMetadataTitle)
-                .font(.headline)
-            Text(L10n.routeLabel(parseResult.route))
-                .font(.footnote)
-            Text(L10n.parseRequestIDLabel(parseResult.parseRequestId))
-                .font(.footnote)
-            Text(L10n.parseVersionLabel(parseResult.parseVersion))
-                .font(.footnote)
-            HStack(spacing: 0) {
-                Text("\(L10n.confidenceLabel): ")
-                RollingNumberText(value: parseResult.confidence, fractionDigits: 3)
-            }
-            .font(.footnote)
-        }
-        .foregroundStyle(.secondary)
-
-        if parseResult.needsClarification {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L10n.clarificationQuestionsTitle)
-                    .font(.headline)
-                ForEach(Array(parseResult.clarificationQuestions.enumerated()), id: \.offset) { _, question in
-                    Text("• \(question)")
-                        .font(.footnote)
-                }
-            }
-        }
-
-        clarificationEscalationSection(parseResult)
-
-        if parseResult.items.count > 1 {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Items")
-                    .font(.headline)
-                ForEach(Array(parseResult.items.enumerated()), id: \.offset) { _, item in
-                    HStack(alignment: .center, spacing: 8) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(item.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            Text("\(item.quantity.formatted()) \(item.unit)")
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                        Spacer()
-                        Text("\(Int(item.calories.rounded())) cal")
-                            .font(.subheadline)
-                            .fontWeight(.semibold)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(.vertical, 6)
-                    .padding(.horizontal, 10)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8)
-                            .fill(Color.gray.opacity(0.08))
-                    )
-                }
-            }
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.editableItemsTitle)
-                .font(.headline)
-            ForEach($editableItems) { $item in
-                VStack(alignment: .leading, spacing: 8) {
-                    TextField(L10n.itemNamePlaceholder, text: $item.name)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    Stepper(
-                        value: Binding(
-                            get: { item.quantity },
-                            set: { item.updateQuantity($0) }
-                        ),
-                        in: 0 ... 20,
-                        step: 0.5
-                    ) {
-                        Text(L10n.quantityLabel(item.quantity))
-                            .font(.footnote)
-                    }
-
-                    TextField(L10n.unitPlaceholder, text: $item.unit)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled()
-
-                    HStack(spacing: 2) {
-                        RollingNumberText(value: Double(Int(item.calories.rounded())), suffix: " kcal")
-                        Text("• P ")
-                        RollingNumberText(value: item.protein, fractionDigits: 1, suffix: "g")
-                        Text(" • C ")
-                        RollingNumberText(value: item.carbs, fractionDigits: 1, suffix: "g")
-                        Text(" • F ")
-                        RollingNumberText(value: item.fat, fractionDigits: 1, suffix: "g")
-                    }
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                .padding(10)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.gray.opacity(0.08))
-                )
-            }
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.saveActionsTitle)
-                .font(.headline)
-
-            HStack(spacing: 12) {
-                Button(L10n.saveLogButton) {
-                    startSaveFlow()
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(.green)
-                .disabled(isSaving || buildSaveDraftRequest() == nil)
-
-                Button(L10n.retryLastSaveButton) {
-                    retryLastSave()
-                }
-                .buttonStyle(.bordered)
-                .disabled(isSaving || pendingSaveRequest == nil || pendingSaveIdempotencyKey == nil)
-            }
-
-            if let saveSuccessMessage {
-                Text(saveSuccessMessage)
-                    .font(.footnote)
-                    .foregroundStyle(.green)
-            }
-
-            if let saveError {
-                Text(saveError)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            }
-
-            if let pendingSaveIdempotencyKey {
-                Text(L10n.idempotencyKey(pendingSaveIdempotencyKey.uuidString.lowercased()))
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .textSelection(.enabled)
-            }
-        }
-
-        VStack(alignment: .leading, spacing: 8) {
-            Text(L10n.saveContractPreviewTitle)
-                .font(.headline)
-            Text(saveDraftPreviewJSON())
-                .font(.system(.caption2, design: .monospaced))
-                .textSelection(.enabled)
-                .padding(8)
-                .background(
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(Color.black.opacity(0.05))
-                )
-        }
-    }
 
     @MainActor
     private func scheduleDebouncedParse(for newValue: String) {
@@ -3449,16 +3090,6 @@ struct MainLoggingShellView: View {
     }
 
     private func scheduleDetailsDrawer(for response: ParseLogResponse) {
-        if response.needsClarification || response.confidence < 0.60 {
-            detailsDrawerMode = .full
-            return
-        }
-
-        if response.confidence < 0.85 {
-            detailsDrawerMode = .compact
-            return
-        }
-
         detailsDrawerMode = .full
     }
 
@@ -3822,7 +3453,10 @@ struct MainLoggingShellView: View {
             if let idx = inputRows.firstIndex(where: { $0.id == rowID }) {
                 inputRows[idx].isSaved = true
             }
-            let savedDay = String((row.serverLoggedAt ?? summaryDateString).prefix(10))
+            let savedDay = HomeLoggingDateUtils.summaryDayString(
+                fromLoggedAt: row.serverLoggedAt ?? summaryDateString,
+                fallback: summaryDateString
+            )
             await refreshDayAfterMutation(
                 savedDay,
                 postNutritionNotification: true,
@@ -3895,7 +3529,10 @@ struct MainLoggingShellView: View {
             // belongs to) over the save request's loggedAt (which reflects
             // when the re-parse fired).
             let originalDay = inputRows.first(where: { $0.id == rowID })?.serverLoggedAt
-            let savedDay = String((originalDay ?? saveRequest.parsedLog.loggedAt).prefix(10))
+            let savedDay = HomeLoggingDateUtils.summaryDayString(
+                fromLoggedAt: originalDay ?? saveRequest.parsedLog.loggedAt,
+                fallback: summaryDateString
+            )
             if let idx = inputRows.firstIndex(where: { $0.id == rowID }) {
                 inputRows[idx].isSaved = true
             }
@@ -3970,7 +3607,13 @@ struct MainLoggingShellView: View {
 
     private func serverBackedDeleteContext(for row: HomeLogRow) -> (serverLogId: String, savedDay: String)? {
         if let serverLogId = row.serverLogId {
-            return (serverLogId, String((row.serverLoggedAt ?? summaryDateString).prefix(10)))
+            return (
+                serverLogId,
+                HomeLoggingDateUtils.summaryDayString(
+                    fromLoggedAt: row.serverLoggedAt ?? summaryDateString,
+                    fallback: summaryDateString
+                )
+            )
         }
 
         guard let queuedItem = pendingQueueItem(forRowID: row.id),
@@ -4214,8 +3857,8 @@ struct MainLoggingShellView: View {
             // duplicate. Covers the case where the user opens a saved row,
             // changes more than just the quantity (triggering a full
             // re-parse), and the standard auto-save fires.
-            if let row = inputRows.first(where: { $0.id == entry.rowID }),
-               let serverLogId = row.serverLogId {
+            let row = inputRows.first(where: { $0.id == entry.rowID })
+            if let serverLogId = row?.serverLogId ?? pendingQueueItem(forRowID: entry.rowID)?.serverLogId {
                 autoSavedParseIDs.insert(entry.parseRequestId)
                 await submitRowPatch(
                     serverLogId: serverLogId,
@@ -4713,7 +4356,10 @@ struct MainLoggingShellView: View {
     ) async -> String {
         let effectiveRequest = success.preparedRequest
         let response = success.response
-        let savedDay = String(effectiveRequest.parsedLog.loggedAt.prefix(10))
+        let savedDay = HomeLoggingDateUtils.summaryDayString(
+            fromLoggedAt: effectiveRequest.parsedLog.loggedAt,
+            fallback: summaryDateString
+        )
         if shouldDiscardCompletedSave(queueKey: queueKey, rowID: submittedRowID) {
             await deleteLateArrivingSave(logId: response.logId, savedDay: savedDay, queueKey: queueKey, rowID: submittedRowID)
             return savedDay
@@ -5404,7 +5050,7 @@ struct MainLoggingShellView: View {
     }
 
     private func markPreservedDateDraftNeedsParse(rowID: UUID, loggedAt: String) {
-        let dateString = String(loggedAt.prefix(10))
+        let dateString = HomeLoggingDateUtils.summaryDayString(fromLoggedAt: loggedAt, fallback: summaryDateString)
         guard var preservedRows = preservedDraftRowsByDate[dateString],
               let preservedIndex = preservedRows.firstIndex(where: { $0.row.id == rowID }) else {
             return
@@ -5457,9 +5103,8 @@ struct MainLoggingShellView: View {
             }
             .map(\.element)
 
-        // Full replace: remove ALL old saved rows and replace with the requested
-        // day's entries. Keep active drafts only when their draft timestamp belongs
-        // to the same day; otherwise a today draft visually leaks into yesterday.
+        // Merge server state into the existing visible order. This keeps rows from
+        // jumping during optimistic save -> stale cache -> fresh server refresh cycles.
         let pendingRows = pendingRowsForDate(dateString, excluding: entries)
         let pendingRowIDs = Set(pendingRows.map(\.id))
         let activeRows: [HomeLogRow]
@@ -5473,7 +5118,10 @@ struct MainLoggingShellView: View {
             pendingRows: pendingRows,
             activeRows: activeRows
         )
-        let nextRows = orderedSavedRows + pendingRows + preservedRows + activeRows
+        let nextRows = mergeRowsPreservingVisibleOrder(
+            currentRows: inputRows,
+            candidateRows: orderedSavedRows + pendingRows + preservedRows + activeRows
+        )
         if inputRowsSyncSignature(inputRows) != inputRowsSyncSignature(nextRows) {
             inputRows = nextRows
         }
@@ -5495,6 +5143,70 @@ struct MainLoggingShellView: View {
             ].joined(separator: "|")
         }
         .joined(separator: "\n")
+    }
+
+    private func mergeRowsPreservingVisibleOrder(
+        currentRows: [HomeLogRow],
+        candidateRows: [HomeLogRow]
+    ) -> [HomeLogRow] {
+        var remainingByServerLogId: [String: HomeLogRow] = [:]
+        var remainingByRowId: [UUID: HomeLogRow] = [:]
+        var candidateOrder: [String] = []
+
+        for row in candidateRows {
+            if let serverLogId = row.serverLogId {
+                let key = "server:\(serverLogId)"
+                if remainingByServerLogId[serverLogId] == nil {
+                    candidateOrder.append(key)
+                }
+                remainingByServerLogId[serverLogId] = row
+            } else {
+                let key = "row:\(row.id.uuidString)"
+                if remainingByRowId[row.id] == nil {
+                    candidateOrder.append(key)
+                }
+                remainingByRowId[row.id] = row
+            }
+        }
+
+        var output: [HomeLogRow] = []
+        var usedKeys = Set<String>()
+
+        func appendIfUnused(_ row: HomeLogRow) {
+            let key = row.serverLogId.map { "server:\($0)" } ?? "row:\(row.id.uuidString)"
+            guard !usedKeys.contains(key) else { return }
+            output.append(row)
+            usedKeys.insert(key)
+        }
+
+        for current in currentRows {
+            if let serverLogId = current.serverLogId,
+               let replacement = remainingByServerLogId.removeValue(forKey: serverLogId) {
+                appendIfUnused(replacement)
+                continue
+            }
+
+            if let replacement = remainingByRowId.removeValue(forKey: current.id) {
+                appendIfUnused(replacement)
+            }
+        }
+
+        for key in candidateOrder where !usedKeys.contains(key) {
+            if key.hasPrefix("server:") {
+                let serverLogId = String(key.dropFirst("server:".count))
+                if let row = remainingByServerLogId.removeValue(forKey: serverLogId) {
+                    appendIfUnused(row)
+                }
+            } else if key.hasPrefix("row:") {
+                let rowIDText = String(key.dropFirst("row:".count))
+                if let rowID = UUID(uuidString: rowIDText),
+                   let row = remainingByRowId.removeValue(forKey: rowID) {
+                    appendIfUnused(row)
+                }
+            }
+        }
+
+        return output
     }
 
     private func loadDaySummary(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
@@ -5729,7 +5441,10 @@ struct MainLoggingShellView: View {
         syncPendingQueueFromCoordinator(refreshRetryState: true)
 
         if nonRetryable {
-            let failedDay = String(request.parsedLog.loggedAt.prefix(10))
+            let failedDay = HomeLoggingDateUtils.summaryDayString(
+                fromLoggedAt: request.parsedLog.loggedAt,
+                fallback: summaryDateString
+            )
             await refreshDayAfterMutation(failedDay, postNutritionNotification: false)
         }
     }
