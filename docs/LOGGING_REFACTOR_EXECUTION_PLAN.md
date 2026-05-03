@@ -60,9 +60,10 @@
 1. Phase 7 audit:
    - Starting Swift LOC audit showed `MainLoggingShellView.swift` at 5,580 lines, `HomeFlowComponents.swift` at 2,325 lines, `OnboardingView.swift` at 1,263 lines, and `ContentView.swift` at 1,030 lines.
    - Asset audit found all imagesets currently referenced.
-   - Phase 7A implementation has started. Completed slices extracted logging presentation views, extracted the home status strip, removed unused logging detail panels, split row models, split the home composer, split the streak drawer, and moved `RollingNumberText` into a shared file.
+   - Phase 7A implementation has started. Completed slices extracted logging presentation views, extracted the home status strip, removed unused logging detail panels, split row models, split the home composer, split the streak drawer, moved `RollingNumberText` into a shared file, and extracted shell-only enums.
    - Current LOC after these slices:
-     - `MainLoggingShellView.swift`: 5,026
+     - `MainLoggingShellView.swift`: 5,003
+     - `MainLoggingShellModels.swift`: 24
      - `HomeFlowComponents.swift`: 467
      - `HomeComposerView.swift`: 1,061
      - `HomeStreakDrawerView.swift`: 460
