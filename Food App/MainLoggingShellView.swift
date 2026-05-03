@@ -1274,6 +1274,7 @@ struct MainLoggingShellView: View {
                         rowDetailsPendingDeleteID = liveDetails.id
                         isRowDetailsDeleteConfirmationPresented = true
                     }
+                    .tint(.red)
                     .disabled(isRowDetailsDeleteDisabled(rowID: liveDetails.id))
                     .accessibilityHint(Text("Deletes this food entry and updates your totals."))
                 }
@@ -5024,7 +5025,8 @@ struct MainLoggingShellView: View {
         guard var preservedRows = preservedDraftRowsByDate[dateString] else { return }
         preservedRows.removeAll { $0.row.id == rowID }
         if preservedRows.isEmpty {
-            preservedDraftRowsByDate.removeValue(forKey: dateString)
+            preservedDraftRowsByDa
+            te.removeValue(forKey: dateString)
         } else {
             preservedDraftRowsByDate[dateString] = preservedRows
         }
