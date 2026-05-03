@@ -8,7 +8,6 @@
 
 /* Begin PBXBuildFile section */
 		CDB5B13A2F4B642600A82851 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B1392F4B642600A82851 /* GoogleSignIn */; };
-		CDB5B13C2F4B642600A82851 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B13B2F4B642600A82851 /* GoogleSignInSwift */; };
 		CDB5B1412F4B7A2C00A82851 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B1402F4B7A2C00A82851 /* Supabase */; };
 /* End PBXBuildFile section */
 
@@ -30,7 +29,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				CDB5B13A2F4B642600A82851 /* GoogleSignIn in Frameworks */,
-				CDB5B13C2F4B642600A82851 /* GoogleSignInSwift in Frameworks */,
 				CDB5B1412F4B7A2C00A82851 /* Supabase in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -83,7 +81,6 @@
 			name = "Food App";
 			packageProductDependencies = (
 				CDB5B1392F4B642600A82851 /* GoogleSignIn */,
-				CDB5B13B2F4B642600A82851 /* GoogleSignInSwift */,
 				CDB5B1402F4B7A2C00A82851 /* Supabase */,
 			);
 			productName = "Food App";
@@ -414,11 +411,6 @@
 			isa = XCSwiftPackageProductDependency;
 			package = CDB5B1382F4B642600A82851 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
 			productName = GoogleSignIn;
-		};
-		CDB5B13B2F4B642600A82851 /* GoogleSignInSwift */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = CDB5B1382F4B642600A82851 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
-			productName = GoogleSignInSwift;
 		};
 		CDB5B1402F4B7A2C00A82851 /* Supabase */ = {
 			isa = XCSwiftPackageProductDependency;
