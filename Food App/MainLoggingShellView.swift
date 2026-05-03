@@ -4,125 +4,125 @@ import PhotosUI
 import UIKit
 
 struct MainLoggingShellView: View {
-    @EnvironmentObject private var appStore: AppStore
-    @Environment(\.colorScheme) private var colorScheme
+    @EnvironmentObject var appStore: AppStore
+    @Environment(\.colorScheme) var colorScheme
 
-    @StateObject private var speechService = SpeechRecognitionService()
-    @StateObject private var saveCoordinator = SaveCoordinator()
-    @StateObject private var parseCoordinator = ParseCoordinator()
-    @State private var isVoiceOverlayPresented = false
-    @State private var inputRows: [HomeLogRow] = [.empty()]
-    @State private var parseInFlightCount = 0
-    @State private var parseRequestSequence = 0
-    @State private var parseResult: ParseLogResponse?
-    @State private var parseError: String?
-    @State private var parseInfoMessage: String?
-    @State private var debounceTask: Task<Void, Never>?
-    @State private var parseTask: Task<Void, Never>?
-    @State private var activeParseRowID: UUID?
-    @State private var queuedParseRowIDs: [UUID] = []
-    @State private var inFlightParseSnapshot: InFlightParseSnapshot?
-    @State private var pendingFollowupRequested = false
-    @State private var latestQueuedNoteText: String?
-    @State private var autoSaveTask: Task<Void, Never>?
-    @State private var unresolvedRetryTask: Task<Void, Never>?
-    @State private var unresolvedRetryCount = 0
-    @State private var isDetailsDrawerPresented = false
-    @State private var editableItems: [EditableParsedItem] = []
-    @State private var isSaving = false
-    @State private var isSubmittingRestoredPendingSaves = false
-    @State private var saveError: String?
-    @State private var saveSuccessMessage: String?
-    @State private var pendingSaveRequest: SaveLogRequest?
-    @State private var pendingSaveFingerprint: String?
-    @State private var pendingSaveIdempotencyKey: UUID?
-    @State private var pendingSaveQueue: [PendingSaveQueueItem] = []
-    @State private var isEscalating = false
-    @State private var escalationError: String?
-    @State private var escalationInfoMessage: String?
-    @State private var escalationBlockedCode: String?
-    @State private var selectedSummaryDate = Date()
-    @State private var daySummary: DaySummaryResponse?
-    @State private var isLoadingDaySummary = false
-    @State private var daySummaryError: String?
-    @State private var dayLogs: DayLogsResponse?
-    @State private var isLoadingDayLogs = false
+    @StateObject var speechService = SpeechRecognitionService()
+    @StateObject var saveCoordinator = SaveCoordinator()
+    @StateObject var parseCoordinator = ParseCoordinator()
+    @State var isVoiceOverlayPresented = false
+    @State var inputRows: [HomeLogRow] = [.empty()]
+    @State var parseInFlightCount = 0
+    @State var parseRequestSequence = 0
+    @State var parseResult: ParseLogResponse?
+    @State var parseError: String?
+    @State var parseInfoMessage: String?
+    @State var debounceTask: Task<Void, Never>?
+    @State var parseTask: Task<Void, Never>?
+    @State var activeParseRowID: UUID?
+    @State var queuedParseRowIDs: [UUID] = []
+    @State var inFlightParseSnapshot: InFlightParseSnapshot?
+    @State var pendingFollowupRequested = false
+    @State var latestQueuedNoteText: String?
+    @State var autoSaveTask: Task<Void, Never>?
+    @State var unresolvedRetryTask: Task<Void, Never>?
+    @State var unresolvedRetryCount = 0
+    @State var isDetailsDrawerPresented = false
+    @State var editableItems: [EditableParsedItem] = []
+    @State var isSaving = false
+    @State var isSubmittingRestoredPendingSaves = false
+    @State var saveError: String?
+    @State var saveSuccessMessage: String?
+    @State var pendingSaveRequest: SaveLogRequest?
+    @State var pendingSaveFingerprint: String?
+    @State var pendingSaveIdempotencyKey: UUID?
+    @State var pendingSaveQueue: [PendingSaveQueueItem] = []
+    @State var isEscalating = false
+    @State var escalationError: String?
+    @State var escalationInfoMessage: String?
+    @State var escalationBlockedCode: String?
+    @State var selectedSummaryDate = Date()
+    @State var daySummary: DaySummaryResponse?
+    @State var isLoadingDaySummary = false
+    @State var daySummaryError: String?
+    @State var dayLogs: DayLogsResponse?
+    @State var isLoadingDayLogs = false
     /// Per-saved-log-id dismissal state for `HomeMealInsightCard`.
     /// Persisted in UserDefaults so dismissals survive app launches and day swipes.
-    @State private var dismissedInsightLogIds: Set<String> = RecentFlaggedMealCard.loadDismissedLogIds()
+    @State var dismissedInsightLogIds: Set<String> = RecentFlaggedMealCard.loadDismissedLogIds()
     /// Once-per-day in-app pause for users whose biggest challenge is emotional eating.
-    @State private var isMindfulPausePresented = false
+    @State var isMindfulPausePresented = false
     /// In-memory cache for adjacent days — keyed by "yyyy-MM-dd" date string.
-    @State private var dayCacheSummary: [String: DaySummaryResponse] = [:]
-    @State private var dayCacheLogs: [String: DayLogsResponse] = [:]
-    @State private var prefetchTask: Task<Void, Never>?
-    @State private var initialHomeBootstrapTask: Task<Void, Never>?
-    @State private var hasBootstrappedAuthenticatedHome = false
+    @State var dayCacheSummary: [String: DaySummaryResponse] = [:]
+    @State var dayCacheLogs: [String: DayLogsResponse] = [:]
+    @State var prefetchTask: Task<Void, Never>?
+    @State var initialHomeBootstrapTask: Task<Void, Never>?
+    @State var hasBootstrappedAuthenticatedHome = false
     /// Per-row debounced PATCH task. A key is added when the client-side
     /// quantity fast path scales a row that already has a `serverLogId`; the
     /// task fires after `patchDebounceNs` and issues a `PATCH /v1/logs/:id`
     /// with the row's current items. Cancelled & replaced on each keystroke
     /// so a user adjusting 3 → 4 → 5 → 6 only results in one network call.
-    @State private var pendingPatchTasks: [UUID: Task<Void, Never>] = [:]
-    @State private var pendingDeleteTasks: [UUID: Task<Void, Never>] = [:]
-    @State private var dateChangeDraftTasks: [UUID: Task<Void, Never>] = [:]
-    @State private var preservedDraftRowsByDate: [String: [PreservedDateDraftRow]] = [:]
-    @State private var dateTransitionResetHandled = false
-    @State private var locallyDeletedPendingRowIDs: Set<UUID> = []
-    @State private var locallyDeletedPendingSaveKeys: Set<String> = []
-    private let patchDebounceNs: UInt64 = 1_500_000_000
-    @FocusState private var isNoteEditorFocused: Bool
-    @State private var flowStartedAt: Date?
-    @State private var draftLoggedAt: Date?
-    @State private var lastTimeToLogMs: Double?
-    @State private var lastAutoSavedContentFingerprint: String?
-    @State private var inputMode: HomeInputMode = .text
-    @State private var detailsDrawerMode: DetailsDrawerMode = .full
-    @State private var selectedRowDetails: RowCalorieDetails?
-    @State private var rowDetailsPendingDeleteID: UUID?
-    @State private var isRowDetailsDeleteConfirmationPresented = false
+    @State var pendingPatchTasks: [UUID: Task<Void, Never>] = [:]
+    @State var pendingDeleteTasks: [UUID: Task<Void, Never>] = [:]
+    @State var dateChangeDraftTasks: [UUID: Task<Void, Never>] = [:]
+    @State var preservedDraftRowsByDate: [String: [PreservedDateDraftRow]] = [:]
+    @State var dateTransitionResetHandled = false
+    @State var locallyDeletedPendingRowIDs: Set<UUID> = []
+    @State var locallyDeletedPendingSaveKeys: Set<String> = []
+    let patchDebounceNs: UInt64 = 1_500_000_000
+    @FocusState var isNoteEditorFocused: Bool
+    @State var flowStartedAt: Date?
+    @State var draftLoggedAt: Date?
+    @State var lastTimeToLogMs: Double?
+    @State var lastAutoSavedContentFingerprint: String?
+    @State var inputMode: HomeInputMode = .text
+    @State var detailsDrawerMode: DetailsDrawerMode = .full
+    @State var selectedRowDetails: RowCalorieDetails?
+    @State var rowDetailsPendingDeleteID: UUID?
+    @State var isRowDetailsDeleteConfirmationPresented = false
     /// Per-(row, itemIndex) retry tracking for unresolved placeholders.
     /// Key format: "<rowUUID>-<itemIndex>". Drives the in-flight spinner
     /// on Retry buttons in the drawer + dedupes concurrent taps.
-    @State private var retryingPlaceholderKeys: Set<String> = []
-    @State private var activeEditingRowID: UUID?
-    @State private var selectedCameraSource: CameraInputSource?
-    @State private var isImagePickerPresented = false
-    @State private var imagePickerSourceType: UIImagePickerController.SourceType = .photoLibrary
-    @State private var pendingImageData: Data?
-    @State private var pendingImagePreviewData: Data?
-    @State private var pendingImageMimeType: String?
-    @State private var pendingImageStorageRef: String?
+    @State var retryingPlaceholderKeys: Set<String> = []
+    @State var activeEditingRowID: UUID?
+    @State var selectedCameraSource: CameraInputSource?
+    @State var isImagePickerPresented = false
+    @State var imagePickerSourceType: UIImagePickerController.SourceType = .photoLibrary
+    @State var pendingImageData: Data?
+    @State var pendingImagePreviewData: Data?
+    @State var pendingImageMimeType: String?
+    @State var pendingImageStorageRef: String?
     /// Image data captured for post-save retry when the inline upload during
     /// `prepareSaveRequestForNetwork` fails. The food_log lands without an
     /// image_ref; once it's saved we kick off a background upload + PATCH.
     /// Keyed by idempotency key so concurrent saves don't clobber each other.
-    @State private var deferredImageUploads: [String: Data] = [:]
-    @State private var latestParseInputKind: String = "text"
-    @State private var suppressDebouncedParseOnce = false
-    @State private var isCalendarPresented = false
-    @State private var isProfilePresented = false
-    @State private var isNutritionSummaryPresented = false
-    @State private var currentFoodLogStreak: Int?
-    @State private var isLoadingFoodLogStreak = false
-    @State private var isStreakDrawerPresented = false
-    @State private var isKeyboardVisible = false
-    @State private var isSyncInfoPresented = false
+    @State var deferredImageUploads: [String: Data] = [:]
+    @State var latestParseInputKind: String = "text"
+    @State var suppressDebouncedParseOnce = false
+    @State var isCalendarPresented = false
+    @State var isProfilePresented = false
+    @State var isNutritionSummaryPresented = false
+    @State var currentFoodLogStreak: Int?
+    @State var isLoadingFoodLogStreak = false
+    @State var isStreakDrawerPresented = false
+    @State var isKeyboardVisible = false
+    @State var isSyncInfoPresented = false
     /// Slide direction for day transitions: negative = slide left (going forward), positive = slide right (going back)
-    @State private var dayTransitionOffset: CGFloat = 0
+    @State var dayTransitionOffset: CGFloat = 0
     /// Locks the swipe direction once determined — prevents fighting with ScrollView vertical scroll
-    @State private var swipeAxis: SwipeAxis = .undecided
-    @State private var isCustomCameraPresented = false
-    @State private var cameraDrawerState: CameraDrawerState = .idle
-    @State private var cameraDrawerImage: UIImage?
-    @State private var isCameraAnalysisSheetPresented = false
+    @State var swipeAxis: SwipeAxis = .undecided
+    @State var isCustomCameraPresented = false
+    @State var cameraDrawerState: CameraDrawerState = .idle
+    @State var cameraDrawerImage: UIImage?
+    @State var isCameraAnalysisSheetPresented = false
 
-    @State private var autoSavedParseIDs: Set<String> = []
-    private let defaults = UserDefaults.standard
-    private let autoSaveDelayNs: UInt64 = 1_500_000_000
-    private let saveAttemptTelemetry = SaveAttemptTelemetry.shared
+    @State var autoSavedParseIDs: Set<String> = []
+    let defaults = UserDefaults.standard
+    let autoSaveDelayNs: UInt64 = 1_500_000_000
+    let saveAttemptTelemetry = SaveAttemptTelemetry.shared
 
-    private var activeParseSnapshots: [ParseSnapshot] {
+    var activeParseSnapshots: [ParseSnapshot] {
         parseCoordinator.snapshots.values.sorted { lhs, rhs in
             if lhs.capturedAt != rhs.capturedAt {
                 return lhs.capturedAt < rhs.capturedAt
@@ -131,7 +131,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private var summaryDateSelectionBinding: Binding<Date> {
+    var summaryDateSelectionBinding: Binding<Date> {
         Binding(
             get: { selectedSummaryDate },
             set: { newValue in
@@ -487,7 +487,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private var bottomActionDock: some View {
+    var bottomActionDock: some View {
         MainLoggingBottomDock(
             shouldShowSyncExceptionPill: shouldShowSyncExceptionPill,
             syncStatusTitle: syncStatusTitle,
@@ -500,7 +500,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private var pendingSyncItemCount: Int {
+    var pendingSyncItemCount: Int {
         let unresolvedQueueItems = unresolvedPendingQueueItems
         var pendingKeys = Set(unresolvedQueueItems.map { pendingSyncKey(for: $0) })
         pendingKeys.formUnion(pendingPatchTasks.keys.map { "patch:\($0.uuidString)" })
@@ -515,26 +515,26 @@ struct MainLoggingShellView: View {
         return pendingKeys.count
     }
 
-    private var shouldShowSyncExceptionPill: Bool {
+    var shouldShowSyncExceptionPill: Bool {
         saveError != nil && pendingSyncItemCount > 0
     }
 
-    private var syncStatusTitle: String {
+    var syncStatusTitle: String {
         pendingSyncItemCount == 1 ? "1 item waiting" : "\(pendingSyncItemCount) items waiting"
     }
 
-    private var syncStatusExplanation: String {
+    var syncStatusExplanation: String {
         "These items are visible here and included in your calories. Sync is retrying in the background."
     }
 
-    private func pendingSyncKey(for item: PendingSaveQueueItem) -> String {
+    func pendingSyncKey(for item: PendingSaveQueueItem) -> String {
         if let rowID = item.rowID {
             return "row:\(rowID.uuidString)"
         }
         return "key:\(item.idempotencyKey)"
     }
 
-    private var topHeaderStrip: some View {
+    var topHeaderStrip: some View {
         MainLoggingTopHeaderStrip(
             firstName: loggedInFirstName,
             dateTitle: todayPillTitle,
@@ -544,14 +544,14 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private var todayPillTitle: String {
+    var todayPillTitle: String {
         if Calendar.current.isDateInToday(selectedSummaryDate) {
             return "Today"
         }
         return HomeLoggingDateUtils.topDateFormatter.string(from: selectedSummaryDate)
     }
 
-    private func focusComposerInputFromBackgroundTap() {
+    func focusComposerInputFromBackgroundTap() {
         guard !isVoiceOverlayPresented,
               !isDetailsDrawerPresented,
               !isProfilePresented,
@@ -567,11 +567,11 @@ struct MainLoggingShellView: View {
         NotificationCenter.default.post(name: .focusComposerInputFromBackgroundTap, object: nil)
     }
 
-    private var loggedInFirstName: String? {
+    var loggedInFirstName: String? {
         appStore.authSessionStore.session?.displayFirstName
     }
 
-    private func handleSwipeTransition(_ value: DragGesture.Value) {
+    func handleSwipeTransition(_ value: DragGesture.Value) {
         let horizontal = value.translation.width
         // Use both distance and velocity — a fast flick with short distance should also work
         let velocity = value.predictedEndTranslation.width - value.translation.width
@@ -588,7 +588,7 @@ struct MainLoggingShellView: View {
         shiftSelectedSummaryDate(byDays: days)
     }
 
-    private func shiftSelectedSummaryDate(byDays days: Int) {
+    func shiftSelectedSummaryDate(byDays days: Int) {
         guard let moved = Calendar.current.date(byAdding: .day, value: days, to: selectedSummaryDate) else {
             withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                 dayTransitionOffset = 0
@@ -650,7 +650,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func transitionToSummaryDate(_ rawDate: Date) async {
+    func transitionToSummaryDate(_ rawDate: Date) async {
         let normalized = clampedSummaryDate(rawDate)
         guard !Calendar.current.isDate(normalized, inSameDayAs: selectedSummaryDate) else { return }
 
@@ -664,11 +664,11 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func draftTimestampForSelectedDate(reference: Date = Date()) -> Date {
+    func draftTimestampForSelectedDate(reference: Date = Date()) -> Date {
         HomeLoggingDateUtils.draftTimestamp(for: selectedSummaryDate, reference: reference)
     }
 
-    private func ensureDraftTimingStarted() {
+    func ensureDraftTimingStarted() {
         let now = Date()
         if flowStartedAt == nil {
             flowStartedAt = now
@@ -678,17 +678,17 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func draftDayString() -> String? {
+    func draftDayString() -> String? {
         draftLoggedAt.map { HomeLoggingDateUtils.summaryRequestFormatter.string(from: $0) }
     }
 
-    private func currentDraftLoggedAtString(reference: Date = Date()) -> String {
+    func currentDraftLoggedAtString(reference: Date = Date()) -> String {
         HomeLoggingDateUtils.loggedAtFormatter.string(
             from: draftLoggedAt ?? draftTimestampForSelectedDate(reference: reference)
         )
     }
 
-    private func captureDateChangeDraftRows() -> [DateChangeDraftRow] {
+    func captureDateChangeDraftRows() -> [DateChangeDraftRow] {
         let snapshotRowIDs = Set(activeParseSnapshots.map(\.rowID))
         let loggedAt = currentDraftLoggedAtString()
 
@@ -708,13 +708,13 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func protectDraftRowsForDateChange() {
+    func protectDraftRowsForDateChange() {
         let drafts = captureDateChangeDraftRows()
         preserveCurrentDraftRowsForDateChange(backgroundDraftRowIDs: Set(drafts.map(\.rowID)))
         startDateChangeDraftPersistence(drafts)
     }
 
-    private func preserveCurrentDraftRowsForDateChange(backgroundDraftRowIDs: Set<UUID>) {
+    func preserveCurrentDraftRowsForDateChange(backgroundDraftRowIDs: Set<UUID>) {
         let dateString = draftDayString() ?? summaryDateString
         let rowsToPreserve = inputRows.compactMap { row -> PreservedDateDraftRow? in
             guard !row.isSaved else { return nil }
@@ -762,7 +762,7 @@ struct MainLoggingShellView: View {
         preservedDraftRowsByDate[dateString] = existingRows
     }
 
-    private func startDateChangeDraftPersistence(_ drafts: [DateChangeDraftRow]) {
+    func startDateChangeDraftPersistence(_ drafts: [DateChangeDraftRow]) {
         for draft in drafts {
             dateChangeDraftTasks[draft.rowID]?.cancel()
             dateChangeDraftTasks[draft.rowID] = Task { @MainActor in
@@ -773,7 +773,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func persistDateChangeDraft(_ draft: DateChangeDraftRow) async {
+    func persistDateChangeDraft(_ draft: DateChangeDraftRow) async {
         guard appStore.isNetworkReachable else {
             markPreservedDateDraftNeedsParse(rowID: draft.rowID, loggedAt: draft.loggedAt)
             return
@@ -811,25 +811,25 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func clampedSummaryDate(_ date: Date) -> Date {
+    func clampedSummaryDate(_ date: Date) -> Date {
         HomeLoggingDateUtils.clampedSummaryDate(date)
     }
 
-    private var isParsing: Bool {
+    var isParsing: Bool {
         parseInFlightCount > 0
     }
 
-    private var hasActiveParseRequest: Bool {
+    var hasActiveParseRequest: Bool {
         inFlightParseSnapshot != nil
     }
 
-    private var hasDirtyRowsPendingParse: Bool {
+    var hasDirtyRowsPendingParse: Bool {
         !orderedDirtyRowIDsForCurrentInput().isEmpty
     }
 
     /// The scrollable food rows + status strip. The title "What did you eat today?"
     /// is rendered separately in the body so it stays pinned during day-swipe animations.
-    private var composeEntryContent: some View {
+    var composeEntryContent: some View {
         VStack(alignment: .leading, spacing: 0) {
             inputSection
 
@@ -838,24 +838,24 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private var nutritionSummarySheet: some View {
+    var nutritionSummarySheet: some View {
         MainLoggingNutritionSummarySheet(
             totals: visibleNutritionTotals,
             navigationTitle: summaryDateString == HomeLoggingDateUtils.summaryRequestFormatter.string(from: Date()) ? "Today" : summaryDateString
         )
     }
 
-    private var visibleNutritionTotals: NutritionTotals {
+    var visibleNutritionTotals: NutritionTotals {
         .visible(from: inputRows)
     }
 
-    private func refreshNutritionStateForVisibleDay() {
+    func refreshNutritionStateForVisibleDay() {
         invalidateDayCache(for: summaryDateString)
         refreshDaySummary()
         refreshDayLogs()
     }
 
-    private func refreshNutritionStateAfterProgressChange(_ notification: Notification) {
+    func refreshNutritionStateAfterProgressChange(_ notification: Notification) {
         guard let savedDay = notification.userInfo?["savedDay"] as? String else {
             refreshNutritionStateForVisibleDay()
             return
@@ -867,7 +867,7 @@ struct MainLoggingShellView: View {
         refreshDayLogs()
     }
 
-    private var inputSection: some View {
+    var inputSection: some View {
         HM01LogComposerSection(
             rows: $inputRows,
             focusBinding: $isNoteEditorFocused,
@@ -893,16 +893,16 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private var noteText: String {
+    var noteText: String {
         // Only consider active (unsaved) rows for parsing — saved rows are read-only history
         inputRows.filter { !$0.isSaved }.map(\.text).joined(separator: "\n")
     }
 
-    private var trimmedNoteText: String {
+    var trimmedNoteText: String {
         noteText.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private var parseCandidateRows: [String] {
+    var parseCandidateRows: [String] {
         let normalized = inputRows.filter { !$0.isSaved }.map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
         var end = normalized.count
         while end > 0, normalized[end - 1].isEmpty {
@@ -911,12 +911,12 @@ struct MainLoggingShellView: View {
         return Array(normalized.prefix(end))
     }
 
-    private var rowTextSignature: String {
+    var rowTextSignature: String {
         parseCandidateRows.joined(separator: "\u{001F}")
     }
 
     @ViewBuilder
-    private var detailsDrawer: some View {
+    var detailsDrawer: some View {
         MainLoggingDetailsDrawer(
             isManualAdd: detailsDrawerMode == .manualAdd,
             parseResult: parseResult,
@@ -938,7 +938,7 @@ struct MainLoggingShellView: View {
     }
 
     @ViewBuilder
-    private func rowCalorieDetailsSheet(_ details: RowCalorieDetails) -> some View {
+    func rowCalorieDetailsSheet(_ details: RowCalorieDetails) -> some View {
         let liveDetails = liveRowCalorieDetails(for: details.id, fallback: details)
         MainLoggingRowCalorieDetailsSheet(
             details: liveDetails,
@@ -971,7 +971,7 @@ struct MainLoggingShellView: View {
     }
 
     @ViewBuilder
-    private var homeStatusStrip: some View {
+    var homeStatusStrip: some View {
         MainLoggingHomeStatusStrip(
             saveSuccessMessage: saveSuccessMessage,
             parseError: parseError,
@@ -982,7 +982,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private var shouldShowRetryParseButton: Bool {
+    var shouldShowRetryParseButton: Bool {
         guard !isParsing else { return false }
         guard appStore.isNetworkReachable else { return false }
         guard !trimmedNoteText.isEmpty else { return false }
@@ -992,7 +992,7 @@ struct MainLoggingShellView: View {
         return parseInfoMessage == L10n.parseStillProcessingLabel
     }
 
-    private var inputModeStatusMessage: String? {
+    var inputModeStatusMessage: String? {
         switch inputMode {
         case .text:
             return nil
@@ -1008,12 +1008,12 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func presentRowDetails(for row: HomeLogRow) {
+    func presentRowDetails(for row: HomeLogRow) {
         guard let details = makeRowCalorieDetails(for: row) else { return }
         selectedRowDetails = details
     }
 
-    private func liveRowCalorieDetails(for rowID: UUID, fallback: RowCalorieDetails) -> RowCalorieDetails {
+    func liveRowCalorieDetails(for rowID: UUID, fallback: RowCalorieDetails) -> RowCalorieDetails {
         guard let row = inputRows.first(where: { $0.id == rowID }),
               let refreshed = makeRowCalorieDetails(for: row) else {
             return fallback
@@ -1021,12 +1021,12 @@ struct MainLoggingShellView: View {
         return refreshed
     }
 
-    private func isRowDetailsDeleteDisabled(rowID: UUID) -> Bool {
+    func isRowDetailsDeleteDisabled(rowID: UUID) -> Bool {
         guard let row = inputRows.first(where: { $0.id == rowID }) else { return true }
         return row.isDeleting || pendingDeleteTasks[rowID] != nil
     }
 
-    private func confirmRowDetailsDelete(rowID: UUID) {
+    func confirmRowDetailsDelete(rowID: UUID) {
         guard let row = inputRows.first(where: { $0.id == rowID }) else {
             selectedRowDetails = nil
             return
@@ -1042,7 +1042,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func removeLocalRowFromDetails(rowID: UUID) {
+    func removeLocalRowFromDetails(rowID: UUID) {
         clearTransientWorkForDeletedRow(rowID: rowID)
         locallyDeletedPendingRowIDs.insert(rowID)
         let removedKeys = removePendingSaveQueueItems(forRowID: rowID)
@@ -1064,7 +1064,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func makeRowCalorieDetails(for row: HomeLogRow) -> RowCalorieDetails? {
+    func makeRowCalorieDetails(for row: HomeLogRow) -> RowCalorieDetails? {
         guard let calories = row.calories else { return nil }
         guard let rowIndex = inputRows.firstIndex(where: { $0.id == row.id }) else { return nil }
 
@@ -1123,7 +1123,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func manualOverridePreview(for row: HomeLogRow, rowIndex: Int) -> (editedFields: [String], originalSources: [String]) {
+    func manualOverridePreview(for row: HomeLogRow, rowIndex: Int) -> (editedFields: [String], originalSources: [String]) {
         var editedFieldSet: Set<String> = []
         var originalSourceSet: Set<String> = []
         let fallbackMap: [String: String] = [
@@ -1162,7 +1162,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func resolvedItems(for row: HomeLogRow) -> [ParsedFoodItem] {
+    func resolvedItems(for row: HomeLogRow) -> [ParsedFoodItem] {
         if !row.parsedItems.isEmpty {
             return row.parsedItems
         }
@@ -1172,7 +1172,7 @@ struct MainLoggingShellView: View {
         return []
     }
 
-    private var displayedDrawerItems: [ParsedFoodItem] {
+    var displayedDrawerItems: [ParsedFoodItem] {
         if editableItems.isEmpty {
             return parseResult?.items ?? []
         }
@@ -1180,7 +1180,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func applyActiveParseItemQuantity(itemOffset: Int, quantity: Double) {
+    func applyActiveParseItemQuantity(itemOffset: Int, quantity: Double) {
         if editableItems.isEmpty, let items = parseResult?.items, items.indices.contains(itemOffset) {
             editableItems = items.map(EditableParsedItem.init(apiItem:))
         }
@@ -1190,7 +1190,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func applyRowItemQuantity(rowID: UUID, itemOffset: Int, quantity: Double) {
+    func applyRowItemQuantity(rowID: UUID, itemOffset: Int, quantity: Double) {
         guard let rowIndex = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
         guard inputRows[rowIndex].parsedItems.indices.contains(itemOffset) else { return }
         applyRowParsedItemEdit(rowIndex: rowIndex, itemOffset: itemOffset) { editable in
@@ -1199,7 +1199,7 @@ struct MainLoggingShellView: View {
         handleQuantityFastPathUpdate(rowID: rowID)
     }
 
-    private func applyRowParsedItemEdit(
+    func applyRowParsedItemEdit(
         rowIndex: Int,
         itemOffset: Int,
         mutate: (inout EditableParsedItem) -> Void
@@ -1241,7 +1241,7 @@ struct MainLoggingShellView: View {
         recalculateRowNutrition(rowIndex: rowIndex)
     }
 
-    private func editableIndexForRowItem(rowIndex: Int, itemOffset: Int) -> Int? {
+    func editableIndexForRowItem(rowIndex: Int, itemOffset: Int) -> Int? {
         guard inputRows.indices.contains(rowIndex) else { return nil }
         guard inputRows[rowIndex].parsedItems.indices.contains(itemOffset) else { return nil }
 
@@ -1279,7 +1279,7 @@ struct MainLoggingShellView: View {
         return nil
     }
 
-    private func recalculateRowNutrition(rowIndex: Int) {
+    func recalculateRowNutrition(rowIndex: Int) {
         guard inputRows.indices.contains(rowIndex) else { return }
         let rowItems = inputRows[rowIndex].parsedItems
         guard !rowItems.isEmpty else { return }
@@ -1293,7 +1293,7 @@ struct MainLoggingShellView: View {
 
     // MARK: - Voice Input
 
-    private func handleVoiceModeTapped() {
+    func handleVoiceModeTapped() {
         Task {
             guard await speechService.requestAuthorization() else {
                 parseError = "Microphone or speech recognition permission was denied. Enable them in Settings."
@@ -1312,7 +1312,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func insertVoiceTranscription(_ text: String) {
+    func insertVoiceTranscription(_ text: String) {
         // Find the first empty unsaved row, or append a new one
         if let emptyIndex = inputRows.firstIndex(where: {
             !$0.isSaved && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -1338,7 +1338,7 @@ struct MainLoggingShellView: View {
 
     // MARK: - Voice Helpers
 
-    private func setVoiceOverlayPresented(_ presented: Bool) {
+    func setVoiceOverlayPresented(_ presented: Bool) {
         isVoiceOverlayPresented = presented
         NotificationCenter.default.post(
             name: .voiceRecordingStateChanged,
@@ -1348,9 +1348,9 @@ struct MainLoggingShellView: View {
     }
 
     private static let voiceHapticGenerator = UIImpactFeedbackGenerator(style: .soft)
-    @State private var lastHapticTime: Date = .distantPast
+    @State var lastHapticTime: Date = .distantPast
 
-    private func handleVoiceHaptic(level: Float) {
+    func handleVoiceHaptic(level: Float) {
         guard level > 0.3 else { return }
         let now = Date()
         guard now.timeIntervalSince(lastHapticTime) > 0.3 else { return }
@@ -1360,7 +1360,7 @@ struct MainLoggingShellView: View {
 
     // MARK: - Camera Input
 
-    private func handleCameraSourceSelection(_ source: CameraInputSource) {
+    func handleCameraSourceSelection(_ source: CameraInputSource) {
         selectedCameraSource = source
         inputMode = .camera
         switch source {
@@ -1376,7 +1376,7 @@ struct MainLoggingShellView: View {
     /// segment text + a Retry button (or a spinner while a retry is
     /// in flight). Tapping Retry calls `retryUnresolvedItem`.
     @ViewBuilder
-    private func unresolvedItemRow(rowID: UUID, itemIndex: Int, item: ParsedFoodItem) -> some View {
+    func unresolvedItemRow(rowID: UUID, itemIndex: Int, item: ParsedFoodItem) -> some View {
         let key = "\(rowID.uuidString)-\(itemIndex)"
         let isRetrying = retryingPlaceholderKeys.contains(key)
 
@@ -1444,7 +1444,7 @@ struct MainLoggingShellView: View {
     // saved-row persistence (PATCH) is queued as a separate follow-up.
 
     @MainActor
-    private func retryUnresolvedItem(rowID: UUID, itemIndex: Int) async {
+    func retryUnresolvedItem(rowID: UUID, itemIndex: Int) async {
         let key = "\(rowID.uuidString)-\(itemIndex)"
         guard !retryingPlaceholderKeys.contains(key) else { return }
         retryingPlaceholderKeys.insert(key)
@@ -1509,7 +1509,7 @@ struct MainLoggingShellView: View {
     // MARK: - Custom Camera Drawer Flow
 
     @MainActor
-    private func parseAndUpdateDrawer(_ image: UIImage) async {
+    func parseAndUpdateDrawer(_ image: UIImage) async {
         guard let prepared = prepareImagePayload(from: image) else {
             withAnimation {
                 cameraDrawerState = .error("Unable to process this image.", image)
@@ -1546,7 +1546,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func handleDrawerLogIt() {
+    func handleDrawerLogIt() {
         guard case .parsed(_, let items, _) = cameraDrawerState,
               let response = parseResult else { return }
 
@@ -1598,7 +1598,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func handlePickedImage(_ image: UIImage) async {
+    func handlePickedImage(_ image: UIImage) async {
         // Dismiss the picker sheet first, then open the analysis drawer —
         // identical flow to the camera capture path so both feel the same.
         isImagePickerPresented = false
@@ -1629,7 +1629,7 @@ struct MainLoggingShellView: View {
         await parseAndUpdateDrawer(image)
     }
 
-    private func clearImageContext() {
+    func clearImageContext() {
         pendingImageData = nil
         pendingImagePreviewData = nil
         pendingImageMimeType = nil
@@ -1642,7 +1642,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func canonicalParseRawText(
+    func canonicalParseRawText(
         response: ParseLogResponse,
         fallbackRawText: String
     ) -> String {
@@ -1662,7 +1662,7 @@ struct MainLoggingShellView: View {
         return String(itemFallback.prefix(500))
     }
 
-    private func upsertParseSnapshot(
+    func upsertParseSnapshot(
         rowID: UUID,
         response: ParseLogResponse,
         fallbackRawText: String,
@@ -1685,7 +1685,7 @@ struct MainLoggingShellView: View {
         parseCoordinator.commit(snapshot: rowEntry)
     }
 
-    private func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
+    func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
         let maxBytes = 600_000
         let dimensionAttempts: [CGFloat] = [1920, 1600, 1280, 1024]
         let qualityAttempts: [CGFloat] = [0.85, 0.78, 0.70, 0.62, 0.55, 0.45, 0.35]
@@ -1712,7 +1712,7 @@ struct MainLoggingShellView: View {
         return nil
     }
 
-    private func resizeImageIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
+    func resizeImageIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
         let size = image.size
         let largestSide = max(size.width, size.height)
         guard largestSide > maxDimension else {
@@ -1730,7 +1730,7 @@ struct MainLoggingShellView: View {
 
 
     @MainActor
-    private func scheduleDebouncedParse(for newValue: String) {
+    func scheduleDebouncedParse(for newValue: String) {
         debounceTask?.cancel()
         cancelAutoSaveTask()
         unresolvedRetryTask?.cancel()
@@ -1822,7 +1822,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func triggerParseNow() {
+    func triggerParseNow() {
         debounceTask?.cancel()
         unresolvedRetryTask?.cancel()
         let trimmed = trimmedNoteText
@@ -1850,7 +1850,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func parseCurrentText(_ text: String, requestSequence: Int) async {
+    func parseCurrentText(_ text: String, requestSequence: Int) async {
         guard !text.isEmpty else { return }
         guard let snapshot = inFlightParseSnapshot, snapshot.requestSequence == requestSequence else { return }
         var shouldAdvanceToNextRow = true
@@ -2035,7 +2035,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func shouldHoldUnresolvedResponse(_ response: ParseLogResponse) -> Bool {
+    func shouldHoldUnresolvedResponse(_ response: ParseLogResponse) -> Bool {
         guard response.items.isEmpty else { return false }
         if isTrustedZeroNutritionResponse(response) {
             return false
@@ -2043,7 +2043,7 @@ struct MainLoggingShellView: View {
         return response.route == "unresolved" || response.route == "gemini"
     }
 
-    private func isTrustedZeroNutritionResponse(_ response: ParseLogResponse) -> Bool {
+    func isTrustedZeroNutritionResponse(_ response: ParseLogResponse) -> Bool {
         guard response.items.isEmpty else { return false }
         guard !response.needsClarification else { return false }
         guard response.confidence >= 0.70 else { return false }
@@ -2053,7 +2053,7 @@ struct MainLoggingShellView: View {
             response.totals.fat <= 0.05
     }
 
-    private func logUnresolvedParseDiagnostics(_ response: ParseLogResponse) {
+    func logUnresolvedParseDiagnostics(_ response: ParseLogResponse) {
 #if DEBUG
         let reasonSummary = (response.reasonCodes ?? []).joined(separator: ",")
         let retryAfterSummary = response.retryAfterSeconds.map(String.init) ?? "nil"
@@ -2065,7 +2065,7 @@ struct MainLoggingShellView: View {
 #endif
     }
 
-    private func shouldDeferDebouncedParse(for rawText: String) -> Bool {
+    func shouldDeferDebouncedParse(for rawText: String) -> Bool {
         guard rawText.contains("\n") else { return false }
         let lines = rawText.components(separatedBy: .newlines)
         guard let lastLine = lines.last?.trimmingCharacters(in: .whitespacesAndNewlines), !lastLine.isEmpty else {
@@ -2077,7 +2077,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func handleQueuedOrImmediateParseRequest(for text: String) {
+    func handleQueuedOrImmediateParseRequest(for text: String) {
         guard !text.isEmpty else { return }
         let dirtyRowIDs = orderedDirtyRowIDsForCurrentInput()
         guard let firstDirtyRowID = dirtyRowIDs.first else {
@@ -2106,7 +2106,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func startTextParse(
+    func startTextParse(
         text: String,
         activeRowID: UUID,
         dirtyRowIDs: [UUID]
@@ -2135,7 +2135,7 @@ struct MainLoggingShellView: View {
     }
 
     @MainActor
-    private func processNextQueuedParseIfNeeded() {
+    func processNextQueuedParseIfNeeded() {
         let dirtyRowIDs = orderedDirtyRowIDsForCurrentInput()
         guard let nextActiveRowID = dirtyRowIDs.first else {
             clearParseSchedulerState()
@@ -2157,7 +2157,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func clearParseSchedulerState() {
+    func clearParseSchedulerState() {
         if let activeParseRowID {
             parseCoordinator.cancelInFlight(rowID: activeParseRowID)
         }
@@ -2172,7 +2172,7 @@ struct MainLoggingShellView: View {
     /// Clears ALL per-day transient parse state. Called when the user changes the
     /// selected date (swipe or calendar pick) so parse spinners / partial results
     /// from the previous day don't leak onto the new day's view.
-    private func resetActiveParseStateForDateChange() {
+    func resetActiveParseStateForDateChange() {
         // Cancel in-flight tasks first so their completion handlers bail out
         parseTask?.cancel()
         debounceTask?.cancel()
@@ -2220,7 +2220,7 @@ struct MainLoggingShellView: View {
         selectedCameraSource = nil
     }
 
-    private func synchronizeParseOwnership() {
+    func synchronizeParseOwnership() {
         let queuedSet = Set(queuedParseRowIDs)
         for index in inputRows.indices {
             let rowID = inputRows[index].id
@@ -2253,7 +2253,7 @@ struct MainLoggingShellView: View {
         updateParseQueueInfoMessage()
     }
 
-    private func updateParseQueueInfoMessage() {
+    func updateParseQueueInfoMessage() {
         guard parseError == nil else { return }
         if hasActiveParseRequest && !queuedParseRowIDs.isEmpty {
             parseInfoMessage = L10n.parseQueuedLabel
@@ -2262,13 +2262,13 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func orderedDirtyRowIDsForCurrentInput() -> [UUID] {
+    func orderedDirtyRowIDsForCurrentInput() -> [UUID] {
         inputRows.compactMap { row in
             rowNeedsFreshParse(row) ? row.id : nil
         }
     }
 
-    private func rowNeedsFreshParse(_ row: HomeLogRow) -> Bool {
+    func rowNeedsFreshParse(_ row: HomeLogRow) -> Bool {
         let normalizedCurrentText = HomeLoggingTextMatch.normalizedRowText(row.text)
         guard !normalizedCurrentText.isEmpty else {
             return false
@@ -2286,7 +2286,7 @@ struct MainLoggingShellView: View {
         return row.parsedItem == nil && row.parsedItems.isEmpty
     }
 
-    private func applyRowParseResult(_ response: ParseLogResponse, targetRowIDs: Set<UUID>? = nil) {
+    func applyRowParseResult(_ response: ParseLogResponse, targetRowIDs: Set<UUID>? = nil) {
         let targetRowIDSet = targetRowIDs ?? Set(inputRows.map(\.id))
         let geminiAuthoritative = isGeminiAuthoritativeResponse(response)
         let approximateDisplay = response.needsClarification || response.confidence < 0.70
@@ -2474,13 +2474,13 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func estimatedCalorieRangeText(for calories: Int) -> String {
+    func estimatedCalorieRangeText(for calories: Int) -> String {
         let lower = max(0, Int((Double(calories) * 0.8).rounded()))
         let upper = max(lower + 1, Int((Double(calories) * 1.2).rounded()))
         return "\(lower)-\(upper) cal"
     }
 
-    private func normalizedRowCalories(from rawCalories: Double, response: ParseLogResponse) -> Int? {
+    func normalizedRowCalories(from rawCalories: Double, response: ParseLogResponse) -> Int? {
         let rounded = Int(rawCalories.rounded())
         guard rounded >= 0 else {
             return nil
@@ -2494,11 +2494,11 @@ struct MainLoggingShellView: View {
         return rounded
     }
 
-    private func isGeminiAuthoritativeResponse(_ response: ParseLogResponse) -> Bool {
+    func isGeminiAuthoritativeResponse(_ response: ParseLogResponse) -> Bool {
         response.route == "gemini" && !response.items.isEmpty
     }
 
-    private func debugRowParseMapping(
+    func debugRowParseMapping(
         response: ParseLogResponse,
         nonEmptyIndices: [Int],
         rowsNeedingFreshMapping: Set<Int>,
@@ -2517,11 +2517,11 @@ struct MainLoggingShellView: View {
 #endif
     }
 
-    private func scheduleDetailsDrawer(for response: ParseLogResponse) {
+    func scheduleDetailsDrawer(for response: ParseLogResponse) {
         detailsDrawerMode = .full
     }
 
-    private func canEscalate(_ result: ParseLogResponse) -> Bool {
+    func canEscalate(_ result: ParseLogResponse) -> Bool {
         guard appStore.isNetworkReachable else { return false }
         guard result.needsClarification else { return false }
         guard !isEscalating else { return false }
@@ -2534,7 +2534,7 @@ struct MainLoggingShellView: View {
         return true
     }
 
-    private func escalationDisabledReason(_ result: ParseLogResponse) -> String? {
+    func escalationDisabledReason(_ result: ParseLogResponse) -> String? {
         if result.budget.escalationAllowed == false || escalationBlockedCode == "BUDGET_EXCEEDED" {
             return L10n.escalationBudgetReason
         }
@@ -2544,7 +2544,7 @@ struct MainLoggingShellView: View {
         return nil
     }
 
-    private func startEscalationFlow() {
+    func startEscalationFlow() {
         guard appStore.isNetworkReachable else {
             escalationError = L10n.noNetworkEscalate
             return
@@ -2570,7 +2570,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func escalateCurrentParse(_ current: ParseLogResponse) async {
+    func escalateCurrentParse(_ current: ParseLogResponse) async {
         isEscalating = true
         escalationError = nil
         escalationInfoMessage = nil
@@ -2633,7 +2633,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private var displayedTotals: NutritionTotals {
+    var displayedTotals: NutritionTotals {
         if editableItems.isEmpty {
             return parseResult?.totals ?? NutritionTotals(calories: 0, protein: 0, carbs: 0, fat: 0)
         }
@@ -2650,7 +2650,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func buildSaveDraftRequest() -> SaveLogRequest? {
+    func buildSaveDraftRequest() -> SaveLogRequest? {
         guard let parseResult else { return nil }
         guard !hasDirtyRowsPendingParse else { return nil }
         guard activeParseRowID == nil else { return nil }
@@ -2704,31 +2704,31 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private enum SaveIntent {
+    enum SaveIntent {
         case manual
         case retry
         case auto
         case dateChangeBackground
     }
 
-    private struct SaveSubmissionResult {
+    struct SaveSubmissionResult {
         let didSucceed: Bool
         let savedDay: String?
     }
 
-    private struct DateChangeDraftRow {
+    struct DateChangeDraftRow {
         let rowID: UUID
         let text: String
         let loggedAt: String
         let inputKind: String
     }
 
-    private struct PreservedDateDraftRow {
+    struct PreservedDateDraftRow {
         var row: HomeLogRow
         var isBackgroundManaged: Bool
     }
 
-    private func startSaveFlow() {
+    func startSaveFlow() {
         guard appStore.isNetworkReachable else {
             saveError = L10n.noNetworkSave
             return
@@ -2774,7 +2774,7 @@ struct MainLoggingShellView: View {
     /// newly-composed row the user is still typing (serverLogId nil → let
     /// the existing auto-save/POST flow pick up the scaled items via
     /// buildRowSaveRequest).
-    private func handleQuantityFastPathUpdate(rowID: UUID) {
+    func handleQuantityFastPathUpdate(rowID: UUID) {
         guard let row = inputRows.first(where: { $0.id == rowID }) else { return }
 
         if let serverLogId = row.serverLogId {
@@ -2794,7 +2794,7 @@ struct MainLoggingShellView: View {
     /// user keeps adjusting the number, each keystroke cancels the previous
     /// task and restarts the timer — so one sustained edit session becomes
     /// one network call.
-    private func schedulePatchUpdate(rowID: UUID, serverLogId: String) {
+    func schedulePatchUpdate(rowID: UUID, serverLogId: String) {
         pendingPatchTasks[rowID]?.cancel()
         let task = Task { @MainActor in
             try? await Task.sleep(nanoseconds: patchDebounceNs)
@@ -2807,7 +2807,7 @@ struct MainLoggingShellView: View {
     /// Build and dispatch the PATCH. Reads the row's CURRENT state at call
     /// time so we always persist the latest scaled values even if multiple
     /// edits were debounced together.
-    private func performPatchUpdate(rowID: UUID, serverLogId: String) async {
+    func performPatchUpdate(rowID: UUID, serverLogId: String) async {
         guard appStore.isNetworkReachable else {
             pendingPatchTasks[rowID] = nil
             saveError = L10n.noNetworkSave
@@ -2906,7 +2906,7 @@ struct MainLoggingShellView: View {
     /// from the save request since the edit did go through a fresh parse
     /// (the client-side fast path uses `performPatchUpdate` instead, which
     /// omits parse references).
-    private func submitRowPatch(
+    func submitRowPatch(
         serverLogId: String,
         saveRequest: SaveLogRequest,
         rowID: UUID
@@ -2983,7 +2983,7 @@ struct MainLoggingShellView: View {
 
     // MARK: - Delete Saved Row
 
-    private func handleServerBackedRowCleared(_ row: HomeLogRow) {
+    func handleServerBackedRowCleared(_ row: HomeLogRow) {
         guard let deleteContext = serverBackedDeleteContext(for: row) else { return }
         let serverLogId = deleteContext.serverLogId
 
@@ -3033,7 +3033,7 @@ struct MainLoggingShellView: View {
         pendingDeleteTasks[row.id] = task
     }
 
-    private func serverBackedDeleteContext(for row: HomeLogRow) -> (serverLogId: String, savedDay: String)? {
+    func serverBackedDeleteContext(for row: HomeLogRow) -> (serverLogId: String, savedDay: String)? {
         if let serverLogId = row.serverLogId {
             return (
                 serverLogId,
@@ -3052,7 +3052,7 @@ struct MainLoggingShellView: View {
         return (serverLogId, queuedItem.dateString)
     }
 
-    private func clearTransientWorkForDeletedRow(rowID: UUID) {
+    func clearTransientWorkForDeletedRow(rowID: UUID) {
         pendingPatchTasks[rowID]?.cancel()
         pendingPatchTasks[rowID] = nil
 
@@ -3077,7 +3077,7 @@ struct MainLoggingShellView: View {
         synchronizeParseOwnership()
     }
 
-    private func deleteServerBackedRow(
+    func deleteServerBackedRow(
         row: HomeLogRow,
         serverLogId: String,
         savedDay: String,
@@ -3104,7 +3104,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func restoreDeletedRow(_ row: HomeLogRow, at originalIndex: Int) {
+    func restoreDeletedRow(_ row: HomeLogRow, at originalIndex: Int) {
         guard !inputRows.contains(where: { $0.id == row.id }) else { return }
         var restored = row
         restored.isDeleting = false
@@ -3112,7 +3112,7 @@ struct MainLoggingShellView: View {
         inputRows.insert(restored, at: insertIndex)
     }
 
-    private func removeDeletedLogFromVisibleDayLogs(logId: String, dateString: String) {
+    func removeDeletedLogFromVisibleDayLogs(logId: String, dateString: String) {
         guard summaryDateString == dateString else { return }
         if let existing = dayLogs, existing.date == dateString {
             dayLogs = DayLogsResponse(
@@ -3130,7 +3130,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func refreshDayAfterMutation(
+    func refreshDayAfterMutation(
         _ dateString: String,
         postNutritionNotification: Bool = true,
         reconcilePendingQueueAfterLoad: Bool = false
@@ -3152,12 +3152,12 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func cancelAutoSaveTask() {
+    func cancelAutoSaveTask() {
         autoSaveTask?.cancel()
         autoSaveTask = nil
     }
 
-    private func scheduleAutoSaveTask(
+    func scheduleAutoSaveTask(
         after delayNs: UInt64,
         forceReschedule: Bool = false
     ) {
@@ -3177,7 +3177,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func retryLastSave() {
+    func retryLastSave() {
         guard appStore.isNetworkReachable else {
             saveError = L10n.noNetworkRetry
             return
@@ -3197,7 +3197,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func scheduleAutoSave() {
+    func scheduleAutoSave() {
         // Persist each pending row's context immediately so drafts survive
         // an app close during the auto-save delay window.
         let saveableEntries = activeParseSnapshots.filter(isAutoSaveEligibleEntry(_:))
@@ -3223,22 +3223,22 @@ struct MainLoggingShellView: View {
         scheduleAutoSaveTask(after: autoSaveDelayNs)
     }
 
-    private func rescheduleAutoSaveAfterActiveSave() {
+    func rescheduleAutoSaveAfterActiveSave() {
         scheduleAutoSaveTask(after: 500_000_000, forceReschedule: true)
     }
 
-    private var hasSaveableRowsPending: Bool {
+    var hasSaveableRowsPending: Bool {
         activeParseSnapshots.contains(where: { isAutoSaveEligibleEntry($0) }) ||
             hasQueuedPendingSaves
     }
 
-    private var hasQueuedPendingSaves: Bool {
+    var hasQueuedPendingSaves: Bool {
         pendingSaveQueue.contains { item in
             item.serverLogId == nil && UUID(uuidString: item.idempotencyKey) != nil
         }
     }
 
-    private func autoSaveIfNeeded() async {
+    func autoSaveIfNeeded() async {
         guard appStore.isNetworkReachable else { return }
         guard !isSaving else {
             if hasSaveableRowsPending {
@@ -3339,7 +3339,7 @@ struct MainLoggingShellView: View {
     }
 
     @discardableResult
-    private func flushQueuedPendingSavesIfNeeded() async -> Bool {
+    func flushQueuedPendingSavesIfNeeded() async -> Bool {
         let candidates = saveCoordinator.consumeSubmissionCandidates()
         syncPendingQueueFromCoordinator(refreshRetryState: true)
 
@@ -3371,7 +3371,7 @@ struct MainLoggingShellView: View {
     /// 10-second debounce. Called before a date change so typed entries aren't
     /// lost when the user swipes away mid-debounce. Safe to call even if nothing
     /// is eligible — it just returns quickly.
-    private func flushPendingAutoSaveIfEligible() async {
+    func flushPendingAutoSaveIfEligible() async {
         // Bail early if nothing to save
         let snapshots = activeParseSnapshots
         let hasCompletedRow = snapshots.contains(where: { isAutoSaveEligibleEntry($0) })
@@ -3386,7 +3386,7 @@ struct MainLoggingShellView: View {
         await autoSaveIfNeeded()
     }
 
-    private func isAutoSaveEligibleEntry(_ entry: ParseSnapshot) -> Bool {
+    func isAutoSaveEligibleEntry(_ entry: ParseSnapshot) -> Bool {
         SaveEligibility.isRowEligible(
             row: inputRows.first(where: { $0.id == entry.rowID }),
             snapshot: entry,
@@ -3394,7 +3394,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private var hasVisibleUnsavedCalorieRows: Bool {
+    var hasVisibleUnsavedCalorieRows: Bool {
         inputRows.contains { row in
             !row.isSaved && row.calories != nil
         }
@@ -3410,7 +3410,7 @@ struct MainLoggingShellView: View {
     ///    was applied. Used when the row is no longer in `inputRows` (e.g.
     ///    cleared between save-loop iterations).
     /// 3. `response.items` — last resort. Only correct for single-row parses.
-    private func buildRowSaveRequest(for entry: ParseSnapshot) -> SaveLogRequest? {
+    func buildRowSaveRequest(for entry: ParseSnapshot) -> SaveLogRequest? {
         let response = entry.response
         let currentRow = inputRows.first(where: { $0.id == entry.rowID })
         let sourceItems: [ParsedFoodItem]
@@ -3493,7 +3493,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func buildDateChangeDraftSaveRequest(
+    func buildDateChangeDraftSaveRequest(
         draft: DateChangeDraftRow,
         response: ParseLogResponse
     ) -> SaveLogRequest? {
@@ -3564,7 +3564,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func fallbackSaveItem(
+    func fallbackSaveItem(
         rawText: String,
         totals: NutritionTotals,
         confidence: Double,
@@ -3606,7 +3606,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func autoSaveContentFingerprint(_ request: SaveLogRequest) -> String {
+    func autoSaveContentFingerprint(_ request: SaveLogRequest) -> String {
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
         struct Payload: Codable {
@@ -3631,11 +3631,11 @@ struct MainLoggingShellView: View {
         return data.base64EncodedString()
     }
 
-    private func normalizedInputKind(_ rawValue: String?, fallback: String = "text") -> String {
+    func normalizedInputKind(_ rawValue: String?, fallback: String = "text") -> String {
         HomeLoggingRowFactory.normalizedInputKind(rawValue, fallback: fallback)
     }
 
-    private func requestWithImageRef(_ request: SaveLogRequest, imageRef: String?) -> SaveLogRequest {
+    func requestWithImageRef(_ request: SaveLogRequest, imageRef: String?) -> SaveLogRequest {
         SaveLogRequest(
             parseRequestId: request.parseRequestId,
             parseVersion: request.parseVersion,
@@ -3653,7 +3653,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func prepareSaveRequestForNetwork(_ request: SaveLogRequest, idempotencyKey: UUID) async throws -> SaveLogRequest {
+    func prepareSaveRequestForNetwork(_ request: SaveLogRequest, idempotencyKey: UUID) async throws -> SaveLogRequest {
         var prepared = request
         let kind = normalizedInputKind(prepared.parsedLog.inputKind, fallback: latestParseInputKind)
         let queuedItem = pendingQueueItem(for: idempotencyKey)
@@ -3712,7 +3712,7 @@ struct MainLoggingShellView: View {
     }
 
     @discardableResult
-    private func submitSave(
+    func submitSave(
         request: SaveLogRequest,
         idempotencyKey: UUID,
         isRetry: Bool,
@@ -3771,7 +3771,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func handleSubmitSaveSuccess(
+    func handleSubmitSaveSuccess(
         _ success: SaveExecutionSuccess,
         queueKey: String,
         submittedRowID: UUID?,
@@ -3890,7 +3890,7 @@ struct MainLoggingShellView: View {
         return savedDay
     }
 
-    private func handleSubmitSaveFailure(
+    func handleSubmitSaveFailure(
         _ failure: SaveExecutionFailure,
         telemetryRowID: UUID,
         idempotencyKey: UUID,
@@ -3955,12 +3955,12 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func shouldDiscardCompletedSave(queueKey: String, rowID: UUID?) -> Bool {
+    func shouldDiscardCompletedSave(queueKey: String, rowID: UUID?) -> Bool {
         locallyDeletedPendingSaveKeys.contains(queueKey) ||
             rowID.map { locallyDeletedPendingRowIDs.contains($0) } == true
     }
 
-    private func deleteLateArrivingSave(logId: String, savedDay: String, queueKey: String, rowID: UUID?) async {
+    func deleteLateArrivingSave(logId: String, savedDay: String, queueKey: String, rowID: UUID?) async {
         removePendingSave(idempotencyKey: queueKey)
         locallyDeletedPendingSaveKeys.remove(queueKey)
         if let rowID {
@@ -3995,7 +3995,7 @@ struct MainLoggingShellView: View {
     ///      degrades to in-memory-only — same as before this commit.
     ///
     /// The meal is already logged; the photo is a best-effort attachment.
-    private func scheduleDeferredImageUploadRetry(
+    func scheduleDeferredImageUploadRetry(
         idempotencyKey: UUID,
         logId: String,
         inputKind: String?
@@ -4013,7 +4013,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func promoteSavedRow(for request: SaveLogRequest, idempotencyKey: UUID, logId: String) {
+    func promoteSavedRow(for request: SaveLogRequest, idempotencyKey: UUID, logId: String) {
         let queuedItem = pendingQueueItem(for: idempotencyKey)
         let savedLoggedAt = request.parsedLog.loggedAt
         var promotedRowID: UUID?
@@ -4054,7 +4054,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func promoteInputRow(at index: Int, logId: String, loggedAt: String, imageRef: String?) {
+    func promoteInputRow(at index: Int, logId: String, loggedAt: String, imageRef: String?) {
         guard inputRows.indices.contains(index) else { return }
         inputRows[index].isSaved = true
         inputRows[index].serverLogId = logId
@@ -4068,7 +4068,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func syncSavedLogToAppleHealthIfEnabled(_ request: SaveLogRequest, response: SaveLogResponse) async -> Bool {
+    func syncSavedLogToAppleHealthIfEnabled(_ request: SaveLogRequest, response: SaveLogResponse) async -> Bool {
         guard appStore.isHealthSyncEnabled else { return false }
 
         let loggedAtDate = HomeLoggingDateUtils.loggedAtFormatter.date(from: request.parsedLog.loggedAt) ??
@@ -4090,7 +4090,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func deleteSavedLogFromAppleHealthIfEnabled(row: HomeLogRow, healthSync: HealthSyncResponse?) async {
+    func deleteSavedLogFromAppleHealthIfEnabled(row: HomeLogRow, healthSync: HealthSyncResponse?) async {
         guard appStore.isHealthSyncEnabled else { return }
         guard let serverLogId = row.serverLogId else { return }
 
@@ -4122,7 +4122,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func emitParseTelemetrySuccess(response: ParseLogResponse, durationMs: Double, uiApplied: Bool) {
+    func emitParseTelemetrySuccess(response: ParseLogResponse, durationMs: Double, uiApplied: Bool) {
         let reasonSummary = (response.reasonCodes ?? []).joined(separator: ",")
         TelemetryClient.shared.emit(
             TelemetryEvent(
@@ -4150,7 +4150,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func emitParseTelemetryFailure(error: Error, durationMs: Double, uiApplied: Bool) {
+    func emitParseTelemetryFailure(error: Error, durationMs: Double, uiApplied: Bool) {
         let metadata = telemetryErrorMetadata(error)
         TelemetryClient.shared.emit(
             TelemetryEvent(
@@ -4173,11 +4173,11 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func emitSaveTelemetrySuccess(request: SaveLogRequest, durationMs: Double, isRetry: Bool, logId: String) {
+    func emitSaveTelemetrySuccess(request: SaveLogRequest, durationMs: Double, isRetry: Bool, logId: String) {
         emitSaveTelemetrySuccess(request: request, durationMs: durationMs, isRetry: isRetry, logId: logId, timeToLogMs: nil)
     }
 
-    private func emitSaveTelemetrySuccess(
+    func emitSaveTelemetrySuccess(
         request: SaveLogRequest,
         durationMs: Double,
         isRetry: Bool,
@@ -4212,7 +4212,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func emitSaveTelemetryFailure(request: SaveLogRequest, error: Error, durationMs: Double, isRetry: Bool) {
+    func emitSaveTelemetryFailure(request: SaveLogRequest, error: Error, durationMs: Double, isRetry: Bool) {
         let metadata = telemetryErrorMetadata(error)
         TelemetryClient.shared.emit(
             TelemetryEvent(
@@ -4237,7 +4237,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func telemetryErrorMetadata(_ error: Error) -> (backendRequestId: String?, backendErrorCode: String?, httpStatusCode: Int?) {
+    func telemetryErrorMetadata(_ error: Error) -> (backendRequestId: String?, backendErrorCode: String?, httpStatusCode: Int?) {
         guard let apiError = error as? APIClientError else {
             return (nil, nil, nil)
         }
@@ -4252,7 +4252,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func saveAttemptErrorCode(_ error: Error) -> String? {
+    func saveAttemptErrorCode(_ error: Error) -> String? {
         let metadata = telemetryErrorMetadata(error)
         if let backendCode = metadata.backendErrorCode, !backendCode.isEmpty {
             return backendCode
@@ -4263,7 +4263,7 @@ struct MainLoggingShellView: View {
         return nil
     }
 
-    private func telemetrySource(for intent: SaveIntent) -> SaveAttemptSource {
+    func telemetrySource(for intent: SaveIntent) -> SaveAttemptSource {
         switch intent {
         case .manual:
             return .manual
@@ -4274,11 +4274,11 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func elapsedMs(since startedAt: Date) -> Double {
+    func elapsedMs(since startedAt: Date) -> Double {
         (Date().timeIntervalSince(startedAt) * 1000).rounded()
     }
 
-    private func hydrateVisibleDayLogsFromDiskIfNeeded() {
+    func hydrateVisibleDayLogsFromDiskIfNeeded() {
         let dateString = summaryDateString
         guard dayLogs == nil, let cached = loadDayLogsFromCache(date: dateString) else { return }
         dayLogs = cached
@@ -4286,7 +4286,7 @@ struct MainLoggingShellView: View {
         syncInputRowsFromDayLogs(cached.logs, for: cached.date)
     }
 
-    private func bootstrapAuthenticatedHomeIfNeeded() {
+    func bootstrapAuthenticatedHomeIfNeeded() {
         guard appStore.isSessionRestored, !hasBootstrappedAuthenticatedHome else { return }
         hasBootstrappedAuthenticatedHome = true
 
@@ -4302,7 +4302,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func refreshDaySummary() {
+    func refreshDaySummary() {
         // Stale-while-revalidate: paint any cached summary instantly, THEN
         // always hit the network so stale cache (e.g. from a prior save whose
         // reload failed silently, or entries made in another session) gets
@@ -4318,7 +4318,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func refreshDayLogs() {
+    func refreshDayLogs() {
         // Stale-while-revalidate: same rationale as refreshDaySummary. Paint
         // any cached logs instantly, then always hit the network so rows
         // saved on another device — or any save whose post-reload failed —
@@ -4333,7 +4333,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func refreshCurrentStreak() {
+    func refreshCurrentStreak() {
         guard appStore.configuration.progressFeatureEnabled else {
             currentFoodLogStreak = nil
             return
@@ -4359,7 +4359,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func loadDayLogs(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
+    func loadDayLogs(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
         let dateToLoad = forcedDate ?? summaryDateString
 
         // Serve from cache only if the date still matches what the user is viewing.
@@ -4413,19 +4413,19 @@ struct MainLoggingShellView: View {
 
     // MARK: - Day Logs Disk Cache
 
-    private func persistDayLogsToCache(_ response: DayLogsResponse, date: String) {
+    func persistDayLogsToCache(_ response: DayLogsResponse, date: String) {
         HomeDayLogsDiskCache.persist(response, date: date, defaults: defaults)
     }
 
-    private func loadDayLogsFromCache(date: String) -> DayLogsResponse? {
+    func loadDayLogsFromCache(date: String) -> DayLogsResponse? {
         HomeDayLogsDiskCache.load(date: date, defaults: defaults)
     }
 
-    private func removeDayLogsCacheEntry(date: String) {
+    func removeDayLogsCacheEntry(date: String) {
         HomeDayLogsDiskCache.remove(date: date, defaults: defaults)
     }
 
-    private func pendingRowsForDate(_ dateString: String, excluding serverEntries: [DayLogEntry]) -> [HomeLogRow] {
+    func pendingRowsForDate(_ dateString: String, excluding serverEntries: [DayLogEntry]) -> [HomeLogRow] {
         let serverLogIds = Set(serverEntries.map(\.id))
         return pendingSaveQueue
             .filter { item in
@@ -4439,7 +4439,7 @@ struct MainLoggingShellView: View {
             .map(HomeLoggingRowFactory.makePendingSaveRow)
     }
 
-    private func preservedDraftRowsForDate(
+    func preservedDraftRowsForDate(
         _ dateString: String,
         pendingRows: [HomeLogRow],
         activeRows: [HomeLogRow]
@@ -4470,7 +4470,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func removePreservedDateDraft(rowID: UUID, for dateString: String) {
+    func removePreservedDateDraft(rowID: UUID, for dateString: String) {
         guard var preservedRows = preservedDraftRowsByDate[dateString] else { return }
         preservedRows.removeAll { $0.row.id == rowID }
         if preservedRows.isEmpty {
@@ -4480,7 +4480,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func markPreservedDateDraftNeedsParse(rowID: UUID, loggedAt: String) {
+    func markPreservedDateDraftNeedsParse(rowID: UUID, loggedAt: String) {
         let dateString = HomeLoggingDateUtils.summaryDayString(fromLoggedAt: loggedAt, fallback: summaryDateString)
         guard var preservedRows = preservedDraftRowsByDate[dateString],
               let preservedIndex = preservedRows.firstIndex(where: { $0.row.id == rowID }) else {
@@ -4501,7 +4501,7 @@ struct MainLoggingShellView: View {
         scheduleDebouncedParse(for: noteText)
     }
 
-    private func syncInputRowsFromDayLogs(_ entries: [DayLogEntry], for dateString: String) {
+    func syncInputRowsFromDayLogs(_ entries: [DayLogEntry], for dateString: String) {
         reconcilePendingSaveQueue(with: entries, for: dateString)
         let currentActiveRows = inputRows.filter { !$0.isSaved }
         let shouldKeepActiveRows = draftDayString() == dateString || (draftLoggedAt == nil && dateString == summaryDateString)
@@ -4563,7 +4563,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func inputRowsSyncSignature(_ rows: [HomeLogRow]) -> String {
+    func inputRowsSyncSignature(_ rows: [HomeLogRow]) -> String {
         rows.map { row in
             [
                 row.id.uuidString,
@@ -4576,7 +4576,7 @@ struct MainLoggingShellView: View {
         .joined(separator: "\n")
     }
 
-    private func mergeRowsPreservingVisibleOrder(
+    func mergeRowsPreservingVisibleOrder(
         currentRows: [HomeLogRow],
         candidateRows: [HomeLogRow]
     ) -> [HomeLogRow] {
@@ -4640,7 +4640,7 @@ struct MainLoggingShellView: View {
         return output
     }
 
-    private func loadDaySummary(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
+    func loadDaySummary(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
         let dateToLoad = forcedDate ?? summaryDateString
 
         // Serve from cache if available — instant, no loading spinner
@@ -4682,7 +4682,7 @@ struct MainLoggingShellView: View {
 
     /// Silently prefetch the previous 10 days in the background so swiping is instant.
     /// Runs with low priority and doesn't show loading indicators or errors.
-    private func prefetchAdjacentDays(around date: Date, count: Int = 15) {
+    func prefetchAdjacentDays(around date: Date, count: Int = 15) {
         prefetchTask?.cancel()
         prefetchTask = Task(priority: .utility) {
             let calendar = Calendar.current
@@ -4739,14 +4739,14 @@ struct MainLoggingShellView: View {
     }
 
     /// Invalidate cache for a specific date (e.g. after saving a new log entry).
-    private func invalidateDayCache(for dateString: String) {
+    func invalidateDayCache(for dateString: String) {
         dayCacheSummary.removeValue(forKey: dateString)
         dayCacheLogs.removeValue(forKey: dateString)
         removeDayLogsCacheEntry(date: dateString)
     }
 
     /// Returns true for errors that are transient and worth retrying automatically.
-    private func isTransientLoadError(_ error: Error) -> Bool {
+    func isTransientLoadError(_ error: Error) -> Bool {
         if let apiErr = error as? APIClientError, case .networkFailure = apiErr {
             return true
         }
@@ -4760,56 +4760,56 @@ struct MainLoggingShellView: View {
         return nsErr.domain == NSURLErrorDomain && transientCodes.contains(nsErr.code)
     }
 
-    private var summaryDateString: String {
+    var summaryDateString: String {
         HomeLoggingDateUtils.summaryRequestFormatter.string(from: selectedSummaryDate)
     }
 
-    private func userFriendlyDaySummaryError(_ error: Error) -> String {
+    func userFriendlyDaySummaryError(_ error: Error) -> String {
         HomeLoggingErrorText.daySummaryError(error)
     }
 
-    private func clearPendingSaveContext() {
+    func clearPendingSaveContext() {
         pendingSaveRequest = nil
         pendingSaveFingerprint = nil
         pendingSaveIdempotencyKey = nil
     }
 
-    private func pendingQueueItem(for idempotencyKey: UUID) -> PendingSaveQueueItem? {
+    func pendingQueueItem(for idempotencyKey: UUID) -> PendingSaveQueueItem? {
         let queueKey = idempotencyKey.uuidString.lowercased()
         return pendingSaveQueue.first { $0.idempotencyKey == queueKey }
     }
 
-    private func pendingQueueItem(forRowID rowID: UUID) -> PendingSaveQueueItem? {
+    func pendingQueueItem(forRowID rowID: UUID) -> PendingSaveQueueItem? {
         pendingSaveQueue.first { $0.rowID == rowID }
     }
 
-    private func containsPendingQueueItem(for idempotencyKey: UUID) -> Bool {
+    func containsPendingQueueItem(for idempotencyKey: UUID) -> Bool {
         pendingQueueItem(for: idempotencyKey) != nil
     }
 
-    private func resolveIdempotencyKey(forRowID rowID: UUID?) -> UUID {
+    func resolveIdempotencyKey(forRowID rowID: UUID?) -> UUID {
         IdempotencyKeyResolver.resolve(
             rowID: rowID,
             queue: pendingSaveQueue
         )
     }
 
-    private var unresolvedPendingQueueItems: [PendingSaveQueueItem] {
+    var unresolvedPendingQueueItems: [PendingSaveQueueItem] {
         pendingSaveQueue.filter { $0.serverLogId == nil }
     }
 
-    private func firstUnresolvedPendingQueueItem() -> PendingSaveQueueItem? {
+    func firstUnresolvedPendingQueueItem() -> PendingSaveQueueItem? {
         unresolvedPendingQueueItems.first
     }
 
-    private func syncPendingQueueFromCoordinator(refreshRetryState: Bool = false) {
+    func syncPendingQueueFromCoordinator(refreshRetryState: Bool = false) {
         pendingSaveQueue = saveCoordinator.pendingItems
         if refreshRetryState {
             refreshRetryStateFromPendingQueue()
         }
     }
 
-    private func upsertPendingSaveQueueItem(
+    func upsertPendingSaveQueueItem(
         request: SaveLogRequest,
         fingerprint: String,
         idempotencyKey: UUID,
@@ -4832,7 +4832,7 @@ struct MainLoggingShellView: View {
         syncPendingQueueFromCoordinator(refreshRetryState: true)
     }
 
-    private func refreshRetryStateFromPendingQueue() {
+    func refreshRetryStateFromPendingQueue() {
         if let context = saveCoordinator.retryContext() {
             pendingSaveRequest = context.request
             pendingSaveFingerprint = context.fingerprint
@@ -4853,12 +4853,12 @@ struct MainLoggingShellView: View {
         pendingSaveIdempotencyKey = key
     }
 
-    private func markPendingSaveAttemptStarted(idempotencyKey: UUID) {
+    func markPendingSaveAttemptStarted(idempotencyKey: UUID) {
         saveCoordinator.markAttemptStarted(idempotencyKey: idempotencyKey)
         syncPendingQueueFromCoordinator()
     }
 
-    private func handlePendingSaveFailure(
+    func handlePendingSaveFailure(
         idempotencyKey: UUID,
         request: SaveLogRequest,
         error: Error,
@@ -4880,7 +4880,7 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func markPendingSaveSucceeded(idempotencyKey: UUID, logId: String, preparedRequest: SaveLogRequest) {
+    func markPendingSaveSucceeded(idempotencyKey: UUID, logId: String, preparedRequest: SaveLogRequest) {
         saveCoordinator.markSucceeded(
             idempotencyKey: idempotencyKey,
             logId: logId,
@@ -4890,44 +4890,44 @@ struct MainLoggingShellView: View {
         syncPendingQueueFromCoordinator(refreshRetryState: true)
     }
 
-    private func removePendingSave(idempotencyKey: String) {
+    func removePendingSave(idempotencyKey: String) {
         saveCoordinator.removePendingSave(idempotencyKey: idempotencyKey)
         syncPendingQueueFromCoordinator(refreshRetryState: true)
     }
 
     @discardableResult
-    private func removePendingSaveQueueItems(forRowID rowID: UUID) -> Set<String> {
+    func removePendingSaveQueueItems(forRowID rowID: UUID) -> Set<String> {
         let removed = saveCoordinator.removePendingItems(forRowID: rowID)
         syncPendingQueueFromCoordinator(refreshRetryState: true)
         return removed
     }
 
-    private func reconcilePendingSaveQueue(with logs: [DayLogEntry], for dateString: String) {
+    func reconcilePendingSaveQueue(with logs: [DayLogEntry], for dateString: String) {
         saveCoordinator.reconcilePendingQueue(with: logs, for: dateString)
         syncPendingQueueFromCoordinator(refreshRetryState: true)
     }
 
-    private func saveRequestFingerprint(_ request: SaveLogRequest) -> String {
+    func saveRequestFingerprint(_ request: SaveLogRequest) -> String {
         HomeLoggingSaveRequestUtils.fingerprint(request)
     }
 
-    private func userFriendlySaveError(_ error: Error) -> String {
+    func userFriendlySaveError(_ error: Error) -> String {
         HomeLoggingErrorText.saveError(error)
     }
 
-    private func userFriendlyParseError(_ error: Error) -> String {
+    func userFriendlyParseError(_ error: Error) -> String {
         HomeLoggingErrorText.parseError(error)
     }
 
-    private func userFriendlyEscalationError(_ error: Error) -> (message: String, blockCode: String?) {
+    func userFriendlyEscalationError(_ error: Error) -> (message: String, blockCode: String?) {
         HomeLoggingErrorText.escalationError(error)
     }
 
-    private func handleAuthFailureIfNeeded(_ error: Error) {
+    func handleAuthFailureIfNeeded(_ error: Error) {
         _ = appStore.handleAuthFailureIfNeeded(error)
     }
 
-    private func persistPendingSaveContext(
+    func persistPendingSaveContext(
         rowID: UUID? = nil,
         imageUploadData: Data? = nil,
         imagePreviewData: Data? = nil,
@@ -4947,7 +4947,7 @@ struct MainLoggingShellView: View {
         )
     }
 
-    private func restorePendingSaveContextIfNeeded() {
+    func restorePendingSaveContextIfNeeded() {
         guard pendingSaveQueue.isEmpty else {
             return
         }
@@ -4958,7 +4958,7 @@ struct MainLoggingShellView: View {
         refreshRetryStateFromPendingQueue()
     }
 
-    private func submitRestoredPendingSaveIfPossible() {
+    func submitRestoredPendingSaveIfPossible() {
         guard appStore.isNetworkReachable, !isSaving, !isSubmittingRestoredPendingSaves else { return }
 
         Task { @MainActor in
@@ -4978,11 +4978,11 @@ struct MainLoggingShellView: View {
         }
     }
 
-    private func isRecoverablePendingSaveItem(_ item: PendingSaveQueueItem) -> Bool {
+    func isRecoverablePendingSaveItem(_ item: PendingSaveQueueItem) -> Bool {
         HomeLoggingSaveRequestUtils.isRecoverablePendingSaveItem(item)
     }
 
-    private func saveDraftPreviewJSON() -> String {
+    func saveDraftPreviewJSON() -> String {
         guard let request = buildSaveDraftRequest() else {
             return "{}"
         }
