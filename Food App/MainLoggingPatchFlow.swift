@@ -5,6 +5,15 @@ import Foundation
 // See docs/CLAUDE_PHASE_7A_REMAINING_HANDOFF.md Part 1.
 
 extension MainLoggingShellView {
+
+    // MARK: - Quantity Fast-Path Persistence
+
+    /// Called from the composer after the client-side quantity fast path
+    /// rescales a row's items. Routes persistence based on whether the row
+    /// was loaded from the server (serverLogId present → PATCH) or is a
+    /// newly-composed row the user is still typing (serverLogId nil → let
+    /// the existing auto-save/POST flow pick up the scaled items via
+    /// buildRowSaveRequest).
     func handleQuantityFastPathUpdate(rowID: UUID) {
         guard let row = inputRows.first(where: { $0.id == rowID }) else { return }
 

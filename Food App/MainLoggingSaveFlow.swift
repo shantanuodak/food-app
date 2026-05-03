@@ -43,15 +43,6 @@ extension MainLoggingShellView {
         }
     }
 
-    // MARK: - Quantity Fast-Path Persistence
-
-    /// Called from the composer after the client-side quantity fast path
-    /// rescales a row's items. Routes persistence based on whether the row
-    /// was loaded from the server (serverLogId present → PATCH) or is a
-    /// newly-composed row the user is still typing (serverLogId nil → let
-    /// the existing auto-save/POST flow pick up the scaled items via
-    /// buildRowSaveRequest).
-
     func cancelAutoSaveTask() {
         autoSaveTask?.cancel()
         autoSaveTask = nil
@@ -285,6 +276,16 @@ extension MainLoggingShellView {
         )
     }
 
+    /// Build a save request for one completed row using that row's individual rawText.
+    ///
+    /// Item source priority:
+    /// 1. The row's current `parsedItems` — captures any client-side scaling
+    ///    from the quantity fast path (e.g. user changed "3" to "4" after the
+    ///    parse landed). This is the authoritative UI state.
+    /// 2. `entry.rowItems` — the snapshot captured when the parse response
+    ///    was applied. Used when the row is no longer in `inputRows` (e.g.
+    ///    cleared between save-loop iterations).
+    /// 3. `response.items` — last resort. Only correct for single-row parses.
     func buildRowSaveRequest(for entry: ParseSnapshot) -> SaveLogRequest? {
         let response = entry.response
         let currentRow = inputRows.first(where: { $0.id == entry.rowID })
