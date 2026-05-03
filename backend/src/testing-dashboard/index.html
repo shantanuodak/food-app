@@ -1018,6 +1018,7 @@
       <button onclick="switchTab('benchmarks', this)">Benchmarks</button>
       <button onclick="switchTab('prompt-lab', this)">Prompt Lab</button>
       <button onclick="switchTab('eval-history', this)">History</button>
+      <button onclick="switchTab('feedback', this)">Feedback</button>
       <button onclick="switchTab('advanced', this)">Advanced</button>
     </nav>
     <div class="header-actions">
@@ -1457,6 +1458,40 @@
       </div>
     </div>
 
+    <!-- ==================== FEEDBACK ==================== -->
+    <div id="tab-feedback" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <h2 style="margin:0">User Feedback</h2>
+          <button class="btn btn-ghost" onclick="loadFeedback()">↻ Refresh</button>
+        </div>
+        <div class="grid-4" id="feedback-stat-cards" style="margin-top:16px;">
+          <div class="stat-card"><div class="stat-label">Total (loaded)</div><div class="stat-value" id="feedback-total">—</div></div>
+          <div class="stat-card"><div class="stat-label">Last 24h</div><div class="stat-value" id="feedback-last-24h">—</div></div>
+          <div class="stat-card"><div class="stat-label">Last 7d</div><div class="stat-value" id="feedback-last-7d">—</div></div>
+          <div class="stat-card"><div class="stat-label">Latest at</div><div class="stat-value" id="feedback-latest" style="font-size:14px;">—</div></div>
+        </div>
+        <h3 style="margin-top:20px;">Recent submissions (newest first)</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>When</th>
+                <th>Email</th>
+                <th>Message</th>
+                <th>App version</th>
+                <th>Device</th>
+                <th>OS</th>
+              </tr>
+            </thead>
+            <tbody id="feedback-tbody">
+              <tr><td colspan="6" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
   </main>
 </div>
 
@@ -1551,6 +1586,7 @@ function switchTab(name, btn) {
       queuePromptLabRuntimeRefresh();
     }
   }
+  if (name === 'feedback') loadFeedback();
   if (name === 'advanced') {
     showAdvancedSection(advancedSection);
   }
@@ -2444,6 +2480,48 @@ async function loadCache() {
     }
   } catch (e) {
     document.getElementById('cache-tbody').innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+/* ====================================================================== */
+/* FEEDBACK */
+/* ====================================================================== */
+async function loadFeedback() {
+  const tbody = document.getElementById('feedback-tbody');
+  try {
+    const data = await api('/feedback?limit=200');
+    const items = Array.isArray(data.items) ? data.items : [];
+
+    // Stat cards.
+    const now = Date.now();
+    const last24h = items.filter(i => now - new Date(i.createdAt).getTime() < 86400000).length;
+    const last7d  = items.filter(i => now - new Date(i.createdAt).getTime() < 86400000 * 7).length;
+    document.getElementById('feedback-total').textContent = fmt(items.length);
+    document.getElementById('feedback-last-24h').textContent = fmt(last24h);
+    document.getElementById('feedback-last-7d').textContent = fmt(last7d);
+    document.getElementById('feedback-latest').textContent = items[0] ? fmtTime(items[0].createdAt) : '—';
+
+    if (!items.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">💬</div>No feedback yet.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = '';
+    for (const item of items) {
+      const versionLabel = item.appVersion
+        ? (item.buildNumber ? `${item.appVersion} (${item.buildNumber})` : item.appVersion)
+        : '<span class="text-muted">—</span>';
+      tbody.innerHTML += `
+        <tr>
+          <td class="mono text-muted" style="font-size:12px;white-space:nowrap;">${fmtTime(item.createdAt)}</td>
+          <td>${escHtml(item.userEmail) || '<span class="text-muted">anonymous</span>'}</td>
+          <td style="white-space:pre-wrap;max-width:480px;">${escHtml(item.message)}</td>
+          <td class="mono" style="font-size:12px">${versionLabel}</td>
+          <td class="mono" style="font-size:12px">${escHtml(item.deviceModel) || '<span class="text-muted">—</span>'}</td>
+          <td class="mono" style="font-size:12px">${escHtml(item.osVersion) || '<span class="text-muted">—</span>'}</td>
+        </tr>`;
+    }
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-red" style="padding:16px">${e.message}</td></tr>`;
   }
 }
 

@@ -11,6 +11,7 @@ import evalDashboardRoutes from './routes/evalDashboard.js';
 import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js';
 import healthRoutes from './routes/health.js';
 import trackingAccuracyRoutes from './routes/trackingAccuracy.js';
+import { submitRouter as feedbackSubmitRoutes, adminRouter as feedbackAdminRoutes } from './routes/feedback.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getLatestAppliedMigration } from './db/schemaMetadata.js';
 
@@ -57,8 +58,13 @@ export function createApp() {
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
   app.use('/v1/health', authRequired, healthRoutes);
   app.use('/v1/profile', authRequired, trackingAccuracyRoutes);
+  // User feedback submission (auth-gated). Admin list view is mounted under
+  // /v1/internal/dashboard/feedback so it shares the testing dashboard's
+  // existing fetch helper + auth gate.
+  app.use('/v1/feedback', authRequired, feedbackSubmitRoutes);
   app.use('/v1/internal', internalMetricsRoutes);
   app.use('/v1/internal/dashboard', evalDashboardRoutes);
+  app.use('/v1/internal/dashboard/feedback', feedbackAdminRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);
