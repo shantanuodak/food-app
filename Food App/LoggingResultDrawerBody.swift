@@ -187,8 +187,8 @@ struct LoggingResultDrawerBody: View {
         .padding(14)
         .frame(minHeight: 96)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.systemGray6))
         )
     }
 

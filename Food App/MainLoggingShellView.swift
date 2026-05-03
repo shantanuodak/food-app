@@ -1269,26 +1269,18 @@ struct MainLoggingShellView: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    HStack(spacing: 10) {
-                        Button(role: .destructive) {
-                            rowDetailsPendingDeleteID = liveDetails.id
-                            isRowDetailsDeleteConfirmationPresented = true
-                        } label: {
-                            Label("Delete", systemImage: "trash")
-                                .font(.subheadline.weight(.semibold))
-                                .padding(.horizontal, 12)
-                                .frame(height: 36)
-                                .glassEffect(.regular.interactive(), in: .capsule)
-                        }
-                        .buttonStyle(.plain)
-                        .tint(.red)
-                        .disabled(isRowDetailsDeleteDisabled(rowID: liveDetails.id))
-                        .accessibilityHint(Text("Deletes this food entry and updates your totals."))
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Delete", role: .destructive) {
+                        rowDetailsPendingDeleteID = liveDetails.id
+                        isRowDetailsDeleteConfirmationPresented = true
+                    }
+                    .disabled(isRowDetailsDeleteDisabled(rowID: liveDetails.id))
+                    .accessibilityHint(Text("Deletes this food entry and updates your totals."))
+                }
 
-                        drawerCheckmarkButton(accessibilityLabel: L10n.doneButton) {
-                            selectedRowDetails = nil
-                        }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L10n.doneButton) {
+                        selectedRowDetails = nil
                     }
                 }
             }
@@ -1308,17 +1300,6 @@ struct MainLoggingShellView: View {
         }
         .presentationDetents([.fraction(0.62), .large])
         .presentationDragIndicator(.visible)
-    }
-
-    private func drawerCheckmarkButton(accessibilityLabel: String, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: "checkmark")
-                .font(.headline.weight(.semibold))
-                .frame(width: 36, height: 36)
-                .glassEffect(.regular.interactive(), in: .capsule)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text(accessibilityLabel))
     }
 
     @ViewBuilder
