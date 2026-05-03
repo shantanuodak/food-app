@@ -225,6 +225,19 @@ final class APIClient {
         )
     }
 
+    /// Submit user feedback from the in-app form. The backend records device
+    /// + version metadata alongside the message; the testing dashboard's
+    /// Feedback tab surfaces it newest-first for triage.
+    @discardableResult
+    func submitFeedback(_ requestBody: SubmitFeedbackRequest) async throws -> SubmitFeedbackResponse {
+        try await request(
+            path: "/v1/feedback",
+            method: "POST",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
     func getDaySummary(date: String, timezone: String = TimeZone.current.identifier) async throws -> DaySummaryResponse {
         try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [
             URLQueryItem(name: "date", value: date),
