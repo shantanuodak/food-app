@@ -1,4 +1,5 @@
 import Foundation
+import TipKit
 
 // Save / autosave / patch flow extracted from MainLoggingShellView.
 // Move-only refactor — function bodies and signatures unchanged.
@@ -757,6 +758,10 @@ extension MainLoggingShellView {
         if let submittedRowID {
             removePreservedDateDraft(rowID: submittedRowID, for: savedDay)
         }
+        // Tutorial: mark first save complete so the day-swipe tip is
+        // eligible to fire (it's gated on the user having something to
+        // navigate to). Idempotent — TipKit dedupes donation events.
+        Task { await TutorialEvents.firstSaveCompleted.donate() }
         // If the inline image upload failed during
         // prepareSaveRequestForNetwork (Supabase storage unhappy, network
         // blip, expired storage JWT, missing bucket), the bytes were

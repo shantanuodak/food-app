@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import TipKit
 
 #if canImport(GoogleSignIn)
 import GoogleSignIn
@@ -14,6 +15,20 @@ import GoogleSignIn
 @main
 struct Food_AppApp: App {
     @StateObject private var appStore = AppStore()
+
+    init() {
+        // Configure TipKit once at app launch. Default datastore lives in
+        // ~/Library/Application Support; persists dismissal state across
+        // launches without us managing UserDefaults keys.
+        do {
+            try Tips.configure([
+                .displayFrequency(.immediate),
+                .datastoreLocation(.applicationDefault)
+            ])
+        } catch {
+            NSLog("[Tutorial] Tips.configure failed: \(error)")
+        }
+    }
 
     var body: some Scene {
         WindowGroup {

@@ -1,6 +1,7 @@
 import SwiftUI
 import Foundation
 import PhotosUI
+import TipKit
 import UIKit
 
 struct MainLoggingShellView: View {
@@ -142,6 +143,11 @@ struct MainLoggingShellView: View {
         )
     }
 
+    /// First-launch coachmark for the swipe-between-days gesture.
+    /// Anchored to the home title; gated on `firstSaveCompleted` so we
+    /// don't teach navigation before the user has anything to navigate to.
+    private let swipeBetweenDaysTip = SwipeBetweenDaysTip()
+
     var body: some View {
         NavigationStack {
             ScrollView {
@@ -151,6 +157,7 @@ struct MainLoggingShellView: View {
                         .font(.custom("InstrumentSerif-Regular", size: 28))
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 12)
+                        .popoverTip(swipeBetweenDaysTip, arrowEdge: .top)
 
                     // Food rows + status slide with the swipe animation
                     composeEntryContent
@@ -274,6 +281,9 @@ struct MainLoggingShellView: View {
                         protectDraftRowsForDateChange()
                         resetActiveParseStateForDateChange()
                     }
+                    // Tutorial: a real day change happened (vs a clamp).
+                    // Donate so TipKit retires the day-swipe tip.
+                    Task { await TutorialEvents.firstDaySwipeCompleted.donate() }
                 }
                 refreshDaySummary()
                 refreshDayLogs()

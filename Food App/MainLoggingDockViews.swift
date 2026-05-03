@@ -1,4 +1,5 @@
 import SwiftUI
+import TipKit
 import UIKit
 
 struct MainLoggingBottomDock: View {
@@ -10,6 +11,12 @@ struct MainLoggingBottomDock: View {
     let isKeyboardVisible: Bool
     @Binding var isSyncInfoPresented: Bool
     @Binding var isStreakDrawerPresented: Bool
+
+    /// Tutorial tips for the photo + mic buttons. Initialised here so each
+    /// dock instance shares the same Tip identity (TipKit dedupes by id
+    /// internally, but keeping a single instance avoids any ambiguity).
+    private let logWithPhotoTip = LogWithPhotoTip()
+    private let logWithVoiceTip = LogWithVoiceTip()
 
     var body: some View {
         VStack(spacing: 10) {
@@ -26,16 +33,23 @@ struct MainLoggingBottomDock: View {
                             color: Color(red: 0.380, green: 0.333, blue: 0.961),
                             accessibilityLabel: "Open camera"
                         ) {
+                            // Donate first so TipKit retires the photo tip
+                            // on the next render — the popover is anchored
+                            // to this same button.
+                            Task { await TutorialEvents.photoButtonTapped.donate() }
                             NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
                         }
+                        .popoverTip(logWithPhotoTip, arrowEdge: .bottom)
 
                         bottomDockButton(
                             systemImage: "mic.fill",
                             color: Color(red: 0.796, green: 0.188, blue: 0.878),
                             accessibilityLabel: "Voice input"
                         ) {
+                            Task { await TutorialEvents.micButtonTapped.donate() }
                             NotificationCenter.default.post(name: .openVoiceFromTabBar, object: nil)
                         }
+                        .popoverTip(logWithVoiceTip, arrowEdge: .bottom)
                     }
 
                     Spacer(minLength: 12)
