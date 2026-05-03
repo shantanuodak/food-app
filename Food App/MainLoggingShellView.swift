@@ -235,34 +235,15 @@ struct MainLoggingShellView: View {
                     .padding(.bottom, 8)
             }
             .sheet(isPresented: $isCalendarPresented) {
-                VStack(spacing: 16) {
-                    HStack {
-                        Text("Select Date")
-                            .font(.headline)
-                        Spacer()
-                        Button("Today") {
-                            Task { @MainActor in
-                                await transitionToSummaryDate(Calendar.current.startOfDay(for: Date()))
-                            }
-                            isCalendarPresented = false
+                MainLoggingCalendarSheet(
+                    selectedDate: summaryDateSelectionBinding,
+                    onToday: {
+                        Task { @MainActor in
+                            await transitionToSummaryDate(Calendar.current.startOfDay(for: Date()))
                         }
-                        .fontWeight(.semibold)
+                        isCalendarPresented = false
                     }
-                    .padding(.horizontal)
-                    .padding(.top, 16)
-
-                    DatePicker(
-                        "",
-                        selection: summaryDateSelectionBinding,
-                        in: ...Calendar.current.startOfDay(for: Date()),
-                        displayedComponents: .date
-                    )
-                    .datePickerStyle(.graphical)
-                    .labelsHidden()
-                    .padding(.horizontal)
-                }
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
+                )
             }
             .sheet(isPresented: $isProfilePresented) {
                 HomeProfileScreen()
@@ -1096,211 +1077,57 @@ struct MainLoggingShellView: View {
 
     @ViewBuilder
     private var detailsDrawer: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if detailsDrawerMode == .manualAdd {
-                    manualAddDrawerContent
-                        .padding()
-                } else if let parseResult {
-                    Text("Food App Result")
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                        .textCase(.uppercase)
-                        .tracking(0.5)
-                        .padding(.horizontal, 20)
-                        .padding(.top, 22)
-
-                    LoggingResultDrawerBody(
-                        foodName: drawerFoodName(from: parseResult),
-                        totals: displayedTotals,
-                        items: displayedDrawerItems,
-                        thoughtProcess: drawerThoughtProcess(for: parseResult),
-                        onItemQuantityChange: { itemOffset, quantity in
-                            applyActiveParseItemQuantity(itemOffset: itemOffset, quantity: quantity)
-                        },
-                        onRecalculate: {
-                            isDetailsDrawerPresented = false
-                            triggerParseNow()
-                        }
-                    )
-                    .padding(.bottom, 44)
-                } else {
-                    Text(L10n.parseFirstHint)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding()
-                }
+        MainLoggingDetailsDrawer(
+            isManualAdd: detailsDrawerMode == .manualAdd,
+            parseResult: parseResult,
+            totals: displayedTotals,
+            items: displayedDrawerItems,
+            onManualAddBackToText: {
+                inputMode = .text
+                detailsDrawerMode = .full
+                isDetailsDrawerPresented = false
+            },
+            onItemQuantityChange: { itemOffset, quantity in
+                applyActiveParseItemQuantity(itemOffset: itemOffset, quantity: quantity)
+            },
+            onRecalculate: {
+                isDetailsDrawerPresented = false
+                triggerParseNow()
             }
-        }
-        .presentationDragIndicator(.visible)
-    }
-
-    private func drawerFoodName(from result: ParseLogResponse) -> String {
-        let names = result.items.prefix(3).map(\.name)
-        if names.isEmpty { return "Food" }
-        if names.count == 1 { return names[0] }
-        if names.count == 2 { return "\(names[0]) & \(names[1])" }
-        return "\(names[0]), \(names[1]) & more"
-    }
-
-    private func drawerThoughtProcess(for result: ParseLogResponse) -> String {
-        let sourceLabel = HomeLoggingDisplayText.sourceLabelForRowItems(
-            result.items, route: result.route, routeDisplayName: nil
         )
-        let isApprox = result.confidence < 0.85 || result.needsClarification
-
-        if result.items.count > 1 {
-            let names = result.items.prefix(3).map(\.name)
-            let preview = names.count <= 2
-                ? names.joined(separator: " & ")
-                : "\(names[0]), \(names[1]) & more"
-            let total = Int(result.totals.calories.rounded())
-            var text = "Interpreted as \(result.items.count) items: \(preview). Used \(sourceLabel) to estimate \(total) kcal total."
-            if isApprox { text += " Result is marked approximate." }
-            return text
-        }
-
-        if let item = result.items.first {
-            if let explanation = item.explanation,
-               !explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return explanation
-            }
-            let qty = HomeLoggingDisplayText.formatOneDecimal(item.quantity)
-            var text = "Interpreted as \"\(item.name)\". Used \(qty) \(item.unit) with \(sourceLabel) to estimate \(Int(item.calories.rounded())) kcal."
-            if isApprox { text += " Result is marked approximate." }
-            return text
-        }
-
-        return "A calorie estimate is available but no matched item was retained. Re-parse to refine."
     }
-
-    private func drawerLoggedAtLabel(from loggedAtISO: String?) -> String? {
-        guard let date = drawerLoggedAtDate(from: loggedAtISO) else { return nil }
-        return Self.drawerLoggedAtDisplayFormatter.string(from: date)
-    }
-
-    private func drawerLoggedAtDate(from loggedAtISO: String?) -> Date? {
-        if let raw = loggedAtISO?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !raw.isEmpty {
-            if let parsed = HomeLoggingDateUtils.loggedAtFormatter.date(from: raw) {
-                return parsed
-            }
-            if let parsed = Self.loggedAtNoFractionFormatter.date(from: raw) {
-                return parsed
-            }
-            if let parsed = Self.loggedAtGenericFormatter.date(from: raw) {
-                return parsed
-            }
-        }
-        return draftLoggedAt ?? draftTimestampForSelectedDate()
-    }
-
-    private static let drawerLoggedAtDisplayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = .current
-        formatter.dateStyle = .medium
-        formatter.timeStyle = .short
-        return formatter
-    }()
-
-    private static let loggedAtNoFractionFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    private static let loggedAtGenericFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
 
     @ViewBuilder
     private func rowCalorieDetailsSheet(_ details: RowCalorieDetails) -> some View {
         let liveDetails = liveRowCalorieDetails(for: details.id, fallback: details)
-        let totals = NutritionTotals(
-            calories: Double(liveDetails.calories),
-            protein: liveDetails.protein ?? 0,
-            carbs: liveDetails.carbs ?? 0,
-            fat: liveDetails.fat ?? 0
-        )
-        NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    // Hero image — shown when a food photo is available
-                    if let imageData = liveDetails.imagePreviewData,
-                       let uiImage = UIImage(data: imageData) {
-                        Image(uiImage: uiImage)
-                            .resizable()
-                            .scaledToFill()
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 224)
-                            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                            .padding(.horizontal, 20)
-                            .padding(.top, 16)
-                    } else {
-                        // Text-entry eyebrow when there is no photo
-                        Text("Food App Result")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.tertiary)
-                            .textCase(.uppercase)
-                            .tracking(0.5)
-                            .padding(.horizontal, 20)
-                            .padding(.top, 22)
-                    }
-
-                    LoggingResultDrawerBody(
-                        foodName: liveDetails.displayName,
-                        totals: totals,
-                        items: liveDetails.parsedItems,
-                        thoughtProcess: liveDetails.thoughtProcess,
-                        onItemQuantityChange: { itemOffset, quantity in
-                            applyRowItemQuantity(
-                                rowID: liveDetails.id,
-                                itemOffset: itemOffset,
-                                quantity: quantity
-                            )
-                        },
-                        onRecalculate: nil
-                    )
-                    .padding(.bottom, 44)
-                }
-            }
-            .navigationTitle("")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Delete", role: .destructive) {
-                        rowDetailsPendingDeleteID = liveDetails.id
-                        isRowDetailsDeleteConfirmationPresented = true
-                    }
-                    .tint(.red)
-                    .disabled(isRowDetailsDeleteDisabled(rowID: liveDetails.id))
-                    .accessibilityHint(Text("Deletes this food entry and updates your totals."))
-                }
-
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(L10n.doneButton) {
-                        selectedRowDetails = nil
-                    }
-                }
-            }
-        }
-        .alert("How sure are you that you want to delete this entry?", isPresented: $isRowDetailsDeleteConfirmationPresented) {
-            Button("Delete", role: .destructive) {
+        MainLoggingRowCalorieDetailsSheet(
+            details: liveDetails,
+            isDeleteDisabled: isRowDetailsDeleteDisabled(rowID: liveDetails.id),
+            isDeleteConfirmationPresented: $isRowDetailsDeleteConfirmationPresented,
+            onDeleteTapped: {
+                rowDetailsPendingDeleteID = liveDetails.id
+                isRowDetailsDeleteConfirmationPresented = true
+            },
+            onConfirmDelete: {
                 if let rowID = rowDetailsPendingDeleteID {
                     confirmRowDetailsDelete(rowID: rowID)
                 }
                 rowDetailsPendingDeleteID = nil
-            }
-            Button("Cancel", role: .cancel) {
+            },
+            onCancelDelete: {
                 rowDetailsPendingDeleteID = nil
+            },
+            onDone: {
+                selectedRowDetails = nil
+            },
+            onItemQuantityChange: { itemOffset, quantity in
+                applyRowItemQuantity(
+                    rowID: liveDetails.id,
+                    itemOffset: itemOffset,
+                    quantity: quantity
+                )
             }
-        } message: {
-            Text("This removes the food from your log, updates your calories, and deletes the database row when it has already synced.")
-        }
-        .presentationDetents([.fraction(0.62), .large])
-        .presentationDragIndicator(.visible)
+        )
     }
 
     @ViewBuilder
@@ -1450,28 +1277,6 @@ struct MainLoggingShellView: View {
                 return nil
             }
             return (offset: itemOffset, item: item, options: servingOptions)
-        }
-    }
-
-    @ViewBuilder
-    private var manualAddDrawerContent: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Manual Add Options")
-                .font(.headline)
-            Text("Pick a manual path to keep logging when auto-parse is not ideal.")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-
-            Button("Add custom food item") { }
-                .buttonStyle(.bordered)
-            Button("Add from recent foods") { }
-                .buttonStyle(.bordered)
-            Button("Back to text mode") {
-                inputMode = .text
-                detailsDrawerMode = .full
-                isDetailsDrawerPresented = false
-            }
-            .buttonStyle(.borderedProminent)
         }
     }
 
