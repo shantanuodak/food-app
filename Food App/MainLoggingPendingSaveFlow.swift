@@ -14,7 +14,16 @@ extension MainLoggingShellView {
     }
 
     func pendingQueueItem(forRowID rowID: UUID) -> PendingSaveQueueItem? {
-        pendingSaveQueue.first { $0.rowID == rowID }
+        // Prefer items that already carry a serverLogId — when both a
+        // server-promoted item (post-save) and a freshly-queued item
+        // (post-edit) exist for the same rowID, the post-save item is the
+        // one that should drive the PATCH-vs-POST decision in
+        // autoSaveIfNeeded.
+        let matching = pendingSaveQueue.filter { $0.rowID == rowID }
+        if let promoted = matching.first(where: { $0.serverLogId != nil }) {
+            return promoted
+        }
+        return matching.first
     }
 
     func containsPendingQueueItem(for idempotencyKey: UUID) -> Bool {
