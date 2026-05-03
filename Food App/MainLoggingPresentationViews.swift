@@ -187,6 +187,72 @@ struct MainLoggingRowCalorieDetailsSheet: View {
     }
 }
 
+struct MainLoggingHomeStatusStrip: View {
+    let saveSuccessMessage: String?
+    let parseError: String?
+    let parseInfoMessage: String?
+    let inputModeStatusMessage: String?
+    let shouldShowRetryParseButton: Bool
+    let onRetryParse: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            statusText
+
+            Spacer(minLength: 0)
+
+            if shouldShowRetryParseButton {
+                Button(L10n.retryParseButton, action: onRetryParse)
+                    .font(.system(size: 13, weight: .semibold))
+                    .buttonStyle(.bordered)
+                    .accessibilityHint(Text(L10n.retryParseHint))
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var statusText: some View {
+        if let saveSuccessMessage {
+            Text(saveSuccessMessage)
+                .font(.system(size: 14))
+                .foregroundStyle(.green)
+                .lineLimit(1)
+        } else if let parseError {
+            if Self.isConnectivityParseError(parseError) {
+                Text(L10n.parseConnectivityIssueLabel)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(
+                        Capsule()
+                            .fill(Color.red.opacity(0.16))
+                    )
+            } else {
+                Text(parseError)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            }
+        } else if let parseInfoMessage {
+            Text(parseInfoMessage)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        } else if let inputModeStatusMessage, !inputModeStatusMessage.isEmpty {
+            Text(inputModeStatusMessage)
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+        } else {
+            EmptyView()
+        }
+    }
+
+    private static func isConnectivityParseError(_ message: String) -> Bool {
+        message == L10n.noNetworkParse || message == L10n.parseNetworkFailure
+    }
+}
+
 enum MainLoggingDrawerDisplayText {
     static func foodName(from result: ParseLogResponse) -> String {
         let names = result.items.prefix(3).map(\.name)

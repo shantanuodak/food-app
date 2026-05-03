@@ -1282,53 +1282,14 @@ struct MainLoggingShellView: View {
 
     @ViewBuilder
     private var homeStatusStrip: some View {
-        HStack(spacing: 10) {
-            if let saveSuccessMessage {
-                Text(saveSuccessMessage)
-                    .font(.system(size: 14))
-                    .foregroundStyle(.green)
-                    .lineLimit(1)
-            } else if let parseError {
-                if isConnectivityParseError(parseError) {
-                    Text(L10n.parseConnectivityIssueLabel)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.red)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        .background(
-                            Capsule()
-                                .fill(Color.red.opacity(0.16))
-                        )
-                } else {
-                    Text(parseError)
-                        .font(.system(size: 14))
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                }
-            } else if let parseInfoMessage {
-                Text(parseInfoMessage)
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            } else if inputMode != .text {
-                Text(modeStatusMessage(inputMode))
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-            } else {
-                EmptyView()
-            }
-
-            Spacer(minLength: 0)
-
-            if shouldShowRetryParseButton {
-                Button(L10n.retryParseButton) {
-                    triggerParseNow()
-                }
-                .font(.system(size: 13, weight: .semibold))
-                .buttonStyle(.bordered)
-                .accessibilityHint(Text(L10n.retryParseHint))
-            }
-        }
+        MainLoggingHomeStatusStrip(
+            saveSuccessMessage: saveSuccessMessage,
+            parseError: parseError,
+            parseInfoMessage: parseInfoMessage,
+            inputModeStatusMessage: inputModeStatusMessage,
+            shouldShowRetryParseButton: shouldShowRetryParseButton,
+            onRetryParse: triggerParseNow
+        )
     }
 
     private var shouldShowRetryParseButton: Bool {
@@ -1341,21 +1302,17 @@ struct MainLoggingShellView: View {
         return parseInfoMessage == L10n.parseStillProcessingLabel
     }
 
-    private func isConnectivityParseError(_ message: String) -> Bool {
-        message == L10n.noNetworkParse || message == L10n.parseNetworkFailure
-    }
-
-    private func modeStatusMessage(_ mode: HomeInputMode) -> String {
-        switch mode {
+    private var inputModeStatusMessage: String? {
+        switch inputMode {
         case .text:
-            return ""
+            return nil
         case .voice:
             return "Voice capture is in progress. You can continue with text right now."
         case .camera:
             if let selectedCameraSource {
                 return selectedCameraSource.statusMessage
             }
-            return ""
+            return nil
         case .manualAdd:
             return "Manual add tools are open in Details."
         }
