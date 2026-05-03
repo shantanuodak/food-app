@@ -5025,8 +5025,7 @@ struct MainLoggingShellView: View {
         guard var preservedRows = preservedDraftRowsByDate[dateString] else { return }
         preservedRows.removeAll { $0.row.id == rowID }
         if preservedRows.isEmpty {
-            preservedDraftRowsByDa
-            te.removeValue(forKey: dateString)
+            preservedDraftRowsByDate.removeValue(forKey: dateString)
         } else {
             preservedDraftRowsByDate[dateString] = preservedRows
         }

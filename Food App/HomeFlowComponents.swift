@@ -1955,6 +1955,9 @@ struct HomeStreakDrawerView: View {
             selectedDay = nil
             Task { await loadStreaks() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { _ in
+            Task { await loadStreaks() }
+        }
         .refreshable {
             await loadStreaks()
         }
