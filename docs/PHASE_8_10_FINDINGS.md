@@ -97,12 +97,52 @@ would surface.
 uploads, copy the `drain empty in Xms` value from console; if it ever
 exceeds 50ms, revisit.
 
-### #1: Memory Graph after 10 image meals ⚠ pending interactive
+### #1: Memory Graph after 10 image meals ✅ measured (with one concern)
 
-Needs Xcode → Debug → Memory Graph after logging ~10 image meals.
-Target: stays under pre-refactor baseline + 10MB. Saved-image-row
-preview-byte release behaviour is already in place (see `HomeLogRow`
-imageRef cleanup); empirical confirmation only.
+Captured from Xcode → Debug Navigator → Memory gauge over a 189-second
+session that included multiple image meals.
+
+```text
+Steady state (post-spike):  100.1 MB   ← acceptable
+High water mark:            1.12 GB    ← concerning
+Low water mark:             304 KB     ← initial cold start
+Memory Use:                 0.86% of system
+```
+
+**Read:**
+
+- **No leak.** Memory returned to ~100 MB after spikes — a real leak
+  would show monotonically increasing memory that never recovers. The
+  graph shape (sharp spike → drop back to baseline) confirms ARC is
+  releasing the heavy objects when expected.
+- **Steady state is acceptable.** 100 MB for a SwiftUI app with
+  photos and live state is in normal range.
+- **The 1.12 GB spike is too large** and is the actionable item. Likely
+  cause: during `prepareImagePayload`, the iteration over
+  4 dimensions × 7 quality attempts creates multiple resized
+  `UIImage` and JPEG `Data` instances inside the same scope. A 12MP
+  iPhone photo decompressed is 70-80 MB; holding 5-6 intermediates
+  simultaneously easily reaches 1 GB.
+
+**Object inspection** (separate Memory Graph view of `APIClient`'s
+subtree) showed normal ownership — `APIClient` held by `AppStore`
+and `ParseCoordinator` (correct singleton-with-two-owners pattern),
+holding `__JSONEncoder`, `__JSONDecoder`, `__NSURLSessionLocal` (all
+~1.6 KB total). No retention cycles surfaced.
+
+**Recommended follow-on (out of Phase 7A scope):**
+
+1. Wrap the inner loop of `prepareImagePayload` in `autoreleasepool`
+   so each (dimension, quality) iteration's intermediate `UIImage`
+   and `Data` are released as soon as the next iteration starts.
+2. Once a successful payload is returned, ensure the original
+   `UIImage` from the picker / camera is dropped from memory before
+   the parse network call begins.
+3. Verify with the same Memory Graph snapshot that peak drops below
+   ~250 MB during a photo log.
+
+This is a pure performance win — does not affect correctness or the
+600 KB upload target. Safe to do in a focused performance pass.
 
 ### #2: SwiftUI Instruments 30s typing session ⚠ pending interactive
 
@@ -224,7 +264,6 @@ in this audit that would affect deploy.
 
 **Pending interactive verification (cheap once the simulator is open):**
 
-- Phase 9 #1 — Memory Graph after 10 image meals.
 - Phase 9 #2 — SwiftUI Instruments 30s typing session.
 
 **Follow-on flagged for later (not blocking):**
@@ -233,6 +272,10 @@ in this audit that would affect deploy.
   600 KB cap. Recent uploads are correct, so the prepare path is
   fine; investigate which call path can bypass it (likely the
   deferred-upload retry uploading original disk bytes).
+- `prepareImagePayload` peak memory: 1.12 GB during photo
+  processing. Steady state and behaviour are correct, but the inner
+  loop should be wrapped in `autoreleasepool` to keep peak under
+  ~250 MB on devices with limited memory budgets. See Phase 9 #1.
 
 **Pending real-world data (no urgent action):**
 
