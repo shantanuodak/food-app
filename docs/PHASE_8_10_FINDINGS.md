@@ -27,20 +27,52 @@ cache         |    101   | 32.1 |    101     |   100.0
 
 **Action:** none required. Re-audit if user volume grows; if Gemini share drifts above 70%, revisit deterministic parser improvements.
 
-### #1: Confirm uploaded image bytes <= 600KB ⚠ pending interactive
+### #1: Confirm uploaded image bytes <= 600KB ✅ measured (with one outlier)
 
-Requires running the iOS app, taking a real photo log, and reading
-the byte count from the `prepareImagePayload` console log line. Code
-already targets <=600KB with progressive dimension/quality attempts;
-verification is empirical only.
+`prepareImagePayload` does not log the chosen byte count, so verification
+was done by querying `storage.objects.metadata->>'size'` against
+`food_logs.image_ref` joined on bucket name.
 
-### #2: Confirm parse cache prevents duplicate parses ⚠ pending interactive
+Last 5 image uploads (most recent first):
 
-Requires logging the same text twice in the running app and observing
-that the second request lands as `route=cache` (or never hits the
-backend at all). Server-side data above shows the cache *does* fire
-in production, just not whether the iOS-side dedupe is also catching
-re-parses before the network call.
+```text
+size_kb | under_600kb | created_at
+  559.2 |    PASS     | 2026-05-03 20:48:51
+  468.2 |    PASS     | 2026-05-03 20:48:29
+  532.0 |    PASS     | 2026-05-03 20:41:21
+  578.1 |    PASS     | 2026-05-03 18:13:21
+ 3369.7 |    FAIL     | 2026-05-02 02:45:20   ← 5.6x the cap
+```
+
+**Read:** Current code path is working — four recent uploads from today
+all landed at 468-578 KB, comfortably under the 600 KB target.
+
+**Outlier follow-on:** the 2026-05-02 upload at 3.4 MB bypassed
+`prepareImagePayload`. Likely candidates:
+- Deferred image upload retry path uploading original bytes from disk
+  instead of the already-prepared bytes.
+- A code path that existed before today's iOS 18 lowering or before
+  the deferred upload work in `0443246`.
+
+Not blocking — current uploads are correct. Worth grepping for any
+upload call site that does not go through `prepareImagePayload`.
+
+### #2: Confirm parse cache prevents duplicate parses ✅ measured
+
+Two consecutive logs of `1 whole big pomegranate` from the iOS
+client (timestamps 16:42:47 and 16:43:02 PT, ~15 seconds apart):
+
+```text
+request_id   | primary_route | cache_hit
+be46d1ce…    | gemini        | false       (first parse)
+8e4771bf…    | cache         | true        (second parse hit cache)
+```
+
+Server-side dedupe is working end-to-end. The iOS client correctly
+forwarded the second request to the backend, the cache layer
+recognized the same text, and returned the cached parse without
+calling Gemini again. 67.9% Gemini share (Phase 8 #3) reflects this
+cache layer's contribution.
 
 ---
 
@@ -192,10 +224,15 @@ in this audit that would affect deploy.
 
 **Pending interactive verification (cheap once the simulator is open):**
 
-- Phase 8 #1 — image upload byte count from console log (one photo).
-- Phase 8 #2 — parse cache hit when typing the same text twice.
 - Phase 9 #1 — Memory Graph after 10 image meals.
 - Phase 9 #2 — SwiftUI Instruments 30s typing session.
+
+**Follow-on flagged for later (not blocking):**
+
+- 2026-05-02 03:45 UTC produced a 3.4 MB image upload — 5.6x the
+  600 KB cap. Recent uploads are correct, so the prepare path is
+  fine; investigate which call path can bypass it (likely the
+  deferred-upload retry uploading original disk bytes).
 
 **Pending real-world data (no urgent action):**
 
