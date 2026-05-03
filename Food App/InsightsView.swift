@@ -1,34 +1,84 @@
 import SwiftUI
 import Charts
 
-/// Insights — 30-day adherence charts for the four nutrition metrics.
-/// Reachable from the Profile's Insights hub row.
+/// Insights — daily-bar charts for the four nutrition metrics across a
+/// user-selectable time window (7d / 14d / 1mo / 3mo). Reachable from
+/// the Profile's Insights hub row.
 ///
-/// Data source: `GET /v1/logs/progress`. The endpoint already returns the
-/// per-day totals, targets, and `hasLogs` flag we need; this view does
-/// not introduce any new backend surface.
+/// Data source: `GET /v1/logs/progress`. Returns per-day totals, targets,
+/// and a `hasLogs` flag. No new backend surface introduced.
 ///
-/// Design intent (Tier 1 #8):
-/// - Plain, short headers — one chart per metric, stacked vertically.
-/// - Consumed line in metric color; target as a dashed gray rule.
-/// - Days with no logs render as gaps (not zeros), so a missed day
-///   doesn't visually equal "ate zero."
-/// - Fixed 30-day range. No range picker in this MVP cut.
-/// - Steps chart deliberately deferred to Tier 2 (#8 add-on); it needs
-///   either a new `/v1/health/activity-range` endpoint or an on-device
-///   HealthKit range read — out of scope for May 6.
+/// Design intent (revised after Tier 1 review):
+/// - One bar per day, four charts stacked (Calories, Protein, Carbs, Fat).
+/// - Bar height = consumed value. A dashed target line overlays so the
+///   user can see at a glance which days hit and which fell short.
+/// - Days with no logs render with no bar (not a zero bar). The target
+///   line is continuous regardless so the eye has a baseline.
+/// - Segmented Picker at the top swaps the active range — re-fetches
+///   progress data each time. Default is 30d.
+/// - Steps chart is still Tier 2 (#8 add-on) — needs HealthKit range
+///   read or new backend endpoint.
 struct InsightsView: View {
     @EnvironmentObject private var appStore: AppStore
+
+    enum RangeOption: Int, CaseIterable, Identifiable {
+        case sevenDays = 7
+        case fourteenDays = 14
+        case oneMonth = 30
+        case threeMonths = 90
+
+        var id: Int { rawValue }
+
+        var label: String {
+            switch self {
+            case .sevenDays: return "7D"
+            case .fourteenDays: return "14D"
+            case .oneMonth: return "1M"
+            case .threeMonths: return "3M"
+            }
+        }
+
+        var headerLabel: String {
+            switch self {
+            case .sevenDays: return "Last 7 days"
+            case .fourteenDays: return "Last 14 days"
+            case .oneMonth: return "Last 30 days"
+            case .threeMonths: return "Last 3 months"
+            }
+        }
+
+        /// X-axis tick density — wider ranges need fewer labels to avoid
+        /// overlap. Roughly aim for ~5 ticks across the range.
+        var axisStrideDays: Int {
+            switch self {
+            case .sevenDays: return 1
+            case .fourteenDays: return 2
+            case .oneMonth: return 5
+            case .threeMonths: return 14
+            }
+        }
+
+        /// Bar width as a fraction of the per-day slot. Wider for short
+        /// ranges (chunkier bars) so 7d doesn't look like skinny lines.
+        var barWidthRatio: CGFloat {
+            switch self {
+            case .sevenDays: return 0.7
+            case .fourteenDays: return 0.65
+            case .oneMonth: return 0.6
+            case .threeMonths: return 0.55
+            }
+        }
+    }
 
     @State private var progress: ProgressResponse?
     @State private var isLoading = false
     @State private var errorMessage: String?
-
-    private let rangeDays = 30
+    @State private var selectedRange: RangeOption = .oneMonth
 
     var body: some View {
         ScrollView {
             VStack(spacing: 16) {
+                rangePicker
                 rangeHeader
                 chartsContent
             }
@@ -37,17 +87,26 @@ struct InsightsView: View {
         .background(Color(.systemGroupedBackground))
         .navigationTitle("Insights")
         .navigationBarTitleDisplayMode(.inline)
-        .task {
-            await loadIfNeeded()
+        .task(id: selectedRange) {
+            await load()
         }
     }
 
-    // MARK: - Header
+    // MARK: - Range picker
+
+    private var rangePicker: some View {
+        Picker("Range", selection: $selectedRange) {
+            ForEach(RangeOption.allCases) { option in
+                Text(option.label).tag(option)
+            }
+        }
+        .pickerStyle(.segmented)
+    }
 
     private var rangeHeader: some View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 2) {
-                Text("Last \(rangeDays) days")
+                Text(selectedRange.headerLabel)
                     .font(.headline)
                 if let progress {
                     Text(rangeSubtitle(from: progress))
@@ -82,25 +141,25 @@ struct InsightsView: View {
                 title: "Calories",
                 unit: "kcal",
                 color: .green,
-                points: progress.days.map { ChartPoint(point: $0, valueKey: .calories) }
+                points: progress.days.compactMap { ChartPoint(point: $0, valueKey: .calories) }
             )
             chartCard(
                 title: "Protein",
                 unit: "g",
                 color: .blue,
-                points: progress.days.map { ChartPoint(point: $0, valueKey: .protein) }
+                points: progress.days.compactMap { ChartPoint(point: $0, valueKey: .protein) }
             )
             chartCard(
                 title: "Carbs",
                 unit: "g",
                 color: .orange,
-                points: progress.days.map { ChartPoint(point: $0, valueKey: .carbs) }
+                points: progress.days.compactMap { ChartPoint(point: $0, valueKey: .carbs) }
             )
             chartCard(
                 title: "Fat",
                 unit: "g",
                 color: .red,
-                points: progress.days.map { ChartPoint(point: $0, valueKey: .fat) }
+                points: progress.days.compactMap { ChartPoint(point: $0, valueKey: .fat) }
             )
         }
     }
@@ -124,30 +183,25 @@ struct InsightsView: View {
                 }
             }
 
-            // Days with no logs are rendered as gaps so a missed day
-            // doesn't read as "ate zero."
-            let consumedSegments = segmentedLoggedPoints(from: points)
             let scale = chartScale(points: points)
 
             Chart {
-                // Consumed (segmented to break across no-log days)
-                ForEach(consumedSegments) { segment in
-                    ForEach(segment.points) { p in
-                        LineMark(
-                            x: .value("Date", p.date),
-                            y: .value(title, scale.clamp(p.consumed))
-                        )
-                        .foregroundStyle(color)
-                        .lineStyle(StrokeStyle(lineWidth: 2.2, lineCap: .round))
-                        .interpolationMethod(.monotone)
-                    }
+                // Consumed bars — one per logged day. No-log days render
+                // nothing here; the target line below still shows.
+                ForEach(points.filter(\.hasLogs)) { p in
+                    BarMark(
+                        x: .value("Date", p.date, unit: .day),
+                        y: .value(title, scale.clamp(p.consumed)),
+                        width: .ratio(selectedRange.barWidthRatio)
+                    )
+                    .foregroundStyle(color.gradient)
+                    .cornerRadius(3)
                 }
 
-                // Target line — dashed, low-emphasis. Continuous across
-                // the full range (target doesn't have gaps).
+                // Target line — dashed, low-emphasis, continuous.
                 ForEach(points) { p in
                     LineMark(
-                        x: .value("Date", p.date),
+                        x: .value("Date", p.date, unit: .day),
                         y: .value("Target", scale.clamp(p.target))
                     )
                     .foregroundStyle(Color.secondary.opacity(0.55))
@@ -156,7 +210,7 @@ struct InsightsView: View {
                 }
             }
             .chartXAxis {
-                AxisMarks(values: .stride(by: .day, count: max(1, rangeDays / 5))) { value in
+                AxisMarks(values: .stride(by: .day, count: selectedRange.axisStrideDays)) { value in
                     AxisGridLine().foregroundStyle(Color.secondary.opacity(0.15))
                     AxisTick().foregroundStyle(Color.secondary.opacity(0.3))
                     AxisValueLabel {
@@ -171,8 +225,8 @@ struct InsightsView: View {
                 AxisMarks(position: .leading, values: .automatic(desiredCount: 3))
             }
             .chartYScale(domain: scale.minY ... scale.maxY)
-            .frame(height: 140)
-            .accessibilityLabel("\(title) chart over the last \(rangeDays) days")
+            .frame(height: 160)
+            .accessibilityLabel(Text("\(title) chart over \(selectedRange.headerLabel.lowercased())"))
         }
         .padding(16)
         .background(
@@ -204,7 +258,7 @@ struct InsightsView: View {
                 .font(.footnote)
                 .foregroundStyle(.secondary)
             Button("Retry") {
-                Task { await loadIfNeeded(force: true) }
+                Task { await load() }
             }
             .buttonStyle(.bordered)
             .padding(.top, 4)
@@ -219,16 +273,16 @@ struct InsightsView: View {
 
     // MARK: - Data loading
 
-    private func loadIfNeeded(force: Bool = false) async {
-        if isLoading { return }
-        if progress != nil && !force { return }
+    private func load() async {
         isLoading = true
         errorMessage = nil
+        // Don't clear `progress` — keep the previous range visible while
+        // the new one loads, so range switches feel responsive.
         defer { isLoading = false }
 
         let formatter = Self.requestFormatter
         let toDate = Date()
-        let fromDate = Calendar.current.date(byAdding: .day, value: -(rangeDays - 1), to: toDate) ?? toDate
+        let fromDate = Calendar.current.date(byAdding: .day, value: -(selectedRange.rawValue - 1), to: toDate) ?? toDate
         let from = formatter.string(from: fromDate)
         let to = formatter.string(from: toDate)
         let tz = TimeZone.current.identifier
@@ -249,28 +303,8 @@ struct InsightsView: View {
         return logged.reduce(0, +) / Double(logged.count)
     }
 
-    /// Splits the points into runs of consecutive logged days, separated
-    /// by no-log days. Lets the consumed line render as multiple short
-    /// segments instead of dipping to zero on missed days.
-    private func segmentedLoggedPoints(from points: [ChartPoint]) -> [ChartSegment] {
-        var segments: [ChartSegment] = []
-        var current: [ChartPoint] = []
-        for p in points {
-            if p.hasLogs {
-                current.append(p)
-            } else if !current.isEmpty {
-                segments.append(ChartSegment(points: current))
-                current = []
-            }
-        }
-        if !current.isEmpty {
-            segments.append(ChartSegment(points: current))
-        }
-        return segments
-    }
-
     /// Y-axis scale that fits both consumed peaks and target line, with
-    /// a small headroom so lines aren't clipped against the top edge.
+    /// a small headroom so bars don't clip against the top edge.
     private func chartScale(points: [ChartPoint]) -> ChartScale {
         let consumed = points.filter(\.hasLogs).map(\.consumed)
         let targets = points.map(\.target)
@@ -311,10 +345,13 @@ private struct ChartPoint: Identifiable {
 
     var id: Date { date }
 
-    /// Macro extractor — closure-based to keep the four chart calls
-    /// concise and avoid duplicating slice logic for each metric.
-    init(point: ProgressDayPoint, valueKey: ChartValueKey) {
-        let date = InsightsView.requestFormatterParse(point.date) ?? Date()
+    /// `compactMap`-friendly init: returns nil if the API row's date
+    /// can't be parsed, so we never plant a bar at "today" by mistake
+    /// (which was the rendering bug in the line-chart version).
+    init?(point: ProgressDayPoint, valueKey: ChartValueKey) {
+        guard let date = InsightsView.requestFormatterParse(point.date) else {
+            return nil
+        }
         self.date = date
         switch valueKey {
         case .calories:
@@ -336,11 +373,6 @@ private struct ChartPoint: Identifiable {
 
 private enum ChartValueKey {
     case calories, protein, carbs, fat
-}
-
-private struct ChartSegment: Identifiable {
-    let id = UUID()
-    let points: [ChartPoint]
 }
 
 private struct ChartScale {
