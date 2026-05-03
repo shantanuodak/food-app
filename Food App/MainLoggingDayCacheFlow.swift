@@ -336,7 +336,21 @@ extension MainLoggingShellView {
             }
         }
 
-        return output
+        // Stable saved-first partition.
+        //
+        // The walk above preserves whatever order rows were in inside
+        // `currentRows`, then appends any brand-new candidates at the end.
+        // That can leave the trailing empty typing placeholder ABOVE the
+        // saved rows (e.g. on first sync after launch when inputRows starts
+        // as [empty] and the server returns history) or push a freshly-
+        // saved row BELOW an active typing row. Both manifest to the user
+        // as "rows changing sequence" / "typing placeholder jumps to the
+        // top." Filtering preserves relative order within each group, so
+        // the user's existing arrangement of saved vs unsaved rows is kept,
+        // but the two groups always render saved-first.
+        let savedOutput = output.filter { $0.isSaved }
+        let unsavedOutput = output.filter { !$0.isSaved }
+        return savedOutput + unsavedOutput
     }
 
     func loadDaySummary(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
