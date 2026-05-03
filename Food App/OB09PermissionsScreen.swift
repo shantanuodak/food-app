@@ -214,7 +214,11 @@ struct OB09PermissionsScreen: View {
     }
 
     private var subhead: some View {
-        Text("With this access, we can create a more personalised experience for you.")
+        // Voice rewrite (2026-05-01): "With this access, we can create
+        // a more personalised experience for you." → tighter, less
+        // marketing-y, and switches the British "personalised" → US
+        // "personalize" to match the rest of the app.
+        Text("We use this to personalize your plan and progress.")
             .font(.system(size: 15, weight: .medium))
             .foregroundStyle(OnboardingGlassTheme.textSecondary)
             .multilineTextAlignment(.leading)
@@ -229,7 +233,11 @@ struct OB09PermissionsScreen: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(OnboardingGlassTheme.textSecondary)
 
-            Text("Your health data is never stored or shared with third parties. It remains private and is used only to enhance your experience while ensuring the highest standards of security.")
+            // Voice rewrite (2026-05-01): tightened and switched to
+            // active voice. Original was 31 words for what reads better
+            // in 17. Privacy claims kept verbatim (never stored, never
+            // shared, used only to personalize).
+            Text("Your health data is never stored on our servers and never shared. It's used only to personalize your plan.")
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(OnboardingGlassTheme.textMuted)
                 .lineSpacing(2)

@@ -21,8 +21,11 @@ struct OB02bSocialProofScreen: View {
 
                 Spacer()
 
-                // Headline
-                Text("Food App provides\nlong-term results")
+                // Headline. Voice rewrite (2026-05-01): replaced
+                // "Food App provides\nlong-term results" — branded
+                // marketing voice that tested as stiff. New copy puts
+                // the user in the subject position.
+                Text("Built for\nlong-term results")
                     .font(OnboardingTypography.instrumentSerif(style: .regular, size: 41))
                     .foregroundStyle(colorScheme == .dark ? .white : .black)
                     .multilineTextAlignment(.center)

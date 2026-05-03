@@ -16,8 +16,10 @@ struct OB02eHowItWorksScreen: View {
                     .padding(.top, 12)
                     .padding(.horizontal, 16)
 
-                // Headline
-                Text("Why Food App's\napproach works")
+                // Voice rewrite (2026-05-01): "Why Food App's\napproach
+                // works" → "Why this works" — drops self-referential brand
+                // phrasing in favor of putting the user with the content.
+                Text("Why this works")
                     .font(OnboardingTypography.instrumentSerif(style: .regular, size: 38))
                     .foregroundStyle(OnboardingGlassTheme.textPrimary)
                     .multilineTextAlignment(.center)
@@ -393,11 +395,11 @@ private struct TrackProgressCardView: View {
 
             // Right: text
             VStack(alignment: .leading, spacing: 4) {
-                Text("Track your Progress")
+                Text("Track your progress")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(OnboardingGlassTheme.textPrimary)
 
-                Text("Track your daily progress and see trends")
+                Text("See your daily progress and trends")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .lineSpacing(2)
@@ -451,11 +453,11 @@ private struct TakePhotoCardView: View {
 
             // Text
             VStack(alignment: .leading, spacing: 4) {
-                Text("Take a Food Photo")
+                Text("Take a food photo")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(OnboardingGlassTheme.textPrimary)
 
-                Text("Just take a picture\nand log your food.")
+                Text("Snap a picture —\nwe'll log the rest.")
                     .font(.system(size: 14, weight: .medium))
                     .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .lineSpacing(2)
