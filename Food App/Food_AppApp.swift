@@ -26,6 +26,7 @@ struct Food_AppApp: App {
 #endif
                 }
                 .task {
+                    appStore.warmBackend()
                     // Refresh the cached notification auth state from the OS
                     // (the user may have toggled it inside iOS Settings while
                     // the app was backgrounded), then idempotently

@@ -86,6 +86,10 @@ async function applySessionClaims(client: PoolClient, context: DbAuthContext | n
 
 export const pool = new Pool({
   connectionString: config.databaseUrl,
+  // Keep the app pool explicit so Render instance count and Supabase limits
+  // can be tuned together. The default remains pg's 10 connections; override
+  // DATABASE_POOL_MAX if another consumer or instance type changes capacity.
+  max: config.databasePoolMax,
   ssl: shouldUseSsl(config.databaseUrl, config.databaseSsl) ? { rejectUnauthorized: false } : undefined
 });
 

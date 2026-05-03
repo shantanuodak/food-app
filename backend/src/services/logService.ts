@@ -71,6 +71,39 @@ function withHealthSync(userId: string, logId: string, response?: Partial<SaveLo
   };
 }
 
+const insertFoodLogText = `
+  INSERT INTO food_logs (
+    user_id, logged_at, meal_type, raw_text,
+    total_calories, total_protein_g, total_carbs_g, total_fat_g,
+    parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind,
+    parse_request_id, parse_version, created_at, updated_at
+  )
+  VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, NOW(), NOW())
+  RETURNING id
+`;
+
+const insertFoodLogItemText = `
+  INSERT INTO food_log_items (
+    food_log_id, food_name, quantity, amount, unit, unit_normalized, grams, grams_per_unit,
+    calories, protein_g, carbs_g, fat_g,
+    nutrition_source_id, original_nutrition_source_id, source_family,
+    needs_clarification, manual_override_json, match_confidence
+  )
+  VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18)
+`;
+
+const selectExistingLogByParseRequestText = `
+  SELECT id
+  FROM food_logs
+  WHERE user_id = $1
+    AND parse_request_id = $2
+  ORDER BY created_at ASC
+  LIMIT 1
+  FOR UPDATE
+`;
+
+const selectOwnedLogForUpdateText = `SELECT id FROM food_logs WHERE id = $1 AND user_id = $2 FOR UPDATE`;
+
 export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse> {
   const client = await pool.connect();
   try {
@@ -85,18 +118,10 @@ export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse>
       client
     );
 
-    const logInsert = await client.query<{ id: string }>(
-      `
-      INSERT INTO food_logs (
-        user_id, logged_at, meal_type, raw_text,
-        total_calories, total_protein_g, total_carbs_g, total_fat_g,
-        parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind,
-        parse_request_id, parse_version, created_at, updated_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, NOW(), NOW())
-      RETURNING id
-      `,
-      [
+    const logInsert = await client.query<{ id: string }>({
+      name: 'insert-food-log-v1',
+      text: insertFoodLogText,
+      values: [
         input.userId,
         input.loggedAt,
         input.mealType ?? null,
@@ -113,7 +138,7 @@ export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse>
         input.parseRequestId ?? null,
         input.parseVersion ?? null
       ]
-    );
+    });
 
     const logId = logInsert.rows[0]?.id;
     if (!logId) {
@@ -121,17 +146,10 @@ export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse>
     }
 
     for (const item of input.items) {
-      await client.query(
-        `
-        INSERT INTO food_log_items (
-          food_log_id, food_name, quantity, amount, unit, unit_normalized, grams, grams_per_unit,
-          calories, protein_g, carbs_g, fat_g,
-          nutrition_source_id, original_nutrition_source_id, source_family,
-          needs_clarification, manual_override_json, match_confidence
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18)
-        `,
-        [
+      await client.query({
+        name: 'insert-food-log-item-v1',
+        text: insertFoodLogItemText,
+        values: [
           logId,
           item.foodName,
           item.quantity,
@@ -151,7 +169,7 @@ export async function saveFoodLog(input: SaveLogInput): Promise<SaveLogResponse>
           item.manualOverrideMeta ? JSON.stringify(item.manualOverrideMeta) : null,
           item.matchConfidence
         ]
-      );
+      });
     }
 
     await client.query('COMMIT');
@@ -208,18 +226,11 @@ export async function saveFoodLogStrict(input: {
     );
 
     if (normalizedParseRequestId) {
-      const existingByParse = await client.query<{ id: string }>(
-        `
-        SELECT id
-        FROM food_logs
-        WHERE user_id = $1
-          AND parse_request_id = $2
-        ORDER BY created_at ASC
-        LIMIT 1
-        FOR UPDATE
-        `,
-        [input.userId, normalizedParseRequestId]
-      );
+      const existingByParse = await client.query<{ id: string }>({
+        name: 'select-existing-log-by-parse-request-v1',
+        text: selectExistingLogByParseRequestText,
+        values: [input.userId, normalizedParseRequestId]
+      });
       const existingLogId = existingByParse.rows[0]?.id;
       if (existingLogId) {
         const isMatchingReplay = await hasSavedPayloadHashForLog(client, {
@@ -247,18 +258,10 @@ export async function saveFoodLogStrict(input: {
       }
     }
 
-    const logInsert = await client.query<{ id: string }>(
-      `
-      INSERT INTO food_logs (
-        user_id, logged_at, meal_type, raw_text,
-        total_calories, total_protein_g, total_carbs_g, total_fat_g,
-        parse_confidence, parse_sources_used_json, assumptions_json, image_ref, input_kind,
-        parse_request_id, parse_version, created_at, updated_at
-      )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15, NOW(), NOW())
-      RETURNING id
-      `,
-      [
+    const logInsert = await client.query<{ id: string }>({
+      name: 'insert-food-log-v1',
+      text: insertFoodLogText,
+      values: [
         input.log.userId,
         input.log.loggedAt,
         input.log.mealType ?? null,
@@ -275,7 +278,7 @@ export async function saveFoodLogStrict(input: {
         normalizedParseRequestId,
         input.log.parseVersion ?? null
       ]
-    );
+    });
 
     const logId = logInsert.rows[0]?.id;
     if (!logId) {
@@ -283,17 +286,10 @@ export async function saveFoodLogStrict(input: {
     }
 
     for (const item of input.log.items) {
-      await client.query(
-        `
-        INSERT INTO food_log_items (
-          food_log_id, food_name, quantity, amount, unit, unit_normalized, grams, grams_per_unit,
-          calories, protein_g, carbs_g, fat_g,
-          nutrition_source_id, original_nutrition_source_id, source_family,
-          needs_clarification, manual_override_json, match_confidence
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18)
-        `,
-        [
+      await client.query({
+        name: 'insert-food-log-item-v1',
+        text: insertFoodLogItemText,
+        values: [
           logId,
           item.foodName,
           item.quantity,
@@ -313,7 +309,7 @@ export async function saveFoodLogStrict(input: {
           item.manualOverrideMeta ? JSON.stringify(item.manualOverrideMeta) : null,
           item.matchConfidence
         ]
-      );
+      });
     }
 
     const response = withHealthSync(input.userId, logId);
@@ -377,10 +373,11 @@ export async function updateFoodLog(input: UpdateLogInput): Promise<UpdateLogRes
     await client.query('BEGIN');
 
     // Verify ownership and existence in the same transaction.
-    const ownerCheck = await client.query<{ id: string }>(
-      `SELECT id FROM food_logs WHERE id = $1 AND user_id = $2 FOR UPDATE`,
-      [input.logId, input.userId]
-    );
+    const ownerCheck = await client.query<{ id: string }>({
+      name: 'select-owned-log-for-update-v1',
+      text: selectOwnedLogForUpdateText,
+      values: [input.logId, input.userId]
+    });
     if (ownerCheck.rowCount === 0) {
       throw new ApiError(404, 'LOG_NOT_FOUND', 'Food log not found');
     }
@@ -430,17 +427,10 @@ export async function updateFoodLog(input: UpdateLogInput): Promise<UpdateLogRes
     await client.query(`DELETE FROM food_log_items WHERE food_log_id = $1`, [input.logId]);
 
     for (const item of input.items) {
-      await client.query(
-        `
-        INSERT INTO food_log_items (
-          food_log_id, food_name, quantity, amount, unit, unit_normalized, grams, grams_per_unit,
-          calories, protein_g, carbs_g, fat_g,
-          nutrition_source_id, original_nutrition_source_id, source_family,
-          needs_clarification, manual_override_json, match_confidence
-        )
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17::jsonb,$18)
-        `,
-        [
+      await client.query({
+        name: 'insert-food-log-item-v1',
+        text: insertFoodLogItemText,
+        values: [
           input.logId,
           item.foodName,
           item.quantity,
@@ -460,7 +450,7 @@ export async function updateFoodLog(input: UpdateLogInput): Promise<UpdateLogRes
           item.manualOverrideMeta ? JSON.stringify(item.manualOverrideMeta) : null,
           item.matchConfidence
         ]
-      );
+      });
     }
 
     await client.query('COMMIT');
@@ -508,10 +498,11 @@ export async function deleteFoodLog(input: { logId: string; userId: string }): P
   try {
     await client.query('BEGIN');
 
-    const ownerCheck = await client.query<{ id: string }>(
-      `SELECT id FROM food_logs WHERE id = $1 AND user_id = $2 FOR UPDATE`,
-      [input.logId, input.userId]
-    );
+    const ownerCheck = await client.query<{ id: string }>({
+      name: 'select-owned-log-for-update-v1',
+      text: selectOwnedLogForUpdateText,
+      values: [input.logId, input.userId]
+    });
     if (ownerCheck.rowCount === 0) {
       throw new ApiError(404, 'LOG_NOT_FOUND', 'Food log not found');
     }

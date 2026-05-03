@@ -2263,23 +2263,30 @@ struct MainLoggingShellView: View {
     }
 
     private func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
-        let resized = resizeImageIfNeeded(image, maxDimension: 1600)
-        let qualityAttempts: [CGFloat] = [0.86, 0.78, 0.70, 0.62, 0.55]
-        let maxBytes = 5_800_000
+        let maxBytes = 600_000
+        let dimensionAttempts: [CGFloat] = [1920, 1600, 1280, 1024]
+        let qualityAttempts: [CGFloat] = [0.85, 0.78, 0.70, 0.62, 0.55, 0.45, 0.35]
+        var smallestData: Data?
 
-        for quality in qualityAttempts {
-            guard let data = resized.jpegData(compressionQuality: quality) else {
-                continue
-            }
-            if data.count <= maxBytes {
-                return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
+        for dimension in dimensionAttempts {
+            let resized = resizeImageIfNeeded(image, maxDimension: dimension)
+            for quality in qualityAttempts {
+                guard let data = resized.jpegData(compressionQuality: quality) else {
+                    continue
+                }
+                if smallestData.map({ data.count < $0.count }) != false {
+                    smallestData = data
+                }
+                if data.count <= maxBytes {
+                    return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
+                }
             }
         }
 
-        guard let fallbackData = resized.jpegData(compressionQuality: 0.5) else {
-            return nil
+        if let smallestData {
+            return PreparedImagePayload(uploadData: smallestData, previewData: smallestData, mimeType: "image/jpeg")
         }
-        return PreparedImagePayload(uploadData: fallbackData, previewData: fallbackData, mimeType: "image/jpeg")
+        return nil
     }
 
     private func resizeImageIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
@@ -2451,11 +2458,27 @@ struct MainLoggingShellView: View {
             }
         }
 
-        let request = ParseLogRequest(text: text, loggedAt: snapshot.loggedAt)
-
         do {
-            let response = try await appStore.apiClient.parseLog(request)
-            let durationMs = elapsedMs(since: startedAt)
+            let response: ParseLogResponse
+            let durationMs: Double
+            if let cachedResponse = parseCoordinator.cachedResponse(
+                rowID: snapshot.activeRowID,
+                text: text,
+                loggedAt: snapshot.loggedAt
+            ) {
+                response = cachedResponse
+                durationMs = 0
+            } else {
+                let request = ParseLogRequest(text: text, loggedAt: snapshot.loggedAt)
+                response = try await appStore.apiClient.parseLog(request)
+                durationMs = elapsedMs(since: startedAt)
+                parseCoordinator.storeCachedResponse(
+                    response,
+                    rowID: snapshot.activeRowID,
+                    text: text,
+                    loggedAt: snapshot.loggedAt
+                )
+            }
 
             // Guard: if the target row no longer exists (e.g. user swiped to a different
             // day while the parse was in flight), silently discard the response instead
@@ -4616,6 +4639,9 @@ struct MainLoggingShellView: View {
         inputRows[index].parsePhase = .idle
         if inputRows[index].imageRef == nil {
             inputRows[index].imageRef = imageRef
+        }
+        if inputRows[index].imageRef != nil {
+            inputRows[index].imagePreviewData = nil
         }
     }
 

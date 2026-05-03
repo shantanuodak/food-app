@@ -66,6 +66,19 @@ final class APIClient {
         try await request(path: "/health", method: "GET", requiresAuth: false)
     }
 
+    func warmHealth() async {
+        guard var components = URLComponents(url: configuration.baseURL, resolvingAgainstBaseURL: false) else {
+            return
+        }
+        components.path = "/health"
+        guard let url = components.url else { return }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.timeoutInterval = 5
+        _ = try? await session.data(for: request)
+    }
+
     func submitOnboarding(_ requestBody: OnboardingRequest) async throws -> OnboardingResponse {
         try await request(path: "/v1/onboarding", method: "POST", body: requestBody, requiresAuth: true)
     }

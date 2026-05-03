@@ -1,13 +1,17 @@
 # Logging Refactor: Execution Plan
 
-## Current status (2026-05-02)
+## Current status (2026-05-03)
 - Phase 0: Complete
 - Phase 1: Complete
 - Phase 2: Complete (SaveCoordinator is now the active iOS save path)
 - Phase 3: Complete (ParseCoordinator is now the active iOS parse snapshot path; image/text/voice converge through shared snapshot persistence)
-- Phase 4: Implemented locally; awaiting release/manual gate verification
+- Phase 4: Stable after manual gate verification
 - Phase 5: Complete (save_attempts telemetry table, ingest endpoint, server-side save-route recording)
 - Phase 6: Complete (recent-parses endpoint/dashboard now show save-attempt state)
+- Phase 7: Audited only; full code-shrink target remains open because it requires a dedicated extraction pass
+- Phase 8: Partially complete (image compression, same-row parse cache, cold-start warmup)
+- Phase 9: Partially complete (saved image rows release preview bytes; deferred upload drain avoids expensive constrained batches)
+- Phase 10: Partially complete (configurable DB pool max and prepared statements for hot save queries)
 
 ### Phase 4 implementation notes
 1. Removed live save/parse feature-flag branching from `MainLoggingShellView`; active behavior now runs through `SaveCoordinator` and `ParseCoordinator`.
@@ -51,6 +55,27 @@
    - Backend build: `npm run build` succeeded.
    - Backend unit suite: `npm test` passed.
    - Backend integration suite: `npm run test:integration` passed (31/31).
+
+### Phase 7-10 pass notes
+1. Phase 7 audit:
+   - Swift LOC audit still shows `MainLoggingShellView.swift` at 5,580 lines, `HomeFlowComponents.swift` at 2,325 lines, `OnboardingView.swift` at 1,263 lines, and `ContentView.swift` at 1,030 lines.
+   - Asset audit found all imagesets currently referenced.
+   - Full Phase 7 is not honestly complete; it needs a focused extraction/deletion pass rather than opportunistic edits.
+2. Phase 8:
+   - Image parse payload prep now targets <= 600KB with progressive dimension/quality attempts.
+   - `ParseCoordinator` now keeps a 50-entry, 30-minute same-row parse response cache. Cache keys include row ID and logged timestamp so repeat meals in new rows do not reuse parse IDs and collide with duplicate-save protection.
+   - App launch now fires a background HEAD `/health` warmup to reduce Render cold-start impact before first parse.
+3. Phase 9:
+   - Saved image rows drop `imagePreviewData` after an `imageRef` exists, reducing retained JPEG bytes in long sessions.
+   - Deferred photo upload drain now skips batches larger than three entries on constrained/expensive networks and logs drain timing.
+4. Phase 10:
+   - Backend DB pool max is now explicit/configurable via `DATABASE_POOL_MAX` with default 10.
+   - Hot save-path queries use named prepared statements for food-log insert, item insert, existing parse lookup, and ownership lock checks.
+5. Validation run:
+   - Backend build: `npm run build` succeeded.
+   - Backend unit suite: `npm test` passed.
+   - Backend integration suite: `npm run test:integration` passed (31/31).
+   - iOS build: `xcodebuild ... build` succeeded.
 
 ## Scope
 Implementation plan for `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/LOGGING_REFACTOR_PLAN.md`.

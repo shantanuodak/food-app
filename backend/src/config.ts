@@ -64,6 +64,7 @@ export const config = {
   port: Number(process.env.PORT || 8080),
   databaseUrl: required('DATABASE_URL'),
   databaseSsl: booleanWithDefault('DATABASE_SSL', false),
+  databasePoolMax: integerWithDefault('DATABASE_POOL_MAX', 10),
   rlsStrictMode: booleanWithDefault('RLS_STRICT_MODE', false),
   authMode: authModeWithDefault('AUTH_MODE', 'dev'),
   authBearerDevPrefix: process.env.AUTH_BEARER_DEV_PREFIX || 'dev-',

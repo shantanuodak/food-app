@@ -251,6 +251,12 @@ final class AppStore: ObservableObject {
         return true
     }
 
+    func warmBackend() {
+        Task(priority: .background) { [apiClient] in
+            await apiClient.warmHealth()
+        }
+    }
+
     func refreshHealthAuthorizationState() {
         healthKitService.refreshAuthorizationState()
     }
@@ -323,8 +329,19 @@ final class AppStore: ObservableObject {
     func drainDeferredImageUploads() async {
         guard let store = deferredImageUploadStore else { return }
         guard authSessionStore.session != nil else { return }
+        let pendingCount = await store.pendingCount()
+        guard pendingCount > 0 else { return }
+        if pendingCount > 3, networkMonitor.isExpensive || networkMonitor.isConstrained {
+            NSLog("[AppStore] Skipping \(pendingCount) deferred image upload(s) on constrained/expensive network")
+            return
+        }
+
+        let startedAt = Date()
         let entries = await store.drain()
-        guard !entries.isEmpty else { return }
+        guard !entries.isEmpty else {
+            NSLog("[AppStore] Deferred image upload drain empty in \(Int(Date().timeIntervalSince(startedAt) * 1000))ms")
+            return
+        }
         NSLog("[AppStore] Draining \(entries.count) deferred image upload(s)")
 
         let storage = imageStorageService
@@ -356,6 +373,7 @@ final class AppStore: ObservableObject {
                 break
             }
         }
+        NSLog("[AppStore] Deferred image upload drain finished in \(Int(Date().timeIntervalSince(startedAt) * 1000))ms")
     }
 
     /// Idempotent — cancels stale requests, schedules per-challenge nudges
