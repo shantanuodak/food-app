@@ -142,7 +142,16 @@ extension MainLoggingShellView {
 
     @MainActor
     func parseAndUpdateDrawer(_ image: UIImage) async {
-        guard let prepared = prepareImagePayload(from: image) else {
+        // JPEG compression can take 1-2 s on a 12MP photo. Run it on a
+        // background queue so the camera result drawer's shimmer state
+        // (already presented before this function was awaited) renders
+        // immediately instead of waiting for compression to finish.
+        let prepared: PreparedImagePayload? = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: MainLoggingShellView.prepareImagePayload(from: image))
+            }
+        }
+        guard let prepared else {
             withAnimation {
                 cameraDrawerState = .error("Unable to process this image.", image)
             }
