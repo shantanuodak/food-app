@@ -43,7 +43,7 @@ struct HM00BottomActionDock: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 10)
                 .foregroundStyle(isActive ? Color.white : Color.primary)
-                .glassEffect(isActive ? .regular.tint(Color.accentColor).interactive() : .regular.interactive(), in: .rect(cornerRadius: 14, style: .continuous))
+                .glassyBackground(in: .rect(cornerRadius: 14, style: .continuous), tint: isActive ? Color.accentColor : nil)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(mode.title))
@@ -59,7 +59,7 @@ struct HM00BottomActionDock: View {
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 10)
                     .foregroundStyle(Color.primary)
-                    .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 14, style: .continuous))
+                    .glassyBackground(in: .rect(cornerRadius: 14, style: .continuous))
 
                 if needsClarification {
                     Circle()

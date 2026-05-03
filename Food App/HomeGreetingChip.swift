@@ -25,7 +25,7 @@ struct HomeGreetingChip: View {
             Capsule(style: .continuous)
                 .fill(Color(red: 1.00, green: 0.78, blue: 0.33).opacity(0.12))
         )
-        .glassEffect(.regular.interactive(), in: .capsule)
+        .glassyBackground(in: .capsule)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Greeting: \(title)"))
         .onAppear {

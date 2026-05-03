@@ -123,7 +123,7 @@ struct MainLoggingBottomDock: View {
             }
         }
         .buttonStyle(.plain)
-        .glassEffect(.regular.interactive(), in: .circle)
+        .glassyBackground(in: .circle)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Open \(currentFoodLogStreak ?? 0)-day food streak"))
     }
@@ -140,7 +140,7 @@ struct MainLoggingBottomDock: View {
                 .foregroundStyle(color)
                 .frame(width: 60, height: 60)
         }
-        .glassEffect(.regular.interactive(), in: .circle)
+        .glassyBackground(in: .circle)
         .accessibilityLabel(Text(accessibilityLabel))
     }
 }

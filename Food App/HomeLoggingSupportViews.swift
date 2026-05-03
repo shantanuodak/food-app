@@ -130,9 +130,29 @@ struct LiquidGlassCapsuleButtonStyle: ButtonStyle {
         configuration.label
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .glassEffect(.regular.interactive(), in: .capsule)
+            .glassyBackground(in: .capsule)
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
+    }
+}
+
+extension View {
+    /// Liquid Glass on iOS 26+, ultra-thin material fallback on iOS 18-25.
+    /// Centralizes the `glassEffect` availability guard so call sites stay one-liners.
+    @ViewBuilder
+    func glassyBackground<S: Shape>(
+        in shape: S,
+        tint: Color? = nil
+    ) -> some View {
+        if #available(iOS 26.0, *) {
+            if let tint {
+                self.glassEffect(.regular.tint(tint).interactive(), in: shape)
+            } else {
+                self.glassEffect(.regular.interactive(), in: shape)
+            }
+        } else {
+            self.background(.ultraThinMaterial, in: shape)
+        }
     }
 }
 
