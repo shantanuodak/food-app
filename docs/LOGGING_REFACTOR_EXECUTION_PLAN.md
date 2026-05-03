@@ -218,6 +218,8 @@ This document converts the architecture plan into an execution sequence with shi
 - Phase 9: render/memory optimization.
 - Phase 10: backend perf tuning (query plans/pool/prepared statements).
 
+Detailed Phase 7 execution plan: `docs/PHASE_7_EXTRACTION_PLAN.md`.
+
 Start only after 14-day stable soak post-Phase 4.
 
 ## Test matrix (minimum per phase)
