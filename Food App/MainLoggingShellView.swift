@@ -1274,6 +1274,7 @@ struct MainLoggingShellView: View {
                         rowDetailsPendingDeleteID = liveDetails.id
                         isRowDetailsDeleteConfirmationPresented = true
                     }
+                    .buttonStyle(.bordered)
                     .disabled(isRowDetailsDeleteDisabled(rowID: liveDetails.id))
                     .accessibilityHint(Text("Deletes this food entry and updates your totals."))
                 }
