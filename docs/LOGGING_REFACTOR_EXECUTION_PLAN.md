@@ -8,7 +8,7 @@
 - Phase 4: Stable after manual gate verification
 - Phase 5: Complete (save_attempts telemetry table, ingest endpoint, server-side save-route recording)
 - Phase 6: Complete (recent-parses endpoint/dashboard now show save-attempt state)
-- Phase 7: Audited only; full code-shrink target remains open because it requires a dedicated extraction pass
+- Phase 7: In progress (Phase 7A extraction pass active; large home component split is complete)
 - Phase 8: Partially complete (image compression, same-row parse cache, cold-start warmup)
 - Phase 9: Partially complete (saved image rows release preview bytes; deferred upload drain avoids expensive constrained batches)
 - Phase 10: Partially complete (configurable DB pool max and prepared statements for hot save queries)
@@ -60,9 +60,14 @@
 1. Phase 7 audit:
    - Starting Swift LOC audit showed `MainLoggingShellView.swift` at 5,580 lines, `HomeFlowComponents.swift` at 2,325 lines, `OnboardingView.swift` at 1,263 lines, and `ContentView.swift` at 1,030 lines.
    - Asset audit found all imagesets currently referenced.
-   - Phase 7A implementation has started. First slices extracted logging presentation views, extracted the home status strip, and removed unused logging detail panels.
-   - Current `MainLoggingShellView.swift` LOC after those slices: 5,026.
-   - Full Phase 7 is not complete; the next major target remains extracting parse/save/date/image flow wrappers and splitting `HomeFlowComponents.swift`.
+   - Phase 7A implementation has started. Completed slices extracted logging presentation views, extracted the home status strip, removed unused logging detail panels, split row models, split the home composer, split the streak drawer, and moved `RollingNumberText` into a shared file.
+   - Current LOC after these slices:
+     - `MainLoggingShellView.swift`: 5,026
+     - `HomeFlowComponents.swift`: 467
+     - `HomeComposerView.swift`: 1,061
+     - `HomeStreakDrawerView.swift`: 460
+     - `HomeLogRowModels.swift`: 317
+   - Full Phase 7 is not complete; the next major target remains extracting parse/save/date/image flow wrappers from `MainLoggingShellView.swift`.
 2. Phase 8:
    - Image parse payload prep now targets <= 600KB with progressive dimension/quality attempts.
    - `ParseCoordinator` now keeps a 50-entry, 30-minute same-row parse response cache. Cache keys include row ID and logged timestamp so repeat meals in new rows do not reuse parse IDs and collide with duplicate-save protection.
