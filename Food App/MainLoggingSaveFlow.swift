@@ -157,6 +157,24 @@ extension MainLoggingShellView {
         }
 
         for entry in rowsToSave {
+            // PIECE B of the save-vs-edit dedupe fix: re-check that this
+            // captured snapshot is still the latest parse for its row before
+            // doing any work for it. Between when activeParseSnapshots was
+            // captured at the top of this function and now, the user could
+            // have edited the row text, which lands a newer parse with a
+            // fresh parseRequestId in parseCoordinator.snapshots. If that
+            // happened, the older parse is "superseded" and saving it would
+            // create a stale food_logs row that the user never saw the
+            // calorie value for.
+            //
+            // The newer parse will trigger its own scheduleAutoSave pass and
+            // will land via the normal flow (or via PATCH if save A already
+            // completed and assigned a serverLogId).
+            if let current = parseCoordinator.snapshots[entry.rowID],
+               current.parseRequestId != entry.parseRequestId {
+                continue
+            }
+
             guard let request = buildRowSaveRequest(for: entry) else { continue }
 
             // If the row was loaded from the server (has a serverLogId),
@@ -599,6 +617,25 @@ extension MainLoggingShellView {
         let queueKey = idempotencyKey.uuidString.lowercased()
         let submittedRowID = pendingQueueItem(for: idempotencyKey)?.rowID
         let telemetryRowID = submittedRowID ?? UUID()
+
+        // PIECE A of the save-vs-edit dedupe fix: last-mile guard. Auto-saves
+        // for text rows can sit in the pending queue between when their save
+        // was scheduled and when this network call actually fires. If the
+        // user edited the row text in that window, parseCoordinator.snapshots
+        // now holds a NEWER parseRequestId for the same rowID. Saving the
+        // older parse here would persist a stale food_logs row that the user
+        // never saw the calorie value for.
+        //
+        // Skip the auto-retry path (.retry, .manual, .restoredPending) — those
+        // are intentional re-attempts where the parseRequestId mismatch is
+        // expected and the queued request IS the source of truth.
+        if intent == .auto,
+           let rowID = submittedRowID,
+           let current = parseCoordinator.snapshots[rowID],
+           current.parseRequestId != request.parseRequestId {
+            return SaveSubmissionResult(didSucceed: false, savedDay: nil)
+        }
+
         let startedAt = Date()
         saveAttemptTelemetry.emit(
             parseRequestId: request.parseRequestId,
