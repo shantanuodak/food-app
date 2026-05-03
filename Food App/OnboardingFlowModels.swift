@@ -837,6 +837,25 @@ enum AllergyChoice: String, CaseIterable, Identifiable, Hashable, Codable, ChipO
         }
     }
 
+    /// SF Symbol used as the row icon in Profile and onboarding allergy
+    /// pickers. SF Symbols doesn't have first-class allergen icons, so
+    /// these are best-fit shapes/colors that read as visually distinct
+    /// — proper allergen iconography would need custom assets and is a
+    /// future-sprint upgrade.
+    var systemImage: String {
+        switch self {
+        case .peanuts:   return "oval.fill"                     // peanut shape
+        case .treeNuts:  return "tree.fill"                     // tree association
+        case .gluten:    return "chart.bar.fill"                // wheat-stalk silhouette
+        case .dairy:     return "drop.fill"                     // milk drop
+        case .eggs:      return "circle.fill"                   // egg shape
+        case .shellfish: return "tortoise.fill"                 // shell
+        case .fish:      return "fish.fill"                     // literal fish
+        case .soy:       return "leaf.fill"                     // soy plant
+        case .sesame:    return "circle.grid.3x3.fill"          // seed cluster
+        }
+    }
+
     /// Lowercase substrings used for client-side conflict preview against parsed
     /// food item names. The backend has the authoritative version.
     var matchTokens: [String] {

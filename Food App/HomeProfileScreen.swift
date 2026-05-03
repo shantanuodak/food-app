@@ -23,13 +23,6 @@ struct HomeProfileScreen: View {
     @State private var trackingAccuracy: TrackingAccuracyResponse?
     @State private var isLoadingAccuracy = false
     @State private var isSignOutConfirmationPresented = false
-    /// Per-row expansion state for the inline diet-preference explanations.
-    /// Keys are `PreferenceChoice.rawValue`. Lives on the screen rather than
-    /// per-row so navigating away and back keeps the user's open rows open.
-    @State private var preferenceExplanationExpanded: Set<String> = []
-    /// Per-row expansion state for the inline allergy explanations.
-    /// Keys are `AllergyChoice.rawValue`.
-    @State private var allergyExplanationExpanded: Set<String> = []
 
     // Auto-save
     private enum SaveStatus: Equatable {
@@ -90,6 +83,7 @@ struct HomeProfileScreen: View {
 
             NavigationLink {
                 FoodPreferencesProfileDetailView {
+                    foodPreferencesIntroSection
                     dietSection
                     allergiesSection
                 }
@@ -259,28 +253,37 @@ struct HomeProfileScreen: View {
         }
     }
 
+    /// Single explainer at the top of Food preferences. Two short lines
+    /// covering both dietary preferences and allergies — the user sees
+    /// this once when they open the screen, no per-row info icons.
+    @ViewBuilder
+    private var foodPreferencesIntroSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("We'll use these to flag meals that don't match your diet or include allergens.")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                Text("Set what fits today — you can change this any time.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        }
+    }
+
     @ViewBuilder
     private var dietSection: some View {
-        let activePrefs = draft.preferences.filter { $0 != .noPreference }
         Section {
             ForEach(PreferenceChoice.allCases.filter { $0 != .noPreference }) { pref in
-                DietaryChoiceRow(
-                    title: pref.title,
-                    systemImage: preferenceSymbol(for: pref),
-                    explanation: pref.explanation,
-                    isExpanded: preferenceExplanationExpanded.contains(pref.rawValue),
-                    isOn: preferenceToggleBinding(pref),
-                    onToggleExplanation: {
-                        toggleExpansion(&preferenceExplanationExpanded, key: pref.rawValue)
-                    }
-                )
+                Toggle(isOn: preferenceToggleBinding(pref)) {
+                    Label(pref.title, systemImage: preferenceSymbol(for: pref))
+                }
             }
         } header: {
             Text("Dietary preferences")
-        } footer: {
-            if activePrefs.isEmpty {
-                Text("Tap the info icon next to any preference to see what it does.")
-            }
         }
     }
 
@@ -288,35 +291,12 @@ struct HomeProfileScreen: View {
     private var allergiesSection: some View {
         Section {
             ForEach(AllergyChoice.allCases) { allergy in
-                DietaryChoiceRow(
-                    title: allergy.title,
-                    systemImage: "exclamationmark.shield",
-                    explanation: allergy.explanation,
-                    isExpanded: allergyExplanationExpanded.contains(allergy.rawValue),
-                    isOn: allergyToggleBinding(allergy),
-                    onToggleExplanation: {
-                        toggleExpansion(&allergyExplanationExpanded, key: allergy.rawValue)
-                    }
-                )
+                Toggle(isOn: allergyToggleBinding(allergy)) {
+                    Label(allergy.title, systemImage: allergy.systemImage)
+                }
             }
         } header: {
             Text("Allergies")
-        } footer: {
-            if draft.allergies.isEmpty {
-                Text("We'll flag foods that conflict with these in your daily log.")
-            }
-        }
-    }
-
-    /// Tracks which diet/allergy rows have their info-tap inline
-    /// explanation visible. Stored as `Set<String>` of raw values rather
-    /// than `[String: Bool]` so the dictionary doesn't grow indefinitely
-    /// — once a row collapses, it leaves no entry behind.
-    private func toggleExpansion(_ set: inout Set<String>, key: String) {
-        if set.contains(key) {
-            set.remove(key)
-        } else {
-            set.insert(key)
         }
     }
 
