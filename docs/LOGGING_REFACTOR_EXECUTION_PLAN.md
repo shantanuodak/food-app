@@ -58,9 +58,11 @@
 
 ### Phase 7-10 pass notes
 1. Phase 7 audit:
-   - Swift LOC audit still shows `MainLoggingShellView.swift` at 5,580 lines, `HomeFlowComponents.swift` at 2,325 lines, `OnboardingView.swift` at 1,263 lines, and `ContentView.swift` at 1,030 lines.
+   - Starting Swift LOC audit showed `MainLoggingShellView.swift` at 5,580 lines, `HomeFlowComponents.swift` at 2,325 lines, `OnboardingView.swift` at 1,263 lines, and `ContentView.swift` at 1,030 lines.
    - Asset audit found all imagesets currently referenced.
-   - Full Phase 7 is not honestly complete; it needs a focused extraction/deletion pass rather than opportunistic edits.
+   - Phase 7A implementation has started. First slices extracted logging presentation views, extracted the home status strip, and removed unused logging detail panels.
+   - Current `MainLoggingShellView.swift` LOC after those slices: 5,026.
+   - Full Phase 7 is not complete; the next major target remains extracting parse/save/date/image flow wrappers and splitting `HomeFlowComponents.swift`.
 2. Phase 8:
    - Image parse payload prep now targets <= 600KB with progressive dimension/quality attempts.
    - `ParseCoordinator` now keeps a 50-entry, 30-minute same-row parse response cache. Cache keys include row ID and logged timestamp so repeat meals in new rows do not reuse parse IDs and collide with duplicate-save protection.
