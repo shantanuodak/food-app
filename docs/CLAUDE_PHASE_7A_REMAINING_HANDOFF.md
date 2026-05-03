@@ -48,9 +48,10 @@ Important: the `Food App.xcodeproj/project.pbxproj` change is believed to be an 
 
 ## Current Phase Status
 
-Phase 7A is in progress. It is an extraction/code-shrink phase, not a behavior-change phase.
+Phase 7A is **complete** as of 2026-05-03 with one item explicitly
+deferred to Phase 7B (see Part 4 below).
 
-Completed Phase 7A slices:
+Completed Phase 7A slices (in chronological order):
 
 1. Extracted presentation views.
 2. Extracted home status strip.
@@ -70,22 +71,65 @@ Completed Phase 7A slices:
 16. Extracted drawer/row-detail helpers.
 17. Extracted camera drawer flow.
 18. Extracted text parse scheduling/row mapping flow.
+19. Extracted save flow → `MainLoggingSaveFlow.swift` + `MainLoggingPatchFlow.swift` (Part 1).
+20. Extracted row mutation flow → `MainLoggingRowMutationFlow.swift` (Part 2).
+21. Extracted escalation flow → `MainLoggingEscalationFlow.swift` (Part 3).
+22. Extracted profile screens out of ContentView → `HomeProfileScreen.swift` (Part 5).
+23. Removed unused `GoogleSignInSwift` package product (Part 6).
+24. Added `ts-prune` baseline + dead-code audit doc (Part 7).
 
-Current LOC snapshot:
+Phase 7A acceptance status:
+
+- ✅ `MainLoggingShellView.swift` <= 1,500 LOC (now 731).
+- ✅ `ContentView.swift` <= 1,000 LOC (now 51).
+- ⏳ `OnboardingView.swift` <= 1,000 LOC — deferred to Phase 7B (still 1,263). See Part 4 for the access-control reason.
+- ✅ No new Swift file exceeds 1,000 LOC.
+- ✅ Product behavior unchanged.
+
+Current LOC snapshot (post-extraction):
 
 ```text
-2310 Food App/MainLoggingShellView.swift
- 467 Food App/HomeFlowComponents.swift
-1263 Food App/OnboardingView.swift
-1030 Food App/ContentView.swift
- 996 Food App/HomeProgressScreen.swift
- 954 Food App/OnboardingComponents.swift
+1263 Food App/OnboardingView.swift            (deferred to 7B)
+1061 Food App/HomeComposerView.swift          (7B candidate)
+ 996 Food App/HomeProgressScreen.swift        (7B candidate)
+ 990 Food App/HomeProfileScreen.swift         (Part 5, new)
+ 984 Food App/MainLoggingSaveFlow.swift       (Part 1, new)
+ 954 Food App/OnboardingComponents.swift      (7B candidate)
+ 951 Food App/AuthService.swift               (7B candidate)
+ 924 Food App/OnboardingFlowModels.swift      (7B candidate)
+ 893 Food App/OB03BaselineScreen.swift        (7B candidate)
  840 Food App/MainLoggingParseFlow.swift
+ 731 Food App/MainLoggingShellView.swift      (was 2,310 at handoff)
  469 Food App/MainLoggingDayCacheFlow.swift
  380 Food App/MainLoggingDrawerFlow.swift
  264 Food App/MainLoggingCameraDrawerFlow.swift
  249 Food App/MainLoggingDateFlow.swift
+ 243 Food App/MainLoggingRowMutationFlow.swift (Part 2, new)
+ 219 Food App/MainLoggingPatchFlow.swift      (Part 1, new)
+ 174 Food App/MainLoggingEscalationFlow.swift (Part 3, new)
+  51 Food App/ContentView.swift               (was 1,030)
 ```
+
+## Phase 8-10 Status
+
+Captured 2026-05-03 in `docs/PHASE_8_10_FINDINGS.md`. Highlights:
+
+- Phase 8 #3: Gemini route share is **67.9%** over 7 days, under the 70% deterministic-parser threshold.
+- Phase 9 #4: relaunch flicker root cause identified (disk-hydrate vs network-response race); fix scoped for 7B.
+- Phase 10 #1: hot save-path queries all hit indexes, sub-millisecond execution.
+- Phase 10 #2: no problematic seq scans; `food_logs` and `food_log_items` are 94-95% index-served.
+
+Items still requiring **interactive Xcode session**:
+
+- Phase 8 #1: image upload byte count (one photo).
+- Phase 8 #2: parse cache iOS dedupe (type "banana" twice).
+- Phase 9 #1: Memory Graph after 10 image meals.
+- Phase 9 #2: SwiftUI Instruments 30s typing session.
+
+Items requiring **real-world data**:
+
+- Phase 10 #3: POST /v1/logs latency under load.
+- Phase 10 #4: Render deploy cleanliness on next deploy.
 
 Phase 7A target:
 
