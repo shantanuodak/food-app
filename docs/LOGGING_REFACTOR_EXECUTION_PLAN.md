@@ -60,17 +60,23 @@
 1. Phase 7 audit:
    - Starting Swift LOC audit showed `MainLoggingShellView.swift` at 5,580 lines, `HomeFlowComponents.swift` at 2,325 lines, `OnboardingView.swift` at 1,263 lines, and `ContentView.swift` at 1,030 lines.
    - Asset audit found all imagesets currently referenced.
-   - Phase 7A implementation has started. Completed slices extracted logging presentation views, extracted the home status strip, removed unused logging detail panels, split row models, split the home composer, split the streak drawer, moved `RollingNumberText` into a shared file, extracted shell-only enums, prepared the logging shell for flow extensions, extracted date navigation/preserved-draft flow, and extracted day cache/loading/reconciliation flow.
+   - Phase 7A implementation has started. Completed slices extracted logging presentation views, extracted the home status strip, removed unused logging detail panels, split row models, split the home composer, split the streak drawer, moved `RollingNumberText` into a shared file, extracted shell-only enums, prepared the logging shell for flow extensions, extracted date navigation/preserved-draft flow, extracted day cache/loading/reconciliation flow, extracted pending-save context helpers, extracted telemetry helpers, extracted input-source actions, extracted image payload helpers, extracted drawer/row-detail helpers, and extracted camera drawer flow.
    - Current LOC after these slices:
-     - `MainLoggingShellView.swift`: 4,294
+     - `MainLoggingShellView.swift`: 3,146
      - `MainLoggingShellModels.swift`: 24
      - `MainLoggingDateFlow.swift`: 249
      - `MainLoggingDayCacheFlow.swift`: 469
+     - `MainLoggingPendingSaveFlow.swift`: 231
+     - `MainLoggingTelemetryFlow.swift`: 160
+     - `MainLoggingInputSourceFlow.swift`: 78
+     - `MainLoggingImagePayloadFlow.swift`: 59
+     - `MainLoggingDrawerFlow.swift`: 380
+     - `MainLoggingCameraDrawerFlow.swift`: 264
      - `HomeFlowComponents.swift`: 467
      - `HomeComposerView.swift`: 1,061
      - `HomeStreakDrawerView.swift`: 460
      - `HomeLogRowModels.swift`: 317
-   - Full Phase 7 is not complete; the next major target remains extracting parse/save/image flow wrappers from `MainLoggingShellView.swift`.
+   - Full Phase 7 is not complete; the next major target remains extracting parse/save flow wrappers from `MainLoggingShellView.swift`.
 2. Phase 8:
    - Image parse payload prep now targets <= 600KB with progressive dimension/quality attempts.
    - `ParseCoordinator` now keeps a 50-entry, 30-minute same-row parse response cache. Cache keys include row ID and logged timestamp so repeat meals in new rows do not reuse parse IDs and collide with duplicate-save protection.

@@ -11,7 +11,7 @@ Current LOC audit:
 
 | File | Current LOC | Phase 7 target | Status |
 |---|---:|---:|---|
-| `Food App/MainLoggingShellView.swift` | 4,294 | <= 1,500 first, <= 800 later | Critical |
+| `Food App/MainLoggingShellView.swift` | 3,146 | <= 1,500 first, <= 800 later | Critical |
 | `Food App/HomeFlowComponents.swift` | 467 | <= 800 | Pass |
 | `Food App/HomeComposerView.swift` | 1,061 | <= 1,000 first, <= 800 later | Watch |
 | `Food App/OnboardingView.swift` | 1,263 | <= 800 | High |
@@ -20,6 +20,8 @@ Current LOC audit:
 | `Food App/OnboardingComponents.swift` | 954 | <= 800 preferred | Watch |
 | `Food App/MainLoggingDateFlow.swift` | 249 | <= 300 preferred | Pass |
 | `Food App/MainLoggingDayCacheFlow.swift` | 469 | <= 500 preferred | Pass |
+| `Food App/MainLoggingDrawerFlow.swift` | 380 | <= 500 preferred | Pass |
+| `Food App/MainLoggingCameraDrawerFlow.swift` | 264 | <= 300 preferred | Pass |
 
 Hard rule: this phase must not change product behavior. Every PR should be mostly move-only extraction with tiny adapter glue.
 
