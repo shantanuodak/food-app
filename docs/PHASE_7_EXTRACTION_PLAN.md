@@ -234,6 +234,8 @@ Target file:
 
 1. `MainLoggingParseFlow.swift`
 
+Status: complete in commit `6c16ef2` as a move-only `extension MainLoggingShellView` extraction. Current size: 840 LOC. The shell is now 2,310 LOC after this slice.
+
 Recommended pattern:
 
 Create a small helper type:
@@ -252,8 +254,8 @@ But only use this if it reduces complexity. If it creates awkward closure soup, 
 
 Safer first pass:
 
-1. Move parse-related methods into `MainLoggingParseFlow.swift` as `extension MainLoggingShellView`.
-2. Build.
+1. Move parse-related methods into `MainLoggingParseFlow.swift` as `extension MainLoggingShellView`. Complete.
+2. Build. Complete.
 3. Only later convert to a standalone helper.
 
 Validation:
@@ -761,12 +763,13 @@ Suggested PR evidence block:
 ```text
 Validation:
 - git diff --check: pass
-- iOS Debug simulator build: pass
+- iOS Debug simulator build: pass through parse-flow extraction
 - Manual QA: text log, rapid edit, drawer stepper, date switch, delete
 
 LOC:
-- MainLoggingShellView.swift: 5,580 -> X
-- HomeFlowComponents.swift: 2,325 -> X
+- MainLoggingShellView.swift: 5,580 -> 2,310
+- HomeFlowComponents.swift: 2,325 -> 467
+- MainLoggingParseFlow.swift: 840
 
 Risk:
 - Move-only extraction; no intended behavior change.

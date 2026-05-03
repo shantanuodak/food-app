@@ -60,9 +60,9 @@
 1. Phase 7 audit:
    - Starting Swift LOC audit showed `MainLoggingShellView.swift` at 5,580 lines, `HomeFlowComponents.swift` at 2,325 lines, `OnboardingView.swift` at 1,263 lines, and `ContentView.swift` at 1,030 lines.
    - Asset audit found all imagesets currently referenced.
-   - Phase 7A implementation has started. Completed slices extracted logging presentation views, extracted the home status strip, removed unused logging detail panels, split row models, split the home composer, split the streak drawer, moved `RollingNumberText` into a shared file, extracted shell-only enums, prepared the logging shell for flow extensions, extracted date navigation/preserved-draft flow, extracted day cache/loading/reconciliation flow, extracted pending-save context helpers, extracted telemetry helpers, extracted input-source actions, extracted image payload helpers, extracted drawer/row-detail helpers, and extracted camera drawer flow.
+   - Phase 7A implementation has started. Completed slices extracted logging presentation views, extracted the home status strip, removed unused logging detail panels, split row models, split the home composer, split the streak drawer, moved `RollingNumberText` into a shared file, extracted shell-only enums, prepared the logging shell for flow extensions, extracted date navigation/preserved-draft flow, extracted day cache/loading/reconciliation flow, extracted pending-save context helpers, extracted telemetry helpers, extracted input-source actions, extracted image payload helpers, extracted drawer/row-detail helpers, extracted camera drawer flow, and extracted the text parse scheduling/row mapping flow.
    - Current LOC after these slices:
-     - `MainLoggingShellView.swift`: 3,146
+     - `MainLoggingShellView.swift`: 2,310
      - `MainLoggingShellModels.swift`: 24
      - `MainLoggingDateFlow.swift`: 249
      - `MainLoggingDayCacheFlow.swift`: 469
@@ -72,6 +72,7 @@
      - `MainLoggingImagePayloadFlow.swift`: 59
      - `MainLoggingDrawerFlow.swift`: 380
      - `MainLoggingCameraDrawerFlow.swift`: 264
+     - `MainLoggingParseFlow.swift`: 840
      - `HomeFlowComponents.swift`: 467
      - `HomeComposerView.swift`: 1,061
      - `HomeStreakDrawerView.swift`: 460
@@ -93,6 +94,7 @@
    - Backend integration suite: `npm run test:integration` passed (31/31).
    - iOS build: `xcodebuild ... build` succeeded.
    - Phase 7A shell/date/day-cache extraction build: `xcodebuild ... build` succeeded.
+   - Phase 7A parse-flow extraction build: `xcodebuild ... build` succeeded.
 
 ## Scope
 Implementation plan for `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/docs/LOGGING_REFACTOR_PLAN.md`.
