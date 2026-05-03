@@ -111,6 +111,7 @@ struct MainLoggingBottomDock: View {
                     ProgressView()
                         .controlSize(.mini)
                         .padding(8)
+                        .allowsHitTesting(false)
                 } else {
                     Text("\(currentFoodLogStreak ?? 0)")
                         .font(.system(size: 12, weight: .bold, design: .rounded))
@@ -119,11 +120,21 @@ struct MainLoggingBottomDock: View {
                         .frame(minWidth: 20, minHeight: 20)
                         .background(.regularMaterial, in: Circle())
                         .padding(8)
+                        .allowsHitTesting(false)
                 }
             }
+            // Glass background lives INSIDE the label so the Button stays
+            // the outermost interactive layer. Previously the glassyBackground
+            // was applied AFTER buttonStyle(.plain), which on iOS 26 meant
+            // glassEffect(.interactive()) wrapped the button and absorbed
+            // the first tap for its own press feedback before the button
+            // could see it — hence the 2-3 tap repro.
+            .glassyBackground(in: .circle)
+            // Without contentShape the badge's regularMaterial Circle could
+            // intercept hits on the bottom-right corner of the button area.
+            .contentShape(Circle())
         }
         .buttonStyle(.plain)
-        .glassyBackground(in: .circle)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Open \(currentFoodLogStreak ?? 0)-day food streak"))
     }
