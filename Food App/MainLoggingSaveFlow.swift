@@ -96,11 +96,23 @@ extension MainLoggingShellView {
         for entry in saveableEntries {
             guard let request = buildRowSaveRequest(for: entry) else { continue }
             let key = resolveIdempotencyKey(forRowID: entry.rowID)
+            // PIECE C of the dedupe fix: forward the row's current serverLogId
+            // into the queue item if the row has been saved before. This is
+            // the case when the user taps an already-saved row, edits its
+            // text, and triggers a re-parse — without this, the new pending
+            // item starts with serverLogId = nil and the PATCH check in
+            // autoSaveIfNeeded misses, falling back to POST and creating a
+            // duplicate food_logs row. (mergeRowsPreservingVisibleOrder can
+            // swap the row's UUID after the first save, so a brand-new
+            // pending item gets created here even though the row itself
+            // already carries its serverLogId.)
+            let rowServerLogId = inputRows.first(where: { $0.id == entry.rowID })?.serverLogId
             upsertPendingSaveQueueItem(
                 request: request,
                 fingerprint: saveRequestFingerprint(request),
                 idempotencyKey: key,
-                rowID: entry.rowID
+                rowID: entry.rowID,
+                serverLogId: rowServerLogId
             )
             saveAttemptTelemetry.emit(
                 parseRequestId: entry.parseRequestId,
