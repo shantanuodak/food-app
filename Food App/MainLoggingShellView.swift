@@ -117,10 +117,6 @@ struct MainLoggingShellView: View {
     @State private var cameraDrawerImage: UIImage?
     @State private var isCameraAnalysisSheetPresented = false
 
-    private enum SwipeAxis {
-        case undecided, horizontal, vertical
-    }
-    // parseRequestIDs that have already been dispatched to auto-save (prevents re-saves).
     @State private var autoSavedParseIDs: Set<String> = []
     private let defaults = UserDefaults.standard
     private let autoSaveDelayNs: UInt64 = 1_500_000_000
@@ -132,25 +128,6 @@ struct MainLoggingShellView: View {
                 return lhs.capturedAt < rhs.capturedAt
             }
             return lhs.rowID.uuidString < rhs.rowID.uuidString
-        }
-    }
-
-    private enum DetailsDrawerMode {
-        case full
-        case manualAdd
-    }
-
-    private enum CameraInputSource {
-        case takePicture
-        case photo
-
-        var statusMessage: String {
-            switch self {
-            case .takePicture:
-                return "Captured photo ready for parsing."
-            case .photo:
-                return "Selected photo ready for parsing."
-            }
         }
     }
 
