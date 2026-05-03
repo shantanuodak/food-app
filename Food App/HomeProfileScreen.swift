@@ -104,6 +104,15 @@ struct HomeProfileScreen: View {
                     systemImage: "heart.text.square"
                 )
             }
+
+            NavigationLink {
+                InsightsView()
+            } label: {
+                ProfileHubRow(
+                    title: "Insights",
+                    systemImage: "chart.line.uptrend.xyaxis"
+                )
+            }
         }
     }
 
