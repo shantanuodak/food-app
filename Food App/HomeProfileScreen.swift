@@ -42,7 +42,7 @@ struct HomeProfileScreen: View {
             profileHubSection
             appHubSection
         }
-        .navigationTitle("Profile")
+        .navigationTitle("Settings")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
