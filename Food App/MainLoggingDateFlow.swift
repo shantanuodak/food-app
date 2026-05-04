@@ -125,6 +125,12 @@ extension MainLoggingShellView {
 
         return inputRows.compactMap { row in
             guard !row.isSaved else { return nil }
+            // A saved row that the user tapped to "edit" gets `isSaved = false`
+            // (HomeComposerView line ~95) but retains its `serverLogId` — so the
+            // row already has a backend representation. Re-POSTing it as a
+            // background draft on day-change creates a duplicate food_log.
+            // Guard with serverLogId in addition to isSaved.
+            guard row.serverLogId == nil else { return nil }
             guard !snapshotRowIDs.contains(row.id) else { return nil }
 
             let text = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,6 +155,11 @@ extension MainLoggingShellView {
         let dateString = draftDayString() ?? summaryDateString
         let rowsToPreserve = inputRows.compactMap { row -> PreservedDateDraftRow? in
             guard !row.isSaved else { return nil }
+            // Mirror the guard in `captureDateChangeDraftRows` — if the row was
+            // a saved row demoted by tap-to-edit, it still has a serverLogId,
+            // and we don't want to re-render it as a "preserved draft" on
+            // return either (the server will already restore it).
+            guard row.serverLogId == nil else { return nil }
             let text = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return nil }
 
