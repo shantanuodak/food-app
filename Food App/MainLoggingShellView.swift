@@ -234,8 +234,11 @@ struct MainLoggingShellView: View {
                 )
             }
             .sheet(isPresented: $isProfilePresented) {
-                HomeProfileScreen()
+                HomeProfileBentoScreen()
                     .environmentObject(appStore)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(24)
             }
             .sheet(isPresented: $isNutritionSummaryPresented) {
                 nutritionSummarySheet

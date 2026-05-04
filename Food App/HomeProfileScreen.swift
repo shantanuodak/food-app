@@ -33,25 +33,27 @@ struct HomeProfileScreen: View {
     @State private var savedResetTask: Task<Void, Never>?
 
     var body: some View {
-        NavigationStack {
-            Form {
-                summaryHeaderSection
-                profileHubSection
-                appHubSection
+        // No outer NavigationStack — this screen is pushed onto the bento
+        // dashboard's NavigationStack, so wrapping here would nest stacks
+        // and break back behavior. The internal NavigationLinks (Body /
+        // Diet / Plan etc.) push onto the parent stack the same way.
+        Form {
+            summaryHeaderSection
+            profileHubSection
+            appHubSection
+        }
+        .navigationTitle("Profile")
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                saveStatusIndicator
             }
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.large)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    saveStatusIndicator
-                }
-            }
-            .onChange(of: draft) { _, _ in triggerDebouncedSave() }
-            .task {
-                await loadDraftIfNeeded()
-                await loadAdminFlags()
-                await loadTrackingAccuracy()
-            }
+        }
+        .onChange(of: draft) { _, _ in triggerDebouncedSave() }
+        .task {
+            await loadDraftIfNeeded()
+            await loadAdminFlags()
+            await loadTrackingAccuracy()
         }
     }
 
