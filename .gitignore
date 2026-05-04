@@ -21,3 +21,6 @@ DerivedData/
 *.xcuserstate
 xcuserdata/
 app-exports/
+
+# Claude Code per-machine overrides (hooks, permissions). Personal, not team-shared.
+.claude/settings.local.json
