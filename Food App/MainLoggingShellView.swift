@@ -150,6 +150,16 @@ struct MainLoggingShellView: View {
                     // Title stays fixed — doesn't move during day swipe
                     Text("What did you eat today?")
                         .font(.custom("InstrumentSerif-Regular", size: 28))
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [
+                                    Color(red: 1.00, green: 0.62, blue: 0.20),
+                                    Color(red: 0.90, green: 0.36, blue: 0.10)
+                                ],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.bottom, 12)
 
