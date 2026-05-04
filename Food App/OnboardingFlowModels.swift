@@ -837,6 +837,22 @@ enum AllergyChoice: String, CaseIterable, Identifiable, Hashable, Codable, ChipO
         }
     }
 
+    /// SF Symbol icon for chip/list rendering. One per case so users can
+    /// scan the list visually rather than reading every label.
+    var systemImage: String {
+        switch self {
+        case .peanuts:   return "circle.hexagongrid.fill"
+        case .treeNuts:  return "tree.fill"
+        case .gluten:    return "leaf.fill"
+        case .dairy:     return "drop.fill"
+        case .eggs:      return "oval.portrait.fill"
+        case .shellfish: return "drop.triangle.fill"
+        case .fish:      return "fish.fill"
+        case .soy:       return "leaf.circle.fill"
+        case .sesame:    return "circle.grid.3x3.fill"
+        }
+    }
+
     /// Lowercase substrings used for client-side conflict preview against parsed
     /// food item names. The backend has the authoritative version.
     var matchTokens: [String] {

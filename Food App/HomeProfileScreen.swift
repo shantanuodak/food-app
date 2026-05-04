@@ -60,6 +60,17 @@ struct HomeProfileScreen: View {
     private var profileHubSection: some View {
         Section {
             NavigationLink {
+                ProgressSectionView()
+                    .navigationTitle("Progress")
+                    .navigationBarTitleDisplayMode(.inline)
+            } label: {
+                ProfileHubRow(
+                    title: "Progress & insights",
+                    systemImage: "chart.bar.fill"
+                )
+            }
+
+            NavigationLink {
                 PlanProfileDetailView {
                     planSection
                 }
@@ -275,7 +286,7 @@ struct HomeProfileScreen: View {
         Section {
             ForEach(AllergyChoice.allCases) { allergy in
                 Toggle(isOn: allergyToggleBinding(allergy)) {
-                    Label(allergy.title, systemImage: "exclamationmark.shield")
+                    Label(allergy.title, systemImage: allergy.systemImage)
                 }
             }
         } header: {
