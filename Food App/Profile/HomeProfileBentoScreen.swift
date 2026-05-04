@@ -49,6 +49,12 @@ struct HomeProfileBentoScreen: View {
             }
             .scrollIndicators(.hidden)
             .background(BentoTokens.canvas)
+            // Cap accessibility text scaling so the dense hero stats grid
+            // and ring don't blow out the layout on iPhone SE width.
+            // Dynamic Type still scales, just within readable bounds; users
+            // can still drill into editor screens which use system Form
+            // styling and respect full Dynamic Type natively.
+            .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .navigationTitle("Profile")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -331,10 +337,16 @@ private struct CalorieHeroTile: View {
     }
 
     let data: Data
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var progress: Double {
         guard data.target > 0 else { return 0 }
         return min(max(data.consumed / data.target, 0), 1)
+    }
+
+    private var ringAccessibilityLabel: String {
+        let percent = Int((progress * 100).rounded())
+        return "\(Int(data.consumed.rounded())) of \(Int(data.target.rounded())) calories, \(percent) percent of goal"
     }
 
     var body: some View {
@@ -380,21 +392,23 @@ private struct CalorieHeroTile: View {
                     style: StrokeStyle(lineWidth: 10, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
-                .animation(.spring(response: 0.6, dampingFraction: 0.85), value: progress)
+                .animation(reduceMotion ? nil : .spring(response: 0.6, dampingFraction: 0.85), value: progress)
         }
-        .frame(width: 144, height: 144)
+        .frame(width: 132, height: 132)
         .overlay {
             VStack(spacing: 6) {
                 Text(Int(data.consumed.rounded()).formatted())
-                    .font(.system(size: 32, weight: .heavy))
+                    .font(.system(size: 30, weight: .heavy))
                     .kerning(-0.6)
-                    .contentTransition(.numericText())
+                    .contentTransition(reduceMotion ? .identity : .numericText())
                 Text("of \(Int(data.target.rounded()).formatted()) kcal")
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.78))
             }
             .foregroundStyle(.white)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(ringAccessibilityLabel)
     }
 
     private var statsGrid: some View {
@@ -435,7 +449,7 @@ private struct CalorieHeroTile: View {
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
                     .font(.system(size: 16, weight: .bold))
-                    .contentTransition(.numericText())
+                    .contentTransition(reduceMotion ? .identity : .numericText())
                 if let suffix {
                     Text(" \(suffix)")
                         .font(.system(size: 11, weight: .medium))
@@ -444,23 +458,27 @@ private struct CalorieHeroTile: View {
             }
             .foregroundStyle(.white)
         }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(label), \(value)\(suffix.map { " \($0)" } ?? "")")
     }
 }
 
 /// Streak — cream gradient 1×1 with flame emoji and brand-orange day count.
 private struct StreakTile: View {
     let days: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("🔥")
                 .font(.system(size: 24))
                 .padding(.bottom, 4)
+                .accessibilityHidden(true)
             Text("\(days)")
                 .font(.system(size: 44, weight: .heavy))
                 .foregroundStyle(BentoTokens.brandGradient)
-                .contentTransition(.numericText())
-            Text(days == 1 ? "day streak" : "day streak")
+                .contentTransition(reduceMotion ? .identity : .numericText())
+            Text("day streak")
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(BentoTokens.gray500)
                 .padding(.top, 6)
@@ -476,6 +494,8 @@ private struct StreakTile: View {
             ),
             border: Color(red: 1.0, green: 0.839, blue: 0.678)
         )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(days == 1 ? "1 day streak" : "\(days) day streak")
     }
 }
 
@@ -490,6 +510,14 @@ private struct DailyTargetsTile: View {
     }
 
     let targets: Data
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var voiceOverSummary: String {
+        "Daily targets: \(targets.calories) calories, "
+            + "\(targets.protein) grams protein, "
+            + "\(targets.carbs) grams carbs, "
+            + "\(targets.fat) grams fat"
+    }
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -502,7 +530,7 @@ private struct DailyTargetsTile: View {
                 HStack(alignment: .firstTextBaseline, spacing: 4) {
                     Text(targets.calories.formatted())
                         .font(.system(size: 28, weight: .bold))
-                        .contentTransition(.numericText())
+                        .contentTransition(reduceMotion ? .identity : .numericText())
                     Text("kcal")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(BentoTokens.gray500)
@@ -520,6 +548,8 @@ private struct DailyTargetsTile: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .opacity(targets.isPlaceholder ? 0.5 : 1)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(voiceOverSummary)
 
             editButton
         }
@@ -584,6 +614,7 @@ private struct BodyTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 iconCircle
                     .padding(.bottom, 12)
+                    .accessibilityHidden(true)
                 Text("Body")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(BentoTokens.gray900)
@@ -593,6 +624,9 @@ private struct BodyTile: View {
                 statRow(name: "Goal",   value: info.goal)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Body. Weight \(info.weight). Height \(info.height). Goal \(info.goal).")
+            .accessibilityHint("Opens body details")
         }
     }
 
@@ -653,6 +687,7 @@ private struct DietTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 iconCircle
                     .padding(.bottom, 12)
+                    .accessibilityHidden(true)
                 Text("Diet")
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(BentoTokens.gray900)
@@ -662,6 +697,9 @@ private struct DietTile: View {
                 statRow(name: "Pace",      value: diet.pace)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel("Diet. Preference \(diet.preference). \(diet.allergiesCount == 1 ? "1 allergy" : "\(diet.allergiesCount) allergies"). Pace \(diet.pace).")
+            .accessibilityHint("Opens food preferences")
         }
     }
 
@@ -718,6 +756,20 @@ private struct SevenDayTrendTile: View {
     }
 
     let data: Data
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    private var voiceOverSummary: String {
+        var parts: [String] = ["7-day calories"]
+        parts.append("\(data.average) average")
+        if data.deltaPercent.isFinite, abs(data.deltaPercent) > 0.5 {
+            let direction = data.deltaPercent >= 0 ? "up" : "down"
+            let pct = Int(abs(data.deltaPercent).rounded())
+            parts.append("\(direction) \(pct) percent vs last week")
+        }
+        parts.append("\(data.total) calories total")
+        parts.append("\(data.loggedDays) logged days")
+        return parts.joined(separator: ", ")
+    }
 
     var body: some View {
         BentoTappableTile(
@@ -741,6 +793,9 @@ private struct SevenDayTrendTile: View {
                 footer
                     .padding(.top, 12)
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(voiceOverSummary)
+            .accessibilityHint("Opens full progress charts")
         }
     }
 
@@ -756,7 +811,7 @@ private struct SevenDayTrendTile: View {
                     HStack(alignment: .firstTextBaseline, spacing: 4) {
                         Text(data.average.formatted())
                             .font(.system(size: 28, weight: .bold))
-                            .contentTransition(.numericText())
+                            .contentTransition(reduceMotion ? .identity : .numericText())
                         Text("avg")
                             .font(.system(size: 14, weight: .medium))
                             .foregroundStyle(BentoTokens.gray500)
@@ -932,6 +987,7 @@ private struct BentoTappableTile<Background: ShapeStyle, Border: ShapeStyle, Des
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(BentoTokens.gray400)
+                    .accessibilityHidden(true)
             }
         }
         .buttonStyle(BentoPressScaleStyle())
@@ -940,12 +996,22 @@ private struct BentoTappableTile<Background: ShapeStyle, Border: ShapeStyle, Des
 }
 
 /// Subtle scale-down on press for tappable tiles. Keeps the Apple-style
-/// "card responds to touch" feel without a heavy ripple.
+/// "card responds to touch" feel without a heavy ripple. Respects the
+/// system "Reduce Motion" accessibility setting.
 private struct BentoPressScaleStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.98 : 1)
-            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+        BentoPressScaleBody(configuration: configuration)
+    }
+
+    private struct BentoPressScaleBody: View {
+        let configuration: ButtonStyle.Configuration
+        @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+        var body: some View {
+            configuration.label
+                .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.98 : 1))
+                .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: configuration.isPressed)
+        }
     }
 }
 
