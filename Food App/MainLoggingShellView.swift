@@ -10,6 +10,7 @@ struct MainLoggingShellView: View {
     @StateObject var speechService = SpeechRecognitionService()
     @StateObject var saveCoordinator = SaveCoordinator()
     @StateObject var parseCoordinator = ParseCoordinator()
+    @StateObject var tutorialController = TutorialController()
     @State var isVoiceOverlayPresented = false
     @State var inputRows: [HomeLogRow] = [.empty()]
     @State var parseInFlightCount = 0
@@ -297,6 +298,12 @@ struct MainLoggingShellView: View {
                 if appStore.selectedChallenge == .emotionalEating, MindfulPauseGate.shouldShow() {
                     isMindfulPausePresented = true
                 }
+                // First-launch tutorial — no-op after the first run, the
+                // controller persists its completion flag in UserDefaults.
+                tutorialController.startIfNeeded()
+            }
+            .sheet(isPresented: $tutorialController.isPresented) {
+                TutorialOverlay(controller: tutorialController)
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
                 guard ready else { return }
