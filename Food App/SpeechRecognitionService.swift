@@ -106,11 +106,26 @@ final class SpeechRecognitionService: ObservableObject {
         }
         self.recognitionRequest = request
 
-        // Install audio tap
+        // Install audio tap. The audio engine invokes this closure on a
+        // non-main thread for every buffer, so it must be Sendable. Two
+        // patterns matter here:
+        //
+        //   1. Capture `request` directly (a local `let` from above) so
+        //      the buffer-append path does NOT cross actor isolation.
+        //      Going through `self?.recognitionRequest` would touch a
+        //      `@MainActor`-isolated property from a Sendable closure
+        //      and trigger the Swift 6 "captured var 'self' in
+        //      concurrently-executing code" diagnostic.
+        //
+        //   2. The audio-level update hops back to the main actor via
+        //      a single `Task { @MainActor in }` and accesses self
+        //      through the outer `[weak self]` capture. Don't re-add
+        //      `[weak self]` on the inner Task — it's redundant and
+        //      Swift 6 flags the duplicate.
         let inputNode = audioEngine.inputNode
         let recordingFormat = inputNode.outputFormat(forBus: 0)
-        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
-            self?.recognitionRequest?.append(buffer)
+        inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self, request] buffer, _ in
+            request.append(buffer)
 
             // Compute RMS audio level for visualization
             guard let channelData = buffer.floatChannelData?[0] else { return }
@@ -121,7 +136,7 @@ final class SpeechRecognitionService: ObservableObject {
             let db = 20 * log10f(max(rms, 1e-6))
             // Map -60dB...0dB → 0...1
             let normalized = max(0, min(1, (db + 60) / 60))
-            Task { @MainActor [weak self] in
+            Task { @MainActor in
                 self?.audioLevel = normalized
             }
         }
@@ -137,33 +152,46 @@ final class SpeechRecognitionService: ObservableObject {
 
         isListening = true
 
-        // Start recognition task
-        recognitionTask = speechRecognizer.recognitionTask(with: request) { [weak self] result, error in
-            Task { @MainActor in
+        // Start recognition task. The closure passed here is @Sendable
+        // and runs on the speech framework's internal queue. Capturing
+        // `self` (a `@MainActor`-isolated reference) into a Sendable
+        // closure is the source of the Swift 6 "Reference to captured
+        // var 'self' in concurrently-executing code" diagnostic.
+        //
+        // Fix: extract every value we need from `result` and `error`
+        // BEFORE the Task hop, so the outer closure captures only
+        // `Sendable` value types. Then the inner `Task { @MainActor }`
+        // is the single point where we cross into self's isolation.
+        recognitionTask = speechRecognizer.recognitionTask(with: request) { result, error in
+            let recognizedText: String? = result?.bestTranscription.formattedString
+            let isFinal: Bool = result?.isFinal ?? false
+            let nsError = error as NSError?
+            let errorDomain: String? = nsError?.domain
+            let errorCode: Int? = nsError?.code
+            let errorMessage: String? = error?.localizedDescription
+            Task { @MainActor [weak self] in
                 guard let self else { return }
 
-                if let result {
-                    self.transcribedText = result.bestTranscription.formattedString
+                if let recognizedText {
+                    self.transcribedText = recognizedText
                     self.resetSilenceTimer()
-
-                    if result.isFinal {
+                    if isFinal {
                         self.stopListening()
                     }
                 }
 
-                if let error {
+                if let errorMessage {
                     // Ignore cancellation errors (happens on normal stopListening)
-                    let nsError = error as NSError
-                    if nsError.domain == "kAFAssistantErrorDomain" && nsError.code == 216 {
+                    if errorDomain == "kAFAssistantErrorDomain" && errorCode == 216 {
                         // "Request was canceled" — this is expected when we stop
                         return
                     }
-                    if nsError.code == 1110 {
+                    if errorCode == 1110 {
                         // "No speech detected" — not really an error for our use case
                         self.stopListening()
                         return
                     }
-                    self.error = error.localizedDescription
+                    self.error = errorMessage
                     self.stopListening()
                 }
             }
@@ -172,7 +200,24 @@ final class SpeechRecognitionService: ObservableObject {
         // Start initial silence timer — if user says nothing for 2s, stop
         resetSilenceTimer()
 
-        // Observe audio session interruptions (phone calls, etc.)
+        // Observe audio session interruptions (phone calls, etc.).
+        //
+        // Known Swift 6 strict-concurrency pain point: closure-based
+        // `addObserver` whose body reaches back into a `@MainActor`
+        // class will emit "Reference to captured var 'self' in
+        // concurrently-executing code" no matter how the captures are
+        // arranged — explicit `[weak self]`, implicit capture via Task,
+        // and "capture-via-handler-closure" all trip it. The proper
+        // Swift 6 fix is to switch to `for await _ in
+        // NotificationCenter.default.notifications(named:)` and store
+        // the long-running Task — that's a meaningful refactor (Task
+        // lifecycle, cancellation in `stopListening`, etc.) and out of
+        // scope for tonight.
+        //
+        // Accepting the warning here: it's a pre-existing diagnostic,
+        // build still succeeds, behavior is correct (audio interruption
+        // stops listening as intended). Filed for the post-Tier-1
+        // strict-concurrency cleanup.
         NotificationCenter.default.addObserver(
             forName: AVAudioSession.interruptionNotification,
             object: audioSession,

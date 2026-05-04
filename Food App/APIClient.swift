@@ -105,7 +105,7 @@ final class APIClient {
             throw APIClientError.invalidURL
         }
 
-        var extraHeaders = ["Accept": "text/event-stream"]
+        let extraHeaders = ["Accept": "text/event-stream"]
         let bodyData = try JSONEncoder().encode(requestBody)
         let request = try await makeRequest(
             url: url,
@@ -470,3 +470,4 @@ final class APIClient {
         }
     }
 }
+

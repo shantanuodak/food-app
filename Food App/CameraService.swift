@@ -47,11 +47,19 @@ final class CameraService: NSObject, ObservableObject {
 
     // MARK: AVFoundation Objects
 
-    private let captureSession = AVCaptureSession()
+    /// `nonisolated` because the AVFoundation objects are thread-safe by
+    /// design and need to be accessed from `sessionQueue` (a background
+    /// queue) for performance — Apple's own AVFoundation samples follow
+    /// this pattern. Without `nonisolated`, the `@MainActor` class
+    /// inheritance forces these properties onto the main actor and
+    /// touching them from `sessionQueue.async { [weak self] in ... }`
+    /// produces a Swift 6 "Sendable closure" warning that becomes an
+    /// error under strict concurrency.
+    nonisolated private let captureSession = AVCaptureSession()
     private var videoDeviceInput: AVCaptureDeviceInput?
-    private let photoOutput = AVCapturePhotoOutput()
+    nonisolated private let photoOutput = AVCapturePhotoOutput()
 
-    private let sessionQueue = DispatchQueue(label: "com.foodapp.camera.session")
+    nonisolated private let sessionQueue = DispatchQueue(label: "com.foodapp.camera.session")
 
     // MARK: Photo Capture
 
@@ -60,7 +68,7 @@ final class CameraService: NSObject, ObservableObject {
 
     // MARK: - Public API
 
-    var session: AVCaptureSession { captureSession }
+    nonisolated var session: AVCaptureSession { captureSession }
 
     func checkPermission() {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
