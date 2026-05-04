@@ -20,20 +20,45 @@ private struct ChartScale {
     }
 }
 
-private enum ProgressRange: Int, CaseIterable, Identifiable {
-    case days7 = 7
-    case days14 = 14
-    case days30 = 30
-    case days90 = 90
+/// Mode-aware color tokens for the progress charts. Replaces the
+/// `Color.white.opacity(...)` / `Color.black.opacity(...)` literals
+/// that assumed a dark canvas — every value here adapts to light
+/// mode automatically. When a real design system lands, swap these
+/// statics for tokens without touching the chart bodies.
+private enum ChartPalette {
+    // Surfaces
+    static let cardBackground: Color = Color(.tertiarySystemBackground)
+    static let pointFill: Color      = Color(.systemBackground)
+
+    // Lines & ticks
+    static let gridLine: Color   = Color(.separator)
+    static let scrubLine: Color  = Color.primary.opacity(0.4)
+    static let targetLine: Color = Color.secondary.opacity(0.7)
+
+    // Macros
+    static let protein = Color(red: 0.19, green: 0.72, blue: 0.98)
+    static let carbs   = Color(red: 0.99, green: 0.64, blue: 0.22)
+    static let fat     = Color(red: 0.98, green: 0.38, blue: 0.36)
+
+    // Hero card accents (used as 1pt strokes over Material)
+    static let calorieAccent: Color = Color.green
+    static let weightAccent: Color  = Color.blue
+}
+
+private enum ProgressRange: Int, CaseIterable, Identifiable, Hashable {
+    case week       = 7
+    case month      = 30
+    case sixMonths  = 180
+    case year       = 365
 
     var id: Int { rawValue }
 
     var title: String {
         switch self {
-        case .days7: return "7D"
-        case .days14: return "14D"
-        case .days30: return "30D"
-        case .days90: return "90D"
+        case .week:      return "W"
+        case .month:     return "M"
+        case .sixMonths: return "6M"
+        case .year:      return "Y"
         }
     }
 }
@@ -53,9 +78,9 @@ private enum MacroMetric: String, CaseIterable {
 
     var color: Color {
         switch self {
-        case .protein: return Color(red: 0.19, green: 0.72, blue: 0.98)
-        case .carbs: return Color(red: 0.99, green: 0.64, blue: 0.22)
-        case .fat: return Color(red: 0.98, green: 0.38, blue: 0.36)
+        case .protein: return ChartPalette.protein
+        case .carbs:   return ChartPalette.carbs
+        case .fat:     return ChartPalette.fat
         }
     }
 }
@@ -67,11 +92,6 @@ private struct NutritionChartPoint: Identifiable {
     let hasLogs: Bool
 
     var id: Date { date }
-}
-
-private struct NutritionChartSegment: Identifiable {
-    let id: String
-    let points: [NutritionChartPoint]
 }
 
 private struct WeightChartPoint: Identifiable {
@@ -86,7 +106,7 @@ struct ProgressSectionView: View {
     @EnvironmentObject private var appStore: AppStore
     @Environment(\.scenePhase) private var scenePhase
 
-    @State private var selectedRange: ProgressRange = .days30
+    @State private var selectedRange: ProgressRange = .week
     @State private var progressResponse: ProgressResponse?
     @State private var isLoadingProgress = false
     @State private var progressError: String?
@@ -108,9 +128,7 @@ struct ProgressSectionView: View {
                 } else {
                     rangePicker
                     caloriesHeroCard
-                    macroCards
-                    streakTimelineCard
-                    weeklyDeltaCard
+                    macroAdherenceCard
                     weightTrendCard
                 }
             }
@@ -134,7 +152,7 @@ struct ProgressSectionView: View {
     }
 
     private var disabledFeatureCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("Progress is currently disabled.")
                 .font(.headline)
             Text("Enable `PROGRESS_FEATURE_ENABLED` to turn on charts and trends.")
@@ -145,35 +163,21 @@ struct ProgressSectionView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.gray.opacity(0.12))
+                .fill(ChartPalette.cardBackground)
         )
     }
 
     private var rangePicker: some View {
-        HStack(spacing: 8) {
+        Picker("Range", selection: $selectedRange) {
             ForEach(ProgressRange.allCases) { range in
-                Button {
-                    withAnimation(.easeInOut(duration: 0.2)) {
-                        selectedRange = range
-                    }
-                } label: {
-                    Text(range.title)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(selectedRange == range ? Color.white : Color.primary)
-                        .padding(.vertical, 8)
-                        .frame(maxWidth: .infinity)
-                        .background(
-                            Capsule(style: .continuous)
-                                .fill(selectedRange == range ? Color.green : Color.gray.opacity(0.14))
-                        )
-                }
-                .buttonStyle(.plain)
+                Text(range.title).tag(range)
             }
         }
+        .pickerStyle(.segmented)
     }
 
     private var caloriesHeroCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Calorie Adherence")
                     .font(.headline)
@@ -193,39 +197,59 @@ struct ProgressSectionView: View {
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             } else {
-                let scale = calorieScale
-                let consumedSegments = segmentedLoggedPoints(from: caloriePoints)
-                Chart {
-                    ForEach(consumedSegments) { segment in
-                        ForEach(segment.points) { point in
-                            AreaMark(
-                                x: .value("Date", point.date),
-                                y: .value("Calories", scale.clamp(point.consumed))
-                            )
-                            .foregroundStyle(
-                                LinearGradient(
-                                    colors: [Color.green.opacity(0.35), Color.green.opacity(0.02)],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
-                            )
+                // Apple Health style header: DAILY AVERAGE + big number + range
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("DAILY AVERAGE")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .tracking(0.5)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(dailyAverageCalories)
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        Text("kcal")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(dateRangeText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
-                            LineMark(
-                                x: .value("Date", point.date),
-                                y: .value("Calories", scale.clamp(point.consumed))
-                            )
-                            .foregroundStyle(Color.green)
-                            .lineStyle(StrokeStyle(lineWidth: 2.2))
-                            .interpolationMethod(.linear)
-                        }
+                let displayedPoints = aggregateForRange(caloriePoints)
+                let bars = displayedPoints.filter { $0.hasLogs }
+                let scale = makePositiveScale(
+                    values: displayedPoints.flatMap { [max(0, $0.consumed), max(0, $0.target)] },
+                    minimumUpperBound: 400
+                )
+
+                if bars.isEmpty {
+                    HStack {
+                        Spacer()
+                        Text("No logs in this range")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .frame(height: 220)
+                } else {
+                Chart {
+                    ForEach(displayedPoints.filter { $0.hasLogs }) { point in
+                        BarMark(
+                            x: .value("Date", point.date),
+                            y: .value("Calories", scale.clamp(point.consumed)),
+                            width: .fixed(calorieBarWidth)
+                        )
+                        .foregroundStyle(ChartPalette.calorieAccent.gradient)
+                        .cornerRadius(2)
                     }
 
-                    ForEach(caloriePoints) { point in
+                    ForEach(displayedPoints) { point in
                         LineMark(
                             x: .value("Date", point.date),
                             y: .value("Target", scale.clamp(point.target))
                         )
-                        .foregroundStyle(Color.gray.opacity(0.7))
+                        .foregroundStyle(ChartPalette.targetLine)
                         .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
                         .interpolationMethod(.linear)
                     }
@@ -233,38 +257,37 @@ struct ProgressSectionView: View {
                     if let selected = selectedCaloriePoint {
                         RuleMark(x: .value("Selected", selected.date))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                            .foregroundStyle(Color.white.opacity(0.5))
-                            .annotation(position: .top, spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(Self.dayLabelFormatter.string(from: selected.date))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                    Text("\(Int(selected.consumed.rounded())) / \(Int(selected.target.rounded())) kcal")
-                                        .font(.caption.weight(.semibold))
-                                }
-                                .padding(8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(Color.black.opacity(0.7))
+                            .foregroundStyle(ChartPalette.scrubLine)
+                            .annotation(
+                                position: .top,
+                                spacing: 12,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                            ) {
+                                tooltipBubble(
+                                    title: Self.dayLabelFormatter.string(from: selected.date),
+                                    value: "\(Int(selected.consumed.rounded())) / \(Int(selected.target.rounded())) kcal"
                                 )
                             }
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: axisStrideCount)) { value in
-                        AxisGridLine().foregroundStyle(Color.white.opacity(0.08))
-                        AxisTick().foregroundStyle(Color.white.opacity(0.2))
+                    AxisMarks(values: chartXAxisStride) { value in
+                        AxisGridLine().foregroundStyle(ChartPalette.gridLine)
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
-                                Text(Self.shortDayFormatter.string(from: date))
+                                Text(chartXAxisLabel(for: date))
                             }
                         }
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading)
+                    AxisMarks(position: .trailing) { _ in
+                        AxisGridLine().foregroundStyle(ChartPalette.gridLine)
+                        AxisValueLabel()
+                    }
                 }
                 .chartYScale(domain: scale.minY ... scale.maxY)
+                .chartXScale(domain: chartXDomain(dates: displayedPoints.map(\.date)) ?? Date()...Date())
                 .frame(height: 220)
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
@@ -278,161 +301,139 @@ struct ProgressSectionView: View {
                                             from: value.location,
                                             proxy: proxy,
                                             geometry: geometry,
-                                            sourceDates: caloriePoints.map(\.date),
+                                            sourceDates: aggregateForRange(caloriePoints).map(\.date),
                                             selectedDate: &selectedCalorieDate
                                         )
                                     }
                             )
                     }
                 }
-
-                if calorieChartHasClampedValues {
-                    Text("Large outlier days are compressed for readability.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
                 }
+
             }
         }
-        .padding(14)
+        .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.green.opacity(0.2), Color.green.opacity(0.05)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(ChartPalette.calorieAccent.opacity(0.25), lineWidth: 0.5)
                 )
         )
     }
 
-    private var macroCards: some View {
-        VStack(alignment: .leading, spacing: 10) {
+    /// Apple Health "Activity" style — single card that stacks Protein,
+    /// Carbs, Fat as three small bar charts. Each row pairs a colored
+    /// metric label with a right-aligned "consumed of target g" summary
+    /// and a thin bar trace below. Replaces the old three-card macro
+    /// stack and the standalone Streak / Weekly Delta cards.
+    private var macroAdherenceCard: some View {
+        VStack(alignment: .leading, spacing: 24) {
             Text("Macro Adherence")
                 .font(.headline)
 
             ForEach(MacroMetric.allCases, id: \.rawValue) { metric in
-                macroCard(for: metric)
+                macroSubChart(for: metric)
             }
         }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color(.separator), lineWidth: 0.5)
+                )
+        )
     }
 
-    private func macroCard(for metric: MacroMetric) -> some View {
+    private func macroSubChart(for metric: MacroMetric) -> some View {
         let points = macroPoints(for: metric)
-        let scale = macroScale(for: points)
+        // Headlines (consumed / target avg) are computed from raw daily
+        // data so they don't shift when the user changes range — same
+        // convention Apple Health uses.
+        let logged = points.filter { $0.hasLogs }
+        let consumedAverage = logged.isEmpty ? 0 : logged.reduce(0) { $0 + $1.consumed } / Double(logged.count)
         let targetAverage = points.isEmpty ? 0 : points.reduce(0) { $0 + $1.target } / Double(points.count)
-        let consumedAverage = points.isEmpty ? 0 : points.reduce(0) { $0 + $1.consumed } / Double(points.count)
+
+        // Bars use range-aware aggregation so 6M/Y don't render sub-pixel.
+        let displayedPoints = aggregateForRange(points)
+        let scale = macroScale(for: displayedPoints)
 
         return VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(alignment: .firstTextBaseline) {
                 Text(metric.title)
                     .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(metric.color)
                 Spacer()
-                Text("\(formatOneDecimal(consumedAverage))/\(formatOneDecimal(targetAverage)) g avg")
+                Text("\(formatOneDecimal(consumedAverage)) of \(formatOneDecimal(targetAverage)) g")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
 
+            let bars = displayedPoints.filter { $0.hasLogs }
             if points.isEmpty {
                 Text("No data yet.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .frame(height: 80, alignment: .leading)
+            } else if bars.isEmpty {
+                HStack {
+                    Spacer()
+                    Text("No logs in this range")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .frame(height: 80)
             } else {
-                let consumedSegments = segmentedLoggedPoints(from: points)
                 Chart {
-                    ForEach(consumedSegments) { segment in
-                        ForEach(segment.points) { point in
-                            LineMark(
-                                x: .value("Date", point.date),
-                                y: .value("Consumed", scale.clamp(point.consumed))
-                            )
-                            .foregroundStyle(metric.color)
-                            .lineStyle(StrokeStyle(lineWidth: 2))
-                            .interpolationMethod(.linear)
-                        }
+                    ForEach(bars) { point in
+                        BarMark(
+                            x: .value("Date", point.date),
+                            y: .value("Consumed", scale.clamp(point.consumed)),
+                            width: .fixed(calorieBarWidth)
+                        )
+                        .foregroundStyle(metric.color.gradient)
+                        .cornerRadius(2)
                     }
 
-                    ForEach(points) { point in
+                    ForEach(displayedPoints) { point in
                         LineMark(
                             x: .value("Date", point.date),
                             y: .value("Target", scale.clamp(point.target))
                         )
-                        .foregroundStyle(Color.gray.opacity(0.7))
+                        .foregroundStyle(ChartPalette.targetLine)
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
                         .interpolationMethod(.linear)
                     }
                 }
                 .chartXAxis(.hidden)
-                .chartYAxis(.hidden)
-                .chartYScale(domain: scale.minY ... scale.maxY)
-                .frame(height: 92)
-            }
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.white.opacity(0.06))
-        )
-    }
-
-    private var streakTimelineCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Streak")
-                .font(.headline)
-
-            if let progressResponse {
-                HStack(spacing: 12) {
-                    statPill(title: "Current", value: "\(progressResponse.streaks.currentDays)d")
-                    statPill(title: "Longest", value: "\(progressResponse.streaks.longestDays)d")
-                }
-
-                HStack(alignment: .bottom, spacing: 4) {
-                    ForEach(caloriePoints) { point in
-                        Capsule(style: .continuous)
-                            .fill(point.hasLogs ? Color.green : Color.gray.opacity(0.3))
-                            .frame(width: 7, height: point.hasLogs ? 26 : 12)
+                .chartYAxis {
+                    // Visible baseline at 0 — bars now sit on a line instead
+                    // of floating in midair. Single value [0] means only the
+                    // baseline grid renders, no other y-ticks crowd the
+                    // small sub-chart.
+                    AxisMarks(position: .trailing, values: [0]) { _ in
+                        AxisGridLine()
+                            .foregroundStyle(Color(.separator))
+                        AxisValueLabel("0g")
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            } else {
-                Text("No streak data yet.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                .chartYScale(domain: scale.minY ... scale.maxY)
+                .chartXScale(domain: chartXDomain(dates: displayedPoints.map(\.date)) ?? Date()...Date())
+                .frame(height: 80)
             }
         }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.06))
-        )
-    }
-
-    private var weeklyDeltaCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Weekly Delta")
-                .font(.headline)
-
-            if let delta = progressResponse?.weeklyDelta {
-                deltaRow(title: "Calories", delta: delta.calories.delta, suffix: "kcal")
-                deltaRow(title: "Protein", delta: delta.protein.delta, suffix: "g")
-                deltaRow(title: "Carbs", delta: delta.carbs.delta, suffix: "g")
-                deltaRow(title: "Fat", delta: delta.fat.delta, suffix: "g")
-            } else {
-                Text("Weekly delta becomes available as data accumulates.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(14)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(Color.white.opacity(0.06))
-        )
     }
 
     private var weightTrendCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 16) {
             HStack {
                 Text("Weight Trend")
                     .font(.headline)
@@ -489,45 +490,39 @@ struct ProgressSectionView: View {
                             x: .value("Date", point.date),
                             y: .value("Weight", point.value)
                         )
-                        .foregroundStyle(Color.white.opacity(0.9))
+                        .foregroundStyle(ChartPalette.pointFill)
                         .symbolSize(24)
                     }
 
                     if let selected = selectedWeightPoint {
                         RuleMark(x: .value("Selected", selected.date))
                             .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
-                            .foregroundStyle(Color.white.opacity(0.6))
-                            .annotation(position: .top, spacing: 8) {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(Self.dayLabelFormatter.string(from: selected.date))
-                                        .font(.caption2)
-                                        .foregroundStyle(.secondary)
-                                    Text("\(formatOneDecimal(selected.value)) \(unitLabel)")
-                                        .font(.caption.weight(.semibold))
-                                }
-                                .padding(8)
-                                .background(
-                                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                        .fill(Color.black.opacity(0.7))
+                            .foregroundStyle(ChartPalette.scrubLine)
+                            .annotation(
+                                position: .top,
+                                spacing: 12,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                            ) {
+                                tooltipBubble(
+                                    title: Self.dayLabelFormatter.string(from: selected.date),
+                                    value: "\(formatOneDecimal(selected.value)) \(unitLabel)"
                                 )
                             }
                     }
                 }
                 .chartXAxis {
-                    AxisMarks(values: .stride(by: .day, count: axisStrideCount)) { value in
-                        AxisGridLine().foregroundStyle(Color.white.opacity(0.08))
-                        AxisTick().foregroundStyle(Color.white.opacity(0.2))
+                    AxisMarks(values: chartXAxisStride) { value in
+                        AxisGridLine().foregroundStyle(ChartPalette.gridLine)
                         AxisValueLabel {
                             if let date = value.as(Date.self) {
-                                Text(Self.shortDayFormatter.string(from: date))
+                                Text(chartXAxisLabel(for: date))
                             }
                         }
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(position: .leading) { value in
-                        AxisGridLine().foregroundStyle(Color.white.opacity(0.08))
-                        AxisTick().foregroundStyle(Color.white.opacity(0.2))
+                    AxisMarks(position: .trailing) { value in
+                        AxisGridLine().foregroundStyle(ChartPalette.gridLine)
                         AxisValueLabel {
                             if let number = value.as(Double.self) {
                                 Text("\(formatOneDecimal(number))")
@@ -536,7 +531,8 @@ struct ProgressSectionView: View {
                     }
                 }
                 .chartYScale(domain: weightYAxisDomain)
-                .frame(height: 210)
+                .chartXScale(domain: chartXDomain(dates: weightDisplayPoints.map(\.date)) ?? Date()...Date())
+                .frame(height: 220)
                 .chartOverlay { proxy in
                     GeometryReader { geometry in
                         Rectangle()
@@ -558,29 +554,93 @@ struct ProgressSectionView: View {
                 }
             }
         }
-        .padding(14)
+        .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.blue.opacity(0.18), Color.blue.opacity(0.05)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
+                .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(ChartPalette.weightAccent.opacity(0.25), lineWidth: 0.5)
                 )
         )
     }
 
-    private var axisStrideCount: Int {
+    /// Selection-tooltip bubble shared by the calorie + weight charts.
+    /// Solid dark-on-light (or light-on-dark in dark mode) for guaranteed
+    /// contrast against bars + Material card. Larger than a typical
+    /// chart annotation so the value is glanceable.
+    private func tooltipBubble(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(Color(.systemBackground).opacity(0.7))
+            Text(value)
+                .font(.callout.weight(.semibold))
+                .foregroundStyle(Color(.systemBackground))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(Color(.label))
+                .shadow(color: Color.black.opacity(0.18), radius: 10, y: 4)
+        )
+    }
+
+    /// Per-range fixed bar width. `.ratio(0.6)` produced sub-5pt bars at
+    /// M (30 daily slots / ~280pt chart width) which were nearly
+    /// invisible against the Material card background. Fixed widths
+    /// keep bars readable at every zoom; the chart always has enough
+    /// horizontal room for the chosen widths.
+    private var calorieBarWidth: CGFloat {
         switch selectedRange {
-        case .days7:
-            return 1
-        case .days14:
-            return 2
-        case .days30:
-            return 5
-        case .days90:
-            return 12
+        case .week:      return 22
+        case .month:     return 8
+        case .sixMonths: return 8   // ~26 weekly buckets after aggregation
+        case .year:      return 18  // ~12 monthly buckets after aggregation
+        }
+    }
+
+    /// Pad the X-axis domain by a fraction of a bucket on each side so
+    /// bars don't hug the chart frame edges. Without this, the leftmost
+    /// bar sits flush against the plot area's left wall while the
+    /// trailing Y-axis labels create implicit right-padding — visually
+    /// left-biased. Apple Health charts extend the domain similarly.
+    private func chartXDomain(dates: [Date]) -> ClosedRange<Date>? {
+        guard let first = dates.first, let last = dates.last else { return nil }
+        let calendar = Calendar.current
+        let (component, amount): (Calendar.Component, Int) = {
+            switch selectedRange {
+            case .week, .month: return (.hour, 18)   // ~¾ day on each side at daily resolution
+            case .sixMonths:    return (.day, 4)     // ~½ week on each side at weekly buckets
+            case .year:         return (.day, 14)    // ~½ month on each side at monthly buckets
+            }
+        }()
+        guard
+            let lower = calendar.date(byAdding: component, value: -amount, to: first),
+            let upper = calendar.date(byAdding: component, value: amount, to: last)
+        else { return first ... last }
+        return lower ... upper
+    }
+
+    /// X-axis tick stride per range. Short windows tick by day; longer
+    /// windows (6M, Y) tick by month so the labels don't collide.
+    private var chartXAxisStride: AxisMarkValues {
+        switch selectedRange {
+        case .week:      return .stride(by: .day, count: 1)
+        case .month:     return .stride(by: .day, count: 5)
+        case .sixMonths: return .stride(by: .month, count: 1)
+        case .year:      return .stride(by: .month, count: 2)
+        }
+    }
+
+    /// Format a date according to the resolution we're showing.
+    private func chartXAxisLabel(for date: Date) -> String {
+        switch selectedRange {
+        case .sixMonths, .year:
+            return Self.monthOnlyFormatter.string(from: date)
+        case .week, .month:
+            return Self.shortDayFormatter.string(from: date)
         }
     }
 
@@ -602,7 +662,50 @@ struct ProgressSectionView: View {
 
     private var selectedCaloriePoint: NutritionChartPoint? {
         guard let selectedCalorieDate else { return nil }
-        return nearestPoint(for: selectedCalorieDate, in: caloriePoints)
+        return nearestPoint(for: selectedCalorieDate, in: aggregateForRange(caloriePoints))
+    }
+
+    /// Bucket raw daily points into the resolution that fits the
+    /// selected range. Without this, 6M (180 daily bars across ~280pt)
+    /// renders sub-pixel-thin bars that disappear, and Y (365 bars) is
+    /// even worse. Apple Health solves the same problem with weekly
+    /// buckets at 6M and monthly buckets at Y — we mirror that.
+    ///
+    /// Aggregation rules:
+    /// - D / W / M: pass through, daily resolution.
+    /// - 6M: weekly buckets (Sunday-start by Calendar default).
+    /// - Y:  monthly buckets.
+    /// - `consumed` is averaged across logged days only.
+    /// - `target` is averaged across all days in the bucket.
+    /// - `hasLogs` is true if any day in the bucket was logged.
+    private func aggregateForRange(_ points: [NutritionChartPoint]) -> [NutritionChartPoint] {
+        let bucketComponent: Calendar.Component? = {
+            switch selectedRange {
+            case .week, .month: return nil
+            case .sixMonths:    return .weekOfYear
+            case .year:         return .month
+            }
+        }()
+
+        guard let component = bucketComponent else { return points }
+
+        let calendar = Calendar.current
+        let groups = Dictionary(grouping: points) { point -> Date in
+            calendar.dateInterval(of: component, for: point.date)?.start ?? point.date
+        }
+
+        return groups.map { bucketStart, group -> NutritionChartPoint in
+            let logged = group.filter { $0.hasLogs }
+            let avgConsumed = logged.isEmpty ? 0 : logged.reduce(0.0) { $0 + $1.consumed } / Double(logged.count)
+            let avgTarget = group.isEmpty ? 0 : group.reduce(0.0) { $0 + $1.target } / Double(group.count)
+            return NutritionChartPoint(
+                date: bucketStart,
+                consumed: avgConsumed,
+                target: avgTarget,
+                hasLogs: !logged.isEmpty
+            )
+        }
+        .sorted { $0.date < $1.date }
     }
 
     private func macroPoints(for metric: MacroMetric) -> [NutritionChartPoint] {
@@ -641,18 +744,6 @@ struct ProgressSectionView: View {
                 )
             )
         }
-    }
-
-    private var calorieScale: ChartScale {
-        makePositiveScale(
-            values: caloriePoints.flatMap { [max(0, $0.consumed), max(0, $0.target)] },
-            minimumUpperBound: 400
-        )
-    }
-
-    private var calorieChartHasClampedValues: Bool {
-        let maxY = calorieScale.maxY
-        return caloriePoints.contains { $0.consumed > maxY || $0.target > maxY }
     }
 
     private func macroScale(for points: [NutritionChartPoint]) -> ChartScale {
@@ -842,39 +933,19 @@ struct ProgressSectionView: View {
         }
     }
 
-    private func statPill(title: String, value: String) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(title)
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.subheadline.weight(.semibold))
-        }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.white.opacity(0.08))
-        )
+    /// Mean of consumed calories across days that actually have logs in
+    /// the selected range. Apple Health uses the same convention — empty
+    /// days don't count against the average.
+    private var dailyAverageCalories: String {
+        let logged = caloriePoints.filter { $0.hasLogs }
+        guard !logged.isEmpty else { return "—" }
+        let avg = logged.reduce(0.0) { $0 + $1.consumed } / Double(logged.count)
+        return Self.calorieAverageFormatter.string(from: NSNumber(value: avg)) ?? "\(Int(avg))"
     }
 
-    private func deltaRow(title: String, delta: Double, suffix: String) -> some View {
-        let isUp = delta > 0
-        let isFlat = abs(delta) < 0.05
-        let symbol = isFlat ? "minus" : (isUp ? "arrow.up.right" : "arrow.down.right")
-        let tint: Color = isFlat ? .secondary : (isUp ? .orange : .green)
-
-        return HStack {
-            Text(title)
-                .font(.subheadline)
-            Spacer()
-            HStack(spacing: 4) {
-                Image(systemName: symbol)
-                Text("\(delta >= 0 ? "+" : "")\(formatOneDecimal(delta)) \(suffix)")
-            }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(tint)
-        }
+    private var dateRangeText: String {
+        let bounds = selectedDateBounds()
+        return "\(Self.rangeBoundFormatter.string(from: bounds.startDate)) – \(Self.rangeBoundFormatter.string(from: bounds.endDate))"
     }
 
     private func formatOneDecimal(_ value: Double) -> String {
@@ -898,39 +969,6 @@ struct ProgressSectionView: View {
         let cappedCeiling = min(hardCeiling, paddedRobustCeiling * 2.25)
         let upperBound = max(minimumUpperBound, max(cappedCeiling, p85))
         return ChartScale(minY: 0, maxY: upperBound)
-    }
-
-    private func segmentedLoggedPoints(from points: [NutritionChartPoint]) -> [NutritionChartSegment] {
-        var segments: [NutritionChartSegment] = []
-        var current: [NutritionChartPoint] = []
-
-        for point in points {
-            if point.hasLogs {
-                current.append(point)
-                continue
-            }
-
-            if !current.isEmpty {
-                segments.append(
-                    NutritionChartSegment(
-                        id: String(segments.count),
-                        points: current
-                    )
-                )
-                current.removeAll(keepingCapacity: true)
-            }
-        }
-
-        if !current.isEmpty {
-            segments.append(
-                NutritionChartSegment(
-                    id: String(segments.count),
-                    points: current
-                )
-            )
-        }
-
-        return segments
     }
 
     private func percentile(ofSorted sortedValues: [Double], p: Double) -> Double {
@@ -991,6 +1029,25 @@ struct ProgressSectionView: View {
         let formatter = DateFormatter()
         formatter.dateStyle = .medium
         formatter.timeStyle = .none
+        return formatter
+    }()
+
+    private static let rangeBoundFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM d, yyyy"
+        return formatter
+    }()
+
+    private static let monthOnlyFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMM"
+        return formatter
+    }()
+
+    private static let calorieAverageFormatter: NumberFormatter = {
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        formatter.maximumFractionDigits = 0
         return formatter
     }()
 }
