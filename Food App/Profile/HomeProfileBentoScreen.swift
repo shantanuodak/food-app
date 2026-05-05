@@ -17,6 +17,11 @@ struct HomeProfileBentoScreen: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.scenePhase) private var scenePhase
 
+    /// Shared draft store passed to drill-down editor screens via the
+    /// environment. Body / Diet / Targets all mutate the same draft so
+    /// edits in one editor are visible in the next without a refetch.
+    @StateObject private var draftStore = ProfileDraftStore()
+
     @State private var profile: OnboardingProfileResponse?
     @State private var daySummary: DaySummaryResponse?
     @State private var todayLogsCount: Int = 0
@@ -77,6 +82,7 @@ struct HomeProfileBentoScreen: View {
                 }
             }
         }
+        .environmentObject(draftStore)
         .task {
             await loadAll()
         }
@@ -87,6 +93,12 @@ struct HomeProfileBentoScreen: View {
             if newPhase == .active {
                 Task { await loadAll() }
             }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .profileDraftSaved)) { _ in
+            // An editor saved — re-fetch the dashboard projections so
+            // tile values reflect the new state without waiting for a
+            // backgrounding cycle.
+            Task { await loadAll() }
         }
     }
 
@@ -573,7 +585,7 @@ private struct DailyTargetsTile: View {
 
     private var editButton: some View {
         NavigationLink {
-            HomeProfileScreen()
+            TargetsEditorScreen()
         } label: {
             Image(systemName: "pencil")
                 .font(.system(size: 13, weight: .semibold))
@@ -609,7 +621,7 @@ private struct BodyTile: View {
             ),
             border: Color(red: 0.227, green: 0.659, blue: 0.969).opacity(0.22)
         ) {
-            HomeProfileScreen()
+            BodyEditorScreen()
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 iconCircle
@@ -682,7 +694,7 @@ private struct DietTile: View {
             ),
             border: Color(red: 0.227, green: 0.812, blue: 0.416).opacity(0.22)
         ) {
-            HomeProfileScreen()
+            DietEditorScreen()
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 iconCircle

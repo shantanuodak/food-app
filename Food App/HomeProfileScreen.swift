@@ -897,7 +897,7 @@ private struct AdminProfileDetailView<Content: View>: View {
 
 // MARK: - Height / Weight Wheel Pickers
 
-private struct HeightPickerView: View {
+struct HeightPickerView: View {
     @Binding var draft: OnboardingDraft
 
     var body: some View {
@@ -966,7 +966,7 @@ private struct HeightPickerView: View {
     }
 }
 
-private struct WeightPickerView: View {
+struct WeightPickerView: View {
     @Binding var draft: OnboardingDraft
 
     var body: some View {
