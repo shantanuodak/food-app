@@ -414,6 +414,10 @@ final class AppStore: ObservableObject {
         try await healthKitService.fetchBodyMassSamples(from: startDate, to: endDate)
     }
 
+    func fetchStepCountsByDay(from startDate: Date, to endDate: Date) async throws -> [DailyStepCount] {
+        try await healthKitService.fetchStepCountsByDay(from: startDate, to: endDate)
+    }
+
     func refreshHealthActivity() async {
         guard isHealthSyncEnabled else { return }
         do {

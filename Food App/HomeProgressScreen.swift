@@ -43,6 +43,7 @@ private enum ChartPalette {
     // Hero card accents (used as 1pt strokes over Material)
     static let calorieAccent: Color = Color.green
     static let weightAccent: Color  = Color.blue
+    static let stepsAccent: Color   = Color.orange
 }
 
 private enum ProgressRange: Int, CaseIterable, Identifiable, Hashable {
@@ -116,8 +117,13 @@ struct ProgressSectionView: View {
     @State private var weightError: String?
     @State private var isRequestingHealthPermission = false
 
+    @State private var stepsSamples: [DailyStepCount] = []
+    @State private var isLoadingSteps = false
+    @State private var stepsError: String?
+
     @State private var selectedCalorieDate: Date?
     @State private var selectedWeightDate: Date?
+    @State private var selectedStepsDate: Date?
     @State private var preferredUnits: UnitsOption = .imperial
 
     var body: some View {
@@ -130,6 +136,7 @@ struct ProgressSectionView: View {
                     caloriesHeroCard
                     macroAdherenceCard
                     weightTrendCard
+                    stepsCard
                 }
             }
             .padding()
@@ -565,6 +572,149 @@ struct ProgressSectionView: View {
         )
     }
 
+    /// Steps card — Apple-Health-style daily-step bar chart with a
+    /// `DAILY AVERAGE N steps` headline matching the Steps screen
+    /// pattern. Pulls daily-bucketed counts from HealthKit via
+    /// `appStore.fetchStepCountsByDay`. Authorization is shared with
+    /// the weight chart (same `canReadWeight` check), so a single
+    /// "Connect Apple Health" prompt covers both.
+    private var stepsCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Steps")
+                    .font(.headline)
+                Spacer()
+                if isLoadingSteps {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            if !canReadWeight {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Connect Apple Health to view step counts.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    Button {
+                        requestAppleHealthFromProgress()
+                    } label: {
+                        if isRequestingHealthPermission {
+                            ProgressView()
+                        } else {
+                            Text("Connect Apple Health")
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                }
+            } else if let stepsError {
+                Text(stepsError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            } else if loggedStepDays.isEmpty {
+                Text("No step data found in Apple Health for this range.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                // Apple Health style header.
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("DAILY AVERAGE")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .tracking(0.5)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(averageStepsLabel)
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        Text("steps")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(dateRangeText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                let displayed = aggregateStepsForRange(stepsSamples)
+                let scale = stepsScale(for: displayed)
+                Chart {
+                    ForEach(displayed) { point in
+                        BarMark(
+                            x: .value("Date", point.date),
+                            y: .value("Steps", scale.clamp(point.steps)),
+                            width: .fixed(stepsBarWidth)
+                        )
+                        .foregroundStyle(ChartPalette.stepsAccent.gradient)
+                        .cornerRadius(2)
+                    }
+
+                    if let selected = selectedStepsPoint {
+                        RuleMark(x: .value("Selected", selected.date))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                            .foregroundStyle(ChartPalette.scrubLine)
+                            .annotation(
+                                position: .top,
+                                spacing: 12,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                            ) {
+                                tooltipBubble(
+                                    title: Self.dayLabelFormatter.string(from: selected.date),
+                                    value: "\(Int(selected.steps.rounded()).formatted()) steps"
+                                )
+                            }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks(values: chartXAxisStride) { value in
+                        AxisGridLine().foregroundStyle(ChartPalette.gridLine)
+                        AxisValueLabel {
+                            if let date = value.as(Date.self) {
+                                Text(chartXAxisLabel(for: date))
+                            }
+                        }
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks(position: .trailing) { _ in
+                        AxisGridLine().foregroundStyle(ChartPalette.gridLine)
+                        AxisValueLabel()
+                    }
+                }
+                .chartYScale(domain: scale.minY ... scale.maxY)
+                .chartXScale(domain: chartXDomain(dates: displayed.map(\.date)) ?? Date()...Date())
+                .frame(height: 220)
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle()
+                            .fill(Color.clear)
+                            .contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        selectClosestDate(
+                                            from: value.location,
+                                            proxy: proxy,
+                                            geometry: geometry,
+                                            sourceDates: displayed.map(\.date),
+                                            selectedDate: &selectedStepsDate
+                                        )
+                                    }
+                            )
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(ChartPalette.stepsAccent.opacity(0.25), lineWidth: 0.5)
+                )
+        )
+    }
+
     /// Selection-tooltip bubble shared by the calorie + weight charts.
     /// Solid dark-on-light (or light-on-dark in dark mode) for guaranteed
     /// contrast against bars + Material card. Larger than a typical
@@ -806,11 +956,80 @@ struct ProgressSectionView: View {
         return sum / Double(inWindow.count)
     }
 
+    // MARK: - Steps helpers
+
+    /// Days that actually have step data (> 0). Used both as the chart
+    /// rendering source and for computing the daily average — a value
+    /// of 0 typically means HealthKit didn't record anything for that
+    /// day (no Apple Watch worn / iPhone not in pocket), which would
+    /// otherwise drag the average down misleadingly.
+    private var loggedStepDays: [DailyStepCount] {
+        stepsSamples.filter { $0.steps > 0 }
+    }
+
+    /// Average of `loggedStepDays` formatted with thousands separators.
+    private var averageStepsLabel: String {
+        guard !loggedStepDays.isEmpty else { return "—" }
+        let avg = loggedStepDays.reduce(0.0) { $0 + $1.steps } / Double(loggedStepDays.count)
+        return Self.calorieAverageFormatter.string(from: NSNumber(value: avg)) ?? "\(Int(avg))"
+    }
+
+    private var selectedStepsPoint: DailyStepCount? {
+        guard let selectedStepsDate else { return nil }
+        return aggregateStepsForRange(stepsSamples)
+            .min { abs($0.date.timeIntervalSince(selectedStepsDate)) < abs($1.date.timeIntervalSince(selectedStepsDate)) }
+    }
+
+    /// Per-range fixed bar width — same scheme as `calorieBarWidth`.
+    private var stepsBarWidth: CGFloat {
+        switch selectedRange {
+        case .week:      return 22
+        case .month:     return 8
+        case .sixMonths: return 8
+        case .year:      return 18
+        }
+    }
+
+    /// Bucket daily step counts into weekly (6M) or monthly (Y) groups
+    /// so bars don't render sub-pixel at long ranges. Mirrors
+    /// `aggregateForRange` for nutrition points but operates on
+    /// `DailyStepCount` and uses `sum` rather than average — total
+    /// steps in a week/month is the meaningful aggregate, unlike
+    /// "average calories per day" where averaging makes more sense.
+    private func aggregateStepsForRange(_ samples: [DailyStepCount]) -> [DailyStepCount] {
+        let bucketComponent: Calendar.Component? = {
+            switch selectedRange {
+            case .week, .month: return nil
+            case .sixMonths:    return .weekOfYear
+            case .year:         return .month
+            }
+        }()
+        guard let component = bucketComponent else { return samples }
+
+        let calendar = Calendar.current
+        let groups = Dictionary(grouping: samples) { sample -> Date in
+            calendar.dateInterval(of: component, for: sample.date)?.start ?? sample.date
+        }
+        return groups.map { bucketStart, group -> DailyStepCount in
+            let total = group.reduce(0.0) { $0 + $1.steps }
+            return DailyStepCount(date: bucketStart, steps: total)
+        }
+        .sorted { $0.date < $1.date }
+    }
+
+    private func stepsScale(for samples: [DailyStepCount]) -> ChartScale {
+        makePositiveScale(
+            values: samples.map { $0.steps },
+            minimumUpperBound: 5_000
+        )
+    }
+
     @MainActor
     private func refreshAllData(reason _: String) async {
         preferredUnits = currentPreferredUnits()
         await refreshNutritionData()
         await refreshWeightData()
+        await refreshStepsData()
     }
 
     @MainActor
@@ -889,6 +1108,53 @@ struct ProgressSectionView: View {
             defer { isRequestingHealthPermission = false }
             _ = try? await appStore.requestAppleHealthAccess()
             await refreshWeightData()
+            await refreshStepsData()
+        }
+    }
+
+    @MainActor
+    private func refreshStepsData() async {
+        guard appStore.configuration.progressFeatureEnabled else { return }
+
+        guard canReadWeight else {
+            stepsSamples = []
+            stepsError = nil
+            selectedStepsDate = nil
+            return
+        }
+
+        isLoadingSteps = true
+        stepsError = nil
+        defer { isLoadingSteps = false }
+
+        do {
+            let bounds = selectedDateBounds()
+            let samples = try await appStore.fetchStepCountsByDay(
+                from: bounds.startDate,
+                to: bounds.endDate.addingTimeInterval(86_399)
+            )
+            stepsSamples = samples
+            // Default selection: most recent day with logged steps.
+            if let last = samples.filter({ $0.steps > 0 }).last {
+                selectedStepsDate = last.date
+            } else {
+                selectedStepsDate = nil
+            }
+        } catch {
+            stepsSamples = []
+            selectedStepsDate = nil
+            if let healthError = error as? HealthKitServiceError {
+                switch healthError {
+                case .notAuthorized:
+                    stepsError = "Connect Apple Health to view step counts."
+                case .unavailable:
+                    stepsError = "Apple Health is unavailable on this device."
+                default:
+                    stepsError = healthError.errorDescription ?? "Unable to load step counts."
+                }
+            } else {
+                stepsError = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+            }
         }
     }
 

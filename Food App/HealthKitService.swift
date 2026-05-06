@@ -48,6 +48,15 @@ struct BodyMassSample: Identifiable, Hashable {
     }
 }
 
+/// One day's step count (cumulative sum across all sources HealthKit
+/// has for that day). `date` is the local-midnight start of the day.
+struct DailyStepCount: Identifiable, Hashable {
+    let date: Date
+    let steps: Double
+
+    var id: Date { date }
+}
+
 @MainActor
 final class HealthKitService: ObservableObject {
 #if canImport(HealthKit)
@@ -170,6 +179,66 @@ final class HealthKitService: ObservableObject {
                 throw healthError
             }
             throw HealthKitServiceError.readFailed(error.localizedDescription)
+        }
+#else
+        throw HealthKitServiceError.unavailable
+#endif
+    }
+
+    /// Fetch daily step totals between two dates via
+    /// `HKStatisticsCollectionQuery`. The query runs with a 1-day
+    /// interval anchored at local midnight, so each returned sample's
+    /// `date` is the start of a calendar day in the user's timezone.
+    /// Days with zero recorded steps still appear in the result with
+    /// `steps == 0`, so callers don't need to fill gaps themselves.
+    func fetchStepCountsByDay(from startDate: Date, to endDate: Date) async throws -> [DailyStepCount] {
+#if canImport(HealthKit)
+        guard HKHealthStore.isHealthDataAvailable() else {
+            throw HealthKitServiceError.unavailable
+        }
+        guard authorizationState == .authorized else {
+            throw HealthKitServiceError.notAuthorized
+        }
+        guard let stepType = HKObjectType.quantityType(forIdentifier: .stepCount) else {
+            return []
+        }
+
+        let calendar = Calendar.current
+        let anchor = calendar.startOfDay(for: startDate)
+        var interval = DateComponents()
+        interval.day = 1
+
+        let predicate = HKQuery.predicateForSamples(
+            withStart: startDate,
+            end: endDate,
+            options: [.strictStartDate]
+        )
+
+        return try await withCheckedThrowingContinuation { continuation in
+            let query = HKStatisticsCollectionQuery(
+                quantityType: stepType,
+                quantitySamplePredicate: predicate,
+                options: .cumulativeSum,
+                anchorDate: anchor,
+                intervalComponents: interval
+            )
+            query.initialResultsHandler = { _, results, error in
+                if let error {
+                    continuation.resume(throwing: HealthKitServiceError.readFailed(error.localizedDescription))
+                    return
+                }
+                guard let results else {
+                    continuation.resume(returning: [])
+                    return
+                }
+                var samples: [DailyStepCount] = []
+                results.enumerateStatistics(from: startDate, to: endDate) { stats, _ in
+                    let count = stats.sumQuantity()?.doubleValue(for: .count()) ?? 0
+                    samples.append(DailyStepCount(date: stats.startDate, steps: count))
+                }
+                continuation.resume(returning: samples)
+            }
+            self.store.execute(query)
         }
 #else
         throw HealthKitServiceError.unavailable
