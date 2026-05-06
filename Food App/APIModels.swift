@@ -348,6 +348,24 @@ struct UpdateLogImageRefResponse: Decodable {
     let imageRef: String?
 }
 
+/// Body for `POST /v1/feedback` — submitted from the in-app feedback form.
+/// The backend captures device/version metadata alongside the message so
+/// the team can triage with full context. All fields except `message` are
+/// optional; if the client omits them the server stores NULL.
+struct SubmitFeedbackRequest: Encodable {
+    let message: String
+    let appVersion: String?
+    let buildNumber: String?
+    let deviceModel: String?
+    let osVersion: String?
+    let locale: String?
+}
+
+struct SubmitFeedbackResponse: Decodable {
+    let id: String
+    let createdAt: String
+}
+
 /// PATCH /v1/logs/:id — parse references are optional so the client-side
 /// quantity fast path (no new parse) can reuse the same schema.
 struct PatchLogRequest: Codable {

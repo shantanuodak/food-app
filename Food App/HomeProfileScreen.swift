@@ -134,6 +134,15 @@ struct HomeProfileScreen: View {
                 )
             }
 
+            NavigationLink {
+                FeedbackView()
+            } label: {
+                ProfileHubRow(
+                    title: "Send feedback",
+                    systemImage: "envelope"
+                )
+            }
+
             if isAdmin {
                 NavigationLink {
                     AdminProfileDetailView {
