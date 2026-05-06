@@ -46,7 +46,7 @@ struct OB01WelcomeScreen: View {
 
                 VStack(spacing: 24) {
                     Button(action: onGetStarted) {
-                        Text("Get Started")
+                        Text(L10n.onboardingSplashStartButton)
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(Color.white)
                             .frame(maxWidth: .infinity)
@@ -83,12 +83,17 @@ struct OB01WelcomeScreen: View {
     // MARK: - Title
 
     private var titleBlock: some View {
+        // Voice rewrite (2026-05-01): "Log your food with\nless Effort" →
+        // "Log your food.\nWithout the effort." Italic kept on the final
+        // word for the brand-voice carrier; period added on each line for
+        // a calmer cadence than the run-on original. See L10n.swift voice
+        // rules + docs/CONTENT_AUDIT_2026-05-01.md sample 1.
         VStack(alignment: .leading, spacing: 0) {
-            Text("Log your food with")
+            Text("Log your food.")
                 .font(OnboardingTypography.onboardingHeadline(size: 44))
                 .foregroundStyle(titleColor)
 
-            Text("less \(Text("Effort").font(OnboardingTypography.instrumentSerif(style: .italic, size: 44)))")
+            Text("Without the \(Text("effort").font(OnboardingTypography.instrumentSerif(style: .italic, size: 44))).")
                 .font(OnboardingTypography.onboardingHeadline(size: 44))
                 .foregroundStyle(titleColor)
         }
