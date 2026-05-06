@@ -96,6 +96,7 @@ struct HomeProfileScreen: View {
 
             NavigationLink {
                 FoodPreferencesProfileDetailView {
+                    foodPreferencesIntroSection
                     dietSection
                     allergiesSection
                 }
@@ -274,9 +275,29 @@ struct HomeProfileScreen: View {
         }
     }
 
+    /// Single explainer at the top of Food preferences. Two short lines
+    /// covering both dietary preferences and allergies — the user sees
+    /// this once when they open the screen, no per-row info icons.
+    @ViewBuilder
+    private var foodPreferencesIntroSection: some View {
+        Section {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("We'll use these to flag meals that don't match your diet or include allergens.")
+                    .font(.subheadline)
+                    .foregroundStyle(.primary)
+                Text("Set what fits today — you can change this any time.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 4)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+        }
+    }
+
     @ViewBuilder
     private var dietSection: some View {
-        let activePrefs = draft.preferences.filter { $0 != .noPreference }
         Section {
             ForEach(PreferenceChoice.allCases.filter { $0 != .noPreference }) { pref in
                 Toggle(isOn: preferenceToggleBinding(pref)) {
@@ -284,11 +305,7 @@ struct HomeProfileScreen: View {
                 }
             }
         } header: {
-            Text("Dietary Preferences")
-        } footer: {
-            if activePrefs.isEmpty {
-                Text("Select any that apply.")
-            }
+            Text("Dietary preferences")
         }
     }
 
@@ -302,10 +319,6 @@ struct HomeProfileScreen: View {
             }
         } header: {
             Text("Allergies")
-        } footer: {
-            if draft.allergies.isEmpty {
-                Text("We'll flag foods that conflict with these in your daily log.")
-            }
         }
     }
 
