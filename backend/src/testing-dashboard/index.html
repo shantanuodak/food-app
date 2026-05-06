@@ -1295,6 +1295,12 @@
               <button class="btn btn-ghost" onclick="setSavedLogsDate(0)">Today</button>
             </div>
             <div class="saved-control">
+              <label for="saved-logs-user">User</label>
+              <select id="saved-logs-user" class="dashboard-input" onchange="loadSavedLogs()">
+                <option value="">All users</option>
+              </select>
+            </div>
+            <div class="saved-control">
               <label for="saved-logs-date">Day</label>
               <input id="saved-logs-date" class="dashboard-input" type="date" onchange="loadSavedLogs()" />
             </div>
@@ -1317,6 +1323,7 @@
             <thead>
               <tr>
                 <th>Logged Time</th>
+                <th>User</th>
                 <th>Input</th>
                 <th>Cal</th>
                 <th>P (g)</th>
@@ -1330,7 +1337,7 @@
               </tr>
             </thead>
             <tbody id="saved-logs-tbody">
-              <tr><td colspan="11" class="text-muted" style="padding:24px; text-align:center;">Choose a day to load saved logs.</td></tr>
+              <tr><td colspan="12" class="text-muted" style="padding:24px; text-align:center;">Choose a day to load saved logs.</td></tr>
             </tbody>
           </table>
         </div>
@@ -1558,7 +1565,10 @@ function showAdvancedSection(name) {
   document.querySelectorAll('#advanced-segments button').forEach(button => {
     button.classList.toggle('active', button.dataset.section === name);
   });
-  if (name === 'saved-logs') loadSavedLogs();
+  if (name === 'saved-logs') {
+    loadSavedLogsUsers();
+    loadSavedLogs();
+  }
   if (name === 'recent-parses') loadRecentParses();
   if (name === 'costs') loadCosts();
   if (name === 'cache') loadCache();
@@ -2208,12 +2218,38 @@ async function loadSavedLogs() {
   const tbody = document.getElementById('saved-logs-tbody');
   const date = document.getElementById('saved-logs-date').value || localDateString();
   const tz = document.getElementById('saved-logs-tz').value || 'UTC';
-  tbody.innerHTML = '<tr><td colspan="11" class="text-muted" style="padding:24px;text-align:center;">Loading saved logs…</td></tr>';
+  const userEmail = document.getElementById('saved-logs-user')?.value || '';
+  tbody.innerHTML = '<tr><td colspan="12" class="text-muted" style="padding:24px;text-align:center;">Loading saved logs…</td></tr>';
   try {
-    const data = await api(`/saved-logs?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(tz)}`);
+    let url = `/saved-logs?date=${encodeURIComponent(date)}&tz=${encodeURIComponent(tz)}`;
+    if (userEmail) url += `&userEmail=${encodeURIComponent(userEmail)}`;
+    const data = await api(url);
     renderSavedLogs(data);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="11" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+  }
+}
+
+// Populates the user picker. Called when the Saved Logs tab is shown so the
+// dropdown stays fresh as new users sign up. The previously selected user is
+// preserved across reloads so a chosen filter survives a manual Refresh.
+async function loadSavedLogsUsers() {
+  const select = document.getElementById('saved-logs-user');
+  if (!select) return;
+  const previous = select.value;
+  try {
+    const data = await api('/users');
+    select.innerHTML = '<option value="">All users</option>';
+    for (const u of data.users) {
+      const label = `${u.email} (${u.logCount})`;
+      const opt = document.createElement('option');
+      opt.value = u.email;
+      opt.textContent = label;
+      select.appendChild(opt);
+    }
+    if (previous) select.value = previous;
+  } catch (e) {
+    console.error('Failed to load users for saved-logs picker:', e);
   }
 }
 
@@ -2226,7 +2262,7 @@ function renderSavedLogs(data) {
 
   const tbody = document.getElementById('saved-logs-tbody');
   if (!data.logs.length) {
-    tbody.innerHTML = '<tr><td colspan="11"><div class="empty-state"><div class="icon">🍽️</div>No saved food logs for this day.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state"><div class="icon">🍽️</div>No saved food logs for this day.</div></td></tr>';
     return;
   }
 
@@ -2238,9 +2274,13 @@ function renderSavedLogs(data) {
     const time = new Date(log.loggedAt).toLocaleTimeString();
     const logId = log.id ? log.id.slice(0, 8) : '—';
     const parseId = log.parseRequestId ? log.parseRequestId.slice(0, 8) : '—';
+    const userCell = log.userEmail
+      ? `<span class="text-muted" style="font-size:12px" title="${escHtml(log.userId || '')}">${escHtml(log.userEmail)}</span>`
+      : '<span class="text-muted">—</span>';
     tbody.innerHTML += `
       <tr>
         <td class="mono saved-time">${time}</td>
+        <td>${userCell}</td>
         <td class="saved-food" title="${escHtml(log.rawText)}">${escHtml(log.rawText)}</td>
         <td class="number-cell">${fmt(log.calories)}</td>
         <td class="number-cell">${fmt(log.proteinG, 1)}</td>

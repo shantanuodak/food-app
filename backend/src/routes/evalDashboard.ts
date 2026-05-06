@@ -495,6 +495,17 @@ router.get('/saved-logs', async (req, res, next) => {
       .catch(new Date().toISOString().slice(0, 10))
       .parse(req.query.date);
 
+    // Optional user filter for the testing dashboard. When provided, scopes the
+    // result to a single user — useful for QA against a specific account.
+    const userEmail = z
+      .string()
+      .trim()
+      .min(1)
+      .max(254)
+      .optional()
+      .catch(undefined)
+      .parse(req.query.userEmail);
+
     try {
       new Intl.DateTimeFormat('en-US', { timeZone: timezone });
     } catch {
@@ -504,6 +515,7 @@ router.get('/saved-logs', async (req, res, next) => {
     const { rows } = await pool.query<{
       id: string;
       user_id: string;
+      user_email: string | null;
       raw_text: string;
       logged_at: Date;
       created_at: Date;
@@ -520,6 +532,7 @@ router.get('/saved-logs', async (req, res, next) => {
       `SELECT
          fl.id,
          fl.user_id,
+         u.email AS user_email,
          fl.raw_text,
          fl.logged_at,
          fl.created_at,
@@ -534,16 +547,19 @@ router.get('/saved-logs', async (req, res, next) => {
          COUNT(fli.id)::text AS item_count
        FROM food_logs fl
        LEFT JOIN food_log_items fli ON fli.food_log_id = fl.id
+       LEFT JOIN users u ON u.id = fl.user_id
        WHERE (fl.logged_at AT TIME ZONE $1)::date = $2::date
-       GROUP BY fl.id
+         AND ($3::text IS NULL OR u.email = $3)
+       GROUP BY fl.id, u.email
        ORDER BY fl.logged_at ASC, fl.created_at ASC, fl.id ASC
        LIMIT 250`,
-      [timezone, date]
+      [timezone, date, userEmail ?? null]
     );
 
     const logs = rows.map((r) => ({
       id: r.id,
       userId: r.user_id,
+      userEmail: r.user_email,
       rawText: r.raw_text,
       loggedAt: r.logged_at.toISOString(),
       createdAt: r.created_at.toISOString(),
@@ -570,6 +586,48 @@ router.get('/saved-logs', async (req, res, next) => {
     );
 
     res.json({ date, timezone, count: logs.length, totals, logs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// GET /v1/internal/dashboard/users
+// Active users who have at least one saved food_log, ordered by most recent
+// activity. Powers the user picker in the Saved Logs dashboard tab.
+// ---------------------------------------------------------------------------
+
+router.get('/users', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+
+    const { rows } = await pool.query<{
+      id: string;
+      email: string;
+      log_count: string;
+      last_logged_at: Date | null;
+    }>(
+      `SELECT
+         u.id,
+         u.email,
+         COUNT(fl.id)::text AS log_count,
+         MAX(fl.created_at) AS last_logged_at
+       FROM users u
+       LEFT JOIN food_logs fl ON fl.user_id = u.id
+       GROUP BY u.id, u.email
+       HAVING COUNT(fl.id) > 0
+       ORDER BY MAX(fl.created_at) DESC NULLS LAST
+       LIMIT 200`
+    );
+
+    res.json({
+      users: rows.map((r) => ({
+        id: r.id,
+        email: r.email,
+        logCount: Number(r.log_count),
+        lastLoggedAt: r.last_logged_at ? r.last_logged_at.toISOString() : null
+      }))
+    });
   } catch (err) {
     next(err);
   }
