@@ -87,7 +87,7 @@ struct HM01LogComposerSection: View {
                                         setFocusedMinimalRowID(row.id)
                                     }
                                 } label: {
-                                    Text(row.text)
+                                    Text(homeRowTitle(for: row))
                                         .font(.system(size: 18))
                                         .foregroundStyle(.primary)
                                         .fixedSize(horizontal: false, vertical: true)
@@ -129,6 +129,11 @@ struct HM01LogComposerSection: View {
                                 )
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
+                                .modifier(InsertShimmerModifier(isActive: row.showInsertShimmer, onComplete: {
+                                    if let index = indexForRowID(row.id) {
+                                        rows[index].showInsertShimmer = false
+                                    }
+                                }))
                                 .accessibilityLabel(Text(L10n.foodInputPrompt))
                                 .accessibilityHint(Text(L10n.foodInputHint))
                             }
@@ -180,6 +185,30 @@ struct HM01LogComposerSection: View {
 
     private var joinedRowText: String {
         rows.map(\.text).joined(separator: "\n")
+    }
+
+    private func homeRowTitle(for row: HomeLogRow) -> String {
+        let trimmed = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return trimmed }
+
+        let lowercased = trimmed.lowercased()
+        let looksLikeOCR = trimmed.count > 80 ||
+            lowercased.contains("nutrition facts") ||
+            lowercased.contains("serving size") ||
+            lowercased.contains("total carbohydrate") ||
+            lowercased.contains("saturated fat")
+
+        guard looksLikeOCR else { return trimmed }
+
+        let items = row.parsedItems.isEmpty
+            ? row.parsedItem.map { [$0] } ?? []
+            : row.parsedItems
+
+        guard !items.isEmpty else {
+            return HomeLoggingDisplayText.shortenedFoodLabel(items: [], extractedText: trimmed)
+        }
+
+        return HomeLoggingDisplayText.shortenedFoodLabel(items: items, extractedText: trimmed)
     }
 
     private var rowTextBinding: Binding<String> {

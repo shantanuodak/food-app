@@ -1,8 +1,20 @@
 import SwiftUI
+import UIKit
 
 extension MainLoggingShellView {
 
     func handleVoiceModeTapped() {
+        isNoteEditorFocused = false
+        activeEditingRowID = nil
+        voiceHandoffTask?.cancel()
+        voiceRevealTask?.cancel()
+        voiceOverlayPhase = .listening
+        voiceCaptureCancelRequested = false
+        NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        Self.voiceHapticGenerator.prepare()
+        Self.voiceHapticGenerator.impactOccurred(intensity: 0.58)
+
         Task {
             guard await speechService.requestAuthorization() else {
                 parseError = "Microphone or speech recognition permission was denied. Enable them in Settings."
@@ -11,9 +23,10 @@ extension MainLoggingShellView {
             }
 
             do {
-                try speechService.startListening()
                 setVoiceOverlayPresented(true)
+                try speechService.startListening()
             } catch {
+                setVoiceOverlayPresented(false)
                 parseError = "Could not start voice recognition: \(error.localizedDescription)"
                 inputMode = .text
             }
@@ -22,38 +35,125 @@ extension MainLoggingShellView {
 
     @MainActor
     func insertVoiceTranscription(_ text: String) {
-        // Find the first empty unsaved row, or append a new one
+        insertVoiceTranscription(text, revealInRow: false)
+    }
+
+    @MainActor
+    func insertVoiceTranscription(_ text: String, revealInRow: Bool) {
         if let emptyIndex = inputRows.firstIndex(where: {
             !$0.isSaved && $0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }) {
-            inputRows[emptyIndex].text = text
+            inputRows[emptyIndex].text = revealInRow ? "" : text
             inputRows[emptyIndex].showInsertShimmer = true
+            if revealInRow {
+                revealVoiceText(text, inRowAt: emptyIndex)
+            }
         } else {
             var newRow = HomeLogRow.empty()
-            newRow.text = text
+            newRow.text = revealInRow ? "" : text
             newRow.showInsertShimmer = true
             inputRows.append(newRow)
+            if revealInRow {
+                revealVoiceText(text, inRowAt: inputRows.count - 1)
+            }
         }
 
-        // Track input source for save contract
         latestParseInputKind = "voice"
-
-        // Switch back to text mode — rowTextSignature change triggers
-        // scheduleDebouncedParse automatically via the existing onChange observer
         inputMode = .text
 
         ensureDraftTimingStarted()
+    }
+
+    @MainActor
+    private func revealVoiceText(_ text: String, inRowAt initialIndex: Int) {
+        let rowID = inputRows[initialIndex].id
+        voiceRevealTask?.cancel()
+        voiceRevealTask = Task { @MainActor in
+            defer { voiceRevealTask = nil }
+            let characters = Array(text)
+            guard !characters.isEmpty else {
+                setVoiceOverlayPresented(false)
+                return
+            }
+
+            var revealed = ""
+            let chunkSize = max(1, Int(ceil(Double(characters.count) / 28.0)))
+            for offset in stride(from: 0, to: characters.count, by: chunkSize) {
+                guard let currentIndex = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
+                let end = min(offset + chunkSize, characters.count)
+                revealed = String(characters[0..<end])
+                suppressDebouncedParseOnce = true
+                inputRows[currentIndex].text = revealed
+                try? await Task.sleep(nanoseconds: 18_000_000)
+            }
+
+            if let currentIndex = inputRows.firstIndex(where: { $0.id == rowID }) {
+                suppressDebouncedParseOnce = true
+                inputRows[currentIndex].text = text
+                inputRows[currentIndex].showInsertShimmer = true
+                latestParseInputKind = "voice"
+                triggerParseNow()
+            }
+
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+            setVoiceOverlayPresented(false)
+        }
     }
 
     // MARK: - Voice Helpers
 
     func setVoiceOverlayPresented(_ presented: Bool) {
         isVoiceOverlayPresented = presented
+        voiceOverlayPhase = presented ? voiceOverlayPhase : .listening
         NotificationCenter.default.post(
             name: .voiceRecordingStateChanged,
             object: nil,
             userInfo: ["isRecording": presented]
         )
+    }
+
+    @MainActor
+    func cancelVoiceCapture() {
+        voiceCaptureCancelRequested = true
+        voiceHandoffTask?.cancel()
+        voiceRevealTask?.cancel()
+        voiceHandoffTask = nil
+        voiceRevealTask = nil
+        speechService.cancelListening()
+        setVoiceOverlayPresented(false)
+        inputMode = .text
+    }
+
+    @MainActor
+    func completeVoiceCapture(with rawText: String) {
+        voiceCaptureCancelRequested = false
+        let finalText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !finalText.isEmpty else {
+            setVoiceOverlayPresented(false)
+            parseInfoMessage = "No speech detected. Try again."
+            inputMode = .text
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 3_000_000_000)
+                if parseInfoMessage == "No speech detected. Try again." {
+                    withAnimation { parseInfoMessage = nil }
+                }
+            }
+            return
+        }
+
+        voiceHandoffTask?.cancel()
+        voiceRevealTask?.cancel()
+        voiceOverlayPhase = .handoff
+        Self.voiceHapticGenerator.prepare()
+        Self.voiceHapticGenerator.impactOccurred(intensity: 0.42)
+        voiceHandoffTask = Task { @MainActor in
+            defer { voiceHandoffTask = nil }
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            insertVoiceTranscription(finalText, revealInRow: true)
+        }
     }
 
     func handleVoiceHaptic(level: Float) {

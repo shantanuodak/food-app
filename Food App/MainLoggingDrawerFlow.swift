@@ -83,7 +83,7 @@ extension MainLoggingShellView {
         case .text:
             return nil
         case .voice:
-            return "Voice capture is in progress. You can continue with text right now."
+            return nil
         case .camera:
             if let selectedCameraSource {
                 return selectedCameraSource.statusMessage

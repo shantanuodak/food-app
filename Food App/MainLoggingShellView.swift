@@ -12,6 +12,10 @@ struct MainLoggingShellView: View {
     @StateObject var parseCoordinator = ParseCoordinator()
     @StateObject var tutorialController = TutorialController()
     @State var isVoiceOverlayPresented = false
+    @State var voiceOverlayPhase: VoiceRecordingOverlay.Phase = .listening
+    @State var voiceHandoffTask: Task<Void, Never>?
+    @State var voiceRevealTask: Task<Void, Never>?
+    @State var voiceCaptureCancelRequested = false
     @State var inputRows: [HomeLogRow] = [.empty()]
     @State var parseInFlightCount = 0
     @State var parseRequestSequence = 0

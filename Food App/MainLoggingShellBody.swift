@@ -199,6 +199,8 @@ extension MainLoggingShellView {
                 pendingDeleteTasks.removeAll()
                 for task in dateChangeDraftTasks.values { task.cancel() }
                 dateChangeDraftTasks.removeAll()
+                voiceHandoffTask?.cancel()
+                voiceRevealTask?.cancel()
                 clearParseSchedulerState()
                 parseCoordinator.clearAll()
             }
@@ -300,15 +302,12 @@ extension MainLoggingShellView {
                         transcribedText: speechService.transcribedText,
                         isListening: speechService.isListening,
                         audioLevel: speechService.audioLevel,
+                        phase: voiceOverlayPhase,
                         onCancel: {
-                            speechService.stopListening()
-                            setVoiceOverlayPresented(false)
-                            inputMode = .text
+                            cancelVoiceCapture()
                         },
                         onSilenceTimeout: {
-                            speechService.stopListening()
-                            setVoiceOverlayPresented(false)
-                            inputMode = .text
+                            cancelVoiceCapture()
                             parseInfoMessage = "No speech detected. Try again."
                             Task { @MainActor in
                                 try? await Task.sleep(nanoseconds: 3_000_000_000)
@@ -320,6 +319,9 @@ extension MainLoggingShellView {
                     )
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
+                    .padding(.horizontal, -16)
+                    .padding(.bottom, -24)
+                    .ignoresSafeArea(.container, edges: .bottom)
                 }
             }
             .overlay(alignment: .bottom) {
@@ -338,22 +340,11 @@ extension MainLoggingShellView {
             }
             .onChange(of: speechService.isListening) { wasListening, isNowListening in
                 guard wasListening && !isNowListening && isVoiceOverlayPresented else { return }
-                let finalText = speechService.transcribedText
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
-                setVoiceOverlayPresented(false)
-
-                guard !finalText.isEmpty else {
-                    parseInfoMessage = "No speech detected. Try again."
-                    inputMode = .text
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 3_000_000_000)
-                        if parseInfoMessage == "No speech detected. Try again." {
-                            withAnimation { parseInfoMessage = nil }
-                        }
-                    }
+                guard !voiceCaptureCancelRequested else {
+                    voiceCaptureCancelRequested = false
                     return
                 }
-                insertVoiceTranscription(finalText)
+                completeVoiceCapture(with: speechService.transcribedText)
             }
             .onChange(of: speechService.audioLevel) { _, newLevel in
                 guard isVoiceOverlayPresented else { return }
@@ -362,8 +353,7 @@ extension MainLoggingShellView {
             .onChange(of: speechService.error) { _, newError in
                 guard let newError else { return }
                 parseError = newError
-                setVoiceOverlayPresented(false)
-                inputMode = .text
+                cancelVoiceCapture()
             }
         }
 }

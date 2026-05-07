@@ -39,8 +39,10 @@ final class SpeechRecognitionService: ObservableObject {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private let audioEngine = AVAudioEngine()
-    private var silenceTimer: Timer?
+    private var silenceTask: Task<Void, Never>?
+    private var interruptionTask: Task<Void, Never>?
     private let silenceThreshold: TimeInterval = 2.0
+    private var shouldIgnoreRecognitionErrors = false
 
     // MARK: - Init
 
@@ -88,6 +90,7 @@ final class SpeechRecognitionService: ObservableObject {
         // Reset state
         transcribedText = ""
         error = nil
+        shouldIgnoreRecognitionErrors = false
 
         // Configure audio session
         let audioSession = AVAudioSession.sharedInstance()
@@ -181,6 +184,9 @@ final class SpeechRecognitionService: ObservableObject {
                 }
 
                 if let errorMessage {
+                    if self.shouldIgnoreRecognitionErrors {
+                        return
+                    }
                     // Ignore cancellation errors (happens on normal stopListening)
                     if errorDomain == "kAFAssistantErrorDomain" && errorCode == 216 {
                         // "Request was canceled" — this is expected when we stop
@@ -200,38 +206,28 @@ final class SpeechRecognitionService: ObservableObject {
         // Start initial silence timer — if user says nothing for 2s, stop
         resetSilenceTimer()
 
-        // Observe audio session interruptions (phone calls, etc.).
-        //
-        // Known Swift 6 strict-concurrency pain point: closure-based
-        // `addObserver` whose body reaches back into a `@MainActor`
-        // class will emit "Reference to captured var 'self' in
-        // concurrently-executing code" no matter how the captures are
-        // arranged — explicit `[weak self]`, implicit capture via Task,
-        // and "capture-via-handler-closure" all trip it. The proper
-        // Swift 6 fix is to switch to `for await _ in
-        // NotificationCenter.default.notifications(named:)` and store
-        // the long-running Task — that's a meaningful refactor (Task
-        // lifecycle, cancellation in `stopListening`, etc.) and out of
-        // scope for tonight.
-        //
-        // Accepting the warning here: it's a pre-existing diagnostic,
-        // build still succeeds, behavior is correct (audio interruption
-        // stops listening as intended). Filed for the post-Tier-1
-        // strict-concurrency cleanup.
-        NotificationCenter.default.addObserver(
-            forName: AVAudioSession.interruptionNotification,
-            object: audioSession,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor in
+        interruptionTask?.cancel()
+        interruptionTask = Task { [weak self] in
+            for await _ in NotificationCenter.default.notifications(named: AVAudioSession.interruptionNotification) {
                 self?.stopListening()
             }
         }
     }
 
     func stopListening() {
-        silenceTimer?.invalidate()
-        silenceTimer = nil
+        stopRecognition(cancelTask: false)
+    }
+
+    func cancelListening() {
+        stopRecognition(cancelTask: true)
+    }
+
+    private func stopRecognition(cancelTask: Bool) {
+        silenceTask?.cancel()
+        silenceTask = nil
+        interruptionTask?.cancel()
+        interruptionTask = nil
+        shouldIgnoreRecognitionErrors = true
 
         if audioEngine.isRunning {
             audioEngine.stop()
@@ -239,7 +235,11 @@ final class SpeechRecognitionService: ObservableObject {
         }
 
         recognitionRequest?.endAudio()
-        recognitionTask?.cancel()
+        if cancelTask {
+            recognitionTask?.cancel()
+        } else {
+            recognitionTask?.finish()
+        }
         recognitionRequest = nil
         recognitionTask = nil
 
@@ -248,19 +248,17 @@ final class SpeechRecognitionService: ObservableObject {
 
         // Deactivate audio session (non-fatal if it fails)
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-
-        NotificationCenter.default.removeObserver(self, name: AVAudioSession.interruptionNotification, object: nil)
     }
 
     // MARK: - Silence Detection
 
     private func resetSilenceTimer() {
-        silenceTimer?.invalidate()
-        silenceTimer = Timer.scheduledTimer(withTimeInterval: silenceThreshold, repeats: false) { [weak self] _ in
-            Task { @MainActor in
-                guard let self, self.isListening else { return }
-                self.stopListening()
-            }
+        silenceTask?.cancel()
+        silenceTask = Task { [weak self, silenceThreshold] in
+            let delay = UInt64(silenceThreshold * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            self?.stopListening()
         }
     }
 }
