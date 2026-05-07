@@ -128,9 +128,9 @@ extension MainLoggingShellView {
     @MainActor
     func completeVoiceCapture(with rawText: String) {
         voiceCaptureCancelRequested = false
-        let finalText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
+        let initialText = rawText.trimmingCharacters(in: .whitespacesAndNewlines)
 
-        guard !finalText.isEmpty else {
+        guard !initialText.isEmpty else {
             setVoiceOverlayPresented(false)
             parseInfoMessage = "No speech detected. Try again."
             inputMode = .text
@@ -152,6 +152,9 @@ extension MainLoggingShellView {
             defer { voiceHandoffTask = nil }
             try? await Task.sleep(nanoseconds: 300_000_000)
             guard !Task.isCancelled else { return }
+            let latestText = speechService.transcribedText
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let finalText = latestText.isEmpty ? initialText : latestText
             insertVoiceTranscription(finalText, revealInRow: true)
         }
     }

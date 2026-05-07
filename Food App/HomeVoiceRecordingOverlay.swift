@@ -21,7 +21,7 @@ struct VoiceRecordingOverlay: View {
     /// Tracks seconds since last detected speech for auto-dismiss.
     @State private var silenceTimer: Task<Void, Never>?
 
-    private let silenceTimeoutSeconds: UInt64 = 4
+    private let silenceTimeoutSeconds: UInt64 = 6
     private let glowHeight: CGFloat = 620
 
     private var level: CGFloat { smoothLevel }

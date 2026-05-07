@@ -17,6 +17,7 @@ struct OnboardingView: View {
     @State var pendingRouteError: String?
     @State var baselineStep: BaselineScreenStep = .sex
     @State var accountScreenAppeared = false
+    @State var isExistingAccountSignIn = false
     @State var screenStates: [OnboardingRoute: OnboardingScreenState] = {
         OnboardingRoute.allCases.reduce(into: [OnboardingRoute: OnboardingScreenState]()) { result, route in
             result[route] = OnboardingScreenState()
@@ -36,9 +37,11 @@ struct OnboardingView: View {
                 if flow.onboardingRoute == .welcome {
                     OB01WelcomeScreen(
                         onGetStarted: {
+                            isExistingAccountSignIn = false
                             flow.moveNextOnboarding()
                         },
                         onExistingAccount: {
+                            isExistingAccountSignIn = true
                             flow.moveToOnboarding(.account)
                         }
                     )

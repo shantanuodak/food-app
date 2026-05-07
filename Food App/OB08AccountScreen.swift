@@ -5,6 +5,8 @@ struct OB08AccountScreen: View {
     let prefersGooglePrimary: Bool
     let enableApple: Bool
     let onSelectProvider: (AccountProvider) -> Void
+    var createAccountTitle: String? = nil
+    var onCreateAccount: (() -> Void)? = nil
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var appeared = false
@@ -42,6 +44,23 @@ struct OB08AccountScreen: View {
                         .foregroundStyle(OnboardingGlassTheme.textSecondary)
                 }
                 .padding(.top, 12)
+            }
+
+            if let createAccountTitle, let onCreateAccount {
+                Button {
+                    onCreateAccount()
+                } label: {
+                    Text(createAccountTitle)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                        .padding(.top, isLoading ? 10 : 18)
+                }
+                .buttonStyle(.plain)
+                .disabled(isLoading)
+                .accessibilityHint(Text("Start the onboarding flow to create a new account."))
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 8)
+                .animation(.easeOut(duration: 0.45).delay(0.36), value: appeared)
             }
         }
         .onAppear {

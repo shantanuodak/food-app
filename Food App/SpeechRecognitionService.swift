@@ -41,7 +41,7 @@ final class SpeechRecognitionService: ObservableObject {
     private let audioEngine = AVAudioEngine()
     private var silenceTask: Task<Void, Never>?
     private var interruptionTask: Task<Void, Never>?
-    private let silenceThreshold: TimeInterval = 2.0
+    private let silenceThreshold: TimeInterval = 4.0
     private var shouldIgnoreRecognitionErrors = false
 
     // MARK: - Init

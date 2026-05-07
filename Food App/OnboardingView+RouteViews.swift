@@ -161,32 +161,38 @@ extension OnboardingView {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Back button — neutral surface circle with hairline border
-                HStack {
-                    Button {
-                        flow.moveBackOnboarding()
-                    } label: {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(OnboardingGlassTheme.textPrimary)
-                            .frame(width: 44, height: 44)
-                            .background(
-                                Circle()
-                                    .fill(OnboardingGlassTheme.neutralSurface)
-                            )
-                            .overlay(
-                                Circle()
-                                    .strokeBorder(OnboardingGlassTheme.hairline, lineWidth: 1)
-                            )
+                if !isExistingAccountSignIn {
+                    // Back button — neutral surface circle with hairline border
+                    HStack {
+                        Button {
+                            flow.moveBackOnboarding()
+                        } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundStyle(OnboardingGlassTheme.textPrimary)
+                                .frame(width: 44, height: 44)
+                                .background(
+                                    Circle()
+                                        .fill(OnboardingGlassTheme.neutralSurface)
+                                )
+                                .overlay(
+                                    Circle()
+                                        .strokeBorder(OnboardingGlassTheme.hairline, lineWidth: 1)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(Text("Back"))
+                        .disabled(isSubmitting || isAccountLoading)
+                        Spacer()
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text("Back"))
-                    .disabled(isSubmitting || isAccountLoading)
-                    Spacer()
+                    .frame(height: 44)
+                    .padding(.top, 12)
+                    .padding(.horizontal, 24)
+                } else {
+                    Color.clear
+                        .frame(height: 44)
+                        .padding(.top, 12)
                 }
-                .frame(height: 44)
-                .padding(.top, 12)
-                .padding(.horizontal, 24)
 
                 // Hero — headline + completed subtitle. Larger title now that
                 // the carousel no longer competes for vertical space.
@@ -227,7 +233,13 @@ extension OnboardingView {
                         isLoading: isAccountLoading,
                         prefersGooglePrimary: isSupabaseAuthMode,
                         enableApple: true,
-                        onSelectProvider: continueAccount(provider:)
+                        onSelectProvider: continueAccount(provider:),
+                        createAccountTitle: isExistingAccountSignIn ? "Create an account" : nil,
+                        onCreateAccount: isExistingAccountSignIn ? {
+                            isExistingAccountSignIn = false
+                            localError = nil
+                            flow.moveToOnboarding(.goal)
+                        } : nil
                     )
 
                     if let localError {

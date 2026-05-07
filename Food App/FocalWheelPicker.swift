@@ -48,7 +48,7 @@ struct FocalWheelPicker: View {
     // changing how fast the wheel scrolls under the finger.
 
     private let rowHeight: CGFloat = 60
-    private let rowSpacing: CGFloat = 70
+    private let rowSpacing: CGFloat = 78
     private let visibleRadius: Int = 3 // ±3 rendered rows; outer ones clipped by frame
 
     // MARK: - Body
@@ -104,10 +104,14 @@ struct FocalWheelPicker: View {
         let absDelta = abs(delta)
 
         Text("\(val)")
-            .font(.system(size: fontSize(absDelta: absDelta), weight: .bold, design: .rounded))
+            .font(.system(size: fontSize(for: val, absDelta: absDelta), weight: .bold, design: .rounded))
             .monospacedDigit() // stable horizontal layout regardless of digit widths
+            .lineLimit(1)
+            .minimumScaleFactor(0.72)
+            .allowsTightening(false)
             .foregroundStyle(OnboardingGlassTheme.textPrimary.opacity(opacity(absDelta: absDelta)))
             .blur(radius: blurRadius(absDelta: absDelta))
+            .frame(width: pickerWidth, height: rowSpacing, alignment: .center)
             .offset(y: delta * rowSpacing)
     }
 
@@ -117,10 +121,21 @@ struct FocalWheelPicker: View {
     // No discrete buckets — as the wheel rolls, every property interpolates
     // continuously, producing a fluid focus shift instead of stepped pops.
 
-    private func fontSize(absDelta: CGFloat) -> CGFloat {
-        // 84pt at centre, decaying to 36pt by distance 2; clamped beyond.
+    private func fontSize(for value: Int, absDelta: CGFloat) -> CGFloat {
+        // Keep the focal number large, but bound it to the column width so
+        // two-digit inches and three-digit weights never collide or clip.
+        let centerSize = centerFontSize(for: value)
         let t = min(absDelta / 2.0, 1.0)
-        return 84 - (84 - 36) * t
+        return centerSize - (centerSize - 36) * t
+    }
+
+    private func centerFontSize(for value: Int) -> CGFloat {
+        let digits = max(1, String(abs(value)).count)
+        let horizontalPadding: CGFloat = pickerWidth <= 120 ? 12 : 20
+        let availableWidth = max(44, pickerWidth - horizontalPadding)
+        let widthFittedSize = availableWidth / (CGFloat(digits) * 0.58)
+        let visualMax: CGFloat = pickerWidth <= 120 ? 72 : 78
+        return max(50, min(visualMax, widthFittedSize))
     }
 
     private func opacity(absDelta: CGFloat) -> Double {
@@ -144,13 +159,13 @@ struct FocalWheelPicker: View {
     // animation, no curve. That's what produces the native-picker feel.
 
     /// Standard Focal Spring — used for the drag-end settle only.
-    /// `response: 0.45, dampingFraction: 0.92` produces a gentle ~440 ms glide
+    /// `response: 0.52, dampingFraction: 0.96` produces a gentle glide
     /// to rest with effectively no overshoot.
     private var focalSpring: Animation {
         if reduceMotion {
             return .linear(duration: 0.14)
         }
-        return .spring(response: 0.45, dampingFraction: 0.92)
+        return .spring(response: 0.52, dampingFraction: 0.96)
     }
 
     // MARK: - Gesture

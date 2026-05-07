@@ -372,19 +372,15 @@ struct OB03BaselineScreen: View {
     private func setFeet(_ newFeet: Int) {
         var val = draft.imperialHeightFeetInches
         val.feet = newFeet
-        withAnimation(.spring(response: 0.2, dampingFraction: 0.85)) {
-            draft.imperialHeightFeetInches = val
-            draft.baselineTouchedHeight = true
-        }
+        draft.imperialHeightFeetInches = val
+        draft.baselineTouchedHeight = true
     }
 
     private func setInches(_ newInches: Int) {
         var val = draft.imperialHeightFeetInches
         val.inches = newInches
-        withAnimation(.spring(response: 0.2, dampingFraction: 0.85)) {
-            draft.imperialHeightFeetInches = val
-            draft.baselineTouchedHeight = true
-        }
+        draft.imperialHeightFeetInches = val
+        draft.baselineTouchedHeight = true
     }
 
     private func sexTheme(for option: SexOption) -> (icon: String, accent: Color, subtitle: String) {

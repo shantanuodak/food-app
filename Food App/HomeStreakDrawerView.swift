@@ -24,12 +24,17 @@ struct HomeStreakDrawerView: View {
     @State private var selectedDay: StreakDay?
 
     private var todayKey: String {
-        let formatter = DateFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        formatter.timeZone = TimeZone(identifier: response?.timezone ?? "") ?? .current
-        formatter.dateFormat = "yyyy-MM-dd"
-        return formatter.string(from: Date())
+        Self.dateKey(for: Date(), timezoneID: response?.timezone ?? TimeZone.current.identifier)
+    }
+
+    private var displayDays: [StreakDay] {
+        guard let response else { return [] }
+        let newestFirst = Array(response.days.reversed())
+        guard selectedRange == .year else { return newestFirst }
+
+        let currentYear = String(todayKey.prefix(4))
+        let currentYearDays = newestFirst.filter { $0.date.hasPrefix("\(currentYear)-") }
+        return currentYearDays.isEmpty ? newestFirst : currentYearDays
     }
 
     var body: some View {
@@ -53,7 +58,7 @@ struct HomeStreakDrawerView: View {
                         switch selectedRange {
                         case .days30:
                             StreakContributionCalendarView(
-                                days: Array(response.days.reversed()),
+                                days: displayDays,
                                 range: selectedRange,
                                 todayKey: todayKey,
                                 timezone: response.timezone,
@@ -61,7 +66,7 @@ struct HomeStreakDrawerView: View {
                             )
                         case .year:
                             StreakYearGridView(
-                                days: Array(response.days.reversed()),
+                                days: displayDays,
                                 todayKey: todayKey,
                                 timezone: response.timezone,
                                 selectedDay: $selectedDay
@@ -88,6 +93,8 @@ struct HomeStreakDrawerView: View {
         }
         .onChange(of: selectedRange) { _, _ in
             selectedDay = nil
+            response = nil
+            errorMessage = nil
             Task { await loadStreaks() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { _ in
@@ -187,9 +194,12 @@ struct HomeStreakDrawerView: View {
         defer { isLoading = false }
 
         do {
+            let timezone = TimeZone.current.identifier
+            let toDate = Self.dateKey(for: Date(), timezoneID: timezone)
             let result = try await appStore.apiClient.getStreaks(
                 range: selectedRange.rawValue,
-                timezone: TimeZone.current.identifier
+                to: toDate,
+                timezone: timezone
             )
             withAnimation(.easeInOut(duration: 0.28)) {
                 response = result
@@ -199,6 +209,15 @@ struct HomeStreakDrawerView: View {
         } catch {
             errorMessage = "Could not load streaks."
         }
+    }
+
+    private static func dateKey(for date: Date, timezoneID: String) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = TimeZone(identifier: timezoneID) ?? .current
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 }
 
@@ -213,21 +232,32 @@ private struct StreakContributionCalendarView: View {
         let columnCount = range == .year ? 14 : 8
         let spacing: CGFloat = range == .year ? 6 : 10
         let cellRadius: CGFloat = range == .year ? 4 : 6
+        let groups = StreakMonthGrouping.groupByMonth(days: days)
 
-        let columns = Array(
-            repeating: GridItem(.flexible(), spacing: spacing),
-            count: columnCount
-        )
+        VStack(alignment: .leading, spacing: 16) {
+            ForEach(groups, id: \.key) { group in
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(group.shortLabel)
+                        .font(.system(size: 12, weight: .bold))
+                        .tracking(1.2)
+                        .foregroundStyle(.secondary)
 
-        LazyVGrid(columns: columns, spacing: spacing) {
-            ForEach(days, id: \.date) { day in
-                StreakDayCell(
-                    day: day,
-                    cornerRadius: cellRadius,
-                    isToday: day.date == todayKey,
-                    timezone: timezone,
-                    selectedDay: $selectedDay
-                )
+                    let columns = Array(
+                        repeating: GridItem(.flexible(), spacing: spacing),
+                        count: columnCount
+                    )
+                    LazyVGrid(columns: columns, spacing: spacing) {
+                        ForEach(group.days, id: \.date) { day in
+                            StreakDayCell(
+                                day: day,
+                                cornerRadius: cellRadius,
+                                isToday: day.date == todayKey,
+                                timezone: timezone,
+                                selectedDay: $selectedDay
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -257,7 +287,7 @@ private struct StreakYearGridView: View {
     @Binding var selectedDay: StreakDay?
 
     var body: some View {
-        let groups = Self.groupByMonth(days: days)
+        let groups = StreakMonthGrouping.groupByMonth(days: days)
 
         VStack(alignment: .leading, spacing: 20) {
             ForEach(groups, id: \.key) { group in
@@ -286,24 +316,28 @@ private struct StreakYearGridView: View {
             }
         }
     }
+}
 
-    private struct MonthGroup {
-        let key: String          // "2026-04"
-        let label: String        // "APRIL 2026"
-        let days: [StreakDay]    // already in display order (newest first)
-    }
+private struct StreakMonthGroup {
+    let key: String          // "2026-04"
+    let label: String        // "APRIL 2026"
+    let shortLabel: String   // "APR"
+    let days: [StreakDay]    // already in display order (newest first)
+}
 
+private enum StreakMonthGrouping {
     /// Groups a reverse-chronological day list into month buckets, preserving order.
     /// First bucket is the most recent month; days within a bucket stay in input order.
-    private static func groupByMonth(days: [StreakDay]) -> [MonthGroup] {
-        var groups: [MonthGroup] = []
+    static func groupByMonth(days: [StreakDay]) -> [StreakMonthGroup] {
+        var groups: [StreakMonthGroup] = []
         var bucket: [StreakDay] = []
         var currentKey: String?
 
         func flush() {
             guard let key = currentKey, !bucket.isEmpty else { return }
             let label = monthLabel(forKey: key, fallback: bucket.first?.date ?? "")
-            groups.append(MonthGroup(key: key, label: label, days: bucket))
+            let shortLabel = shortMonthLabel(forKey: key, fallback: String(label.prefix(3)))
+            groups.append(StreakMonthGroup(key: key, label: label, shortLabel: shortLabel, days: bucket))
             bucket = []
         }
 
@@ -326,6 +360,13 @@ private struct StreakYearGridView: View {
         return fallback
     }
 
+    private static func shortMonthLabel(forKey key: String, fallback: String) -> String {
+        if let date = monthKeyFormatter.date(from: key) {
+            return shortMonthDisplayFormatter.string(from: date).uppercased()
+        }
+        return fallback
+    }
+
     private static let monthKeyFormatter: DateFormatter = {
         let f = DateFormatter()
         f.calendar = Calendar(identifier: .gregorian)
@@ -339,6 +380,13 @@ private struct StreakYearGridView: View {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "MMMM yyyy"
+        return f
+    }()
+
+    private static let shortMonthDisplayFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "MMM"
         return f
     }()
 }
