@@ -6,6 +6,7 @@ import { authRequired } from './middleware/auth.js';
 import onboardingRoutes from './routes/onboarding.js';
 import parseRoutes from './routes/parse.js';
 import logsRoutes from './routes/logs.js';
+import rewardsRoutes from './routes/rewards.js';
 import internalMetricsRoutes from './routes/internalMetrics.js';
 import evalDashboardRoutes from './routes/evalDashboard.js';
 import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js';
@@ -55,6 +56,7 @@ export function createApp() {
   app.use('/v1/onboarding', authRequired, onboardingRoutes);
   app.use('/v1/logs/parse', authRequired, parseRoutes);
   app.use('/v1/logs', authRequired, logsRoutes);
+  app.use('/v1/rewards', authRequired, rewardsRoutes);
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
   app.use('/v1/health', authRequired, healthRoutes);
   app.use('/v1/profile', authRequired, trackingAccuracyRoutes);
