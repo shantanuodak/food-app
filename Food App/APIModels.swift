@@ -520,6 +520,27 @@ struct StreakDay: Decodable, Identifiable {
     var hasLogs: Bool { logsCount > 0 }
 }
 
+struct RewardsSummaryResponse: Decodable {
+    let timezone: String
+    let generatedAt: String
+    let totals: RewardsTotals
+}
+
+struct RewardsTotals: Decodable, Equatable {
+    let logs: Int
+    let foodItems: Int
+    let uniqueFoods: Int
+    let textLogs: Int
+    let voiceLogs: Int
+    let imageLogs: Int
+    let manualLogs: Int
+    let manualOverrideItems: Int
+    let highConfidenceLogs: Int
+    let highConfidenceItems: Int
+    let healthActiveDays: Int
+    let healthStepDays10k: Int
+}
+
 struct AdminFeatureFlags: Codable {
     let geminiEnabled: Bool
 }

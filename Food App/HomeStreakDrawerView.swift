@@ -1,85 +1,25 @@
 import SwiftUI
 
-private enum HomeStreakDrawerRange: Int, CaseIterable, Identifiable {
-    case days30 = 30
-    case year = 365
-
-    var id: Int { rawValue }
-
-    var title: String {
-        switch self {
-        case .days30: return "30 Days"
-        case .year: return "This Year"
-        }
-    }
-}
-
 struct HomeStreakDrawerView: View {
     @EnvironmentObject private var appStore: AppStore
 
-    @State private var selectedRange: HomeStreakDrawerRange = .days30
     @State private var response: StreakResponse?
     @State private var isLoading = false
     @State private var errorMessage: String?
-    @State private var selectedDay: StreakDay?
-
-    private var todayKey: String {
-        if let response {
-            return response.to
-        }
-        return Self.dateKey(for: Date(), timezoneID: response?.timezone ?? TimeZone.current.identifier)
-    }
-
-    private var displayDays: [StreakDay] {
-        guard let response else { return [] }
-        let newestFirst = Array(response.days.reversed())
-        guard selectedRange == .year else { return newestFirst }
-
-        let currentYear = String(todayKey.prefix(4))
-        let currentYearDays = newestFirst.filter { $0.date.hasPrefix("\(currentYear)-") }
-        return currentYearDays.isEmpty ? newestFirst : currentYearDays
-    }
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
-                header
-
-                Picker("Streak range", selection: $selectedRange) {
-                    ForEach(HomeStreakDrawerRange.allCases) { range in
-                        Text(range.title).tag(range)
-                    }
-                }
-                .pickerStyle(.segmented)
+                drawerTitle
 
                 if !appStore.configuration.progressFeatureEnabled {
                     disabledCard
                 } else if isLoading && response == nil {
                     loadingCard
                 } else if let response {
-                    Group {
-                        switch selectedRange {
-                        case .days30:
-                            StreakContributionCalendarView(
-                                days: displayDays,
-                                range: selectedRange,
-                                todayKey: todayKey,
-                                timezone: response.timezone,
-                                selectedDay: $selectedDay
-                            )
-                        case .year:
-                            StreakYearGridView(
-                                days: displayDays,
-                                todayKey: todayKey,
-                                timezone: response.timezone,
-                                selectedDay: $selectedDay
-                            )
-                        }
-                    }
-                    .id(selectedRange.rawValue)
-                    .transition(.opacity.combined(with: .scale(scale: 0.98)))
-
-                    legend
+                    badgeHero(for: response)
+                    nextBadgeProgressCard(for: response)
+                    badgeCollection(for: response.currentDays)
                 } else if let errorMessage {
                     errorCard(errorMessage)
                 }
@@ -87,18 +27,11 @@ struct HomeStreakDrawerView: View {
                 Spacer(minLength: 0)
             }
             .padding(20)
-            .animation(.easeInOut(duration: 0.28), value: selectedRange)
             .animation(.easeInOut(duration: 0.28), value: response?.range)
         }
         .background(Color(.systemBackground))
         .task {
             await loadStreaks()
-        }
-        .onChange(of: selectedRange) { _, _ in
-            selectedDay = nil
-            response = nil
-            errorMessage = nil
-            Task { await loadStreaks() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { _ in
             Task { await loadStreaks() }
@@ -108,17 +41,216 @@ struct HomeStreakDrawerView: View {
         }
     }
 
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("\(response?.currentDays ?? 0) day streak")
-                .font(.system(size: 34, weight: .bold))
-                .monospacedDigit()
-
-            Text("LONGEST STREAK | \(response?.longestDays ?? 0) \(response?.longestDays == 1 ? "DAY" : "DAYS")")
-                .font(.system(size: 12, weight: .bold))
+    private var drawerTitle: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Your streak")
+                .font(.system(size: 13, weight: .bold))
                 .tracking(1.5)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            Text("Badge progress")
+                .font(.system(size: 34, weight: .bold))
                 .foregroundStyle(.primary)
         }
+    }
+
+    private func badgeHero(for response: StreakResponse) -> some View {
+        let currentDays = response.currentDays
+        let currentBadge = StreakRewards.currentBadge(for: currentDays)
+        let nextBadge = StreakRewards.nextBadge(for: currentDays)
+
+        return VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .top, spacing: 16) {
+                StreakBadgeMedallion(
+                    badge: currentBadge ?? nextBadge,
+                    isEarned: currentBadge != nil,
+                    size: 76
+                )
+                .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(currentBadge?.title ?? "Start your first streak badge today")
+                        .font(.system(size: 26, weight: .heavy))
+                        .foregroundStyle(.primary)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(heroSubtitle(for: response, currentBadge: currentBadge, nextBadge: nextBadge))
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("\(currentDays)")
+                    .font(.system(size: 46, weight: .heavy))
+                    .monospacedDigit()
+                    .foregroundStyle(streakGoldGradient)
+
+                Text("day streak")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 0)
+            }
+
+            HStack(spacing: 10) {
+                Label(
+                    "Longest \(response.longestDays) \(response.longestDays == 1 ? "day" : "days")",
+                    systemImage: "trophy.fill"
+                )
+                .font(.system(size: 12, weight: .bold))
+
+                Circle()
+                    .fill(Color.primary.opacity(0.18))
+                    .frame(width: 4, height: 4)
+
+                Text(statusCopy(for: response))
+                    .font(.system(size: 12, weight: .bold))
+            }
+            .foregroundStyle(.primary.opacity(0.72))
+            .lineLimit(2)
+        }
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(heroBackground)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color.white.opacity(0.62), lineWidth: 1)
+        }
+        .shadow(color: Color.orange.opacity(0.14), radius: 20, y: 10)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(heroAccessibilityLabel(for: response, badge: currentBadge))
+    }
+
+    private func nextBadgeProgressCard(for response: StreakResponse) -> some View {
+        let currentDays = response.currentDays
+
+        return VStack(alignment: .leading, spacing: 12) {
+            if let nextBadge = StreakRewards.nextBadge(for: currentDays),
+               let progress = StreakRewards.progressToNext(for: currentDays) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("\(progress.daysRemaining) \(progress.daysRemaining == 1 ? "day" : "days") to \(nextBadge.title)")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 8)
+                    Text("\(currentDays)/\(nextBadge.requiredDays)")
+                        .font(.system(size: 13, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.secondary)
+                }
+
+                GeometryReader { proxy in
+                    ZStack(alignment: .leading) {
+                        Capsule()
+                            .fill(Color.primary.opacity(0.08))
+                        Capsule()
+                            .fill(streakGoldGradient)
+                            .frame(width: progress.fraction <= 0 ? 0 : max(8, proxy.size.width * progress.fraction))
+                    }
+                }
+                .frame(height: 10)
+
+                Text(nextBadge.subtitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+            } else {
+                Label("All streak badges unlocked", systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.primary)
+
+                Text("You have reached the top of this badge ladder.")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(Color(.secondarySystemGroupedBackground))
+        )
+        .accessibilityElement(children: .combine)
+    }
+
+    private func badgeCollection(for currentDays: Int) -> some View {
+        let columns = [
+            GridItem(.flexible(), spacing: 10),
+            GridItem(.flexible(), spacing: 10)
+        ]
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Text("Badge collection")
+                .font(.system(size: 13, weight: .bold))
+                .tracking(1.2)
+                .foregroundStyle(.secondary)
+                .textCase(.uppercase)
+
+            LazyVGrid(columns: columns, spacing: 10) {
+                ForEach(StreakRewards.badges) { badge in
+                    StreakBadgeCollectionCard(
+                        badge: badge,
+                        isEarned: currentDays >= badge.requiredDays
+                    )
+                }
+            }
+        }
+    }
+
+    private var streakGoldGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 1.0, green: 0.72, blue: 0.18),
+                Color(red: 0.93, green: 0.42, blue: 0.10)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var heroBackground: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 1.0, green: 0.97, blue: 0.91),
+                Color(red: 1.0, green: 0.89, blue: 0.76)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private func heroSubtitle(
+        for response: StreakResponse,
+        currentBadge: StreakBadge?,
+        nextBadge: StreakBadge?
+    ) -> String {
+        if let currentBadge {
+            return "\(currentBadge.subtitle) \(nextBadge.map { "Next: \($0.title)." } ?? "Every streak badge is unlocked.")"
+        }
+        return nextBadge.map { "\($0.requiredDays) logged day earns \($0.title)." } ?? "Every streak badge is unlocked."
+    }
+
+    private func statusCopy(for response: StreakResponse) -> String {
+        switch response.status {
+        case "completed_today":
+            return "Logged today"
+        case "at_risk_today":
+            return "Today is open"
+        default:
+            return response.currentDays > 0 ? "Keep building" : "Ready to begin"
+        }
+    }
+
+    private func heroAccessibilityLabel(for response: StreakResponse, badge: StreakBadge?) -> String {
+        let streak = response.currentDays == 1 ? "1 day streak" : "\(response.currentDays) day streak"
+        if let badge {
+            return "\(badge.title), earned at \(badge.requiredDays) days, \(streak), longest \(response.longestDays) days"
+        }
+        return "No streak badge earned yet, \(streak), first badge at 1 day"
     }
 
     private var loadingCard: some View {
@@ -168,26 +300,6 @@ struct HomeStreakDrawerView: View {
         )
     }
 
-    private var legend: some View {
-        HStack(spacing: 8) {
-            Text("Less")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.primary)
-
-            ForEach(0...3, id: \.self) { level in
-                RoundedRectangle(cornerRadius: 4, style: .continuous)
-                    .fill(StreakContributionCalendarView.color(for: level))
-                    .frame(width: 16, height: 16)
-            }
-
-            Text("High")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.primary)
-
-            Spacer()
-        }
-    }
-
     @MainActor
     private func loadStreaks() async {
         guard appStore.configuration.progressFeatureEnabled else { return }
@@ -198,8 +310,10 @@ struct HomeStreakDrawerView: View {
 
         do {
             let timezone = TimeZone.current.identifier
+            let toDate = Self.dateKey(for: Date(), timezoneID: timezone)
             let result = try await appStore.apiClient.getStreaks(
-                range: selectedRange.rawValue,
+                range: 30,
+                to: toDate,
                 timezone: timezone
             )
             withAnimation(.easeInOut(duration: 0.28)) {
@@ -212,7 +326,7 @@ struct HomeStreakDrawerView: View {
         }
     }
 
-    private static func dateKey(for date: Date, timezoneID: String) -> String {
+    static func dateKey(for date: Date, timezoneID: String) -> String {
         let formatter = DateFormatter()
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.locale = Locale(identifier: "en_US_POSIX")
@@ -222,288 +336,142 @@ struct HomeStreakDrawerView: View {
     }
 }
 
-private struct StreakContributionCalendarView: View {
-    let days: [StreakDay]
-    let range: HomeStreakDrawerRange
-    let todayKey: String
-    let timezone: String
-    @Binding var selectedDay: StreakDay?
+private struct StreakBadgeMedallion: View {
+    let badge: StreakBadge?
+    let isEarned: Bool
+    let size: CGFloat
 
     var body: some View {
-        let columnCount = range == .year ? 14 : 8
-        let spacing: CGFloat = range == .year ? 6 : 10
-        let cellRadius: CGFloat = range == .year ? 4 : 6
-        let groups = StreakMonthGrouping.groupByMonth(days: days)
-
-        VStack(alignment: .leading, spacing: 16) {
-            ForEach(groups, id: \.key) { group in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(group.shortLabel)
-                        .font(.system(size: 12, weight: .bold))
-                        .tracking(1.2)
-                        .foregroundStyle(.secondary)
-
-                    let columns = Array(
-                        repeating: GridItem(.flexible(), spacing: spacing),
-                        count: columnCount
-                    )
-                    LazyVGrid(columns: columns, spacing: spacing) {
-                        ForEach(group.days, id: \.date) { day in
-                            StreakDayCell(
-                                day: day,
-                                cornerRadius: cellRadius,
-                                isToday: day.date == todayKey,
-                                timezone: timezone,
-                                selectedDay: $selectedDay
-                            )
-                        }
-                    }
+        ZStack {
+            Circle()
+                .fill(backgroundGradient)
+                .overlay {
+                    Circle()
+                        .stroke(Color.white.opacity(isEarned ? 0.74 : 0.48), lineWidth: 1)
                 }
-            }
-        }
-    }
+                .shadow(color: glowColor.opacity(isEarned ? 0.26 : 0.08), radius: 14, y: 7)
 
-    static func color(for level: Int) -> Color {
-        switch level {
-        case 1:
-            // Light peach
-            return Color(red: 0.99, green: 0.83, blue: 0.65)
-        case 2:
-            // Pumpkin orange
-            return Color(red: 0.96, green: 0.58, blue: 0.20)
-        case 3:
-            // Burnt sienna
-            return Color(red: 0.72, green: 0.36, blue: 0.08)
-        default:
-            // Neutral beige (no activity)
-            return Color(red: 0.91, green: 0.90, blue: 0.86)
-        }
-    }
-}
-
-private struct StreakYearGridView: View {
-    let days: [StreakDay]
-    let todayKey: String
-    let timezone: String
-    @Binding var selectedDay: StreakDay?
-
-    var body: some View {
-        let groups = StreakMonthGrouping.groupByMonth(days: days)
-
-        VStack(alignment: .leading, spacing: 20) {
-            ForEach(groups, id: \.key) { group in
-                VStack(alignment: .leading, spacing: 10) {
-                    Text(group.label)
-                        .font(.system(size: 12, weight: .bold))
-                        .tracking(1.4)
-                        .foregroundStyle(.secondary)
-
-                    let columns = Array(
-                        repeating: GridItem(.flexible(), spacing: 8),
-                        count: 8
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [.white.opacity(isEarned ? 0.32 : 0.18), .clear],
+                        startPoint: .topLeading,
+                        endPoint: .center
                     )
-                    LazyVGrid(columns: columns, spacing: 8) {
-                        ForEach(group.days, id: \.date) { day in
-                            StreakDayCell(
-                                day: day,
-                                cornerRadius: 5,
-                                isToday: day.date == todayKey,
-                                timezone: timezone,
-                                selectedDay: $selectedDay
-                            )
-                        }
-                    }
-                }
+                )
+                .padding(size * 0.08)
+
+            Image(systemName: badge?.systemImage ?? "trophy.fill")
+                .font(.system(size: size * 0.40, weight: .heavy))
+                .foregroundStyle(isEarned ? .white : Color.primary.opacity(0.38))
+                .shadow(color: glowColor.opacity(isEarned ? 0.24 : 0), radius: 3, y: 1)
+
+            if !isEarned {
+                Image(systemName: "lock.fill")
+                    .font(.system(size: size * 0.16, weight: .bold))
+                    .foregroundStyle(.secondary)
+                    .padding(size * 0.12)
+                    .background(.regularMaterial, in: Circle())
+                    .offset(x: size * 0.30, y: size * 0.30)
             }
         }
-    }
-}
-
-private struct StreakMonthGroup {
-    let key: String          // "2026-04"
-    let label: String        // "APRIL 2026"
-    let shortLabel: String   // "APR"
-    let days: [StreakDay]    // already in display order (newest first)
-}
-
-private enum StreakMonthGrouping {
-    /// Groups a reverse-chronological day list into month buckets, preserving order.
-    /// First bucket is the most recent month; days within a bucket stay in input order.
-    static func groupByMonth(days: [StreakDay]) -> [StreakMonthGroup] {
-        var groups: [StreakMonthGroup] = []
-        var bucket: [StreakDay] = []
-        var currentKey: String?
-
-        func flush() {
-            guard let key = currentKey, !bucket.isEmpty else { return }
-            let label = monthLabel(forKey: key, fallback: bucket.first?.date ?? "")
-            let shortLabel = shortMonthLabel(forKey: key, fallback: String(label.prefix(3)))
-            groups.append(StreakMonthGroup(key: key, label: label, shortLabel: shortLabel, days: bucket))
-            bucket = []
-        }
-
-        for day in days {
-            let key = String(day.date.prefix(7)) // "yyyy-MM"
-            if key != currentKey {
-                flush()
-                currentKey = key
-            }
-            bucket.append(day)
-        }
-        flush()
-        return groups
+        .frame(width: size, height: size)
     }
 
-    private static func monthLabel(forKey key: String, fallback: String) -> String {
-        if let date = monthKeyFormatter.date(from: key) {
-            return monthDisplayFormatter.string(from: date).uppercased()
-        }
-        return fallback
-    }
-
-    private static func shortMonthLabel(forKey key: String, fallback: String) -> String {
-        if let date = monthKeyFormatter.date(from: key) {
-            return shortMonthDisplayFormatter.string(from: date).uppercased()
-        }
-        return fallback
-    }
-
-    private static let monthKeyFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.timeZone = TimeZone(secondsFromGMT: 0)
-        f.dateFormat = "yyyy-MM"
-        return f
-    }()
-
-    private static let monthDisplayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "MMMM yyyy"
-        return f
-    }()
-
-    private static let shortMonthDisplayFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "en_US_POSIX")
-        f.dateFormat = "MMM"
-        return f
-    }()
-}
-
-private struct StreakDayCell: View {
-    let day: StreakDay
-    let cornerRadius: CGFloat
-    let isToday: Bool
-    let timezone: String
-    @Binding var selectedDay: StreakDay?
-
-    var body: some View {
-        let isSelected = selectedDay?.date == day.date
-
-        RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-            .fill(StreakContributionCalendarView.color(for: day.level))
-            .aspectRatio(1, contentMode: .fit)
-            .overlay(
-                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .strokeBorder(Color.primary, lineWidth: 2)
-                    .opacity(isToday ? 1 : 0)
+    private var backgroundGradient: LinearGradient {
+        guard isEarned, let badge else {
+            return LinearGradient(
+                colors: [Color(.systemGray5), Color(.systemGray4)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
             )
-            .contentShape(Rectangle())
-            .onTapGesture {
-                selectedDay = isSelected ? nil : day
+        }
+
+        switch badge.tier {
+        case .bronze:
+            return LinearGradient(
+                colors: [Color(red: 0.98, green: 0.66, blue: 0.36), Color(red: 0.74, green: 0.36, blue: 0.15)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .silver:
+            return LinearGradient(
+                colors: [Color(red: 0.89, green: 0.91, blue: 0.94), Color(red: 0.50, green: 0.57, blue: 0.66)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .gold:
+            return LinearGradient(
+                colors: [Color(red: 1.0, green: 0.80, blue: 0.24), Color(red: 0.91, green: 0.44, blue: 0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .platinum:
+            return LinearGradient(
+                colors: [Color(red: 0.23, green: 0.24, blue: 0.30), Color(red: 0.04, green: 0.05, blue: 0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    private var glowColor: Color {
+        guard let badge else { return .secondary }
+        switch badge.tier {
+        case .bronze:
+            return Color(red: 0.85, green: 0.39, blue: 0.14)
+        case .silver:
+            return Color(red: 0.54, green: 0.59, blue: 0.68)
+        case .gold:
+            return Color.orange
+        case .platinum:
+            return Color.black
+        }
+    }
+}
+
+private struct StreakBadgeCollectionCard: View {
+    let badge: StreakBadge
+    let isEarned: Bool
+
+    var body: some View {
+        HStack(spacing: 10) {
+            StreakBadgeMedallion(badge: badge, isEarned: isEarned, size: 42)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(badge.title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(isEarned ? .primary : .secondary)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+
+                Text(isEarned ? "Earned at \(badge.requiredDays)d" : "\(badge.requiredDays)d")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
             }
-            .popover(isPresented: Binding(
-                get: { isSelected },
-                set: { newValue in
-                    if !newValue { selectedDay = nil }
-                }
-            )) {
-                StreakDayPopover(day: day, isToday: isToday, timezone: timezone)
-                    .presentationCompactAdaptation(.popover)
-            }
-            .accessibilityLabel(Text(accessibilityLabel))
-            .accessibilityAddTraits(.isButton)
+
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(isEarned ? Color(.secondarySystemGroupedBackground) : Color(.systemGray6).opacity(0.72))
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(isEarned ? Color.orange.opacity(0.16) : Color.primary.opacity(0.06), lineWidth: 1)
+        }
+        .opacity(isEarned ? 1 : 0.72)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(accessibilityLabel)
     }
 
     private var accessibilityLabel: String {
-        let foods = day.foodsCount == 1 ? "1 food" : "\(day.foodsCount) foods"
-        let suffix = isToday ? ", today" : ""
-        return "\(day.date): \(foods)\(suffix)"
-    }
-}
-
-private struct StreakDayPopover: View {
-    let day: StreakDay
-    let isToday: Bool
-    let timezone: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 6) {
-                Text(formattedDate)
-                    .font(.headline)
-                if isToday {
-                    Text("TODAY")
-                        .font(.caption2.weight(.bold))
-                        .tracking(1.0)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule().fill(Color(red: 0.96, green: 0.58, blue: 0.20))
-                        )
-                }
-            }
-
-            if day.foodsCount == 0 {
-                Text("No foods logged")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-            } else {
-                Text("\(day.foodsCount) \(day.foodsCount == 1 ? "food" : "foods") logged")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-
-                if day.logsCount > 1 {
-                    Text("Across \(day.logsCount) entries")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-            }
-        }
-        .padding(14)
-        .frame(minWidth: 180, alignment: .leading)
-    }
-
-    private var formattedDate: String {
-        Self.formatDate(day.date, timezone: timezone)
-    }
-
-    private static let dateDisplay: DateFormatter = {
-        let f = DateFormatter()
-        f.calendar = Calendar(identifier: .gregorian)
-        f.locale = .current
-        f.dateFormat = "EEE, MMM d"
-        return f
-    }()
-
-    private static func formatDate(_ value: String, timezone: String) -> String {
-        let effectiveTimezone = TimeZone(identifier: timezone) ?? .current
-        var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = effectiveTimezone
-        let parts = value.split(separator: "-").compactMap { Int($0) }
-        guard parts.count == 3 else { return value }
-        var components = DateComponents()
-        components.calendar = calendar
-        components.timeZone = effectiveTimezone
-        components.year = parts[0]
-        components.month = parts[1]
-        components.day = parts[2]
-        components.hour = 12
-        guard let date = calendar.date(from: components) else { return value }
-        dateDisplay.timeZone = effectiveTimezone
-        return dateDisplay.string(from: date)
+        isEarned
+            ? "\(badge.title), earned at \(badge.requiredDays) days"
+            : "\(badge.title), locked, requires \(badge.requiredDays) days"
     }
 }

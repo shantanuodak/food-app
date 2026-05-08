@@ -39,7 +39,12 @@ struct HomeProfileBentoScreen: View {
                     }
                     CalorieHeroTile(data: heroData)
                     HStack(alignment: .top, spacing: 12) {
-                        StreakTile(days: streakDays)
+                        NavigationLink {
+                            RewardsTrophyCaseView(currentStreakDays: streakDays)
+                        } label: {
+                            StreakTile(days: streakDays)
+                        }
+                        .buttonStyle(.plain)
                         DailyTargetsTile(targets: targetData)
                     }
                     HStack(alignment: .top, spacing: 12) {
@@ -475,16 +480,15 @@ private struct CalorieHeroTile: View {
     }
 }
 
-/// Streak — cream gradient 1×1 with flame emoji and brand-orange day count.
+/// Streak — cream gradient 1×1 with trophy icon and brand-orange day count.
 private struct StreakTile: View {
     let days: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("🔥")
-                .font(.system(size: 24))
-                .padding(.bottom, 4)
+            trophyIcon
+                .padding(.bottom, 8)
                 .accessibilityHidden(true)
             Text("\(days)")
                 .font(.system(size: 44, weight: .heavy))
@@ -494,6 +498,12 @@ private struct StreakTile: View {
                 .font(.system(size: 12, weight: .regular))
                 .foregroundStyle(BentoTokens.gray500)
                 .padding(.top, 6)
+            Text(badgeTitle)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(BentoTokens.orange700)
+                .lineLimit(2)
+                .minimumScaleFactor(0.82)
+                .padding(.top, 4)
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -507,7 +517,23 @@ private struct StreakTile: View {
             border: Color(red: 1.0, green: 0.839, blue: 0.678)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(days == 1 ? "1 day streak" : "\(days) day streak")
+        .accessibilityLabel(days == 1 ? "1 day streak, \(badgeTitle)" : "\(days) day streak, \(badgeTitle)")
+    }
+
+    private var badgeTitle: String {
+        StreakRewards.currentBadge(for: days)?.title ?? "First Spark awaits"
+    }
+
+    private var trophyIcon: some View {
+        ZStack {
+            Circle()
+                .fill(BentoTokens.brandGradient)
+            Image(systemName: "trophy.fill")
+                .font(.system(size: 19, weight: .bold))
+                .foregroundStyle(.white)
+        }
+        .frame(width: 38, height: 38)
+        .shadow(color: BentoTokens.orange700.opacity(0.22), radius: 6, y: 3)
     }
 }
 

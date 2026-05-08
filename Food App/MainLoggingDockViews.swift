@@ -102,10 +102,7 @@ struct MainLoggingBottomDock: View {
             isStreakDrawerPresented = true
         } label: {
             ZStack(alignment: .bottomTrailing) {
-                Image(systemName: "calendar")
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .frame(width: 60, height: 60)
+                trophyStreakIcon
 
                 if isLoadingFoodLogStreak && currentFoodLogStreak == nil {
                     ProgressView()
@@ -123,20 +120,78 @@ struct MainLoggingBottomDock: View {
                         .allowsHitTesting(false)
                 }
             }
-            // Glass background lives INSIDE the label so the Button stays
-            // the outermost interactive layer. Previously the glassyBackground
-            // was applied AFTER buttonStyle(.plain), which on iOS 26 meant
-            // glassEffect(.interactive()) wrapped the button and absorbed
-            // the first tap for its own press feedback before the button
-            // could see it — hence the 2-3 tap repro.
-            .glassyBackground(in: .circle)
             // Without contentShape the badge's regularMaterial Circle could
             // intercept hits on the bottom-right corner of the button area.
             .contentShape(Circle())
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Open \(currentFoodLogStreak ?? 0)-day food streak"))
+        .accessibilityLabel(Text(streakAccessibilityLabel))
+    }
+
+    private var streakAccessibilityLabel: String {
+        let days = currentFoodLogStreak ?? 0
+        let badgeTitle = StreakRewards.currentBadge(for: days)?.title ?? "First Spark awaits"
+        return "Open \(days)-day food streak, \(badgeTitle)"
+    }
+
+    private var trophyStreakIcon: some View {
+        dockIconBadge(
+            systemImage: "trophy.fill",
+            gradientColors: [
+                Color(red: 1.0, green: 0.92, blue: 0.32),
+                Color(red: 1.0, green: 0.68, blue: 0.12)
+            ],
+            glowColor: Color.yellow,
+            badgeSize: 48,
+            iconSize: 18
+        )
+    }
+
+    private func dockIconBadge(
+        systemImage: String,
+        gradientColors: [Color],
+        glowColor: Color,
+        badgeSize: CGFloat = 48,
+        iconSize: CGFloat = 16
+    ) -> some View {
+        ZStack {
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: gradientColors,
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .shadow(color: glowColor.opacity(0.35), radius: 10, y: 4)
+
+            Image(systemName: systemImage)
+                .font(.system(size: iconSize, weight: .bold))
+                .foregroundStyle(
+                    LinearGradient(
+                        colors: [.white, Color(red: 1.0, green: 0.96, blue: 0.72)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .shadow(color: glowColor.opacity(0.28), radius: 2, y: 1)
+
+            Circle()
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            .white.opacity(0.28),
+                            .clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .center
+                    )
+                )
+                .allowsHitTesting(false)
+        }
+        .frame(width: badgeSize, height: badgeSize)
+        .frame(width: 60, height: 60)
     }
 
     private func bottomDockButton(
@@ -146,13 +201,60 @@ struct MainLoggingBottomDock: View {
         action: @escaping () -> Void
     ) -> some View {
         Button(action: action) {
-            Image(systemName: systemImage)
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(color)
+            ZStack {
+                dockIconLens(color: color)
+
+                Image(systemName: systemImage)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(color)
+                    .shadow(color: color.opacity(0.18), radius: 2, y: 1)
+            }
+                .frame(width: 48, height: 48)
                 .frame(width: 60, height: 60)
+                .background(dockButtonShell)
         }
-        .glassyBackground(in: .circle)
+        .buttonStyle(.plain)
         .accessibilityLabel(Text(accessibilityLabel))
+    }
+
+    private var dockButtonShell: some View {
+        Circle()
+            .fill(.ultraThinMaterial)
+            .shadow(color: Color.black.opacity(0.06), radius: 12, y: 5)
+    }
+
+    @ViewBuilder
+    private func dockIconLens(color: Color) -> some View {
+        Circle()
+            .fill(Color.white.opacity(0.04))
+            .overlay(alignment: .topLeading) {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.34),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(width: 22, height: 22)
+                    .offset(x: 7, y: 7)
+            }
+            .modifier(DockIconLiquidGlassTint(color: color))
+            .allowsHitTesting(false)
+    }
+}
+
+private struct DockIconLiquidGlassTint: ViewModifier {
+    let color: Color
+
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        content
+            .background(color.opacity(0.08), in: Circle())
+            .background(.ultraThinMaterial, in: Circle())
     }
 }
 

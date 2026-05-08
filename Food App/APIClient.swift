@@ -293,6 +293,17 @@ final class APIClient {
         )
     }
 
+    func getRewardsSummary(timezone: String) async throws -> RewardsSummaryResponse {
+        try await request(
+            path: "/v1/rewards/summary",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "tz", value: timezone)
+            ],
+            requiresAuth: true
+        )
+    }
+
     func getAdminFeatureFlags() async throws -> AdminFeatureFlagsResponse {
         try await request(path: "/v1/admin/feature-flags", method: "GET", requiresAuth: true)
     }
@@ -437,6 +448,9 @@ final class APIClient {
     ) async throws -> URLRequest {
         var request = URLRequest(url: url)
         request.httpMethod = method
+        if method.uppercased() == "GET" {
+            request.cachePolicy = .reloadIgnoringLocalCacheData
+        }
         request.timeoutInterval = timeoutInterval
         if extraHeaders["Content-Type"] == nil {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
@@ -483,4 +497,3 @@ final class APIClient {
         }
     }
 }
-
