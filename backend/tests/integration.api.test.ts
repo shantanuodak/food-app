@@ -213,7 +213,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
 
   beforeEach(async () => {
     await pool.query(
-      'TRUNCATE TABLE save_attempts, food_log_items, food_logs, onboarding_profiles, users, admin_feature_flags, parse_cache, parse_requests, log_save_idempotency, ai_cost_events RESTART IDENTITY CASCADE'
+      'TRUNCATE TABLE save_attempts, food_log_items, food_logs, onboarding_profiles, users, user_feedback, admin_feature_flags, parse_cache, parse_requests, log_save_idempotency, ai_cost_events RESTART IDENTITY CASCADE'
     );
 
     await pool.query(
@@ -942,6 +942,112 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(neutralDay.logsCount).toBe(0);
     expect(neutralDay.foodsCount).toBe(0);
     expect(neutralDay.level).toBe(0);
+  });
+
+  test('in-app feedback is saved and appears in dashboard feedback endpoints', async () => {
+    const feedbackPayload = {
+      message: 'Calories looked too high for poha in the TestFlight build.',
+      appVersion: '1.0',
+      buildNumber: '15',
+      deviceModel: 'iPhone',
+      osVersion: 'iOS 18.4',
+      locale: 'en_US'
+    };
+
+    const submit = await request(app)
+      .post('/v1/feedback')
+      .set(authHeader)
+      .send(feedbackPayload);
+
+    expect(submit.status).toBe(201);
+    expect(submit.body.id).toBeTruthy();
+    expect(submit.body.createdAt).toBeTruthy();
+
+    const savedRows = await pool.query<{
+      user_id: string | null;
+      user_email: string | null;
+      message: string;
+      app_version: string | null;
+      build_number: string | null;
+      device_model: string | null;
+      os_version: string | null;
+      locale: string | null;
+    }>(
+      `
+      SELECT user_id, user_email, message, app_version, build_number,
+             device_model, os_version, locale
+      FROM user_feedback
+      WHERE id = $1
+      `,
+      [submit.body.id]
+    );
+
+    expect(savedRows.rowCount).toBe(1);
+    expect(savedRows.rows[0]).toMatchObject({
+      user_id: userId,
+      user_email: `${userId}@dev.local`,
+      message: feedbackPayload.message,
+      app_version: feedbackPayload.appVersion,
+      build_number: feedbackPayload.buildNumber,
+      device_model: feedbackPayload.deviceModel,
+      os_version: feedbackPayload.osVersion,
+      locale: feedbackPayload.locale
+    });
+
+    const dashboardFeedback = await request(app)
+      .get('/v1/internal/dashboard/feedback')
+      .set('x-internal-metrics-key', 'metrics-test-key')
+      .query({ limit: 20 });
+
+    expect(dashboardFeedback.status).toBe(200);
+    expect(dashboardFeedback.body.items[0]).toMatchObject({
+      id: submit.body.id,
+      userId,
+      userEmail: `${userId}@dev.local`,
+      message: feedbackPayload.message,
+      appVersion: feedbackPayload.appVersion,
+      buildNumber: feedbackPayload.buildNumber,
+      deviceModel: feedbackPayload.deviceModel,
+      osVersion: feedbackPayload.osVersion,
+      locale: feedbackPayload.locale
+    });
+
+    const aliasFeedback = await request(app)
+      .get('/v1/internal/feedback')
+      .set('x-internal-metrics-key', 'metrics-test-key')
+      .query({ limit: 20 });
+
+    expect(aliasFeedback.status).toBe(200);
+    expect(aliasFeedback.body.items[0].id).toBe(submit.body.id);
+  });
+
+  test('feedback routes reject invalid input and unauthorized dashboard access', async () => {
+    const emptyMessage = await request(app)
+      .post('/v1/feedback')
+      .set(authHeader)
+      .send({
+        message: '   ',
+        appVersion: '1.0'
+      });
+
+    expect(emptyMessage.status).toBe(400);
+    expect(emptyMessage.body.error.code).toBe('INVALID_INPUT');
+
+    const unauthenticatedSubmit = await request(app)
+      .post('/v1/feedback')
+      .send({
+        message: 'This should not save.'
+      });
+
+    expect(unauthenticatedSubmit.status).toBe(401);
+    expect(unauthenticatedSubmit.body.error.code).toBe('UNAUTHORIZED');
+
+    const forbiddenDashboardRead = await request(app)
+      .get('/v1/internal/dashboard/feedback')
+      .set('x-internal-metrics-key', 'wrong-key');
+
+    expect(forbiddenDashboardRead.status).toBe(403);
+    expect(forbiddenDashboardRead.body.error.code).toBe('FORBIDDEN');
   });
 
   test('progress endpoint matches day-summary totals for the same day and tz', async () => {

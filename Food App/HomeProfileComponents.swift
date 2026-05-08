@@ -66,15 +66,17 @@ struct HealthInsightsProfileDetailView<Content: View>: View {
 }
 
 struct AccountProfileDetailView<Content: View>: View {
+    let title: String
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(title: String = "Account & App", @ViewBuilder content: () -> Content) {
+        self.title = title
         self.content = content()
     }
 
     var body: some View {
         Form { content }
-            .navigationTitle("Account & App")
+            .navigationTitle(title)
             .navigationBarTitleDisplayMode(.inline)
     }
 }

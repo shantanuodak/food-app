@@ -7,12 +7,13 @@ import { listRecentFeedback, saveFeedback } from '../services/feedbackService.js
 /**
  * Two routes share this file but mount at different paths:
  *
- *   POST /v1/feedback              — auth-gated user submission
- *   GET  /v1/internal/feedback     — admin-gated list view (testing dashboard)
+ *   POST /v1/feedback                         — auth-gated user submission
+ *   GET  /v1/internal/dashboard/feedback      — admin-gated dashboard list view
+ *   GET  /v1/internal/feedback                — admin-gated compatibility alias
  *
  * The submission route uses the standard Bearer-token auth middleware that
  * populates `res.locals.auth` (same pattern as `onboarding.ts`). The admin
- * list route uses the `requireInternalKey` pattern from `internalMetrics.ts`.
+ * list routes use the `requireInternalKey` pattern from `internalMetrics.ts`.
  */
 
 // User-facing: bounded message + optional metadata. Anything missing is

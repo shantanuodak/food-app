@@ -38,11 +38,9 @@ struct HomeProfileScreen: View {
         // and break back behavior. The internal NavigationLinks (Body /
         // Diet / Plan etc.) push onto the parent stack the same way.
         Form {
-            summaryHeaderSection
-            profileHubSection
             appHubSection
         }
-        .navigationTitle("Settings")
+        .navigationTitle("Account & App")
         .navigationBarTitleDisplayMode(.large)
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
@@ -122,16 +120,28 @@ struct HomeProfileScreen: View {
     }
 
     private var appHubSection: some View {
-        Section("Account and app") {
+        Section {
             NavigationLink {
-                AccountProfileDetailView {
+                AccountProfileDetailView(title: "Account") {
                     accountSection
-                    mealReminderSection
                 }
             } label: {
                 ProfileHubRow(
-                    title: "Account & app",
+                    title: "Account",
                     systemImage: accountProviderIcon
+                )
+            }
+
+            NavigationLink {
+                AccountProfileDetailView(title: "App") {
+                    mealReminderSection
+                    healthSection
+                    trackingAccuracySection
+                }
+            } label: {
+                ProfileHubRow(
+                    title: "App",
+                    systemImage: "app.badge"
                 )
             }
 

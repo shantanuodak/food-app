@@ -58,11 +58,12 @@ export function createApp() {
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
   app.use('/v1/health', authRequired, healthRoutes);
   app.use('/v1/profile', authRequired, trackingAccuracyRoutes);
-  // User feedback submission (auth-gated). Admin list view is mounted under
-  // /v1/internal/dashboard/feedback so it shares the testing dashboard's
-  // existing fetch helper + auth gate.
+  // User feedback submission (auth-gated). Admin list views are mounted under
+  // both the testing-dashboard namespace and the shorter internal alias so
+  // older tooling/comments do not drift from the same Supabase-backed data.
   app.use('/v1/feedback', authRequired, feedbackSubmitRoutes);
   app.use('/v1/internal', internalMetricsRoutes);
+  app.use('/v1/internal/feedback', feedbackAdminRoutes);
   app.use('/v1/internal/dashboard', evalDashboardRoutes);
   app.use('/v1/internal/dashboard/feedback', feedbackAdminRoutes);
 

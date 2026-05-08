@@ -24,7 +24,10 @@ struct HomeStreakDrawerView: View {
     @State private var selectedDay: StreakDay?
 
     private var todayKey: String {
-        Self.dateKey(for: Date(), timezoneID: response?.timezone ?? TimeZone.current.identifier)
+        if let response {
+            return response.to
+        }
+        return Self.dateKey(for: Date(), timezoneID: response?.timezone ?? TimeZone.current.identifier)
     }
 
     private var displayDays: [StreakDay] {
@@ -195,10 +198,8 @@ struct HomeStreakDrawerView: View {
 
         do {
             let timezone = TimeZone.current.identifier
-            let toDate = Self.dateKey(for: Date(), timezoneID: timezone)
             let result = try await appStore.apiClient.getStreaks(
                 range: selectedRange.rawValue,
-                to: toDate,
                 timezone: timezone
             )
             withAnimation(.easeInOut(duration: 0.28)) {
