@@ -37,6 +37,7 @@ describe('rewardsService.getRewardsSummary', () => {
     const summary = await service.getRewardsSummary('u1', 'America/New_York');
 
     expect(query).toHaveBeenCalledWith(expect.stringContaining('WITH log_stats AS'), ['u1']);
+    expect(query.mock.calls[0]?.[0]).toContain('fl.id = fli.food_log_id');
     expect(summary.timezone).toBe('America/New_York');
     expect(summary.generatedAt).toEqual(expect.any(String));
     expect(summary.totals).toEqual({

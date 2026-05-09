@@ -76,7 +76,7 @@ export async function getRewardsSummary(userId: string, timezone?: string): Prom
         COUNT(*) FILTER (WHERE fli.manual_override_json IS NOT NULL)::bigint AS manual_override_items,
         COUNT(*) FILTER (WHERE fli.match_confidence >= 0.85)::bigint AS high_confidence_items
       FROM food_log_items fli
-      JOIN food_logs fl ON fl.id = fli.log_id
+      JOIN food_logs fl ON fl.id = fli.food_log_id
       WHERE fl.user_id = $1
     ),
     health_stats AS (
