@@ -118,6 +118,7 @@ struct MainLoggingShellView: View {
     /// Locks the swipe direction once determined — prevents fighting with ScrollView vertical scroll
     @State var swipeAxis: SwipeAxis = .undecided
     @State var isCustomCameraPresented = false
+    @State var isQuickCameraCaptureActive = false
     @State var cameraDrawerState: CameraDrawerState = .idle
     @State var cameraDrawerImage: UIImage?
     @State var isCameraAnalysisSheetPresented = false

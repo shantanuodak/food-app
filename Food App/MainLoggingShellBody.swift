@@ -175,6 +175,10 @@ extension MainLoggingShellView {
                 // First-launch tutorial — no-op after the first run, the
                 // controller persists its completion flag in UserDefaults.
                 tutorialController.startIfNeeded()
+                if QuickCameraLaunchStore.consumeLaunchRequest() {
+                    isQuickCameraCaptureActive = true
+                    handleCameraSourceSelection(.takePicture)
+                }
             }
             .sheet(isPresented: $tutorialController.isPresented) {
                 TutorialOverlay(controller: tutorialController)
@@ -208,6 +212,10 @@ extension MainLoggingShellView {
                 // Tap on the dock camera button → straight to the custom camera
                 // (no action sheet). The camera's bottom-left album icon
                 // handles "from photo library" once the user is inside it.
+                handleCameraSourceSelection(.takePicture)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openQuickCameraFromSystem)) { _ in
+                isQuickCameraCaptureActive = true
                 handleCameraSourceSelection(.takePicture)
             }
             .onReceive(NotificationCenter.default.publisher(for: .openVoiceFromTabBar)) { _ in
@@ -250,12 +258,24 @@ extension MainLoggingShellView {
                     }
                 )
             }
-            .fullScreenCover(isPresented: $isCustomCameraPresented) {
+            .fullScreenCover(isPresented: $isCustomCameraPresented, onDismiss: {
+                isQuickCameraCaptureActive = false
+            }) {
                 CameraView(
                     onImageCaptured: { image in
                         isCustomCameraPresented = false
                         inputMode = .text
                         selectedCameraSource = nil
+                        if isQuickCameraCaptureActive {
+                            isQuickCameraCaptureActive = false
+                            Task {
+                                await QuickCameraLoggingService.processCapturedImage(
+                                    image,
+                                    apiClient: appStore.apiClient
+                                )
+                            }
+                            return
+                        }
                         cameraDrawerImage = image
                         cameraDrawerState = .analyzing(image)
                         isCameraAnalysisSheetPresented = true

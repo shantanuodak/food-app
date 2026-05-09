@@ -13,6 +13,7 @@ import GoogleSignIn
 
 @main
 struct Food_AppApp: App {
+    @UIApplicationDelegateAdaptor(FoodAppDelegate.self) private var appDelegate
     @StateObject private var appStore = AppStore()
 
     var body: some Scene {
@@ -21,6 +22,9 @@ struct Food_AppApp: App {
                 .environmentObject(appStore)
                 .preferredColorScheme(.light)
                 .onOpenURL { url in
+                    if QuickCameraLaunchStore.handle(url: url) {
+                        return
+                    }
 #if canImport(GoogleSignIn)
                     _ = GIDSignIn.sharedInstance.handle(url)
 #endif

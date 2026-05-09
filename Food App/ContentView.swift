@@ -37,6 +37,7 @@ private struct HomeTabShellView: View {
 
 extension Notification.Name {
     static let openCameraFromTabBar = Notification.Name("openCameraFromTabBar")
+    static let openQuickCameraFromSystem = Notification.Name("openQuickCameraFromSystem")
     static let openVoiceFromTabBar = Notification.Name("openVoiceFromTabBar")
     static let openNutritionSummaryFromTabBar = Notification.Name("openNutritionSummaryFromTabBar")
     static let voiceRecordingStateChanged = Notification.Name("voiceRecordingStateChanged")
