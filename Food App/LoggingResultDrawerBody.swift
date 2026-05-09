@@ -248,11 +248,11 @@ struct LoggingResultDrawerBody: View {
         "\(formatQuantity(value))g"
     }
 
-    // MARK: - Thought process card
+    // MARK: - Estimate details card
 
     private var thoughtProcessCard: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("Food App Thought Process")
+            Text("How Food App Estimated This")
                 .font(.system(size: 13, weight: .semibold))
                 .foregroundStyle(.primary)
             Text(thoughtProcess)

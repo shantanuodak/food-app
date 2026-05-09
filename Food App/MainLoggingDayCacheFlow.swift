@@ -42,14 +42,13 @@ extension MainLoggingShellView {
             isLoadingFoodLogStreak = true
             defer { isLoadingFoodLogStreak = false }
 
-            let calendar = Calendar.current
-            let today = calendar.startOfDay(for: Date())
-            let formatter = HomeLoggingDateUtils.summaryRequestFormatter
             do {
+                let timezone = TimeZone.current.identifier
+                let today = HomeStreakDrawerView.dateKey(for: Date(), timezoneID: timezone)
                 let response = try await appStore.apiClient.getStreaks(
                     range: 30,
-                    to: formatter.string(from: today),
-                    timezone: TimeZone.current.identifier
+                    to: today,
+                    timezone: timezone
                 )
                 currentFoodLogStreak = response.currentDays
             } catch {
