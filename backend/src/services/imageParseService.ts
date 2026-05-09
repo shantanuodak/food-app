@@ -97,7 +97,8 @@ function buildImageParsePrompt(): string {
     '- extractedText should be a concise comma-separated phrase list in user-entered order.',
     '- assumptions should be [] unless an assumption is essential.',
     '- nutritionSourceId is not needed in output; it is added downstream.',
-    '- Keep explanations concise and user-friendly (1-2 sentences).',
+    '- Keep explanations concise and user-friendly (1-2 sentences) and mention the visible food, estimated portion or grams, and how calories/macros were scaled.',
+    '- Do not mention matchConfidence in explanations.',
     '- If image has no food, return confidence 0 and items [].'
   ].join('\n');
 }

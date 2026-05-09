@@ -79,8 +79,9 @@ export function buildGeminiEscalationPrompt(inputText: string): string {
     '- if uncertain, still return a best-guess item with a lower matchConfidence',
     '- assumptions must always be an empty array',
     '- avoid zero-calorie outputs unless the item is truly near-zero',
-    '- for each item, include a short foodDescription and one short user-facing explanation sentence',
-    '- do not include chain-of-thought or step-by-step reasoning; keep explanations user-friendly',
+    '- for each item, include a short foodDescription and a 1-2 sentence user-facing explanation that mentions the interpreted food, portion or grams, source basis, and how calories/macros were scaled',
+    '- do not mention matchConfidence in explanations',
+    '- do not include chain-of-thought or step-by-step reasoning; keep explanations concise and confidence-building',
     '',
     `User meal text: ${inputText}`
   ].join('\n');

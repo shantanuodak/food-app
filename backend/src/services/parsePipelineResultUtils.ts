@@ -101,16 +101,13 @@ export function ensureItemExplanations(result: ParseResult, route: ParsePipeline
     return result;
   }
 
-  const fallbackExplanation =
-    route === 'gemini'
-      ? 'AI estimate provided based on the entered text.'
-      : 'Nutrition estimate provided based on the matched data source.';
-
   return {
     ...result,
     items: result.items.map((item) => {
       const foodDescription = item.foodDescription && item.foodDescription.trim().length > 0 ? item.foodDescription : item.name;
-      const explanation = item.explanation && item.explanation.trim().length > 0 ? item.explanation : fallbackExplanation;
+      const explanation = item.explanation && item.explanation.trim().length > 0
+        ? item.explanation
+        : buildFallbackExplanation(item, route);
       return {
         ...item,
         foodDescription,
@@ -118,6 +115,32 @@ export function ensureItemExplanations(result: ParseResult, route: ParsePipeline
       };
     })
   };
+}
+
+function formatOneDecimal(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+  const rounded = Math.round(value * 10) / 10;
+  return Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+}
+
+function sourceBasis(route: ParsePipelineRoute): string {
+  if (route === 'gemini') {
+    return 'AI-selected common serving data';
+  }
+  if (route === 'cache') {
+    return 'cached nutrition data from the same food match';
+  }
+  return 'matched nutrition data';
+}
+
+function buildFallbackExplanation(item: ParseResult['items'][number], route: ParsePipelineRoute): string {
+  const quantity = formatOneDecimal(item.quantity);
+  const unit = item.unit || 'serving';
+  const grams = formatOneDecimal(item.grams);
+  const calories = Math.round(item.calories);
+  return `Interpreted this as ${item.name} using ${quantity} ${unit} (about ${grams} g) and ${sourceBasis(route)}. Food App scaled that portion to estimate ${calories} kcal plus the listed protein, carbs, and fat.`;
 }
 
 export function shouldAcceptCachedResult(result: ParseResult): boolean {

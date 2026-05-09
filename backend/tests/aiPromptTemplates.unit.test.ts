@@ -53,7 +53,8 @@ describe('AI nutrition prompt templates', () => {
     expect(prompt).toContain('hint only; improve or replace inaccurate values');
     expect(prompt).toContain('default servings: egg=1 large');
     expect(prompt).toContain('4 kcal/g protein');
-    expect(prompt).toContain('one short user-facing explanation sentence');
+    expect(prompt).toContain('1-2 sentence user-facing explanation');
+    expect(prompt).toContain('do not mention matchConfidence in explanations');
   });
 
   test('escalation prompt mirrors accuracy rules from fallback prompt', () => {
@@ -63,6 +64,7 @@ describe('AI nutrition prompt templates', () => {
     expect(prompt).toContain('USDA-style common serving estimates');
     expect(prompt).toContain('set matchConfidence based on food identity and portion confidence');
     expect(prompt).toContain('avoid zero-calorie outputs unless the item is truly near-zero');
-    expect(prompt).toContain('one short user-facing explanation sentence');
+    expect(prompt).toContain('1-2 sentence user-facing explanation');
+    expect(prompt).toContain('do not mention matchConfidence in explanations');
   });
 });
