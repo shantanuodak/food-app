@@ -9,16 +9,47 @@
 /* Begin PBXBuildFile section */
 		CDB5B13A2F4B642600A82851 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B1392F4B642600A82851 /* GoogleSignIn */; };
 		CDB5B1412F4B7A2C00A82851 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B1402F4B7A2C00A82851 /* Supabase */; };
+		CDF100032F60000000AA0003 /* Food Camera Widget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = CDF100022F60000000AA0002 /* Food Camera Widget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		CDF1000C2F60000000AA000C /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CDD80CCB2F4268E4008A5987 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CDF100082F60000000AA0008;
+			remoteInfo = "Food Camera Widget";
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		CDF100072F60000000AA0007 /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				CDF100032F60000000AA0003 /* Food Camera Widget.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		CDD80CD32F4268E4008A5987 /* Food App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Food App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDF100022F60000000AA0002 /* Food Camera Widget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Food Camera Widget.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CDD80CD52F4268E4008A5987 /* Food App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = "Food App";
+			sourceTree = "<group>";
+		};
+		CDF100012F60000000AA0001 /* Food Camera Widget */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = "Food Camera Widget";
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -30,6 +61,13 @@
 			files = (
 				CDB5B13A2F4B642600A82851 /* GoogleSignIn in Frameworks */,
 				CDB5B1412F4B7A2C00A82851 /* Supabase in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CDF100042F60000000AA0004 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -47,6 +85,7 @@
 			isa = PBXGroup;
 			children = (
 				CDD80CD52F4268E4008A5987 /* Food App */,
+				CDF100012F60000000AA0001 /* Food Camera Widget */,
 				CDB5B13F2F4B7A2C00A82851 /* Frameworks */,
 				CDD80CD42F4268E4008A5987 /* Products */,
 			);
@@ -56,6 +95,7 @@
 			isa = PBXGroup;
 			children = (
 				CDD80CD32F4268E4008A5987 /* Food App.app */,
+				CDF100022F60000000AA0002 /* Food Camera Widget.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -70,10 +110,12 @@
 				CDD80CCF2F4268E4008A5987 /* Sources */,
 				CDD80CD02F4268E4008A5987 /* Frameworks */,
 				CDD80CD12F4268E4008A5987 /* Resources */,
+				CDF100072F60000000AA0007 /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				CDF1000D2F60000000AA000D /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				CDD80CD52F4268E4008A5987 /* Food App */,
@@ -86,6 +128,28 @@
 			productName = "Food App";
 			productReference = CDD80CD32F4268E4008A5987 /* Food App.app */;
 			productType = "com.apple.product-type.application";
+		};
+		CDF100082F60000000AA0008 /* Food Camera Widget */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = CDF100092F60000000AA0009 /* Build configuration list for PBXNativeTarget "Food Camera Widget" */;
+			buildPhases = (
+				CDF100062F60000000AA0006 /* Sources */,
+				CDF100042F60000000AA0004 /* Frameworks */,
+				CDF100052F60000000AA0005 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				CDF100012F60000000AA0001 /* Food Camera Widget */,
+			);
+			name = "Food Camera Widget";
+			packageProductDependencies = (
+			);
+			productName = "Food Camera Widget";
+			productReference = CDF100022F60000000AA0002 /* Food Camera Widget.appex */;
+			productType = "com.apple.product-type.app-extension";
 		};
 /* End PBXNativeTarget section */
 
@@ -108,6 +172,9 @@
 							};
 						};
 					};
+					CDF100082F60000000AA0008 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 				};
 			};
 			buildConfigurationList = CDD80CCE2F4268E4008A5987 /* Build configuration list for PBXProject "Food App" */;
@@ -129,12 +196,20 @@
 			projectRoot = "";
 			targets = (
 				CDD80CD22F4268E4008A5987 /* Food App */,
+				CDF100082F60000000AA0008 /* Food Camera Widget */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		CDD80CD12F4268E4008A5987 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		CDF100052F60000000AA0005 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -151,7 +226,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		CDF100062F60000000AA0006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		CDF1000D2F60000000AA000D /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CDF100082F60000000AA0008 /* Food Camera Widget */;
+			targetProxy = CDF1000C2F60000000AA000C /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		CDD80CDC2F4268E6008A5987 /* Debug */ = {
@@ -364,6 +454,67 @@
 			};
 			name = Release;
 		};
+		CDF1000A2F60000000AA000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 22;
+				DEVELOPMENT_TEAM = 9CL8Q244T8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Food Camera";
+				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shantanu.foodapp.FoodCameraWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CDF1000B2F60000000AA000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 22;
+				DEVELOPMENT_TEAM = 9CL8Q244T8;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Food Camera";
+				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.shantanu.foodapp.FoodCameraWidget;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -381,6 +532,15 @@
 			buildConfigurations = (
 				CDD80CDF2F4268E6008A5987 /* Debug */,
 				CDD80CE02F4268E6008A5987 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		CDF100092F60000000AA0009 /* Build configuration list for PBXNativeTarget "Food Camera Widget" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				CDF1000A2F60000000AA000A /* Debug */,
+				CDF1000B2F60000000AA000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
