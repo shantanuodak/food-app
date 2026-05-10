@@ -2,6 +2,14 @@ import SwiftUI
 import Foundation
 
 private let kDrawerPurple = Color(red: 0.420, green: 0.369, blue: 1.0)
+private let kDrawerProtein = Color(red: 0.420, green: 0.369, blue: 1.0)
+private let kDrawerCarbs = Color(red: 0.106, green: 0.620, blue: 0.353)
+private let kDrawerFat = Color(red: 0.000, green: 0.478, blue: 1.0)
+
+enum LoggingResultDrawerMode {
+    case textDetails
+    case photoReview
+}
 
 /// Shared result body used by both the camera drawer (CameraResultDrawerView)
 /// and the text-entry drawer (detailsDrawer in MainLoggingShellView).
@@ -12,24 +20,45 @@ struct LoggingResultDrawerBody: View {
     let totals: NutritionTotals
     let items: [ParsedFoodItem]
     let thoughtProcess: String
+    let mode: LoggingResultDrawerMode
+    let showsThoughtProcess: Bool
     let onItemQuantityChange: ((Int, Double) -> Void)?
     let onRecalculate: (() -> Void)?
 
+    init(
+        foodName: String,
+        totals: NutritionTotals,
+        items: [ParsedFoodItem],
+        thoughtProcess: String,
+        mode: LoggingResultDrawerMode = .textDetails,
+        showsThoughtProcess: Bool = true,
+        onItemQuantityChange: ((Int, Double) -> Void)?,
+        onRecalculate: (() -> Void)?
+    ) {
+        self.foodName = foodName
+        self.totals = totals
+        self.items = items
+        self.thoughtProcess = thoughtProcess
+        self.mode = mode
+        self.showsThoughtProcess = showsThoughtProcess
+        self.onItemQuantityChange = onItemQuantityChange
+        self.onRecalculate = onRecalculate
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            if mode == .photoReview {
+                photoSummaryLabel
+            }
             foodNameView
             calorieHero
-            Divider()
-                .padding(.horizontal, 20)
-                .padding(.top, 16)
             macroCards
             if !items.isEmpty {
-                Divider()
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
                 detectedItemsList
             }
-            thoughtProcessCard
+            if showsThoughtProcess {
+                LoggingResultThoughtProcessCard(thoughtProcess: thoughtProcess)
+            }
             if let onRecalculate {
                 Button(action: onRecalculate) {
                     Text("Something wrong? Recalculate")
@@ -46,34 +75,29 @@ struct LoggingResultDrawerBody: View {
 
     private var foodNameView: some View {
         Text(foodName)
-            .font(.system(size: 22, weight: .semibold))
+            .font(.system(size: mode == .photoReview ? 20 : 22, weight: .semibold))
             .foregroundStyle(.primary)
             .lineLimit(2)
             .padding(.horizontal, 20)
-            .padding(.top, 6)
+            .padding(.top, mode == .photoReview ? 4 : 12)
     }
 
     // MARK: - Calorie hero — Large Title
 
     private var calorieHero: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 6) {
-            Image(systemName: "flame.fill")
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(
-                    LinearGradient(
-                        colors: [Color(red: 1, green: 0.671, blue: 0), Color(red: 1, green: 0.333, blue: 0)],
-                        startPoint: .top, endPoint: .bottom
-                    )
-                )
-            Text("\(Int(totals.calories.rounded()))")
-                .font(.system(size: 34, weight: .bold))
-                .foregroundStyle(.primary)
-            Text("cal")
-                .font(.system(size: 18, weight: .regular))
-                .foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(Int(totals.calories.rounded()))")
+                    .font(.system(size: mode == .photoReview ? 42 : 44, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .monospacedDigit()
+                Text("cal")
+                    .font(.system(size: 19, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
         }
         .padding(.horizontal, 20)
-        .padding(.top, 4)
+        .padding(.top, 8)
     }
 
     // MARK: - Macro cards
@@ -81,29 +105,29 @@ struct LoggingResultDrawerBody: View {
     private var macroCards: some View {
         HStack(spacing: 8) {
             drawerMacroCard(
-                icon: "bolt.fill",
+                icon: "figure.strengthtraining.traditional",
                 value: "\(Int(totals.protein.rounded()))g",
                 label: "Protein",
-                iconColor: kDrawerPurple,
-                bgColor: kDrawerPurple.opacity(0.10)
+                iconColor: kDrawerProtein,
+                bgColor: kDrawerProtein.opacity(0.11)
             )
             drawerMacroCard(
                 icon: "leaf.fill",
                 value: "\(Int(totals.carbs.rounded()))g",
                 label: "Carbs",
-                iconColor: .green,
-                bgColor: Color.green.opacity(0.10)
+                iconColor: kDrawerCarbs,
+                bgColor: kDrawerCarbs.opacity(0.11)
             )
             drawerMacroCard(
                 icon: "drop.fill",
                 value: "\(Int(totals.fat.rounded()))g",
                 label: "Fat",
-                iconColor: .blue,
-                bgColor: Color.blue.opacity(0.10)
+                iconColor: kDrawerFat,
+                bgColor: kDrawerFat.opacity(0.11)
             )
         }
         .padding(.horizontal, 20)
-        .padding(.top, 16)
+        .padding(.top, 18)
     }
 
     @ViewBuilder
@@ -114,19 +138,20 @@ struct LoggingResultDrawerBody: View {
         iconColor: Color,
         bgColor: Color
     ) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 7) {
             Image(systemName: icon)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(iconColor)
             Text(value)
-                .font(.system(size: 17, weight: .bold))
+                .font(.system(size: 19, weight: .bold))
                 .foregroundStyle(.primary)
+                .monospacedDigit()
             Text(label)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
+        .padding(13)
         .background(bgColor, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
     }
 
@@ -135,11 +160,11 @@ struct LoggingResultDrawerBody: View {
     private var detectedItemsList: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Detected items")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.tertiary)
                 .textCase(.uppercase)
                 .padding(.horizontal, 20)
-                .padding(.top, 16)
+                .padding(.top, 22)
                 .padding(.bottom, 10)
 
             ForEach(Array(items.enumerated()), id: \.offset) { idx, item in
@@ -154,13 +179,13 @@ struct LoggingResultDrawerBody: View {
         HStack(alignment: .center, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(item.name)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(nil)
                     .fixedSize(horizontal: false, vertical: true)
 
                 Text(quantityLabel(for: item))
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(.secondary)
 
                 if let onItemQuantityChange {
@@ -173,7 +198,7 @@ struct LoggingResultDrawerBody: View {
 
             VStack(alignment: .trailing, spacing: 5) {
                 Text("\(Int(item.calories.rounded())) cal")
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: 16, weight: .semibold))
                     .foregroundStyle(.primary)
                     .monospacedDigit()
 
@@ -185,11 +210,22 @@ struct LoggingResultDrawerBody: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(14)
-        .frame(minHeight: 96)
+        .frame(minHeight: onItemQuantityChange == nil ? 82 : 100)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(.systemGray6))
         )
+    }
+
+    private var photoSummaryLabel: some View {
+        Text(items.count == 1 ? "Detected from photo" : "\(items.count) items detected from photo")
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(kDrawerPurple)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(kDrawerPurple.opacity(0.12), in: Capsule())
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
     }
 
     private func quantityStepper(
@@ -248,20 +284,24 @@ struct LoggingResultDrawerBody: View {
         "\(formatQuantity(value))g"
     }
 
-    // MARK: - Estimate details card
+}
 
-    private var thoughtProcessCard: some View {
+struct LoggingResultThoughtProcessCard: View {
+    let thoughtProcess: String
+
+    var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text("How Food App Estimated This")
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(.primary)
             Text(thoughtProcess)
-                .font(.system(size: 13, weight: .regular))
+                .font(.system(size: 14, weight: .regular))
                 .foregroundStyle(.secondary)
+                .lineSpacing(2)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(14)
+        .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
                 .fill(Color(.systemGray6))

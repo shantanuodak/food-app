@@ -12,6 +12,7 @@ struct HM01LogComposerSection: View {
     let onCaloriesTapped: (HomeLogRow) -> Void
     let onFocusedRowChanged: (UUID?) -> Void
     let onServerBackedRowCleared: (HomeLogRow) -> Void
+    let onKeyboardDone: () -> Void
     /// Fires after the client-side quantity fast path rescales a row's items
     /// (e.g. "3 chicken tenders" → "4 chicken tenders"). The parent view uses
     /// this to schedule persistence: PATCH for rows that already have a
@@ -31,6 +32,7 @@ struct HM01LogComposerSection: View {
         onCaloriesTapped: @escaping (HomeLogRow) -> Void = { _ in },
         onFocusedRowChanged: @escaping (UUID?) -> Void = { _ in },
         onServerBackedRowCleared: @escaping (HomeLogRow) -> Void = { _ in },
+        onKeyboardDone: @escaping () -> Void = {},
         onQuantityFastPathUpdated: @escaping (UUID) -> Void = { _ in }
     ) {
         _rows = rows
@@ -43,6 +45,7 @@ struct HM01LogComposerSection: View {
         self.onCaloriesTapped = onCaloriesTapped
         self.onFocusedRowChanged = onFocusedRowChanged
         self.onServerBackedRowCleared = onServerBackedRowCleared
+        self.onKeyboardDone = onKeyboardDone
         self.onQuantityFastPathUpdated = onQuantityFastPathUpdated
     }
 
@@ -115,11 +118,13 @@ struct HM01LogComposerSection: View {
                                                 setFocusedMinimalRowID(row.id)
                                             } else if focusedMinimalRowID == row.id {
                                                 setFocusedMinimalRowID(nil)
+                                                onKeyboardDone()
                                             }
                                         }
                                     },
-                                    onSubmit: {
-                                        addMinimalRow(after: row.id)
+                                    onDone: {
+                                        setFocusedMinimalRowID(nil)
+                                        onKeyboardDone()
                                     },
                                     onDeleteBackwardWhenEmpty: {
                                         deleteCurrentEmptyRowAndFocusPrevious(rowID: row.id)

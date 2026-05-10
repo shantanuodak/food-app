@@ -238,6 +238,10 @@ final class APIClient {
         )
     }
 
+    func getRoadmap() async throws -> RoadmapResponse {
+        try await request(path: "/v1/roadmap", method: "GET", requiresAuth: true)
+    }
+
     func getDaySummary(date: String, timezone: String = TimeZone.current.identifier) async throws -> DaySummaryResponse {
         try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [
             URLQueryItem(name: "date", value: date),

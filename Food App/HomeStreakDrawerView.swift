@@ -16,6 +16,7 @@ struct HomeStreakDrawerView: View {
     /// Bootstrapped on first-ever load with the user's currently-earned set so
     /// existing streak holders don't see retroactive popups for old badges.
     @AppStorage("celebratedStreakBadgeIds") private var celebratedIdsRaw: String = ""
+    @AppStorage("hasBootstrappedStreakCelebrations") private var hasBootstrappedCelebrations = false
 
     var body: some View {
         ScrollView {
@@ -486,8 +487,9 @@ struct HomeStreakDrawerView: View {
         let earnedNow = StreakRewards.badges.filter { currentDays >= $0.requiredDays }
         let earnedNowIds = Set(earnedNow.map(\.id))
 
-        if celebratedIdsRaw.isEmpty {
+        if !hasBootstrappedCelebrations {
             // Bootstrap: don't celebrate retroactively.
+            hasBootstrappedCelebrations = true
             celebratedIdsRaw = earnedNowIds.sorted().joined(separator: ",")
             return
         }

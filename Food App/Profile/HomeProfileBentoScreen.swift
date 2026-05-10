@@ -5,10 +5,9 @@ import Charts
 /// list as the sheet content when the user taps the greeting chip on the
 /// home screen.
 ///
-/// Phase 2: real data wired from `AppStore` via four parallel API calls
-/// on appear (`getOnboardingProfile`, `getDaySummary`, `getDayLogs`,
-/// `getProgress`). Tiles render with optimistic placeholders while loading
-/// so the layout doesn't pop when responses land.
+/// Phase 2: real data is warmed by `AppStore` while the user is on Home.
+/// The sheet paints from that snapshot immediately, then quietly refreshes
+/// so calorie/progress changes made just before opening still reconcile.
 ///
 /// Drill-down navigation (Phase 4) and per-tile animations (Phase 5) are
 /// still pending.
@@ -26,6 +25,7 @@ struct HomeProfileBentoScreen: View {
     @State private var daySummary: DaySummaryResponse?
     @State private var todayLogsCount: Int = 0
     @State private var progress: ProgressResponse?
+    @State private var streaks: StreakResponse?
     @State private var isInitialLoad = true
     @State private var errorMessage: String?
 
@@ -38,15 +38,12 @@ struct HomeProfileBentoScreen: View {
                         errorBanner(errorMessage)
                     }
                     CalorieHeroTile(data: heroData)
-                    HStack(alignment: .top, spacing: 12) {
-                        NavigationLink {
-                            RewardsTrophyCaseView(currentStreakDays: streakDays)
-                        } label: {
-                            StreakTile(days: streakDays)
-                        }
-                        .buttonStyle(.plain)
-                        DailyTargetsTile(targets: targetData)
+                    NavigationLink {
+                        RewardsTrophyCaseView(currentStreakDays: streakDays)
+                    } label: {
+                        StreakTile(days: streakDays)
                     }
+                    .buttonStyle(.plain)
                     HStack(alignment: .top, spacing: 12) {
                         BodyTile(info: bodyData)
                         DietTile(diet: dietData)
@@ -89,6 +86,7 @@ struct HomeProfileBentoScreen: View {
         }
         .environmentObject(draftStore)
         .task {
+            applyCachedSnapshotIfAvailable()
             await loadAll()
         }
         .onChange(of: scenePhase) { _, newPhase in
@@ -171,34 +169,42 @@ struct HomeProfileBentoScreen: View {
     // MARK: - Data loading
 
     @MainActor
+    private func applyCachedSnapshotIfAvailable() {
+        let todayStr = HomeLoggingDateUtils.summaryRequestFormatter.string(from: Date())
+        let tz = TimeZone.current.identifier
+        guard let snapshot = appStore.profileDashboardSnapshot,
+              snapshot.isUsable(for: todayStr, timezone: tz, maxAge: 10 * 60) else {
+            return
+        }
+
+        profile = snapshot.profile ?? profile
+        daySummary = snapshot.daySummary ?? daySummary
+        todayLogsCount = snapshot.todayLogsCount ?? todayLogsCount
+        progress = snapshot.progress ?? progress
+        streaks = snapshot.streaks ?? streaks
+        isInitialLoad = false
+    }
+
+    @MainActor
     private func loadAll() async {
         errorMessage = nil
-        let today = Date()
-        let todayStr = HomeLoggingDateUtils.summaryRequestFormatter.string(from: today)
-        let weekStartDate = Calendar.current.date(byAdding: .day, value: -6, to: today) ?? today
-        let weekStartStr = HomeLoggingDateUtils.summaryRequestFormatter.string(from: weekStartDate)
-        let tz = TimeZone.current.identifier
+        await appStore.refreshProfileDashboardSnapshot()
+        let snapshot = appStore.profileDashboardSnapshot
+        let profileResult = snapshot?.profile
+        let summaryResult = snapshot?.daySummary
+        let logsCountResult = snapshot?.todayLogsCount
+        let progressResult = snapshot?.progress
+        let streaksResult = snapshot?.streaks
 
-        async let profileTask = appStore.apiClient.getOnboardingProfile()
-        async let summaryTask = appStore.apiClient.getDaySummary(date: todayStr, timezone: tz)
-        async let logsTask = appStore.apiClient.getDayLogs(date: todayStr, timezone: tz)
-        async let progressTask = appStore.apiClient.getProgress(from: weekStartStr, to: todayStr, timezone: tz)
-
-        // Each call is allowed to fail independently — we'd rather render
-        // a partial dashboard than block on a single bad endpoint.
-        let profileResult = try? await profileTask
-        let summaryResult = try? await summaryTask
-        let logsResult = try? await logsTask
-        let progressResult = try? await progressTask
-
-        if profileResult == nil && summaryResult == nil && progressResult == nil {
+        if profileResult == nil && summaryResult == nil && progressResult == nil && streaksResult == nil {
             errorMessage = "Couldn't load your profile. Pull to retry."
         }
 
         profile = profileResult ?? profile
         daySummary = summaryResult ?? daySummary
-        todayLogsCount = logsResult?.logs.count ?? todayLogsCount
+        todayLogsCount = logsCountResult ?? todayLogsCount
         progress = progressResult ?? progress
+        streaks = streaksResult ?? streaks
         isInitialLoad = false
     }
 
@@ -226,20 +232,7 @@ struct HomeProfileBentoScreen: View {
     }
 
     private var streakDays: Int {
-        progress?.streaks.currentDays ?? 0
-    }
-
-    private var targetData: DailyTargetsTile.Data {
-        guard let profile else {
-            return DailyTargetsTile.Data(calories: 2_500, protein: 0, carbs: 0, fat: 0, isPlaceholder: true)
-        }
-        return DailyTargetsTile.Data(
-            calories: profile.calorieTarget,
-            protein: profile.macroTargets.protein,
-            carbs: profile.macroTargets.carbs,
-            fat: profile.macroTargets.fat,
-            isPlaceholder: false
-        )
+        streaks?.currentDays ?? progress?.streaks.currentDays ?? 0
     }
 
     private var bodyData: BodyTile.Data {
@@ -368,11 +361,31 @@ private struct CalorieHeroTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Today's Progress")
-                .font(.system(size: 11, weight: .bold))
-                .tracking(0.6)
-                .textCase(.uppercase)
-                .foregroundStyle(.white.opacity(0.78))
+            HStack(spacing: 10) {
+                Text("Today's Progress")
+                    .font(.system(size: 11, weight: .bold))
+                    .tracking(0.6)
+                    .textCase(.uppercase)
+                    .foregroundStyle(.white.opacity(0.78))
+
+                Spacer()
+
+                NavigationLink {
+                    TargetsEditorScreen()
+                } label: {
+                    Image(systemName: "pencil")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(.white.opacity(0.18), in: Circle())
+                        .overlay {
+                            Circle()
+                                .stroke(.white.opacity(0.18), lineWidth: 0.75)
+                        }
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Edit daily targets")
+            }
 
             HStack(spacing: 18) {
                 ring
@@ -534,93 +547,6 @@ private struct StreakTile: View {
         }
         .frame(width: 38, height: 38)
         .shadow(color: BentoTokens.orange700.opacity(0.22), radius: 6, y: 3)
-    }
-}
-
-/// Daily Targets — white card with edit pencil and macro target list.
-private struct DailyTargetsTile: View {
-    struct Data {
-        let calories: Int
-        let protein: Int
-        let carbs: Int
-        let fat: Int
-        let isPlaceholder: Bool
-    }
-
-    let targets: Data
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    private var voiceOverSummary: String {
-        "Daily targets: \(targets.calories) calories, "
-            + "\(targets.protein) grams protein, "
-            + "\(targets.carbs) grams carbs, "
-            + "\(targets.fat) grams fat"
-    }
-
-    var body: some View {
-        ZStack(alignment: .topTrailing) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("DAILY TARGETS")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.6)
-                    .foregroundStyle(BentoTokens.gray500)
-
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text(targets.calories.formatted())
-                        .font(.system(size: 28, weight: .bold))
-                        .contentTransition(reduceMotion ? .identity : .numericText())
-                    Text("kcal")
-                        .font(.system(size: 14, weight: .medium))
-                        .foregroundStyle(BentoTokens.gray500)
-                }
-                .foregroundStyle(BentoTokens.gray900)
-
-                VStack(spacing: 8) {
-                    targetRow(color: BentoTokens.protein, name: "Protein", value: "\(targets.protein)g")
-                    targetRow(color: BentoTokens.carbs,   name: "Carbs",   value: "\(targets.carbs)g")
-                    targetRow(color: BentoTokens.fat,     name: "Fat",     value: "\(targets.fat)g")
-                }
-                .padding(.top, 4)
-
-                Spacer(minLength: 0)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .opacity(targets.isPlaceholder ? 0.5 : 1)
-            .accessibilityElement(children: .ignore)
-            .accessibilityLabel(voiceOverSummary)
-
-            editButton
-        }
-        .bentoTile(background: Color.white, border: BentoTokens.gray100)
-    }
-
-    private func targetRow(color: Color, name: String, value: String) -> some View {
-        HStack {
-            HStack(spacing: 8) {
-                Circle().fill(color).frame(width: 8, height: 8)
-                Text(name)
-                    .font(.system(size: 13))
-                    .foregroundStyle(BentoTokens.gray700)
-            }
-            Spacer()
-            Text(value)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(BentoTokens.gray900)
-        }
-    }
-
-    private var editButton: some View {
-        NavigationLink {
-            TargetsEditorScreen()
-        } label: {
-            Image(systemName: "pencil")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(BentoTokens.gray700)
-                .frame(width: 30, height: 30)
-                .background(BentoTokens.gray100, in: Circle())
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Edit targets")
     }
 }
 

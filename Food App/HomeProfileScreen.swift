@@ -154,6 +154,15 @@ struct HomeProfileScreen: View {
                 )
             }
 
+            NavigationLink {
+                UpcomingFeaturesAndFixesView()
+            } label: {
+                ProfileHubRow(
+                    title: "Upcoming features and fixes",
+                    systemImage: "sparkle.magnifyingglass"
+                )
+            }
+
             if isAdmin {
                 NavigationLink {
                     AdminProfileDetailView {
@@ -830,6 +839,177 @@ struct HomeProfileScreen: View {
             }
         } catch {
             _ = appStore.handleAuthFailureIfNeeded(error)
+        }
+    }
+}
+
+private struct UpcomingFeaturesAndFixesView: View {
+    @EnvironmentObject private var appStore: AppStore
+    @State private var selectedBucket: Bucket = .fixes
+    @State private var roadmap: RoadmapResponse?
+    @State private var isLoading = false
+    @State private var errorMessage: String?
+
+    private enum Bucket: String, CaseIterable, Identifiable {
+        case fixes
+        case features
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .fixes:
+                return "Upcoming fixes"
+            case .features:
+                return "Upcoming features"
+            }
+        }
+    }
+
+    private var selectedItems: [RoadmapItem] {
+        switch selectedBucket {
+        case .fixes:
+            return roadmap?.fixes ?? []
+        case .features:
+            return roadmap?.features ?? []
+        }
+    }
+
+    var body: some View {
+        List {
+            Section {
+                Picker("Roadmap bucket", selection: $selectedBucket) {
+                    ForEach(Bucket.allCases) { bucket in
+                        Text(bucket.title).tag(bucket)
+                    }
+                }
+                .pickerStyle(.segmented)
+            }
+
+            if isLoading && roadmap == nil {
+                Section {
+                    HStack {
+                        ProgressView()
+                        Text("Loading roadmap…")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else if let errorMessage {
+                Section {
+                    ContentUnavailableView(
+                        "Roadmap unavailable",
+                        systemImage: "exclamationmark.triangle",
+                        description: Text(errorMessage)
+                    )
+                    Button("Retry") {
+                        Task { await loadRoadmap() }
+                    }
+                }
+            } else if selectedItems.isEmpty {
+                Section {
+                    ContentUnavailableView(
+                        selectedBucket == .fixes ? "No upcoming fixes yet" : "No upcoming features yet",
+                        systemImage: selectedBucket == .fixes ? "wrench.and.screwdriver" : "sparkles",
+                        description: Text("Check back after the next roadmap update.")
+                    )
+                }
+            } else {
+                Section {
+                    ForEach(selectedItems) { item in
+                        roadmapRow(item)
+                    }
+                } footer: {
+                    Text("Roadmap items are curated from user feedback and internal planning. Dates and release numbers may change before shipping.")
+                }
+            }
+        }
+        .navigationTitle("Upcoming features and fixes")
+        .navigationBarTitleDisplayMode(.inline)
+        .refreshable {
+            await loadRoadmap()
+        }
+        .task {
+            await loadRoadmap()
+        }
+    }
+
+    private func roadmapRow(_ item: RoadmapItem) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(item.title)
+                        .font(.system(size: 16, weight: .semibold))
+                    if !item.description.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        Text(item.description)
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                Spacer()
+                statusChip(item.status)
+            }
+
+            HStack(spacing: 8) {
+                metadataChip(icon: "shippingbox", text: item.releaseVersion?.isEmpty == false ? item.releaseVersion! : "Release TBD")
+                metadataChip(icon: "calendar", text: item.targetDate ?? item.targetDateLabel)
+            }
+        }
+        .padding(.vertical, 6)
+    }
+
+    private func statusChip(_ status: String) -> some View {
+        Text(statusLabel(status))
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(statusColor(status))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(statusColor(status).opacity(0.12), in: Capsule())
+    }
+
+    private func metadataChip(icon: String, text: String) -> some View {
+        Label(text, systemImage: icon)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color(.secondarySystemGroupedBackground), in: Capsule())
+    }
+
+    private func statusLabel(_ status: String) -> String {
+        switch status {
+        case "in_progress":
+            return "In progress"
+        case "done":
+            return "Done"
+        default:
+            return "Not started"
+        }
+    }
+
+    private func statusColor(_ status: String) -> Color {
+        switch status {
+        case "in_progress":
+            return .blue
+        case "done":
+            return .green
+        default:
+            return .secondary
+        }
+    }
+
+    @MainActor
+    private func loadRoadmap() async {
+        guard !isLoading else { return }
+        isLoading = true
+        errorMessage = nil
+        defer { isLoading = false }
+        do {
+            roadmap = try await appStore.apiClient.getRoadmap()
+        } catch {
+            _ = appStore.handleAuthFailureIfNeeded(error)
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 }

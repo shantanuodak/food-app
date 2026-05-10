@@ -21,6 +21,7 @@ import {
 } from '../services/evalService.js';
 import {
   archiveBenchmarkCase,
+  clearBenchmarkCaseMfp,
   createBenchmarkCase,
   createBenchmarkPublicSnapshot,
   deleteBenchmarkRun,
@@ -31,7 +32,8 @@ import {
   listBenchmarkCases,
   listBenchmarkRuns,
   runAccuracyBenchmark,
-  updateBenchmarkCase
+  updateBenchmarkCase,
+  updateBenchmarkCaseMfp
 } from '../services/accuracyBenchmarkService.js';
 import { getSaveHealthReport } from '../services/saveHealthService.js';
 import { pool } from '../db.js';
@@ -78,6 +80,18 @@ const benchmarkRunSchema = z.object({
   cacheMode: z.enum(['cached', 'fresh']).optional().default('cached'),
   maxCases: z.number().int().min(1).max(100).optional().default(25),
   runLabel: z.string().trim().max(120).optional().nullable()
+});
+
+const benchmarkMfpCaptureSchema = z.object({
+  itemName: z.string().trim().min(1).max(180),
+  calories: z.number().nonnegative(),
+  protein: z.number().nonnegative().optional().default(0),
+  carbs: z.number().nonnegative().optional().default(0),
+  fat: z.number().nonnegative().optional().default(0),
+  servingLabel: z.string().trim().max(240).optional().nullable().transform((v) => v || null),
+  sourceUrl: z.string().trim().url().max(600).optional().nullable().or(z.literal('')).transform((v) => v || null),
+  notes: z.string().trim().max(1200).optional().nullable().transform((v) => v || null),
+  collectedAt: z.string().datetime().optional().nullable().default(null)
 });
 
 const benchmarkSnapshotSchema = z.object({
@@ -478,6 +492,42 @@ router.patch('/accuracy-benchmarks/cases/:id', async (req, res, next) => {
     requireInternalKey(req.header('x-internal-metrics-key'));
     const input = benchmarkCaseSchema.parse(req.body ?? {});
     const benchmarkCase = await updateBenchmarkCase(req.params.id!, input);
+    if (!benchmarkCase) throw new ApiError(404, 'NOT_FOUND', 'Benchmark case not found');
+    res.json({ case: benchmarkCase });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/accuracy-benchmarks/cases/:id/mfp', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const input = benchmarkMfpCaptureSchema.parse(req.body ?? {});
+    const noteParts = [
+      input.notes,
+      input.servingLabel ? `Serving: ${input.servingLabel}` : null,
+      input.sourceUrl ? `Source: ${input.sourceUrl}` : null
+    ].filter(Boolean);
+    const benchmarkCase = await updateBenchmarkCaseMfp(req.params.id!, {
+      itemName: input.itemName,
+      calories: input.calories,
+      protein: input.protein,
+      carbs: input.carbs,
+      fat: input.fat,
+      notes: noteParts.length ? noteParts.join('\n') : null,
+      collectedAt: input.collectedAt
+    });
+    if (!benchmarkCase) throw new ApiError(404, 'NOT_FOUND', 'Benchmark case not found');
+    res.json({ case: benchmarkCase });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/accuracy-benchmarks/cases/:id/mfp', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const benchmarkCase = await clearBenchmarkCaseMfp(req.params.id!);
     if (!benchmarkCase) throw new ApiError(404, 'NOT_FOUND', 'Benchmark case not found');
     res.json({ case: benchmarkCase });
   } catch (err) {

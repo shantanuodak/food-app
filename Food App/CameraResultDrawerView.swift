@@ -84,7 +84,7 @@ struct CameraResultDrawerView: View {
                 .padding(14)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 8)
+            .padding(.top, 28)
             .onAppear {
                 withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: false)) {
                     shimmerPhase = 1
@@ -208,8 +208,22 @@ struct CameraResultDrawerView: View {
                     .resizable()
                     .scaledToFill()
                     .frame(maxWidth: .infinity)
-                    .frame(height: 224)
+                    .frame(height: 232)
                     .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+                VStack {
+                    Spacer()
+                    HStack {
+                        Label("Detected from photo", systemImage: "camera.viewfinder")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 10)
+                            .padding(.vertical, 7)
+                            .background(.black.opacity(0.46), in: Capsule())
+                        Spacer()
+                    }
+                    .padding(12)
+                }
 
                 HStack(spacing: 8) {
                     Button { onRetry() } label: {
@@ -230,19 +244,20 @@ struct CameraResultDrawerView: View {
                 .padding(13)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 16)
+            .padding(.top, 28)
 
             LoggingResultDrawerBody(
                 foodName: foodDisplayName(items: items),
                 totals: totals,
                 items: items,
                 thoughtProcess: cameraThoughtProcess(items: items),
+                mode: .photoReview,
                 onItemQuantityChange: nil,
-                onRecalculate: onRetry
+                onRecalculate: nil
             )
 
             // CTA
-            VStack(spacing: 4) {
+            VStack(spacing: 10) {
                 Button(action: onLogIt) {
                     Text("Log it")
                         .font(.system(size: 17, weight: .semibold))
@@ -259,14 +274,29 @@ struct CameraResultDrawerView: View {
                             in: RoundedRectangle(cornerRadius: 14, style: .continuous)
                         )
                 }
+                .buttonStyle(.plain)
 
-                Button(action: onDiscard) {
-                    Text("Discard")
-                        .font(.system(size: 15, weight: .regular))
-                        .foregroundStyle(.secondary)
+                Button(action: onRetry) {
+                    Label("Recalculate", systemImage: "arrow.clockwise")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(Color(red: 0.420, green: 0.370, blue: 1.0))
                         .frame(maxWidth: .infinity)
-                        .frame(height: 44)
+                        .frame(height: 50)
+                        .background(
+                            Color(red: 0.420, green: 0.370, blue: 1.0).opacity(0.10),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        )
                 }
+                .buttonStyle(.plain)
+
+                Button(role: .destructive, action: onDiscard) {
+                    Text("Discard")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 46)
+                }
+                .buttonStyle(.plain)
             }
             .padding(.horizontal, 20)
             .padding(.top, 20)
@@ -281,7 +311,7 @@ struct CameraResultDrawerView: View {
                 ? names.joined(separator: " & ")
                 : "\(names[0]), \(names[1]) & more"
             let total = Int(items.reduce(0) { $0 + $1.calories }.rounded())
-            return "Detected \(items.count) items from the photo: \(preview). Estimated \(total) kcal using standard nutrition data."
+            return "Food App identified \(items.count) visible items from the photo: \(preview). It estimated the portions shown in the image, matched each item to standard nutrition data, and summed the item calories and macros. The current estimate is \(total) kcal total; review the detected items before logging if a portion looks off."
         }
         if let item = items.first {
             if let explanation = item.explanation,
@@ -289,7 +319,7 @@ struct CameraResultDrawerView: View {
                 return explanation
             }
             let qty = HomeLoggingDisplayText.formatOneDecimal(item.quantity)
-            return "Identified \"\(item.name)\" from the photo — \(Int(item.calories.rounded())) kcal using a \(qty) \(item.unit) standard portion."
+            return "Food App identified the visible food as \(item.name). It estimated the photo portion as \(qty) \(item.unit), matched that serving to standard nutrition data, and used the matched calories and macros for this result. Review the serving if the photographed portion was larger or smaller than a typical serving."
         }
         return "Photo analyzed. A calorie estimate is available."
     }
@@ -361,9 +391,7 @@ struct CameraResultDrawerView: View {
     private func foodDisplayName(items: [ParsedFoodItem]) -> String {
         if items.isEmpty { return "Food" }
         if items.count == 1 { return items[0].name }
-        let names = items.prefix(3).map(\.name)
-        if names.count == 2 { return names.joined(separator: " & ") }
-        return names.dropLast().joined(separator: ", ") + " & " + names.last!
+        return "\(items.count) items detected"
     }
 }
 

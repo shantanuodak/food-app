@@ -1,5 +1,6 @@
 import { pool } from '../db.js';
 import { ApiError } from '../utils/errors.js';
+import { getFoodLogStreaks } from './streakService.js';
 
 type DayTotals = {
   calories: number;
@@ -97,29 +98,6 @@ function adherencePercent(consumed: number, target: number): number {
     return 0;
   }
   return roundOneDecimal((consumed / target) * 100);
-}
-
-function computeStreaks(days: ProgressDayPoint[]): ProgressStreaks {
-  let longestDays = 0;
-  let running = 0;
-  for (const day of days) {
-    if (day.hasLogs) {
-      running += 1;
-      longestDays = Math.max(longestDays, running);
-    } else {
-      running = 0;
-    }
-  }
-
-  let currentDays = 0;
-  for (let i = days.length - 1; i >= 0; i -= 1) {
-    if (!days[i]?.hasLogs) {
-      break;
-    }
-    currentDays += 1;
-  }
-
-  return { currentDays, longestDays };
 }
 
 function metricAverage(days: ProgressDayPoint[], metric: keyof DayTotals): number {
@@ -271,13 +249,17 @@ export async function getProgressSummary(
       }
     };
   });
+  const canonicalStreaks = await getFoodLogStreaks(userId, 365, effectiveTimezone, to);
 
   return {
     from,
     to,
     timezone: effectiveTimezone,
     days,
-    streaks: computeStreaks(days),
+    streaks: {
+      currentDays: canonicalStreaks.currentDays,
+      longestDays: canonicalStreaks.longestDays
+    },
     weeklyDelta: computeWeeklyDelta(days)
   };
 }

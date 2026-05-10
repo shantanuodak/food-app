@@ -123,18 +123,10 @@ extension MainLoggingShellView {
             queuedParseRowIDs = dirtyRowIDs.filter { $0 != activeParseRowID }
         }
         // Defer synchronizeParseOwnership to debounce callback
-        let nonEmptyRowCount = inputRows.filter {
-            !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }.count
-        let debounceNanos: UInt64 = nonEmptyRowCount > 1 ? 1_500_000_000 : 1_000_000_000
-
-        debounceTask = Task {
-            try? await Task.sleep(nanoseconds: debounceNanos)
-            guard !Task.isCancelled else { return }
-            await MainActor.run {
-                handleQueuedOrImmediateParseRequest(for: trimmed)
-            }
-        }
+        // Passive typing is too weak a signal to spend on Gemini. Keep parse
+        // ownership state current for UI purposes, but wait for an explicit
+        // completion signal (Done, Return/Next, blur, retry/details) to call
+        // triggerParseNow().
     }
 
     @MainActor

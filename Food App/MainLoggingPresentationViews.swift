@@ -48,8 +48,6 @@ struct MainLoggingDetailsDrawer: View {
                     MainLoggingManualAddDrawerContent(onBackToText: onManualAddBackToText)
                         .padding()
                 } else if let parseResult {
-                    drawerEyebrow
-
                     LoggingResultDrawerBody(
                         foodName: MainLoggingDrawerDisplayText.foodName(from: parseResult),
                         totals: totals,
@@ -68,16 +66,6 @@ struct MainLoggingDetailsDrawer: View {
             }
         }
         .presentationDragIndicator(.visible)
-    }
-
-    private var drawerEyebrow: some View {
-        Text("Food App Result")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundStyle(.tertiary)
-            .textCase(.uppercase)
-            .tracking(0.5)
-            .padding(.horizontal, 20)
-            .padding(.top, 22)
     }
 }
 
@@ -123,22 +111,31 @@ struct MainLoggingRowCalorieDetailsSheet: View {
                         totals: totals,
                         items: details.parsedItems,
                         thoughtProcess: details.thoughtProcess,
+                        showsThoughtProcess: false,
                         onItemQuantityChange: onItemQuantityChange,
                         onRecalculate: nil
                     )
-                    .padding(.bottom, 44)
+
+                    LoggingResultThoughtProcessCard(thoughtProcess: details.thoughtProcess)
+
+                    Button(role: .destructive, action: onDeleteTapped) {
+                        Text("Delete")
+                            .font(.system(size: 16, weight: .semibold))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 50)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.red)
+                    .disabled(isDeleteDisabled)
+                    .accessibilityHint(Text("Deletes this food entry and updates your totals."))
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+                    .padding(.bottom, 36)
                 }
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Delete", role: .destructive, action: onDeleteTapped)
-                        .tint(.red)
-                        .disabled(isDeleteDisabled)
-                        .accessibilityHint(Text("Deletes this food entry and updates your totals."))
-                }
-
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L10n.doneButton, action: onDone)
                 }
@@ -176,13 +173,7 @@ struct MainLoggingRowCalorieDetailsSheet: View {
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
         } else {
-            Text("Food App Result")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .textCase(.uppercase)
-                .tracking(0.5)
-                .padding(.horizontal, 20)
-                .padding(.top, 22)
+            EmptyView()
         }
     }
 }
@@ -282,10 +273,12 @@ enum MainLoggingDrawerDisplayText {
         if let item = result.items.first {
             if let explanation = item.explanation,
                !explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return explanation
+                let trimmedExplanation = explanation.trimmingCharacters(in: .whitespacesAndNewlines)
+                let qty = HomeLoggingDisplayText.formatOneDecimal(item.quantity)
+                return "\(trimmedExplanation) Food App used \(qty) \(item.unit) with \(sourceLabel) nutrition data, then scaled calories, protein, carbs, and fat from the matched serving."
             }
             let qty = HomeLoggingDisplayText.formatOneDecimal(item.quantity)
-            var text = "Interpreted as \"\(item.name)\". Used \(qty) \(item.unit) with \(sourceLabel) to estimate \(Int(item.calories.rounded())) kcal."
+            var text = "Interpreted as \"\(item.name)\". Food App used \(qty) \(item.unit) with \(sourceLabel) to estimate \(Int(item.calories.rounded())) kcal. The macro values are scaled from the same matched serving so protein, carbs, and fat stay consistent."
             if isApprox { text += " Result is marked approximate." }
             return text
         }

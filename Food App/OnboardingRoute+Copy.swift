@@ -14,7 +14,7 @@ extension OnboardingRoute {
         case .activity:
             return "How active are you most days?"
         case .pace:
-            return "Choose your pace"
+            return "How fast should your plan move?"
         case .preferencesOptional:
             return "Food Preferences"
         case .planPreview:
@@ -55,7 +55,7 @@ extension OnboardingRoute {
         case .activity:
             return "Choose your typical day, not your best day."
         case .pace:
-            return "Consistency beats speed. Pick a pace you can sustain."
+            return "This helps us set a daily target that matches how quickly you want to make progress while keeping the plan realistic."
         case .preferencesOptional:
             return ""
         case .planPreview:
@@ -83,4 +83,3 @@ extension OnboardingRoute {
         }
     }
 }
-

@@ -259,7 +259,7 @@ struct BackspaceAwareTextFieldRepresentable: UIViewRepresentable {
     @Binding var text: String
     let isFocused: Bool
     let onFocusChanged: (Bool) -> Void
-    let onSubmit: () -> Void
+    let onDone: () -> Void
     let onDeleteBackwardWhenEmpty: () -> Void
     var placeholder: String = ""
 
@@ -270,7 +270,7 @@ struct BackspaceAwareTextFieldRepresentable: UIViewRepresentable {
         tv.tintColor = .label
         tv.textColor = .label
         tv.delegate = context.coordinator
-        tv.returnKeyType = .next
+        tv.returnKeyType = .done
         tv.autocorrectionType = .no
         tv.spellCheckingType = .no
         tv.autocapitalizationType = .none
@@ -311,6 +311,7 @@ struct BackspaceAwareTextFieldRepresentable: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: BackspaceDetectingTextView, context: Context) {
+        context.coordinator.parent = self
         if uiView.text != text {
             uiView.text = text
         }
@@ -354,9 +355,9 @@ struct BackspaceAwareTextFieldRepresentable: UIViewRepresentable {
         }
 
         func textView(_ textView: UITextView, shouldChangeTextIn range: NSRange, replacementText text: String) -> Bool {
-            // Return key → submit (add new row), don't insert newline
+            // Done key → commit the current row, don't insert newline.
             if text == "\n" {
-                parent.onSubmit()
+                parent.onDone()
                 return false
             }
             return true
@@ -409,7 +410,7 @@ struct MinimalRowTextEditor: View {
     @Binding var text: String
     let isFocused: Bool
     let onFocusChanged: (Bool) -> Void
-    let onSubmit: () -> Void
+    let onDone: () -> Void
     let onDeleteBackwardWhenEmpty: () -> Void
     var placeholder: String = ""
     var showTypewriterPlaceholder: Bool = false
@@ -420,7 +421,7 @@ struct MinimalRowTextEditor: View {
                 text: $text,
                 isFocused: isFocused,
                 onFocusChanged: onFocusChanged,
-                onSubmit: onSubmit,
+                onDone: onDone,
                 onDeleteBackwardWhenEmpty: onDeleteBackwardWhenEmpty,
                 placeholder: showTypewriterPlaceholder ? "" : placeholder
             )

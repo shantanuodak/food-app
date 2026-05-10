@@ -168,6 +168,7 @@ extension MainLoggingShellView {
                 restorePendingSaveContextIfNeeded()
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
+                appStore.preloadProfileDashboard()
                 // Surface the mindful-pause sheet once per day for emotional-eating users.
                 if appStore.selectedChallenge == .emotionalEating, MindfulPauseGate.shouldShow() {
                     isMindfulPausePresented = true
@@ -187,6 +188,7 @@ extension MainLoggingShellView {
                 guard ready else { return }
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
+                appStore.preloadProfileDashboard()
             }
             .onDisappear {
                 debounceTask?.cancel()
@@ -231,6 +233,7 @@ extension MainLoggingShellView {
             .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { notification in
                 refreshNutritionStateAfterProgressChange(notification)
                 refreshCurrentStreak()
+                appStore.preloadProfileDashboard(force: true)
             }
             .sheet(isPresented: $isDetailsDrawerPresented) {
                 detailsDrawer

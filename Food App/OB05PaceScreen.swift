@@ -15,9 +15,9 @@ struct OB05PaceScreen: View {
 
     private var paceDescription: String {
         switch resolvedPace {
-        case .conservative: return "Slow and steady — easiest to maintain"
-        case .balanced: return "The sweet spot for most people"
-        case .aggressive: return "Faster results, requires more discipline"
+        case .conservative: return "Slower, steadier progress with more flexibility day to day."
+        case .balanced: return "A practical middle ground: noticeable progress without feeling too restrictive."
+        case .aggressive: return "Faster progress with a tighter calorie target. Best if you want more structure."
         }
     }
 
@@ -59,19 +59,23 @@ struct OB05PaceScreen: View {
                     .padding(.horizontal, 16)
 
                 // Headline
-                Text("Choose your pace")
+                Text("How fast should your plan move?")
                     .font(OnboardingTypography.instrumentSerif(style: .regular, size: 41))
                     .foregroundStyle(colorScheme == .dark ? .white : .black)
                     .multilineTextAlignment(.center)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 12)
                     .padding(.top, 20)
+                    .padding(.horizontal, 24)
 
-                Text("Consistency beats speed")
+                Text("This helps us set a daily target that matches how quickly you want to make progress while keeping the plan realistic.")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
                     .opacity(appeared ? 1 : 0)
                     .padding(.top, 8)
+                    .padding(.horizontal, 32)
 
                 Spacer()
 
@@ -95,11 +99,12 @@ struct OB05PaceScreen: View {
                         .font(.system(size: 15, weight: .medium))
                         .foregroundStyle(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
                         .multilineTextAlignment(.center)
-                        .frame(height: 40, alignment: .top)
+                        .lineSpacing(2)
+                        .frame(height: 56, alignment: .top)
                         .animation(.easeInOut(duration: 0.2), value: resolvedPace)
                 }
                 .padding(.horizontal, 32)
-                .frame(height: 160)
+                .frame(height: 176)
 
                 // Slider
                 paceSlider(style: style)

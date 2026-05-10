@@ -353,6 +353,7 @@ struct UpdateLogImageRefResponse: Decodable {
 /// the team can triage with full context. All fields except `message` are
 /// optional; if the client omits them the server stores NULL.
 struct SubmitFeedbackRequest: Encodable {
+    let feedbackType: String
     let message: String
     let appVersion: String?
     let buildNumber: String?
@@ -364,6 +365,26 @@ struct SubmitFeedbackRequest: Encodable {
 struct SubmitFeedbackResponse: Decodable {
     let id: String
     let createdAt: String
+}
+
+struct RoadmapResponse: Decodable {
+    let fixes: [RoadmapItem]
+    let features: [RoadmapItem]
+}
+
+struct RoadmapItem: Decodable, Identifiable {
+    let id: String
+    let itemType: String
+    let title: String
+    let description: String
+    let status: String
+    let releaseVersion: String?
+    let targetDate: String?
+    let targetDateLabel: String
+    let displayOrder: Int
+    let isVisible: Bool
+    let createdAt: String
+    let updatedAt: String
 }
 
 /// PATCH /v1/logs/:id — parse references are optional so the client-side

@@ -25,6 +25,7 @@ final class AppStore: ObservableObject {
     /// `NotificationScheduler` to short-circuit cleanly when permission isn't granted.
     @Published private(set) var notificationAuthState: UNAuthorizationStatus = .notDetermined
     @Published private(set) var mealReminderSettings: MealReminderSettings
+    @Published private(set) var profileDashboardSnapshot: ProfileDashboardSnapshot? = nil
 
     let configuration: AppConfiguration
     let authSessionStore: AuthSessionStore
@@ -46,6 +47,7 @@ final class AppStore: ObservableObject {
     private let mealReminderSettingsKey = "app.meal.reminder.settings.v1"
     private let networkMonitor: NetworkStatusMonitor
     private var onboardingProfileRefreshTask: Task<Void, Never>?
+    private var profileDashboardPreloadTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -178,6 +180,9 @@ final class AppStore: ObservableObject {
     func signOut() {
         onboardingProfileRefreshTask?.cancel()
         onboardingProfileRefreshTask = nil
+        profileDashboardPreloadTask?.cancel()
+        profileDashboardPreloadTask = nil
+        profileDashboardSnapshot = nil
         authService.signOut()
         isOnboardingComplete = false
         defaults.set(false, forKey: onboardingKey)
@@ -255,6 +260,69 @@ final class AppStore: ObservableObject {
         Task(priority: .background) { [apiClient] in
             await apiClient.warmHealth()
         }
+    }
+
+    func preloadProfileDashboard(force: Bool = false) {
+        guard isSessionRestored, isOnboardingComplete, authSessionStore.session != nil else { return }
+        guard isNetworkReachable else { return }
+
+        let today = Date()
+        let dateString = HomeLoggingDateUtils.summaryRequestFormatter.string(from: today)
+        let timezone = TimeZone.current.identifier
+
+        if !force,
+           let snapshot = profileDashboardSnapshot,
+           snapshot.isUsable(for: dateString, timezone: timezone) {
+            return
+        }
+
+        if profileDashboardPreloadTask != nil, !force {
+            return
+        }
+
+        profileDashboardPreloadTask?.cancel()
+        profileDashboardPreloadTask = Task(priority: .background) { [weak self] in
+            guard let self else { return }
+            await self.refreshProfileDashboardSnapshot(date: today, timezone: timezone)
+            await MainActor.run {
+                self.profileDashboardPreloadTask = nil
+            }
+        }
+    }
+
+    func refreshProfileDashboardSnapshot(date: Date = Date(), timezone: String = TimeZone.current.identifier) async {
+        guard isSessionRestored, isOnboardingComplete, authSessionStore.session != nil else { return }
+        guard isNetworkReachable else { return }
+
+        let dateString = HomeLoggingDateUtils.summaryRequestFormatter.string(from: date)
+        let weekStartDate = Calendar.current.date(byAdding: .day, value: -6, to: date) ?? date
+        let weekStartString = HomeLoggingDateUtils.summaryRequestFormatter.string(from: weekStartDate)
+
+        async let profileTask = apiClient.getOnboardingProfile()
+        async let summaryTask = apiClient.getDaySummary(date: dateString, timezone: timezone)
+        async let logsTask = apiClient.getDayLogs(date: dateString, timezone: timezone)
+        async let progressTask = apiClient.getProgress(from: weekStartString, to: dateString, timezone: timezone)
+        async let streaksTask = apiClient.getStreaks(range: 30, to: dateString, timezone: timezone)
+
+        let profileResult = try? await profileTask
+        let summaryResult = try? await summaryTask
+        let logsResult = try? await logsTask
+        let progressResult = try? await progressTask
+        let streaksResult = try? await streaksTask
+
+        if Task.isCancelled { return }
+
+        let previous = profileDashboardSnapshot
+        profileDashboardSnapshot = ProfileDashboardSnapshot(
+            profile: profileResult ?? previous?.profile,
+            daySummary: summaryResult ?? previous?.daySummary,
+            todayLogsCount: logsResult?.logs.count ?? previous?.todayLogsCount,
+            progress: progressResult ?? previous?.progress,
+            streaks: streaksResult ?? previous?.streaks,
+            dateString: dateString,
+            timezone: timezone,
+            loadedAt: Date()
+        )
     }
 
     func refreshHealthAuthorizationState() {

@@ -13,6 +13,7 @@ struct FeedbackView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var message: String = ""
+    @State private var feedbackType: FeedbackType = .general
     @State private var isSubmitting = false
     @State private var submissionError: String?
     @State private var showSuccessConfirmation = false
@@ -33,6 +34,20 @@ struct FeedbackView: View {
 
     var body: some View {
         Form {
+            Section {
+                Picker("Feedback type", selection: $feedbackType) {
+                    ForEach(FeedbackType.allCases) { type in
+                        Text(type.title).tag(type)
+                    }
+                }
+                .pickerStyle(.segmented)
+            } header: {
+                Text("What are you sending?")
+            } footer: {
+                Text(feedbackType.footer)
+                    .foregroundStyle(.secondary)
+            }
+
             Section {
                 ZStack(alignment: .topLeading) {
                     if message.isEmpty {
@@ -106,6 +121,7 @@ struct FeedbackView: View {
         defer { isSubmitting = false }
 
         let request = SubmitFeedbackRequest(
+            feedbackType: feedbackType.rawValue,
             message: trimmedMessage,
             appVersion: Self.appVersion(),
             buildNumber: Self.buildNumber(),
@@ -150,6 +166,36 @@ struct FeedbackView: View {
         let v = UIDevice.current.systemVersion
         let name = UIDevice.current.systemName
         return "\(name) \(v)"
+    }
+}
+
+private enum FeedbackType: String, CaseIterable, Identifiable {
+    case general
+    case bug
+    case feature
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general:
+            return "General"
+        case .bug:
+            return "Bug"
+        case .feature:
+            return "Feature"
+        }
+    }
+
+    var footer: String {
+        switch self {
+        case .general:
+            return "Use this for comments, questions, or anything that is not clearly a bug or request."
+        case .bug:
+            return "Bug reports are reviewed for fixes and can be promoted into Upcoming fixes."
+        case .feature:
+            return "Feature requests are reviewed and can be promoted into Upcoming features."
+        }
     }
 }
 

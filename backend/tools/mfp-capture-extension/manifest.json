@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "Food App MFP Capture",
+  "description": "Internal helper for capturing visible MyFitnessPal nutrition into Food App benchmark cases.",
+  "version": "0.1.0",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "https://www.myfitnesspal.com/*",
+    "https://food-app-backend-ifdx.onrender.com/*",
+    "http://localhost:8080/*",
+    "http://localhost:3000/*"
+  ],
+  "background": {
+    "service_worker": "service-worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://food-app-backend-ifdx.onrender.com/testing-dashboard*",
+        "http://localhost:8080/testing-dashboard*",
+        "http://localhost:3000/testing-dashboard*"
+      ],
+      "js": ["dashboard-bridge.js"]
+    },
+    {
+      "matches": ["https://www.myfitnesspal.com/*"],
+      "js": ["mfp-capture.js"]
+    }
+  ],
+  "action": {
+    "default_title": "Food App MFP Capture"
+  }
+}

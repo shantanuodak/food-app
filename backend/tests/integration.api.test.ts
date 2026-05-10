@@ -522,7 +522,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     const firstProv = await request(app).get('/v1/onboarding/provenance').set(authHeader);
     expect(firstProv.status).toBe(200);
     expect(firstProv.body.mode).toBe('computed_provenance_v1');
-    expect(firstProv.body.calculatorVersion).toBe('onboarding-target-calculator-v3');
+    expect(firstProv.body.calculatorVersion).toBe('onboarding-target-calculator-v4');
     expect(typeof firstProv.body.inputsHash).toBe('string');
     expect(firstProv.body.inputsHash.length).toBe(64);
     expect(firstProv.body.inputs.timezone).toBe('America/New_York');
@@ -540,7 +540,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     const secondProv = await request(app).get('/v1/onboarding/provenance').set(authHeader);
     expect(secondProv.status).toBe(200);
     expect(secondProv.body.mode).toBe('computed_provenance_v1');
-    expect(secondProv.body.calculatorVersion).toBe('onboarding-target-calculator-v3');
+    expect(secondProv.body.calculatorVersion).toBe('onboarding-target-calculator-v4');
     expect(secondProv.body.inputsHash).toBe(firstProv.body.inputsHash);
     expect(secondProv.body.inputs).toEqual(firstProv.body.inputs);
   });
@@ -564,7 +564,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
 
     const provenance = await request(app).get('/v1/onboarding/provenance').set(authHeader);
     expect(provenance.status).toBe(200);
-    expect(provenance.body.calculatorVersion).toBe('onboarding-target-calculator-v3');
+    expect(provenance.body.calculatorVersion).toBe('onboarding-target-calculator-v4');
     expect(provenance.body.inputs.age).toBeNull();
     expect(provenance.body.inputs.sex).toBeNull();
     expect(provenance.body.inputs.heightCm).toBeNull();
@@ -841,6 +841,18 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(dayWithoutLogs.logsCount).toBe(0);
     expect(dayWithoutLogs.totals.calories).toBe(0);
     expect(dayWithoutLogs.adherence.caloriesPct).toBe(0);
+
+    const atRiskProgress = await request(app)
+      .get('/v1/logs/progress')
+      .set(authHeader)
+      .query({
+        from: '2026-02-18',
+        to: '2026-02-22'
+      });
+
+    expect(atRiskProgress.status).toBe(200);
+    expect(atRiskProgress.body.streaks.currentDays).toBe(2);
+    expect(atRiskProgress.body.streaks.longestDays).toBe(2);
   });
 
   test('streak endpoint returns current streak, status, and food-count intensity levels', async () => {

@@ -1303,6 +1303,7 @@
             </div>
             <button class="btn btn-primary" onclick="openBenchmarkEditor()">Add case</button>
           </div>
+          <div id="benchmark-mfp-msg" class="text-muted" style="display:none; font-size:12px; margin-top:10px;"></div>
 
           <div class="eval-controls" style="margin-top:12px;">
             <div class="eval-control">
@@ -2564,6 +2565,8 @@ function renderAccuracyBenchmarkCases() {
         <td>${benchmarkStatusBadge(item.status)}${item.isActive ? '' : '<div class="badge badge-muted" style="margin-top:4px">inactive</div>'}</td>
         <td>
           <button class="btn btn-ghost" onclick="editBenchmarkCase('${item.id}')">Edit</button>
+          <button class="btn btn-ghost" onclick="openMfpLookup('${item.id}')">Lookup MFP</button>
+          ${item.mfpCalories === null || item.mfpCalories === undefined ? '' : `<button class="btn btn-ghost" onclick="clearBenchmarkCaseMfp('${item.id}')">Clear MFP</button>`}
           <button class="btn btn-danger btn-icon" title="Archive case" aria-label="Archive benchmark case" onclick="archiveBenchmarkCase('${item.id}')">${trashSvg}</button>
         </td>
       </tr>
@@ -2679,6 +2682,44 @@ async function saveBenchmarkCase() {
 async function archiveBenchmarkCase(id) {
   if (!confirm('Archive this benchmark case? Existing run history will keep its stored result rows.')) return;
   await api(`/accuracy-benchmarks/cases/${id}`, { method: 'DELETE' });
+  await loadAccuracyBenchmarks();
+}
+
+function openMfpLookup(id) {
+  const item = accuracyBenchmarkCases.find(row => row.id === id);
+  if (!item) return;
+  const query = item.inputText || item.displayName || '';
+  const payload = {
+    caseId: item.id,
+    foodText: query,
+    apiBase: location.origin,
+    internalKey: API_KEY,
+    reference: {
+      calories: item.referenceCalories,
+      protein: item.referenceProtein,
+      carbs: item.referenceCarbs,
+      fat: item.referenceFat
+    }
+  };
+  window.postMessage({ type: 'FOOD_APP_MFP_LOOKUP_START', payload }, location.origin);
+  const msg = document.getElementById('benchmark-mfp-msg');
+  if (msg) {
+    msg.style.display = 'block';
+    msg.textContent = `MFP lookup started for "${query}". Choose a MyFitnessPal result, then use the floating capture button.`;
+  }
+  const fragment = encodeURIComponent(JSON.stringify({
+    caseId: item.id,
+    foodText: query,
+    apiBase: location.origin,
+    reference: payload.reference
+  }));
+  const searchUrl = `https://www.myfitnesspal.com/food/search?search=${encodeURIComponent(query)}#foodAppMfpCapture=${fragment}`;
+  window.open(searchUrl, '_blank', 'noopener,noreferrer');
+}
+
+async function clearBenchmarkCaseMfp(id) {
+  if (!confirm('Clear the saved MyFitnessPal comparison for this benchmark case?')) return;
+  await api(`/accuracy-benchmarks/cases/${id}/mfp`, { method: 'DELETE' });
   await loadAccuracyBenchmarks();
 }
 

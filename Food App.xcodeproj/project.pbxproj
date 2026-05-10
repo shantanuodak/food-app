@@ -476,9 +476,9 @@
 				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_TEAM = 9CL8Q244T8;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Food Camera Widget/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Food Camera";
 				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
-				INFOPLIST_FILE = "Food Camera Widget/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -507,9 +507,9 @@
 				CURRENT_PROJECT_VERSION = 22;
 				DEVELOPMENT_TEAM = 9CL8Q244T8;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Food Camera Widget/Info.plist";
 				INFOPLIST_KEY_CFBundleDisplayName = "Food Camera";
 				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
-				INFOPLIST_FILE = "Food Camera Widget/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",

@@ -117,6 +117,9 @@ extension MainLoggingShellView {
             onServerBackedRowCleared: { row in
                 handleServerBackedRowCleared(row)
             },
+            onKeyboardDone: {
+                triggerParseNow()
+            },
             onQuantityFastPathUpdated: { rowID in
                 handleQuantityFastPathUpdate(rowID: rowID)
             }

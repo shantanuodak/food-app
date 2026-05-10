@@ -32,6 +32,16 @@ export type BenchmarkCaseInput = {
   mfpCollectedAt: string | null;
 };
 
+export type BenchmarkMfpCaptureInput = {
+  itemName: string;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+  notes: string | null;
+  collectedAt: string | null;
+};
+
 export type BenchmarkCase = BenchmarkCaseInput & {
   id: string;
   createdAt: string;
@@ -514,6 +524,57 @@ export async function updateBenchmarkCase(id: string, input: BenchmarkCaseInput)
       input.mfpNotes,
       input.mfpCollectedAt
     ]
+  );
+  if ((result.rowCount ?? 0) === 0) return null;
+  return getBenchmarkCase(id);
+}
+
+export async function updateBenchmarkCaseMfp(id: string, input: BenchmarkMfpCaptureInput): Promise<BenchmarkCase | null> {
+  const result = await pool.query<{ id: string }>(
+    `
+    UPDATE benchmark_cases
+    SET mfp_item_name = $2,
+        mfp_calories = $3,
+        mfp_protein = $4,
+        mfp_carbs = $5,
+        mfp_fat = $6,
+        mfp_notes = $7,
+        mfp_collected_at = COALESCE($8::timestamptz, NOW()),
+        updated_at = NOW()
+    WHERE id = $1
+    RETURNING id
+    `,
+    [
+      id,
+      input.itemName,
+      input.calories,
+      input.protein,
+      input.carbs,
+      input.fat,
+      input.notes,
+      input.collectedAt
+    ]
+  );
+  if ((result.rowCount ?? 0) === 0) return null;
+  return getBenchmarkCase(id);
+}
+
+export async function clearBenchmarkCaseMfp(id: string): Promise<BenchmarkCase | null> {
+  const result = await pool.query<{ id: string }>(
+    `
+    UPDATE benchmark_cases
+    SET mfp_item_name = NULL,
+        mfp_calories = NULL,
+        mfp_protein = NULL,
+        mfp_carbs = NULL,
+        mfp_fat = NULL,
+        mfp_notes = NULL,
+        mfp_collected_at = NULL,
+        updated_at = NOW()
+    WHERE id = $1
+    RETURNING id
+    `,
+    [id]
   );
   if ((result.rowCount ?? 0) === 0) return null;
   return getBenchmarkCase(id);

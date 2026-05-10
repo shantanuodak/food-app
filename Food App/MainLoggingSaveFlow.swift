@@ -972,9 +972,6 @@ extension MainLoggingShellView {
         if inputRows[index].imageRef == nil {
             inputRows[index].imageRef = imageRef
         }
-        if inputRows[index].imageRef != nil {
-            inputRows[index].imagePreviewData = nil
-        }
     }
 
     func syncSavedLogToAppleHealthIfEnabled(_ request: SaveLogRequest, response: SaveLogResponse) async -> Bool {

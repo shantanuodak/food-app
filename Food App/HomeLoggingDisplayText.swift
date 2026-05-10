@@ -116,11 +116,14 @@ enum HomeLoggingDisplayText {
 
         if let item = items.first {
             if let explanation = item.explanation, !explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return explanation
+                let trimmedExplanation = explanation.trimmingCharacters(in: .whitespacesAndNewlines)
+                let qty = formatOneDecimal(item.quantity)
+                return "\(trimmedExplanation) Food App used \(qty) \(item.unit) (~\(formatOneDecimal(item.grams)) g) with \(sourceLabel) nutrition data, then scaled calories, protein, carbs, and fat from that serving."
             }
             var thought = "Interpreted “\(rowText)” as “\(item.name)”. "
-            thought += "Used \(formatOneDecimal(item.quantity)) \(item.unit) (~\(formatOneDecimal(item.grams)) g) "
-            thought += "with \(sourceLabel) nutrition data to estimate \(Int(item.calories.rounded())) kcal and scale macros."
+            thought += "Food App used \(formatOneDecimal(item.quantity)) \(item.unit) (~\(formatOneDecimal(item.grams)) g) "
+            thought += "with \(sourceLabel) nutrition data to estimate \(Int(item.calories.rounded())) kcal. "
+            thought += "The protein, carbs, and fat values are scaled from the same matched serving so the macro total stays consistent with the calorie estimate."
             if row.isApproximate || needsClarification {
                 thought += " This is marked as approximate because confidence is below the strict threshold."
             }
