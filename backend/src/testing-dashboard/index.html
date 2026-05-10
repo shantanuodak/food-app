@@ -105,7 +105,7 @@
     .header-actions { display: flex; align-items: center; gap: 12px; }
     .refresh-info { color: var(--muted); font-size: 12px; font-family: var(--font-mono); }
 
-    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+    main { padding: 24px; max-width: 1440px; margin: 0 auto; }
 
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
@@ -886,6 +886,34 @@
       padding: 13px 16px;
       color: #e6e8f3;
     }
+    .parse-debug-wrap {
+      overflow-x: auto;
+    }
+    .parse-debug-table {
+      min-width: 1540px;
+      table-layout: fixed;
+    }
+    .parse-debug-table th,
+    .parse-debug-table td {
+      white-space: nowrap;
+    }
+    .parse-debug-table .parse-time { width: 175px; }
+    .parse-debug-table .parse-input { width: 300px; }
+    .parse-debug-table .parse-route { width: 88px; }
+    .parse-debug-table .parse-cache { width: 78px; }
+    .parse-debug-table .parse-cost { width: 112px; }
+    .parse-debug-table .parse-save { width: 128px; }
+    .parse-debug-table .parse-attempt { width: 132px; }
+    .parse-debug-table .parse-number { width: 72px; }
+    .parse-debug-table .parse-confidence { width: 112px; }
+    .parse-debug-table .parse-clarification { width: 132px; }
+    .parse-debug-table .truncate {
+      max-width: 272px;
+    }
+    .parse-debug-table .badge {
+      white-space: nowrap;
+      flex-wrap: nowrap;
+    }
     .eval-controls,
     .provider-toggles {
       gap: 12px;
@@ -1364,23 +1392,23 @@
           </select>
           <button class="btn btn-ghost" onclick="loadRecentParses()">↻ Refresh</button>
         </div>
-        <div class="table-wrap">
-          <table>
+        <div class="table-wrap parse-debug-wrap">
+          <table class="parse-debug-table">
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Input</th>
-                <th>Route</th>
-                <th>Cache</th>
-                <th>AI Cost</th>
-                <th>Save</th>
-                <th>Attempt</th>
-                <th>Cal</th>
-                <th>P (g)</th>
-                <th>C (g)</th>
-                <th>F (g)</th>
-                <th>Confidence</th>
-                <th>Clarification?</th>
+                <th class="parse-time">Time</th>
+                <th class="parse-input">Input</th>
+                <th class="parse-route">Route</th>
+                <th class="parse-cache">Cache</th>
+                <th class="parse-cost">AI Cost</th>
+                <th class="parse-save">Save</th>
+                <th class="parse-attempt">Attempt</th>
+                <th class="parse-number">Cal</th>
+                <th class="parse-number">P (g)</th>
+                <th class="parse-number">C (g)</th>
+                <th class="parse-number">F (g)</th>
+                <th class="parse-confidence">Confidence</th>
+                <th class="parse-clarification">Clarification?</th>
               </tr>
             </thead>
             <tbody id="parses-tbody">
@@ -2509,19 +2537,19 @@ function renderParses(parses) {
     const time = new Date(p.createdAt).toLocaleTimeString() + ' ' + new Date(p.createdAt).toLocaleDateString();
     tbody.innerHTML += `
       <tr>
-        <td class="mono text-muted" style="font-size:12px; white-space:nowrap" title="${escHtml(p.requestId)}">${time}</td>
-        <td class="truncate" title="${escHtml(p.rawText)}&#10;Request: ${escHtml(p.requestId)}">${escHtml(p.rawText)}</td>
-        <td>${routeBadge(p.route)}</td>
-        <td>${cacheBadge}</td>
-        <td>${aiCostBadge}</td>
-        <td>${saveBadge}</td>
-        <td>${attemptBadge}</td>
-        <td class="mono">${p.calories !== null ? fmt(p.calories) : '—'}</td>
-        <td class="mono">${p.proteinG !== null ? fmt(p.proteinG, 1) : '—'}</td>
-        <td class="mono">${p.carbsG !== null ? fmt(p.carbsG, 1) : '—'}</td>
-        <td class="mono">${p.fatG !== null ? fmt(p.fatG, 1) : '—'}</td>
-        <td>${confCell}</td>
-        <td>${clarBadge}</td>
+        <td class="mono text-muted parse-time" style="font-size:12px;" title="${escHtml(p.requestId)}">${time}</td>
+        <td class="truncate parse-input" title="${escHtml(p.rawText)}&#10;Request: ${escHtml(p.requestId)}">${escHtml(p.rawText)}</td>
+        <td class="parse-route">${routeBadge(p.route)}</td>
+        <td class="parse-cache">${cacheBadge}</td>
+        <td class="parse-cost">${aiCostBadge}</td>
+        <td class="parse-save">${saveBadge}</td>
+        <td class="parse-attempt">${attemptBadge}</td>
+        <td class="mono parse-number">${p.calories !== null ? fmt(p.calories) : '—'}</td>
+        <td class="mono parse-number">${p.proteinG !== null ? fmt(p.proteinG, 1) : '—'}</td>
+        <td class="mono parse-number">${p.carbsG !== null ? fmt(p.carbsG, 1) : '—'}</td>
+        <td class="mono parse-number">${p.fatG !== null ? fmt(p.fatG, 1) : '—'}</td>
+        <td class="parse-confidence">${confCell}</td>
+        <td class="parse-clarification">${clarBadge}</td>
       </tr>`;
   }
 }
