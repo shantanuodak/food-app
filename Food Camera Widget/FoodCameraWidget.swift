@@ -1,5 +1,6 @@
 import SwiftUI
 import WidgetKit
+import AppIntents
 
 struct FoodCameraWidgetEntry: TimelineEntry {
     let date: Date
@@ -102,9 +103,32 @@ struct FoodCameraWidget: Widget {
     }
 }
 
+@available(iOS 18.0, *)
+struct FoodCameraControl: ControlWidget {
+    let kind = "FoodCameraControl"
+
+    var body: some ControlWidgetConfiguration {
+        StaticControlConfiguration(kind: kind) {
+            ControlWidgetButton(action: OpenURLIntent(FoodCameraURL.camera)) {
+                Label("Food Camera", systemImage: "fork.knife")
+            }
+            .tint(.orange)
+        }
+        .displayName("Food Camera")
+        .description("Open Food App directly to the quick camera.")
+    }
+}
+
+enum FoodCameraURL {
+    static let camera = URL(string: "foodapp://camera")!
+}
+
 @main
 struct FoodCameraWidgetBundle: WidgetBundle {
     var body: some Widget {
         FoodCameraWidget()
+        if #available(iOS 18.0, *) {
+            FoodCameraControl()
+        }
     }
 }

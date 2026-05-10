@@ -271,16 +271,6 @@ extension MainLoggingShellView {
                         selectedCameraSource = nil
                         if isQuickCameraCaptureActive {
                             isQuickCameraCaptureActive = false
-                            parseError = nil
-                            saveSuccessMessage = nil
-                            parseInfoMessage = "Analyzing food photo..."
-                            Task {
-                                await QuickCameraLoggingService.processCapturedImage(
-                                    image,
-                                    apiClient: appStore.apiClient
-                                )
-                            }
-                            return
                         }
                         cameraDrawerImage = image
                         cameraDrawerState = .analyzing(image)
