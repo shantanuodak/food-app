@@ -3,7 +3,7 @@ import { ensureUserExists } from './userService.js';
 import { createHash } from 'node:crypto';
 
 const ONBOARDING_PROVENANCE_MODE = 'computed_provenance_v1' as const;
-const ONBOARDING_CALCULATOR_VERSION = 'onboarding-target-calculator-v3' as const;
+const ONBOARDING_CALCULATOR_VERSION = 'onboarding-target-calculator-v4' as const;
 
 export type OnboardingInput = {
   userId: string;
@@ -303,39 +303,39 @@ function normalizeInputs(input: OnboardingInput): Record<string, unknown> {
   };
 }
 
-function resolveActivityAdjustment(input: OnboardingInput): number {
+function resolveActivityMultiplier(input: OnboardingInput): number {
   if (input.activityDetail) {
     switch (input.activityDetail) {
       case 'mostlySitting':
-        return -80;
+        return 1.2;
       case 'lightlyActive':
-        return 0;
+        return 1.375;
       case 'moderatelyActive':
-        return 120;
+        return 1.55;
       case 'veryActive':
-        return 240;
+        return 1.725;
     }
   }
 
   switch (input.activityLevel) {
     case 'low':
-      return -80;
+      return 1.2;
     case 'moderate':
-      return 0;
+      return 1.375;
     case 'high':
-      return 240;
+      return 1.725;
   }
 }
 
-function resolvePaceAdjustment(pace?: OnboardingInput['pace']): number {
+function resolveDailyDeficitForPace(pace?: OnboardingInput['pace']): number {
   switch (pace) {
     case 'conservative':
-      return 80;
+      return 250;
     case 'aggressive':
-      return -120;
+      return 750;
     case 'balanced':
     default:
-      return 0;
+      return 500;
   }
 }
 
@@ -345,23 +345,23 @@ export function calculateOnboardingTargets(input: OnboardingInput): OnboardingTa
   if (hasBiometricInputs(input)) {
     const sexOffset = input.sex === 'male' ? 5 : -161;
     const bmr = (10 * input.weightKg) + (6.25 * input.heightCm) - (5 * input.age) + sexOffset;
-    const maintenance = Math.max(1200, Math.round(bmr * 1.2));
+    const minFloor = input.sex === 'male' ? 1500 : 1200;
+    const maintenance = Math.max(minFloor, Math.round(bmr * resolveActivityMultiplier(input)));
+    const paceCalories = resolveDailyDeficitForPace(input.pace);
     let calorieTarget = maintenance;
 
     switch (input.goal) {
       case 'lose':
-        calorieTarget -= 350;
+        calorieTarget -= paceCalories;
         break;
       case 'gain':
-        calorieTarget += 280;
+        calorieTarget += paceCalories;
         break;
       case 'maintain':
         break;
     }
 
-    calorieTarget += resolveActivityAdjustment(input);
-    calorieTarget += resolvePaceAdjustment(input.pace);
-    calorieTarget = Math.max(1200, calorieTarget);
+    calorieTarget = Math.max(minFloor, calorieTarget);
 
     const macros = resolveMacroTargets(calorieTarget);
     return {

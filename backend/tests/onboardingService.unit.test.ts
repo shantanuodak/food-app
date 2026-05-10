@@ -36,8 +36,8 @@ describe('onboarding target calculator', () => {
     });
 
     expect(result.calculationMode).toBe('biometric');
-    expect(result.calculatorVersion).toBe('onboarding-target-calculator-v3');
-    expect(result.calorieTarget).toBe(1591);
+    expect(result.calculatorVersion).toBe('onboarding-target-calculator-v4');
+    expect(result.calorieTarget).toBe(1724);
     expect(result.normalizedInputs).toMatchObject({
       age: 30,
       sex: 'male',
@@ -55,6 +55,80 @@ describe('onboarding target calculator', () => {
     expect((result.fat * 9) / result.calorieTarget).toBeLessThan(0.33);
   });
 
+  test('matches iOS onboarding calculator for representative biometric fixtures', async () => {
+    const { calculateOnboardingTargets } = await loadOnboardingService();
+
+    const fixtures = [
+      {
+        input: {
+          age: 30,
+          sex: 'male' as const,
+          heightCm: 170,
+          weightKg: 70,
+          goal: 'lose' as const,
+          activityDetail: 'lightlyActive' as const,
+          activityLevel: 'moderate' as const,
+          pace: 'balanced' as const
+        },
+        expectedTarget: 1724
+      },
+      {
+        input: {
+          age: 25,
+          sex: 'female' as const,
+          heightCm: 160,
+          weightKg: 55,
+          goal: 'maintain' as const,
+          activityDetail: 'moderatelyActive' as const,
+          activityLevel: 'moderate' as const,
+          pace: 'conservative' as const
+        },
+        expectedTarget: 1959
+      },
+      {
+        input: {
+          age: 40,
+          sex: 'other' as const,
+          heightCm: 180,
+          weightKg: 82,
+          goal: 'gain' as const,
+          activityDetail: 'veryActive' as const,
+          activityLevel: 'high' as const,
+          pace: 'aggressive' as const
+        },
+        expectedTarget: 3482
+      },
+      {
+        input: {
+          age: 30,
+          sex: 'male' as const,
+          heightCm: 183,
+          weightKg: 82,
+          goal: 'lose' as const,
+          activityDetail: 'veryActive' as const,
+          activityLevel: 'high' as const,
+          pace: 'aggressive' as const
+        },
+        expectedTarget: 2387
+      }
+    ];
+
+    for (const fixture of fixtures) {
+      const result = calculateOnboardingTargets({
+        userId: 'u1',
+        dietPreference: 'none',
+        allergies: [],
+        units: 'metric',
+        timezone: 'UTC',
+        ...fixture.input
+      });
+
+      expect(result.calculationMode).toBe('biometric');
+      expect(result.calorieTarget).toBe(fixture.expectedTarget);
+      expect((4 * result.protein) + (4 * result.carbs) + (9 * result.fat)).toBe(result.calorieTarget);
+    }
+  });
+
   test('keeps legacy calorie buckets when biometrics are absent but still uses aligned macro ratios', async () => {
     const { calculateOnboardingTargets } = await loadOnboardingService();
 
@@ -69,7 +143,7 @@ describe('onboarding target calculator', () => {
     });
 
     expect(result.calculationMode).toBe('legacy');
-    expect(result.calculatorVersion).toBe('onboarding-target-calculator-v3');
+    expect(result.calculatorVersion).toBe('onboarding-target-calculator-v4');
     expect(result.calorieTarget).toBe(2200);
     expect(result.normalizedInputs).toMatchObject({
       age: null,
