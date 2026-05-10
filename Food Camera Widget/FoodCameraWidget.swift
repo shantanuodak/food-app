@@ -109,7 +109,7 @@ struct FoodCameraControl: ControlWidget {
 
     var body: some ControlWidgetConfiguration {
         StaticControlConfiguration(kind: kind) {
-            ControlWidgetButton(action: OpenURLIntent(FoodCameraURL.camera)) {
+            ControlWidgetButton(action: OpenFoodCameraControlIntent()) {
                 Label("Food Camera", systemImage: "fork.knife")
             }
             .tint(.orange)
@@ -119,8 +119,19 @@ struct FoodCameraControl: ControlWidget {
     }
 }
 
+@available(iOS 18.0, *)
+struct OpenFoodCameraControlIntent: AppIntent {
+    static var title: LocalizedStringResource = "Open Food Camera"
+    static var description = IntentDescription("Opens Food App directly to the quick camera logger.")
+    static var openAppWhenRun = true
+
+    func perform() async throws -> some IntentResult {
+        .result(opensIntent: OpenURLIntent(FoodCameraURL.camera))
+    }
+}
+
 enum FoodCameraURL {
-    static let camera = URL(string: "foodapp://camera")!
+    nonisolated static let camera = URL(string: "foodapp://camera")!
 }
 
 @main
