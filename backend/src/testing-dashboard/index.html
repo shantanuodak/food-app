@@ -1018,6 +1018,7 @@
       <button onclick="switchTab('benchmarks', this)">Benchmarks</button>
       <button onclick="switchTab('prompt-lab', this)">Prompt Lab</button>
       <button onclick="switchTab('eval-history', this)">History</button>
+      <button onclick="switchTab('roadmap', this)">Roadmap</button>
       <button onclick="switchTab('feedback', this)">Feedback</button>
       <button onclick="switchTab('advanced', this)">Advanced</button>
     </nav>
@@ -1352,7 +1353,7 @@
           <div>
             <h2 style="margin:0">Parse Debug Trace</h2>
             <p class="text-muted" style="font-size:13px; margin:4px 0 0;">
-              Instrumentation only. Superseded typing parses can appear here without becoming saved food logs.
+              Instrumentation only. Superseded typing parses can appear here without becoming saved food logs; route and cost show whether Gemini actually ran.
             </p>
           </div>
           <select id="conf-filter" onchange="filterParses()" style="background:var(--surface2);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;cursor:pointer;">
@@ -1369,6 +1370,10 @@
               <tr>
                 <th>Time</th>
                 <th>Input</th>
+                <th>Route</th>
+                <th>Cache</th>
+                <th>AI Cost</th>
+                <th>Save</th>
                 <th>Attempt</th>
                 <th>Cal</th>
                 <th>P (g)</th>
@@ -1379,7 +1384,7 @@
               </tr>
             </thead>
             <tbody id="parses-tbody">
-              <tr><td colspan="10" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+              <tr><td colspan="13" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1458,6 +1463,93 @@
       </div>
     </div>
 
+    <!-- ==================== ROADMAP ==================== -->
+    <div id="tab-roadmap" class="tab-panel">
+      <div class="section">
+        <div class="row-actions">
+          <h2 style="margin:0">Upcoming features and fixes</h2>
+          <button class="btn btn-ghost" onclick="loadRoadmap()">↻ Refresh</button>
+        </div>
+        <p class="text-muted" style="font-size:13px; margin-top:8px;">
+          This is the CMS source for the app's public roadmap. Visible items appear for all app users.
+        </p>
+
+        <div class="eval-controls" style="margin-top:16px;">
+          <div class="eval-control">
+            <label for="roadmap-type">Bucket</label>
+            <select id="roadmap-type">
+              <option value="fix">Upcoming fixes</option>
+              <option value="feature">Upcoming features</option>
+            </select>
+          </div>
+          <div class="eval-control" style="flex:1; min-width:240px;">
+            <label for="roadmap-title">Title</label>
+            <input id="roadmap-title" type="text" maxlength="160" placeholder="Short user-facing title" />
+          </div>
+          <div class="eval-control">
+            <label for="roadmap-status">Status</label>
+            <select id="roadmap-status">
+              <option value="not_started">Not started</option>
+              <option value="in_progress">In progress</option>
+              <option value="done">Done</option>
+            </select>
+          </div>
+          <div class="eval-control">
+            <label for="roadmap-release">Release</label>
+            <input id="roadmap-release" type="text" maxlength="40" placeholder="TBD or v1.2" />
+          </div>
+          <div class="eval-control">
+            <label for="roadmap-target-date">Target date</label>
+            <input id="roadmap-target-date" type="date" />
+          </div>
+          <div class="eval-control">
+            <label for="roadmap-target-label">Date label</label>
+            <input id="roadmap-target-label" type="text" maxlength="40" value="TBD" />
+          </div>
+          <div class="eval-control">
+            <label for="roadmap-order">Order</label>
+            <input id="roadmap-order" type="number" min="0" value="0" />
+          </div>
+        </div>
+
+        <div class="eval-control" style="margin-top:10px;">
+          <label for="roadmap-description">Description</label>
+          <textarea id="roadmap-description" class="dashboard-input" rows="3" maxlength="1200" placeholder="Concise explanation users will see in the app."></textarea>
+        </div>
+        <input id="roadmap-id" type="hidden" />
+        <input id="roadmap-source-feedback-id" type="hidden" />
+        <div class="row-actions" style="margin-top:12px;">
+          <label class="provider-toggle"><input id="roadmap-visible" type="checkbox" checked /> Visible in app</label>
+          <span class="text-muted" id="roadmap-source-label"></span>
+          <button class="btn btn-ghost" onclick="resetRoadmapForm()">Clear</button>
+          <button class="btn btn-primary" onclick="saveRoadmapItem()">Save roadmap item</button>
+        </div>
+
+        <div class="segment-control" style="margin-top:22px;">
+          <button class="active" data-roadmap-filter="fix" onclick="setRoadmapFilter('fix')">Upcoming fixes</button>
+          <button data-roadmap-filter="feature" onclick="setRoadmapFilter('feature')">Upcoming features</button>
+        </div>
+        <div class="table-wrap" style="margin-top:12px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Status</th>
+                <th>Release</th>
+                <th>Date</th>
+                <th>Visible</th>
+                <th>Source</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="roadmap-tbody">
+              <tr><td colspan="7" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
     <!-- ==================== FEEDBACK ==================== -->
     <div id="tab-feedback" class="tab-panel">
       <div class="section">
@@ -1477,15 +1569,17 @@
             <thead>
               <tr>
                 <th>When</th>
+                <th>Type</th>
                 <th>Email</th>
                 <th>Message</th>
                 <th>App version</th>
                 <th>Device</th>
                 <th>OS</th>
+                <th>Promote</th>
               </tr>
             </thead>
             <tbody id="feedback-tbody">
-              <tr><td colspan="6" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+              <tr><td colspan="8" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1568,6 +1662,8 @@ let advancedSection = 'saved-logs';
 let promptLabLoaded = false;
 let promptLabRuntimeRefreshToken = 0;
 let promptLabRuntimeRefreshTimer = null;
+let roadmapItems = [];
+let roadmapFilter = 'fix';
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -1586,6 +1682,7 @@ function switchTab(name, btn) {
       queuePromptLabRuntimeRefresh();
     }
   }
+  if (name === 'roadmap') loadRoadmap();
   if (name === 'feedback') loadFeedback();
   if (name === 'advanced') {
     showAdvancedSection(advancedSection);
@@ -2368,13 +2465,13 @@ function renderSavedLogs(data) {
 /* ====================================================================== */
 async function loadRecentParses() {
   const tbody = document.getElementById('parses-tbody');
-  tbody.innerHTML = '<tr><td colspan="10" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="13" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
   try {
     const data = await api('/recent-parses');
     allParsesData = data.parses;
     renderParses(allParsesData);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="10" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="13" class="text-red" style="padding:16px">${e.message}</td></tr>`;
   }
 }
 
@@ -2390,7 +2487,7 @@ function filterParses() {
 function renderParses(parses) {
   const tbody = document.getElementById('parses-tbody');
   if (!parses.length) {
-    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="icon">📭</div>No parse requests found.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="icon">📭</div>No parse requests found.</div></td></tr>';
     return;
   }
   tbody.innerHTML = '';
@@ -2403,13 +2500,20 @@ function renderParses(parses) {
       : '<span class="badge badge-muted">No</span>';
     const saveBadge = p.saveStatus === 'saved'
       ? '<span class="badge badge-green" title="Matched to a saved food_log">Saved</span>'
-      : '<span class="badge badge-yellow" title="Parsed, but no saved food_log is linked yet">Parse only</span>';
+      : '<span class="badge badge-yellow" title="Parsed, but no saved food_log is linked yet">Parsed, not saved</span>';
+    const cacheBadge = p.cacheHit
+      ? '<span class="badge badge-green" title="Served from parse cache; no new Gemini spend for this parse">Hit</span>'
+      : '<span class="badge badge-muted" title="Cache miss or unresolved parse">Miss</span>';
+    const aiCostBadge = renderAiCostBadge(p);
     const attemptBadge = renderSaveAttemptBadge(p);
     const time = new Date(p.createdAt).toLocaleTimeString() + ' ' + new Date(p.createdAt).toLocaleDateString();
     tbody.innerHTML += `
       <tr>
-        <td class="mono text-muted" style="font-size:12px; white-space:nowrap">${time}</td>
-        <td class="truncate" title="${escHtml(p.rawText)}">${escHtml(p.rawText)}</td>
+        <td class="mono text-muted" style="font-size:12px; white-space:nowrap" title="${escHtml(p.requestId)}">${time}</td>
+        <td class="truncate" title="${escHtml(p.rawText)}&#10;Request: ${escHtml(p.requestId)}">${escHtml(p.rawText)}</td>
+        <td>${routeBadge(p.route)}</td>
+        <td>${cacheBadge}</td>
+        <td>${aiCostBadge}</td>
         <td>${saveBadge}</td>
         <td>${attemptBadge}</td>
         <td class="mono">${p.calories !== null ? fmt(p.calories) : '—'}</td>
@@ -2420,6 +2524,17 @@ function renderParses(parses) {
         <td>${clarBadge}</td>
       </tr>`;
   }
+}
+
+function renderAiCostBadge(p) {
+  const cost = Number(p.aiCostUsd || 0);
+  const eventCount = Number(p.aiCostEventCount || 0);
+  if (!eventCount) {
+    return '<span class="badge badge-muted" title="No ai_cost_events linked to this parse request">No AI spend</span>';
+  }
+  const tokens = `${fmt(p.aiInputTokens || 0)} in / ${fmt(p.aiOutputTokens || 0)} out`;
+  const title = `${eventCount} event${eventCount === 1 ? '' : 's'} · ${escHtml(p.aiCostFeatures || 'unknown feature')} · ${escHtml(p.aiCostModels || 'unknown model')} · ${tokens}`;
+  return `<span class="badge badge-blue" title="${title}">$${cost.toFixed(6)}</span>`;
 }
 
 function renderSaveAttemptBadge(p) {
@@ -2534,7 +2649,7 @@ async function loadFeedback() {
     document.getElementById('feedback-latest').textContent = items[0] ? fmtTime(items[0].createdAt) : '—';
 
     if (!items.length) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">💬</div>No feedback yet.</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="8"><div class="empty-state"><div class="icon">💬</div>No feedback yet.</div></td></tr>';
       return;
     }
     tbody.innerHTML = '';
@@ -2545,16 +2660,169 @@ async function loadFeedback() {
       tbody.innerHTML += `
         <tr>
           <td class="mono text-muted" style="font-size:12px;white-space:nowrap;">${fmtTime(item.createdAt)}</td>
+          <td>${feedbackTypeBadge(item.feedbackType)}</td>
           <td>${escHtml(item.userEmail) || '<span class="text-muted">anonymous</span>'}</td>
           <td style="white-space:pre-wrap;max-width:480px;">${escHtml(item.message)}</td>
           <td class="mono" style="font-size:12px">${versionLabel}</td>
           <td class="mono" style="font-size:12px">${escHtml(item.deviceModel) || '<span class="text-muted">—</span>'}</td>
           <td class="mono" style="font-size:12px">${escHtml(item.osVersion) || '<span class="text-muted">—</span>'}</td>
+          <td>
+            <button class="btn btn-ghost" onclick='promoteFeedbackToRoadmap(${JSON.stringify(item).replace(/'/g, '&#39;')})'>
+              Promote
+            </button>
+          </td>
         </tr>`;
     }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="6" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${e.message}</td></tr>`;
   }
+}
+
+function roadmapStatusLabel(status) {
+  return {
+    not_started: 'Not started',
+    in_progress: 'In progress',
+    done: 'Done'
+  }[status] || status || '—';
+}
+
+function roadmapStatusBadge(status) {
+  const cls = status === 'done' ? 'badge-green' : status === 'in_progress' ? 'badge-blue' : 'badge-muted';
+  return `<span class="badge ${cls}">${escHtml(roadmapStatusLabel(status))}</span>`;
+}
+
+function feedbackTypeBadge(type) {
+  const normalized = type || 'general';
+  const label = normalized === 'bug' ? 'Bug report' : normalized === 'feature' ? 'Feature request' : 'General';
+  const cls = normalized === 'bug' ? 'badge-red' : normalized === 'feature' ? 'badge-blue' : 'badge-muted';
+  return `<span class="badge ${cls}">${label}</span>`;
+}
+
+function setRoadmapFilter(type) {
+  roadmapFilter = type;
+  document.querySelectorAll('[data-roadmap-filter]').forEach(button => {
+    button.classList.toggle('active', button.dataset.roadmapFilter === type);
+  });
+  renderRoadmap();
+}
+
+async function loadRoadmap() {
+  const tbody = document.getElementById('roadmap-tbody');
+  try {
+    const data = await api('/roadmap');
+    roadmapItems = Array.isArray(data.items) ? data.items : [];
+    renderRoadmap();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${escHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderRoadmap() {
+  const tbody = document.getElementById('roadmap-tbody');
+  const items = roadmapItems.filter(item => item.itemType === roadmapFilter);
+  if (!items.length) {
+    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">🗺️</div>No ${roadmapFilter === 'fix' ? 'fixes' : 'features'} yet.</div></td></tr>`;
+    return;
+  }
+  tbody.innerHTML = '';
+  for (const item of items) {
+    const source = item.sourceFeedback
+      ? `${feedbackTypeBadge(item.sourceFeedback.feedbackType)}<div class="text-muted" style="margin-top:4px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(item.sourceFeedback.message)}</div>`
+      : '<span class="text-muted">Manual</span>';
+    tbody.innerHTML += `
+      <tr>
+        <td style="max-width:360px;">
+          <strong>${escHtml(item.title)}</strong>
+          <div class="text-muted" style="white-space:pre-wrap;margin-top:4px;">${escHtml(item.description || '')}</div>
+        </td>
+        <td>${roadmapStatusBadge(item.status)}</td>
+        <td class="mono">${escHtml(item.releaseVersion || 'TBD')}</td>
+        <td class="mono">${escHtml(item.targetDate || item.targetDateLabel || 'TBD')}</td>
+        <td>${item.isVisible ? '<span class="badge badge-green">Visible</span>' : '<span class="badge badge-muted">Hidden</span>'}</td>
+        <td>${source}</td>
+        <td><button class="btn btn-ghost" onclick="editRoadmapItem('${item.id}')">Edit</button></td>
+      </tr>`;
+  }
+}
+
+function resetRoadmapForm() {
+  document.getElementById('roadmap-id').value = '';
+  document.getElementById('roadmap-source-feedback-id').value = '';
+  document.getElementById('roadmap-source-label').textContent = '';
+  document.getElementById('roadmap-type').value = roadmapFilter;
+  document.getElementById('roadmap-title').value = '';
+  document.getElementById('roadmap-description').value = '';
+  document.getElementById('roadmap-status').value = 'not_started';
+  document.getElementById('roadmap-release').value = '';
+  document.getElementById('roadmap-target-date').value = '';
+  document.getElementById('roadmap-target-label').value = 'TBD';
+  document.getElementById('roadmap-order').value = '0';
+  document.getElementById('roadmap-visible').checked = true;
+}
+
+function editRoadmapItem(id) {
+  const item = roadmapItems.find(row => row.id === id);
+  if (!item) return;
+  document.getElementById('roadmap-id').value = item.id;
+  document.getElementById('roadmap-source-feedback-id').value = item.sourceFeedbackId || '';
+  document.getElementById('roadmap-source-label').textContent = item.sourceFeedbackId ? `Linked feedback ${item.sourceFeedbackId.slice(0, 8)}` : '';
+  document.getElementById('roadmap-type').value = item.itemType;
+  document.getElementById('roadmap-title').value = item.title || '';
+  document.getElementById('roadmap-description').value = item.description || '';
+  document.getElementById('roadmap-status').value = item.status || 'not_started';
+  document.getElementById('roadmap-release').value = item.releaseVersion || '';
+  document.getElementById('roadmap-target-date').value = item.targetDate || '';
+  document.getElementById('roadmap-target-label').value = item.targetDateLabel || 'TBD';
+  document.getElementById('roadmap-order').value = String(item.displayOrder || 0);
+  document.getElementById('roadmap-visible').checked = Boolean(item.isVisible);
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function promoteFeedbackToRoadmap(item) {
+  const type = item.feedbackType === 'bug' ? 'fix' : 'feature';
+  switchTab('roadmap', document.querySelector('nav button[onclick*="roadmap"]'));
+  roadmapFilter = type;
+  setRoadmapFilter(type);
+  document.getElementById('roadmap-id').value = '';
+  document.getElementById('roadmap-source-feedback-id').value = item.id;
+  document.getElementById('roadmap-source-label').textContent = `Linked feedback from ${item.userEmail || 'anonymous'}`;
+  document.getElementById('roadmap-type').value = type;
+  document.getElementById('roadmap-title').value = item.feedbackType === 'bug' ? 'Fix reported issue' : 'User-requested feature';
+  document.getElementById('roadmap-description').value = item.message || '';
+  document.getElementById('roadmap-status').value = 'not_started';
+  document.getElementById('roadmap-release').value = '';
+  document.getElementById('roadmap-target-date').value = '';
+  document.getElementById('roadmap-target-label').value = 'TBD';
+  document.getElementById('roadmap-order').value = '0';
+  document.getElementById('roadmap-visible').checked = true;
+}
+
+async function saveRoadmapItem() {
+  const id = document.getElementById('roadmap-id').value.trim();
+  const body = {
+    itemType: document.getElementById('roadmap-type').value,
+    title: document.getElementById('roadmap-title').value.trim(),
+    description: document.getElementById('roadmap-description').value.trim(),
+    status: document.getElementById('roadmap-status').value,
+    releaseVersion: document.getElementById('roadmap-release').value.trim() || null,
+    targetDate: document.getElementById('roadmap-target-date').value || null,
+    targetDateLabel: document.getElementById('roadmap-target-label').value.trim() || 'TBD',
+    displayOrder: Number(document.getElementById('roadmap-order').value || 0),
+    isVisible: document.getElementById('roadmap-visible').checked,
+    sourceFeedbackId: document.getElementById('roadmap-source-feedback-id').value.trim() || null
+  };
+  if (!body.title) {
+    alert('Add a roadmap title.');
+    return;
+  }
+  await api(id ? `/roadmap/${id}` : '/roadmap', {
+    method: id ? 'PATCH' : 'POST',
+    body: JSON.stringify(body)
+  });
+  resetRoadmapForm();
+  roadmapFilter = body.itemType;
+  await loadRoadmap();
+  setRoadmapFilter(body.itemType);
 }
 
 /* ====================================================================== */

@@ -13,6 +13,7 @@ import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js';
 import healthRoutes from './routes/health.js';
 import trackingAccuracyRoutes from './routes/trackingAccuracy.js';
 import { submitRouter as feedbackSubmitRoutes, adminRouter as feedbackAdminRoutes } from './routes/feedback.js';
+import { publicRouter as roadmapPublicRoutes, adminRouter as roadmapAdminRoutes } from './routes/roadmap.js';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 import { getLatestAppliedMigration } from './db/schemaMetadata.js';
 
@@ -60,6 +61,7 @@ export function createApp() {
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
   app.use('/v1/health', authRequired, healthRoutes);
   app.use('/v1/profile', authRequired, trackingAccuracyRoutes);
+  app.use('/v1/roadmap', authRequired, roadmapPublicRoutes);
   // User feedback submission (auth-gated). Admin list views are mounted under
   // both the testing-dashboard namespace and the shorter internal alias so
   // older tooling/comments do not drift from the same Supabase-backed data.
@@ -68,6 +70,7 @@ export function createApp() {
   app.use('/v1/internal/feedback', feedbackAdminRoutes);
   app.use('/v1/internal/dashboard', evalDashboardRoutes);
   app.use('/v1/internal/dashboard/feedback', feedbackAdminRoutes);
+  app.use('/v1/internal/dashboard/roadmap', roadmapAdminRoutes);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

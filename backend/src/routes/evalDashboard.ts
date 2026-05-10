@@ -384,6 +384,8 @@ router.get('/recent-parses', async (req, res, next) => {
       created_at: Date;
       needs_clarification: boolean;
       parse_version: string;
+      primary_route: string;
+      cache_hit: boolean;
       log_id: string | null;
       saved_at: Date | null;
       total_calories: string | null;
@@ -391,6 +393,12 @@ router.get('/recent-parses', async (req, res, next) => {
       total_carbs_g: string | null;
       total_fat_g: string | null;
       parse_confidence: string | null;
+      ai_cost_event_count: string | null;
+      ai_cost_usd: string | null;
+      ai_cost_features: string | null;
+      ai_cost_models: string | null;
+      ai_input_tokens: string | null;
+      ai_output_tokens: string | null;
       save_attempted: boolean;
       save_attempt_count: string | null;
       latest_save_outcome: string | null;
@@ -404,6 +412,8 @@ router.get('/recent-parses', async (req, res, next) => {
          pr.created_at,
          pr.needs_clarification,
          pr.parse_version,
+         pr.primary_route,
+         pr.cache_hit,
          fl.id AS log_id,
          fl.created_at AS saved_at,
          fl.total_calories::text,
@@ -411,6 +421,12 @@ router.get('/recent-parses', async (req, res, next) => {
          fl.total_carbs_g::text,
          fl.total_fat_g::text,
          fl.parse_confidence::text,
+         ace.ai_cost_event_count::text,
+         ace.ai_cost_usd::text,
+         ace.ai_cost_features,
+         ace.ai_cost_models,
+         ace.ai_input_tokens::text,
+         ace.ai_output_tokens::text,
          COALESCE(sa.save_attempt_count, 0) > 0 AS save_attempted,
          sa.save_attempt_count::text,
          sa.latest_save_outcome,
@@ -447,6 +463,17 @@ router.get('/recent-parses', async (req, res, next) => {
          FROM save_attempts sa
          WHERE sa.parse_request_id = pr.request_id
        ) sa ON true
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(*) AS ai_cost_event_count,
+           COALESCE(SUM(estimated_cost_usd), 0) AS ai_cost_usd,
+           STRING_AGG(DISTINCT feature, ', ' ORDER BY feature) AS ai_cost_features,
+           STRING_AGG(DISTINCT model, ', ' ORDER BY model) AS ai_cost_models,
+           COALESCE(SUM(input_tokens), 0) AS ai_input_tokens,
+           COALESCE(SUM(output_tokens), 0) AS ai_output_tokens
+         FROM ai_cost_events ace
+         WHERE ace.request_id = pr.request_id
+       ) ace ON true
        ORDER BY pr.created_at DESC
        LIMIT 50`
     );
@@ -457,6 +484,8 @@ router.get('/recent-parses', async (req, res, next) => {
       createdAt: r.created_at.toISOString(),
       needsClarification: r.needs_clarification,
       parseVersion: r.parse_version,
+      route: r.primary_route,
+      cacheHit: r.cache_hit,
       saveStatus: r.log_id ? 'saved' : 'parse_only',
       logId: r.log_id,
       savedAt: r.saved_at ? r.saved_at.toISOString() : null,
@@ -465,6 +494,12 @@ router.get('/recent-parses', async (req, res, next) => {
       carbsG: r.total_carbs_g !== null ? Number(r.total_carbs_g) : null,
       fatG: r.total_fat_g !== null ? Number(r.total_fat_g) : null,
       confidence: r.parse_confidence !== null ? Number(r.parse_confidence) : null,
+      aiCostEventCount: r.ai_cost_event_count !== null ? Number(r.ai_cost_event_count) : 0,
+      aiCostUsd: r.ai_cost_usd !== null ? Number(r.ai_cost_usd) : 0,
+      aiCostFeatures: r.ai_cost_features || '',
+      aiCostModels: r.ai_cost_models || '',
+      aiInputTokens: r.ai_input_tokens !== null ? Number(r.ai_input_tokens) : 0,
+      aiOutputTokens: r.ai_output_tokens !== null ? Number(r.ai_output_tokens) : 0,
       saveAttempted: r.save_attempted,
       saveAttemptCount: r.save_attempt_count !== null ? Number(r.save_attempt_count) : 0,
       latestSaveOutcome: r.latest_save_outcome,

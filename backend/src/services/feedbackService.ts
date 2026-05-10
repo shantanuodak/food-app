@@ -9,6 +9,7 @@ import { pool } from '../db.js';
 export type FeedbackInput = {
   userId: string | null;
   userEmail: string | null;
+  feedbackType: 'general' | 'bug' | 'feature';
   message: string;
   appVersion: string | null;
   buildNumber: string | null;
@@ -21,6 +22,7 @@ export type FeedbackRow = {
   id: string;
   userId: string | null;
   userEmail: string | null;
+  feedbackType: string;
   message: string;
   appVersion: string | null;
   buildNumber: string | null;
@@ -35,6 +37,7 @@ export async function saveFeedback(input: FeedbackInput): Promise<FeedbackRow> {
     id: string;
     user_id: string | null;
     user_email: string | null;
+    feedback_type: string;
     message: string;
     app_version: string | null;
     build_number: string | null;
@@ -45,16 +48,17 @@ export async function saveFeedback(input: FeedbackInput): Promise<FeedbackRow> {
   }>(
     `
     INSERT INTO user_feedback (
-      user_id, user_email, message,
+      user_id, user_email, feedback_type, message,
       app_version, build_number, device_model, os_version, locale
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-    RETURNING id, user_id, user_email, message,
+    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    RETURNING id, user_id, user_email, feedback_type, message,
               app_version, build_number, device_model, os_version, locale, created_at
     `,
     [
       input.userId,
       input.userEmail,
+      input.feedbackType,
       input.message,
       input.appVersion,
       input.buildNumber,
@@ -69,6 +73,7 @@ export async function saveFeedback(input: FeedbackInput): Promise<FeedbackRow> {
     id: row.id,
     userId: row.user_id,
     userEmail: row.user_email,
+    feedbackType: row.feedback_type,
     message: row.message,
     appVersion: row.app_version,
     buildNumber: row.build_number,
@@ -90,6 +95,7 @@ export async function listRecentFeedback(limit: number = 100): Promise<FeedbackR
     id: string;
     user_id: string | null;
     user_email: string | null;
+    feedback_type: string;
     message: string;
     app_version: string | null;
     build_number: string | null;
@@ -99,7 +105,7 @@ export async function listRecentFeedback(limit: number = 100): Promise<FeedbackR
     created_at: Date;
   }>(
     `
-    SELECT id, user_id, user_email, message,
+    SELECT id, user_id, user_email, feedback_type, message,
            app_version, build_number, device_model, os_version, locale, created_at
     FROM user_feedback
     ORDER BY created_at DESC
@@ -112,6 +118,7 @@ export async function listRecentFeedback(limit: number = 100): Promise<FeedbackR
     id: row.id,
     userId: row.user_id,
     userEmail: row.user_email,
+    feedbackType: row.feedback_type,
     message: row.message,
     appVersion: row.app_version,
     buildNumber: row.build_number,

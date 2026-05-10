@@ -20,6 +20,7 @@ import { listRecentFeedback, saveFeedback } from '../services/feedbackService.js
 // allowed so the client doesn't have to do detective work; we just record
 // what we get.
 const submitSchema = z.object({
+  feedbackType: z.enum(['general', 'bug', 'feature']).optional().default('general'),
   message: z.string().trim().min(1).max(4000),
   appVersion: z.string().trim().max(40).optional(),
   buildNumber: z.string().trim().max(40).optional(),
@@ -38,6 +39,7 @@ submitRouter.post('/', async (req, res, next) => {
     const saved = await saveFeedback({
       userId: auth?.userId ?? null,
       userEmail: auth?.email ?? null,
+      feedbackType: body.feedbackType,
       message: body.message,
       appVersion: body.appVersion ?? null,
       buildNumber: body.buildNumber ?? null,
