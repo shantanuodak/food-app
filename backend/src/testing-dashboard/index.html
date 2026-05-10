@@ -1690,6 +1690,7 @@ let advancedSection = 'saved-logs';
 let promptLabLoaded = false;
 let promptLabRuntimeRefreshToken = 0;
 let promptLabRuntimeRefreshTimer = null;
+const PROMPT_LAB_DEFAULT_INPUT = 'cold coffee 8 oz';
 let roadmapItems = [];
 let roadmapFilter = 'fix';
 function switchTab(name, btn) {
@@ -2171,9 +2172,17 @@ function renderPromptLabRuntimeContext(data) {
 }
 
 async function refreshPromptLabRuntimePreview(options = {}) {
-  const { overwriteTemplate = false, showLoading = false } = options;
-  const input = document.getElementById('prompt-input-text').value.trim() || 'cold coffee 8 oz';
+  const { overwriteTemplate = false, showLoading = false, useDefaultWhenEmpty = false } = options;
+  const inputEl = document.getElementById('prompt-input-text');
+  const rawInput = inputEl.value.trim();
+  const input = rawInput || (useDefaultWhenEmpty ? PROMPT_LAB_DEFAULT_INPUT : '');
   const token = ++promptLabRuntimeRefreshToken;
+
+  if (!input) {
+    document.getElementById('prompt-runtime-meta').innerHTML = '';
+    document.getElementById('prompt-runtime-preview').textContent = 'Add sample food text to preview the runtime context.';
+    return null;
+  }
 
   if (showLoading) {
     document.getElementById('prompt-runtime-preview').textContent = 'Loading runtime context…';
@@ -2183,7 +2192,9 @@ async function refreshPromptLabRuntimePreview(options = {}) {
     const data = await api('/prompt-lab?inputText=' + encodeURIComponent(input));
     if (token !== promptLabRuntimeRefreshToken) return null;
 
-    document.getElementById('prompt-input-text').value = data.inputText;
+    if (useDefaultWhenEmpty && !rawInput) {
+      inputEl.value = data.inputText;
+    }
     document.getElementById('prompt-version').textContent = data.promptVersion || '—';
     document.getElementById('prompt-model').textContent = data.model || '—';
     if (overwriteTemplate) {
@@ -2212,7 +2223,8 @@ async function loadPromptLab() {
   document.getElementById('prompt-result').textContent = 'Loading production prompt…';
   renderPromptLabIdleState('Loading production prompt template…');
   try {
-    const data = await refreshPromptLabRuntimePreview({ overwriteTemplate: true, showLoading: true });
+    const data = await refreshPromptLabRuntimePreview({ overwriteTemplate: true, showLoading: true, useDefaultWhenEmpty: true });
+    if (!data) return;
     document.getElementById('prompt-result').textContent = JSON.stringify({
       inputText: data.inputText,
       segments: data.segments,
