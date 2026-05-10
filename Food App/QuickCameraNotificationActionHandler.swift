@@ -30,7 +30,7 @@ enum QuickCameraNotificationActionHandler {
         }
     }
 
-    private static func logPendingEntry(id: String) async {
+    static func logPendingEntry(id: String) async {
         guard let pendingLog = QuickCameraPendingLogStore.load(id: id),
               let saveRequest = pendingLog.saveRequest,
               let idempotencyKey = pendingLog.idempotencyKey else {

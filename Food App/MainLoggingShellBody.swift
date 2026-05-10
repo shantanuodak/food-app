@@ -218,6 +218,9 @@ extension MainLoggingShellView {
                 isQuickCameraCaptureActive = true
                 handleCameraSourceSelection(.takePicture)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .quickCameraStatusChanged)) { notification in
+                handleQuickCameraStatusNotification(notification)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .openVoiceFromTabBar)) { _ in
                 inputMode = .voice
             }
@@ -268,6 +271,9 @@ extension MainLoggingShellView {
                         selectedCameraSource = nil
                         if isQuickCameraCaptureActive {
                             isQuickCameraCaptureActive = false
+                            parseError = nil
+                            saveSuccessMessage = nil
+                            parseInfoMessage = "Analyzing food photo..."
                             Task {
                                 await QuickCameraLoggingService.processCapturedImage(
                                     image,
@@ -290,6 +296,23 @@ extension MainLoggingShellView {
                 )
                 .ignoresSafeArea()
             }
+            .modifier(QuickCameraPromptDialogModifier(
+                prompt: $quickCameraPrompt,
+                onLog: { pendingLog in
+                    Task {
+                        await QuickCameraNotificationActionHandler.logPendingEntry(id: pendingLog.id)
+                        refreshDaySummary()
+                        refreshDayLogs()
+                    }
+                },
+                onRetake: { pendingLog in
+                    QuickCameraPendingLogStore.remove(id: pendingLog.id)
+                    QuickCameraLaunchStore.requestLaunch()
+                },
+                onDiscard: { pendingLog in
+                    QuickCameraPendingLogStore.remove(id: pendingLog.id)
+                }
+            ))
             .sheet(item: $selectedRowDetails) { details in
                 rowCalorieDetailsSheet(details)
             }

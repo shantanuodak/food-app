@@ -119,6 +119,7 @@ struct MainLoggingShellView: View {
     @State var swipeAxis: SwipeAxis = .undecided
     @State var isCustomCameraPresented = false
     @State var isQuickCameraCaptureActive = false
+    @State var quickCameraPrompt: QuickCameraPendingLog?
     @State var cameraDrawerState: CameraDrawerState = .idle
     @State var cameraDrawerImage: UIImage?
     @State var isCameraAnalysisSheetPresented = false

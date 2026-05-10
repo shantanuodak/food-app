@@ -1,6 +1,6 @@
 import Foundation
 
-struct QuickCameraPendingLog: Codable {
+struct QuickCameraPendingLog: Codable, Identifiable {
     let id: String
     let createdAt: Date
     let displayName: String

@@ -72,6 +72,12 @@ enum QuickCameraNotificationService {
             : QuickCameraNotificationIdentifier.reviewCategory
         content.userInfo = ["pendingLogId": pendingLog.id]
 
+        await postInAppStatus(
+            title: content.title,
+            body: content.body,
+            kind: "info",
+            pendingLogId: pendingLog.id
+        )
         await addNotification(
             identifier: QuickCameraNotificationIdentifier.parsedRequest(id: pendingLog.id),
             content: content
@@ -84,6 +90,7 @@ enum QuickCameraNotificationService {
         content.body = "I’ll let you know what I find."
         content.sound = .default
 
+        await postInAppStatus(title: content.title, body: content.body, kind: "info")
         await addNotification(
             identifier: QuickCameraNotificationIdentifier.statusRequest(id: "\(id).analyzing"),
             content: content,
@@ -97,6 +104,7 @@ enum QuickCameraNotificationService {
         content.body = body
         content.sound = .default
 
+        await postInAppStatus(title: title, body: body, kind: title.localizedCaseInsensitiveContains("couldn") ? "error" : "info")
         await addNotification(
             identifier: QuickCameraNotificationIdentifier.statusRequest(id: id),
             content: content
@@ -108,6 +116,24 @@ enum QuickCameraNotificationService {
         content: UNMutableNotificationContent,
         delay: TimeInterval = 1
     ) async {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            break
+        case .notDetermined:
+            do {
+                let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+                guard granted else { return }
+            } catch {
+                return
+            }
+        case .denied:
+            return
+        @unknown default:
+            return
+        }
+
         let request = UNNotificationRequest(
             identifier: identifier,
             content: content,
@@ -115,9 +141,32 @@ enum QuickCameraNotificationService {
         )
 
         do {
-            try await UNUserNotificationCenter.current().add(request)
+            try await center.add(request)
         } catch {
             // Notification failures should not interrupt capture or saving.
+        }
+    }
+
+    private static func postInAppStatus(
+        title: String,
+        body: String,
+        kind: String,
+        pendingLogId: String? = nil
+    ) async {
+        await MainActor.run {
+            var userInfo = [
+                "title": title,
+                "body": body,
+                "kind": kind
+            ]
+            if let pendingLogId {
+                userInfo["pendingLogId"] = pendingLogId
+            }
+            NotificationCenter.default.post(
+                name: .quickCameraStatusChanged,
+                object: nil,
+                userInfo: userInfo
+            )
         }
     }
 }
