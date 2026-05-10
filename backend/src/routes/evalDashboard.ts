@@ -19,6 +19,19 @@ import {
   getEvalRunHistory,
   getEvalRunById
 } from '../services/evalService.js';
+import {
+  archiveBenchmarkCase,
+  createBenchmarkCase,
+  createBenchmarkPublicSnapshot,
+  getBenchmarkCase,
+  getBenchmarkDashboardSummary,
+  getBenchmarkPublicSnapshot,
+  getBenchmarkRun,
+  listBenchmarkCases,
+  listBenchmarkRuns,
+  runAccuracyBenchmark,
+  updateBenchmarkCase
+} from '../services/accuracyBenchmarkService.js';
 import { getSaveHealthReport } from '../services/saveHealthService.js';
 import { pool } from '../db.js';
 import { splitFoodTextSegments } from '../services/foodTextSegmentation.js';
@@ -30,6 +43,48 @@ const evalRunRequestSchema = z.object({
   cacheMode: z.enum(['cached', 'fresh']).optional().default('cached'),
   benchmarkProviders: z.array(z.enum(['usda', 'fatsecret', 'curated'])).optional().default(['usda', 'fatsecret', 'curated']),
   maxCases: z.number().int().min(1).max(500).optional()
+});
+
+const benchmarkCaseSchema = z.object({
+  inputText: z.string().trim().min(1).max(500),
+  displayName: z.string().trim().max(160).optional().nullable().transform((v) => v || null),
+  category: z.string().trim().min(1).max(60),
+  status: z.enum(['draft', 'reviewed', 'archived']).optional().default('draft'),
+  isActive: z.boolean().optional().default(true),
+  referenceSourceType: z.string().trim().min(1).max(80),
+  referenceSourceLabel: z.string().trim().min(1).max(180),
+  referenceSourceUrl: z.string().trim().url().max(600).optional().nullable().or(z.literal('')).transform((v) => v || null),
+  referenceNotes: z.string().trim().max(1200).optional().nullable().transform((v) => v || null),
+  servingNotes: z.string().trim().max(1200).optional().nullable().transform((v) => v || null),
+  referenceCalories: z.number().nonnegative(),
+  referenceProtein: z.number().nonnegative().optional().default(0),
+  referenceCarbs: z.number().nonnegative().optional().default(0),
+  referenceFat: z.number().nonnegative().optional().default(0),
+  referenceTolerancePct: z.number().min(0).max(2).optional().default(0.2),
+  referenceMinToleranceCalories: z.number().min(0).max(500).optional().default(15),
+  mfpItemName: z.string().trim().max(180).optional().nullable().transform((v) => v || null),
+  mfpCalories: z.number().nonnegative().optional().nullable().default(null),
+  mfpProtein: z.number().nonnegative().optional().nullable().default(null),
+  mfpCarbs: z.number().nonnegative().optional().nullable().default(null),
+  mfpFat: z.number().nonnegative().optional().nullable().default(null),
+  mfpNotes: z.string().trim().max(1200).optional().nullable().transform((v) => v || null),
+  mfpCollectedAt: z.string().datetime().optional().nullable().default(null)
+});
+
+const benchmarkRunSchema = z.object({
+  caseIds: z.array(z.string().uuid()).optional(),
+  category: z.string().trim().min(1).max(60).optional().nullable(),
+  cacheMode: z.enum(['cached', 'fresh']).optional().default('cached'),
+  maxCases: z.number().int().min(1).max(100).optional().default(25),
+  runLabel: z.string().trim().max(120).optional().nullable()
+});
+
+const benchmarkSnapshotSchema = z.object({
+  runId: z.string().uuid(),
+  title: z.string().trim().min(1).max(160),
+  summary: z.string().trim().min(1).max(1200),
+  visibleCategories: z.array(z.string().trim().min(1).max(60)).optional().default([]),
+  isActive: z.boolean().optional().default(true)
 });
 
 const promptLabTestSchema = z.object({
@@ -364,6 +419,131 @@ router.get('/evals/:runId', async (req, res, next) => {
       throw new ApiError(404, 'NOT_FOUND', 'Eval run not found');
     }
     res.json({ result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Accuracy benchmark CMS
+// ---------------------------------------------------------------------------
+
+router.get('/accuracy-benchmarks/summary', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    res.json(await getBenchmarkDashboardSummary());
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/accuracy-benchmarks/cases', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const status = z.enum(['draft', 'reviewed', 'archived']).optional().parse(req.query.status || undefined);
+    const category = z.string().trim().min(1).max(60).optional().parse(req.query.category || undefined);
+    const activeOnly = z.coerce.boolean().optional().parse(req.query.activeOnly);
+    const cases = await listBenchmarkCases({ status, category, activeOnly });
+    res.json({ cases });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/accuracy-benchmarks/cases', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const input = benchmarkCaseSchema.parse(req.body ?? {});
+    const benchmarkCase = await createBenchmarkCase(input);
+    res.status(201).json({ case: benchmarkCase });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/accuracy-benchmarks/cases/:id', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const benchmarkCase = await getBenchmarkCase(req.params.id!);
+    if (!benchmarkCase) throw new ApiError(404, 'NOT_FOUND', 'Benchmark case not found');
+    res.json({ case: benchmarkCase });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch('/accuracy-benchmarks/cases/:id', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const input = benchmarkCaseSchema.parse(req.body ?? {});
+    const benchmarkCase = await updateBenchmarkCase(req.params.id!, input);
+    if (!benchmarkCase) throw new ApiError(404, 'NOT_FOUND', 'Benchmark case not found');
+    res.json({ case: benchmarkCase });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/accuracy-benchmarks/cases/:id', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const archived = await archiveBenchmarkCase(req.params.id!);
+    if (!archived) throw new ApiError(404, 'NOT_FOUND', 'Benchmark case not found');
+    res.json({ archived: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/accuracy-benchmarks/runs', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const input = benchmarkRunSchema.parse(req.body ?? {});
+    const result = await runAccuracyBenchmark(input);
+    res.status(201).json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/accuracy-benchmarks/runs', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const limit = z.coerce.number().int().min(1).max(100).optional().default(20).parse(req.query.limit);
+    const runs = await listBenchmarkRuns(limit);
+    res.json({ runs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/accuracy-benchmarks/runs/:id', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const result = await getBenchmarkRun(req.params.id!);
+    if (!result) throw new ApiError(404, 'NOT_FOUND', 'Benchmark run not found');
+    res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/accuracy-benchmarks/public-snapshot', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const snapshot = await getBenchmarkPublicSnapshot();
+    res.json({ snapshot });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/accuracy-benchmarks/public-snapshot', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const input = benchmarkSnapshotSchema.parse(req.body ?? {});
+    const snapshot = await createBenchmarkPublicSnapshot(input);
+    res.status(201).json({ snapshot });
   } catch (err) {
     next(err);
   }

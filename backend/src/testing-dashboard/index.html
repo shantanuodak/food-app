@@ -1184,30 +1184,222 @@
     <!-- ==================== BENCHMARKS ==================== -->
     <div id="tab-benchmarks" class="tab-panel">
       <div class="section">
-        <h2>Benchmark Truth Sources</h2>
+        <div class="row-actions">
+          <h2 style="margin:0">Accuracy Benchmarks</h2>
+          <button class="btn btn-ghost" onclick="loadAccuracyBenchmarks()">↻ Refresh</button>
+          <button class="btn btn-primary" id="benchmark-run-btn" onclick="runAccuracyBenchmark()">Run benchmark</button>
+          <span id="benchmark-run-msg" style="display:none; color:var(--muted); font-size:13px;">
+            <span class="spinner"></span>&nbsp;Running…
+          </span>
+        </div>
         <p class="text-muted" style="font-size:13px; margin-bottom:16px;">
-          These sources define what the expected calories should be. The parser is judged against them.
+          Reference nutrition is the truth. Food App and MyFitnessPal are both scored against the same reviewed cases.
         </p>
-        <div class="truth-grid">
-          <div class="card">
-            <h3>USDA</h3>
-            <p class="text-muted">Best for simple foods like coffee, milk, fruit, rice, eggs, and raw ingredients.</p>
+
+        <div class="grid-4" id="benchmark-stat-cards">
+          <div class="stat-card"><div class="stat-label">Active Cases</div><div class="stat-value" id="bench-active">—</div></div>
+          <div class="stat-card"><div class="stat-label">Reviewed Cases</div><div class="stat-value" id="bench-reviewed">—</div></div>
+          <div class="stat-card"><div class="stat-label">Food App Score</div><div class="stat-value" id="bench-food-score">—</div><div class="stat-sub" id="bench-food-score-sub">latest run</div></div>
+          <div class="stat-card"><div class="stat-label">MFP Score</div><div class="stat-value" id="bench-mfp-score">—</div><div class="stat-sub" id="bench-mfp-score-sub">manual comparison</div></div>
+        </div>
+
+        <div class="eval-controls">
+          <div class="eval-control" style="flex:1; min-width:260px;">
+            <label for="benchmark-input">Input text</label>
+            <input id="benchmark-input" type="text" maxlength="500" placeholder="one bowl dal rice" />
           </div>
-          <div class="card">
-            <h3>FatSecret</h3>
-            <p class="text-muted">Best for prepared, branded, and serving-based foods when FatSecret access is active.</p>
+          <div class="eval-control">
+            <label for="benchmark-category">Category</label>
+            <select id="benchmark-category">
+              <option value="simple">simple</option>
+              <option value="restaurant">restaurant</option>
+              <option value="branded">branded</option>
+              <option value="homemade">homemade</option>
+              <option value="indian">indian</option>
+              <option value="international">international</option>
+              <option value="typo">typo</option>
+              <option value="portion">portion</option>
+              <option value="ambiguous">ambiguous</option>
+            </select>
           </div>
-          <div class="card">
-            <h3>SnapCalorie Curated</h3>
-            <p class="text-muted">Manual truth source for foods you review in SnapCalorie and trust enough for evals.</p>
+          <div class="eval-control">
+            <label for="benchmark-status">Status</label>
+            <select id="benchmark-status">
+              <option value="draft">draft</option>
+              <option value="reviewed">reviewed</option>
+              <option value="archived">archived</option>
+            </select>
+          </div>
+          <div class="eval-control">
+            <label for="benchmark-source-type">Source type</label>
+            <select id="benchmark-source-type">
+              <option value="usda">USDA</option>
+              <option value="official_restaurant">Official restaurant</option>
+              <option value="official_brand">Official brand</option>
+              <option value="curated_recipe">Curated recipe</option>
+              <option value="curated_manual">Curated manual</option>
+            </select>
+          </div>
+          <div class="eval-control" style="flex:1; min-width:220px;">
+            <label for="benchmark-source-label">Source label</label>
+            <input id="benchmark-source-label" type="text" maxlength="180" placeholder="USDA FoodData Central" />
           </div>
         </div>
-      </div>
-      <div class="card section">
-        <h3>Current Rule</h3>
-        <p class="text-muted">
-          A case is only trustworthy when it has a usable truth source. If the eval says “Needs benchmark,” that case should not be treated as a parser failure yet.
-        </p>
+
+        <div class="eval-controls" style="margin-top:10px;">
+          <div class="eval-control"><label for="benchmark-ref-cal">Ref cal</label><input id="benchmark-ref-cal" type="number" min="0" step="0.1" /></div>
+          <div class="eval-control"><label for="benchmark-ref-protein">Ref protein</label><input id="benchmark-ref-protein" type="number" min="0" step="0.1" value="0" /></div>
+          <div class="eval-control"><label for="benchmark-ref-carbs">Ref carbs</label><input id="benchmark-ref-carbs" type="number" min="0" step="0.1" value="0" /></div>
+          <div class="eval-control"><label for="benchmark-ref-fat">Ref fat</label><input id="benchmark-ref-fat" type="number" min="0" step="0.1" value="0" /></div>
+          <div class="eval-control"><label for="benchmark-mfp-cal">MFP cal</label><input id="benchmark-mfp-cal" type="number" min="0" step="0.1" /></div>
+          <div class="eval-control"><label for="benchmark-mfp-protein">MFP protein</label><input id="benchmark-mfp-protein" type="number" min="0" step="0.1" /></div>
+          <div class="eval-control"><label for="benchmark-mfp-carbs">MFP carbs</label><input id="benchmark-mfp-carbs" type="number" min="0" step="0.1" /></div>
+          <div class="eval-control"><label for="benchmark-mfp-fat">MFP fat</label><input id="benchmark-mfp-fat" type="number" min="0" step="0.1" /></div>
+        </div>
+
+        <div class="eval-controls" style="margin-top:10px;">
+          <div class="eval-control" style="flex:1; min-width:220px;">
+            <label for="benchmark-display-name">Display name</label>
+            <input id="benchmark-display-name" type="text" maxlength="160" placeholder="Optional cleaner label" />
+          </div>
+          <div class="eval-control" style="flex:1; min-width:220px;">
+            <label for="benchmark-source-url">Source URL</label>
+            <input id="benchmark-source-url" type="url" maxlength="600" placeholder="https://..." />
+          </div>
+          <div class="eval-control" style="flex:1; min-width:220px;">
+            <label for="benchmark-mfp-name">MyFitnessPal item</label>
+            <input id="benchmark-mfp-name" type="text" maxlength="180" placeholder="Selected MFP result" />
+          </div>
+        </div>
+
+        <div class="eval-controls" style="margin-top:10px;">
+          <div class="eval-control" style="flex:1; min-width:280px;">
+            <label for="benchmark-serving-notes">Serving notes</label>
+            <textarea id="benchmark-serving-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="What portion/reference assumption this case uses."></textarea>
+          </div>
+          <div class="eval-control" style="flex:1; min-width:280px;">
+            <label for="benchmark-reference-notes">Reference notes</label>
+            <textarea id="benchmark-reference-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="Why this reference is trusted."></textarea>
+          </div>
+          <div class="eval-control" style="flex:1; min-width:280px;">
+            <label for="benchmark-mfp-notes">MFP notes</label>
+            <textarea id="benchmark-mfp-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="Top result, confusing result, duplicate, etc."></textarea>
+          </div>
+        </div>
+
+        <input id="benchmark-id" type="hidden" />
+        <div class="row-actions" style="margin-top:12px;">
+          <label class="provider-toggle"><input id="benchmark-active" type="checkbox" checked /> Active</label>
+          <button class="btn btn-ghost" onclick="resetBenchmarkForm()">Clear</button>
+          <button class="btn btn-primary" onclick="saveBenchmarkCase()">Save benchmark case</button>
+        </div>
+
+        <div class="eval-controls" style="margin-top:22px;">
+          <div class="eval-control">
+            <label for="benchmark-filter-category">Filter category</label>
+            <select id="benchmark-filter-category" onchange="loadAccuracyBenchmarkCases()">
+              <option value="">All</option>
+              <option value="simple">simple</option>
+              <option value="restaurant">restaurant</option>
+              <option value="branded">branded</option>
+              <option value="homemade">homemade</option>
+              <option value="indian">indian</option>
+              <option value="international">international</option>
+              <option value="typo">typo</option>
+              <option value="portion">portion</option>
+              <option value="ambiguous">ambiguous</option>
+            </select>
+          </div>
+          <div class="eval-control">
+            <label for="benchmark-filter-status">Filter status</label>
+            <select id="benchmark-filter-status" onchange="loadAccuracyBenchmarkCases()">
+              <option value="">All</option>
+              <option value="draft">draft</option>
+              <option value="reviewed">reviewed</option>
+              <option value="archived">archived</option>
+            </select>
+          </div>
+          <div class="eval-control">
+            <label for="benchmark-run-cache-mode">Run cache</label>
+            <select id="benchmark-run-cache-mode">
+              <option value="cached">cached</option>
+              <option value="fresh">fresh</option>
+            </select>
+          </div>
+          <div class="eval-control">
+            <label for="benchmark-run-max">Max cases</label>
+            <input id="benchmark-run-max" type="number" min="1" max="100" value="25" />
+          </div>
+        </div>
+
+        <div class="table-wrap" style="margin-top:12px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Input</th>
+                <th>Category</th>
+                <th>Reference</th>
+                <th>Ref macros</th>
+                <th>MyFitnessPal</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="benchmark-cases-tbody">
+              <tr><td colspan="7" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="table-wrap" style="margin-top:18px;">
+          <table>
+            <thead>
+              <tr>
+                <th>Run</th>
+                <th>Cases</th>
+                <th>Food App</th>
+                <th>MyFitnessPal</th>
+                <th>Cache</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="benchmark-runs-tbody">
+              <tr><td colspan="6" class="text-muted" style="padding:24px; text-align:center;">No runs loaded.</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="card section" style="margin-top:18px;">
+          <div class="row-actions">
+            <h3 style="margin:0">Public Snapshot</h3>
+            <button class="btn btn-ghost" onclick="loadBenchmarkPublicSnapshot()">↻ Refresh</button>
+            <button class="btn btn-primary" onclick="publishBenchmarkSnapshot()">Publish selected run</button>
+          </div>
+          <p class="text-muted" style="font-size:13px; margin-bottom:12px;">
+            This pins one reviewed benchmark run for the future website. New internal runs will not replace it automatically.
+          </p>
+          <div class="eval-controls">
+            <div class="eval-control">
+              <label for="benchmark-snapshot-run">Run</label>
+              <select id="benchmark-snapshot-run"></select>
+            </div>
+            <div class="eval-control" style="flex:1; min-width:220px;">
+              <label for="benchmark-snapshot-title">Public title</label>
+              <input id="benchmark-snapshot-title" type="text" maxlength="160" placeholder="Food App Accuracy Benchmark" />
+            </div>
+            <div class="eval-control" style="flex:1; min-width:260px;">
+              <label for="benchmark-snapshot-categories">Visible categories</label>
+              <input id="benchmark-snapshot-categories" type="text" maxlength="300" placeholder="simple, restaurant, indian" />
+            </div>
+          </div>
+          <div class="eval-control" style="margin-top:10px;">
+            <label for="benchmark-snapshot-summary">Public summary</label>
+            <textarea id="benchmark-snapshot-summary" class="dashboard-input" rows="3" maxlength="1200" placeholder="Short public-facing explanation of this benchmark."></textarea>
+          </div>
+          <div id="benchmark-public-snapshot-current" class="text-muted" style="font-size:13px; margin-top:12px;">No public snapshot loaded.</div>
+        </div>
+
+        <div id="benchmark-run-detail" style="margin-top:18px;"></div>
       </div>
     </div>
 
@@ -1693,6 +1885,8 @@ let promptLabRuntimeRefreshTimer = null;
 const PROMPT_LAB_DEFAULT_INPUT = 'cold coffee 8 oz';
 let roadmapItems = [];
 let roadmapFilter = 'fix';
+let accuracyBenchmarkCases = [];
+let accuracyBenchmarkRuns = [];
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
@@ -1712,6 +1906,7 @@ function switchTab(name, btn) {
     }
   }
   if (name === 'roadmap') loadRoadmap();
+  if (name === 'benchmarks') loadAccuracyBenchmarks();
   if (name === 'feedback') loadFeedback();
   if (name === 'advanced') {
     showAdvancedSection(advancedSection);
@@ -2126,6 +2321,387 @@ function renderEvalResult(result) {
         <td>${statusBadge}</td>
       </tr>`;
   }
+}
+
+/* ====================================================================== */
+/* ACCURACY BENCHMARKS */
+/* ====================================================================== */
+function scoreBadge(score) {
+  if (score === null || score === undefined) return '<span class="badge badge-muted">—</span>';
+  const n = Number(score);
+  const cls = n >= 90 ? 'badge-green' : n >= 75 ? 'badge-blue' : n >= 50 ? 'badge-yellow' : 'badge-red';
+  return `<span class="badge ${cls}">${escapeHtml(fmt(n, 1))}</span>`;
+}
+
+function benchmarkStatusBadge(status) {
+  const cls = status === 'reviewed' ? 'badge-green' : status === 'archived' ? 'badge-muted' : 'badge-yellow';
+  return `<span class="badge ${cls}">${escapeHtml(status || 'draft')}</span>`;
+}
+
+function numberOrNull(id) {
+  const value = document.getElementById(id).value;
+  if (value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function requiredNumber(id, fallback = 0) {
+  const value = numberOrNull(id);
+  return value === null ? fallback : value;
+}
+
+async function loadAccuracyBenchmarks() {
+  await Promise.all([loadAccuracyBenchmarkSummary(), loadAccuracyBenchmarkCases(), loadAccuracyBenchmarkRuns(), loadBenchmarkPublicSnapshot()]);
+}
+
+async function loadAccuracyBenchmarkSummary() {
+  try {
+    const data = await api('/accuracy-benchmarks/summary');
+    document.getElementById('bench-active').textContent = fmt(data.activeCases);
+    document.getElementById('bench-reviewed').textContent = fmt(data.reviewedCases);
+    if (data.latestRun) {
+      document.getElementById('bench-food-score').textContent = fmt(data.latestRun.foodAppScore, 1);
+      document.getElementById('bench-food-score-sub').textContent = fmtTime(data.latestRun.runAt);
+      document.getElementById('bench-mfp-score').textContent = data.latestRun.mfpScore === null ? '—' : fmt(data.latestRun.mfpScore, 1);
+      document.getElementById('bench-mfp-score-sub').textContent = `${data.latestRun.caseCount} case${data.latestRun.caseCount === 1 ? '' : 's'}`;
+    } else {
+      document.getElementById('bench-food-score').textContent = '—';
+      document.getElementById('bench-food-score-sub').textContent = 'latest run';
+      document.getElementById('bench-mfp-score').textContent = '—';
+      document.getElementById('bench-mfp-score-sub').textContent = 'manual comparison';
+    }
+  } catch (e) {
+    console.error('Accuracy benchmark summary failed', e);
+  }
+}
+
+async function loadAccuracyBenchmarkCases() {
+  const tbody = document.getElementById('benchmark-cases-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="padding:24px;text-align:center;">Loading benchmark cases…</td></tr>';
+  try {
+    const category = document.getElementById('benchmark-filter-category')?.value || '';
+    const status = document.getElementById('benchmark-filter-status')?.value || '';
+    let url = '/accuracy-benchmarks/cases';
+    const params = new URLSearchParams();
+    if (category) params.set('category', category);
+    if (status) params.set('status', status);
+    if (params.toString()) url += '?' + params.toString();
+    const data = await api(url);
+    accuracyBenchmarkCases = Array.isArray(data.cases) ? data.cases : [];
+    renderAccuracyBenchmarkCases();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderAccuracyBenchmarkCases() {
+  const tbody = document.getElementById('benchmark-cases-tbody');
+  if (!accuracyBenchmarkCases.length) {
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">📏</div>No benchmark cases yet.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = accuracyBenchmarkCases.map(item => {
+    const mfp = item.mfpCalories === null || item.mfpCalories === undefined
+      ? '<span class="badge badge-yellow">Missing MFP</span>'
+      : `${escapeHtml(fmt(item.mfpCalories, 1))} cal<div class="text-muted" style="font-size:11px">${escapeHtml(item.mfpItemName || 'manual MFP')}</div>`;
+    return `
+      <tr>
+        <td>
+          <div class="truncate" title="${escapeHtml(item.inputText)}">${escapeHtml(item.inputText)}</div>
+          <div class="text-muted" style="font-size:11px">${escapeHtml(item.displayName || '')}</div>
+        </td>
+        <td><span class="badge badge-muted">${escapeHtml(item.category)}</span></td>
+        <td>
+          <div>${escapeHtml(item.referenceSourceLabel)}</div>
+          <div class="text-muted" style="font-size:11px">${escapeHtml(item.referenceSourceType)}</div>
+        </td>
+        <td class="mono">
+          ${escapeHtml(fmt(item.referenceCalories, 1))} cal
+          <div class="text-muted" style="font-size:11px">P ${escapeHtml(fmt(item.referenceProtein, 1))} · C ${escapeHtml(fmt(item.referenceCarbs, 1))} · F ${escapeHtml(fmt(item.referenceFat, 1))}</div>
+        </td>
+        <td>${mfp}</td>
+        <td>${benchmarkStatusBadge(item.status)}${item.isActive ? '' : '<div class="badge badge-muted" style="margin-top:4px">inactive</div>'}</td>
+        <td>
+          <button class="btn btn-ghost" onclick="editBenchmarkCase('${item.id}')">Edit</button>
+          <button class="btn btn-ghost" onclick="archiveBenchmarkCase('${item.id}')">Archive</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function resetBenchmarkForm() {
+  document.getElementById('benchmark-id').value = '';
+  document.getElementById('benchmark-input').value = '';
+  document.getElementById('benchmark-display-name').value = '';
+  document.getElementById('benchmark-category').value = 'simple';
+  document.getElementById('benchmark-status').value = 'draft';
+  document.getElementById('benchmark-active').checked = true;
+  document.getElementById('benchmark-source-type').value = 'usda';
+  document.getElementById('benchmark-source-label').value = '';
+  document.getElementById('benchmark-source-url').value = '';
+  document.getElementById('benchmark-ref-cal').value = '';
+  document.getElementById('benchmark-ref-protein').value = '0';
+  document.getElementById('benchmark-ref-carbs').value = '0';
+  document.getElementById('benchmark-ref-fat').value = '0';
+  document.getElementById('benchmark-mfp-name').value = '';
+  document.getElementById('benchmark-mfp-cal').value = '';
+  document.getElementById('benchmark-mfp-protein').value = '';
+  document.getElementById('benchmark-mfp-carbs').value = '';
+  document.getElementById('benchmark-mfp-fat').value = '';
+  document.getElementById('benchmark-serving-notes').value = '';
+  document.getElementById('benchmark-reference-notes').value = '';
+  document.getElementById('benchmark-mfp-notes').value = '';
+}
+
+function editBenchmarkCase(id) {
+  const item = accuracyBenchmarkCases.find(row => row.id === id);
+  if (!item) return;
+  document.getElementById('benchmark-id').value = item.id;
+  document.getElementById('benchmark-input').value = item.inputText || '';
+  document.getElementById('benchmark-display-name').value = item.displayName || '';
+  document.getElementById('benchmark-category').value = item.category || 'simple';
+  document.getElementById('benchmark-status').value = item.status || 'draft';
+  document.getElementById('benchmark-active').checked = Boolean(item.isActive);
+  document.getElementById('benchmark-source-type').value = item.referenceSourceType || 'curated_manual';
+  document.getElementById('benchmark-source-label').value = item.referenceSourceLabel || '';
+  document.getElementById('benchmark-source-url').value = item.referenceSourceUrl || '';
+  document.getElementById('benchmark-ref-cal').value = item.referenceCalories ?? '';
+  document.getElementById('benchmark-ref-protein').value = item.referenceProtein ?? 0;
+  document.getElementById('benchmark-ref-carbs').value = item.referenceCarbs ?? 0;
+  document.getElementById('benchmark-ref-fat').value = item.referenceFat ?? 0;
+  document.getElementById('benchmark-mfp-name').value = item.mfpItemName || '';
+  document.getElementById('benchmark-mfp-cal').value = item.mfpCalories ?? '';
+  document.getElementById('benchmark-mfp-protein').value = item.mfpProtein ?? '';
+  document.getElementById('benchmark-mfp-carbs').value = item.mfpCarbs ?? '';
+  document.getElementById('benchmark-mfp-fat').value = item.mfpFat ?? '';
+  document.getElementById('benchmark-serving-notes').value = item.servingNotes || '';
+  document.getElementById('benchmark-reference-notes').value = item.referenceNotes || '';
+  document.getElementById('benchmark-mfp-notes').value = item.mfpNotes || '';
+}
+
+function benchmarkCasePayload() {
+  return {
+    inputText: document.getElementById('benchmark-input').value.trim(),
+    displayName: document.getElementById('benchmark-display-name').value.trim() || null,
+    category: document.getElementById('benchmark-category').value,
+    status: document.getElementById('benchmark-status').value,
+    isActive: document.getElementById('benchmark-active').checked,
+    referenceSourceType: document.getElementById('benchmark-source-type').value,
+    referenceSourceLabel: document.getElementById('benchmark-source-label').value.trim(),
+    referenceSourceUrl: document.getElementById('benchmark-source-url').value.trim() || null,
+    referenceNotes: document.getElementById('benchmark-reference-notes').value.trim() || null,
+    servingNotes: document.getElementById('benchmark-serving-notes').value.trim() || null,
+    referenceCalories: requiredNumber('benchmark-ref-cal'),
+    referenceProtein: requiredNumber('benchmark-ref-protein'),
+    referenceCarbs: requiredNumber('benchmark-ref-carbs'),
+    referenceFat: requiredNumber('benchmark-ref-fat'),
+    referenceTolerancePct: 0.2,
+    referenceMinToleranceCalories: 15,
+    mfpItemName: document.getElementById('benchmark-mfp-name').value.trim() || null,
+    mfpCalories: numberOrNull('benchmark-mfp-cal'),
+    mfpProtein: numberOrNull('benchmark-mfp-protein'),
+    mfpCarbs: numberOrNull('benchmark-mfp-carbs'),
+    mfpFat: numberOrNull('benchmark-mfp-fat'),
+    mfpNotes: document.getElementById('benchmark-mfp-notes').value.trim() || null,
+    mfpCollectedAt: numberOrNull('benchmark-mfp-cal') === null ? null : new Date().toISOString()
+  };
+}
+
+async function saveBenchmarkCase() {
+  const id = document.getElementById('benchmark-id').value.trim();
+  const body = benchmarkCasePayload();
+  if (!body.inputText) {
+    alert('Add benchmark input text.');
+    return;
+  }
+  if (!body.referenceSourceLabel) {
+    alert('Add a reference source label.');
+    return;
+  }
+  if (!body.referenceCalories) {
+    alert('Add reference calories.');
+    return;
+  }
+  await api(id ? `/accuracy-benchmarks/cases/${id}` : '/accuracy-benchmarks/cases', {
+    method: id ? 'PATCH' : 'POST',
+    body: JSON.stringify(body)
+  });
+  resetBenchmarkForm();
+  await loadAccuracyBenchmarks();
+}
+
+async function archiveBenchmarkCase(id) {
+  if (!confirm('Archive this benchmark case?')) return;
+  await api(`/accuracy-benchmarks/cases/${id}`, { method: 'DELETE' });
+  await loadAccuracyBenchmarks();
+}
+
+async function loadAccuracyBenchmarkRuns() {
+  const tbody = document.getElementById('benchmark-runs-tbody');
+  try {
+    const data = await api('/accuracy-benchmarks/runs?limit=10');
+    accuracyBenchmarkRuns = Array.isArray(data.runs) ? data.runs : [];
+    renderBenchmarkSnapshotRunOptions();
+    if (!accuracyBenchmarkRuns.length) {
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">📊</div>No benchmark runs yet.</div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = accuracyBenchmarkRuns.map(run => `
+      <tr>
+        <td>
+          <div class="mono">${escapeHtml(fmtTime(run.runAt))}</div>
+          <div class="text-muted" style="font-size:11px">${escapeHtml(run.runLabel || run.id)}</div>
+        </td>
+        <td class="mono">${escapeHtml(fmt(run.caseCount))}</td>
+        <td>${scoreBadge(run.foodAppScore)}</td>
+        <td>${scoreBadge(run.mfpScore)}</td>
+        <td><span class="badge badge-muted">${escapeHtml(run.cacheMode)}</span></td>
+        <td><button class="btn btn-ghost" onclick="loadAccuracyBenchmarkRunDetail('${run.id}')">View</button></td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderBenchmarkSnapshotRunOptions() {
+  const select = document.getElementById('benchmark-snapshot-run');
+  if (!select) return;
+  const previous = select.value;
+  select.innerHTML = accuracyBenchmarkRuns.map(run => {
+    const label = `${fmtTime(run.runAt)} · Food ${fmt(run.foodAppScore, 1)} · MFP ${run.mfpScore === null ? '—' : fmt(run.mfpScore, 1)} · ${run.caseCount} cases`;
+    return `<option value="${escapeHtml(run.id)}">${escapeHtml(label)}</option>`;
+  }).join('');
+  if (previous) select.value = previous;
+}
+
+async function runAccuracyBenchmark() {
+  const btn = document.getElementById('benchmark-run-btn');
+  const msg = document.getElementById('benchmark-run-msg');
+  const cacheMode = document.getElementById('benchmark-run-cache-mode').value;
+  const category = document.getElementById('benchmark-filter-category').value || null;
+  const maxCases = Math.max(1, Math.min(100, Number(document.getElementById('benchmark-run-max').value || 25)));
+  if (cacheMode === 'fresh' && !confirm('Fresh benchmark runs can spend Gemini money for cache misses. Continue?')) return;
+  btn.disabled = true;
+  msg.style.display = 'inline-flex';
+  try {
+    const data = await api('/accuracy-benchmarks/runs', {
+      method: 'POST',
+      body: JSON.stringify({ cacheMode, category, maxCases, runLabel: `${category || 'all'} ${cacheMode}` })
+    });
+    await loadAccuracyBenchmarks();
+    renderAccuracyBenchmarkRunDetail(data);
+  } catch (e) {
+    alert('Benchmark run failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    msg.style.display = 'none';
+  }
+}
+
+async function loadAccuracyBenchmarkRunDetail(id) {
+  const panel = document.getElementById('benchmark-run-detail');
+  panel.innerHTML = '<div class="card"><span class="spinner"></span>&nbsp;Loading run detail…</div>';
+  try {
+    const data = await api('/accuracy-benchmarks/runs/' + id);
+    renderAccuracyBenchmarkRunDetail(data);
+  } catch (e) {
+    panel.innerHTML = `<div class="card text-red">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderAccuracyBenchmarkRunDetail(data) {
+  const panel = document.getElementById('benchmark-run-detail');
+  const run = data.run;
+  const results = data.results || [];
+  const rows = results.map(result => {
+    const item = result.case || {};
+    return `
+      <tr title="${escapeHtml(result.foodAppExplanation || result.error || '')}">
+        <td>
+          <div class="truncate">${escapeHtml(item.inputText || result.caseId)}</div>
+          <div class="text-muted" style="font-size:11px">${escapeHtml(item.category || '')} · ${escapeHtml(result.foodAppRoute || '—')}</div>
+        </td>
+        <td class="mono">${escapeHtml(fmt(item.referenceCalories, 1))}<div class="text-muted" style="font-size:11px">P ${escapeHtml(fmt(item.referenceProtein, 1))} · C ${escapeHtml(fmt(item.referenceCarbs, 1))} · F ${escapeHtml(fmt(item.referenceFat, 1))}</div></td>
+        <td class="mono">${escapeHtml(fmt(result.foodAppCalories, 1))}<div class="text-muted" style="font-size:11px">P ${escapeHtml(fmt(result.foodAppProtein, 1))} · C ${escapeHtml(fmt(result.foodAppCarbs, 1))} · F ${escapeHtml(fmt(result.foodAppFat, 1))}</div></td>
+        <td class="mono">${escapeHtml(fmt(item.mfpCalories, 1))}<div class="text-muted" style="font-size:11px">P ${escapeHtml(fmt(item.mfpProtein, 1))} · C ${escapeHtml(fmt(item.mfpCarbs, 1))} · F ${escapeHtml(fmt(item.mfpFat, 1))}</div></td>
+        <td>${scoreBadge(result.foodAppOverallScore)}</td>
+        <td>${scoreBadge(result.mfpOverallScore)}</td>
+        <td>${benchmarkStatusBadge(result.resultLabel)}</td>
+      </tr>
+    `;
+  }).join('');
+  panel.innerHTML = `
+    <div class="eval-summary">
+      <div>
+        <div class="pass-rate-big ${passrateClass((run.foodAppScore || 0) / 100)}">${escapeHtml(fmt(run.foodAppScore, 1))}</div>
+        <div class="text-muted" style="font-size:13px;">Food App score</div>
+      </div>
+      <div style="flex:1;">
+        <div class="row-actions" style="margin-bottom:8px;">
+          <span class="badge badge-muted">${escapeHtml(run.cacheMode)}</span>
+          <span class="badge badge-blue">${escapeHtml(fmt(run.caseCount))} cases</span>
+          <span class="badge badge-muted">${escapeHtml(fmtTime(run.runAt))}</span>
+          <span>MyFitnessPal ${scoreBadge(run.mfpScore)}</span>
+        </div>
+        <div class="text-muted" style="font-size:12px;">Both systems are scored against the same stored reference calories and macros.</div>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Input</th><th>Reference</th><th>Food App</th><th>MyFitnessPal</th><th>Food Score</th><th>MFP Score</th><th>Label</th></tr></thead>
+        <tbody>${rows || '<tr><td colspan="7" class="text-muted" style="padding:24px;text-align:center;">No results.</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function loadBenchmarkPublicSnapshot() {
+  const current = document.getElementById('benchmark-public-snapshot-current');
+  if (!current) return;
+  try {
+    const data = await api('/accuracy-benchmarks/public-snapshot');
+    const snapshot = data.snapshot;
+    if (!snapshot) {
+      current.textContent = 'No active public snapshot yet.';
+      return;
+    }
+    current.innerHTML = `
+      <span class="badge badge-green">Active</span>
+      ${escapeHtml(snapshot.title)} · run ${escapeHtml(snapshot.runId.slice(0, 8))} ·
+      ${escapeHtml(snapshot.publishedAt ? fmtTime(snapshot.publishedAt) : fmtTime(snapshot.createdAt))}
+    `;
+    document.getElementById('benchmark-snapshot-title').value = snapshot.title || '';
+    document.getElementById('benchmark-snapshot-summary').value = snapshot.summary || '';
+    document.getElementById('benchmark-snapshot-categories').value = (snapshot.visibleCategories || []).join(', ');
+  } catch (e) {
+    current.innerHTML = `<span class="text-red">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+async function publishBenchmarkSnapshot() {
+  const runId = document.getElementById('benchmark-snapshot-run').value;
+  const title = document.getElementById('benchmark-snapshot-title').value.trim();
+  const summary = document.getElementById('benchmark-snapshot-summary').value.trim();
+  const visibleCategories = document.getElementById('benchmark-snapshot-categories').value
+    .split(',')
+    .map(value => value.trim())
+    .filter(Boolean);
+  if (!runId) {
+    alert('Choose a benchmark run to publish.');
+    return;
+  }
+  if (!title || !summary) {
+    alert('Add a public title and summary.');
+    return;
+  }
+  if (!confirm('Replace the active public benchmark snapshot?')) return;
+  await api('/accuracy-benchmarks/public-snapshot', {
+    method: 'POST',
+    body: JSON.stringify({ runId, title, summary, visibleCategories, isActive: true })
+  });
+  await loadBenchmarkPublicSnapshot();
 }
 
 /* ====================================================================== */
