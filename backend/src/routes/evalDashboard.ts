@@ -23,6 +23,7 @@ import {
   archiveBenchmarkCase,
   createBenchmarkCase,
   createBenchmarkPublicSnapshot,
+  deleteBenchmarkRun,
   getBenchmarkCase,
   getBenchmarkDashboardSummary,
   getBenchmarkPublicSnapshot,
@@ -523,6 +524,17 @@ router.get('/accuracy-benchmarks/runs/:id', async (req, res, next) => {
     const result = await getBenchmarkRun(req.params.id!);
     if (!result) throw new ApiError(404, 'NOT_FOUND', 'Benchmark run not found');
     res.json(result);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete('/accuracy-benchmarks/runs/:id', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const deleted = await deleteBenchmarkRun(req.params.id!);
+    if (!deleted) throw new ApiError(404, 'NOT_FOUND', 'Benchmark run not found');
+    res.json({ deleted: true });
   } catch (err) {
     next(err);
   }

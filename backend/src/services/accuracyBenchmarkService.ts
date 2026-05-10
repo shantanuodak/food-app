@@ -527,6 +527,22 @@ export async function archiveBenchmarkCase(id: string): Promise<boolean> {
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function deleteBenchmarkRun(id: string): Promise<boolean> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`DELETE FROM benchmark_public_snapshots WHERE run_id = $1`, [id]);
+    const result = await client.query(`DELETE FROM benchmark_runs WHERE id = $1`, [id]);
+    await client.query('COMMIT');
+    return (result.rowCount ?? 0) > 0;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 async function selectCasesForRun(options: BenchmarkRunOptions): Promise<BenchmarkCase[]> {
   const params: unknown[] = [];
   const where = ['is_active = TRUE', "status = 'reviewed'"];
