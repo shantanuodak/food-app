@@ -6,6 +6,7 @@ import {
   createRoadmapItem,
   groupRoadmapItems,
   listRoadmapItems,
+  reorderRoadmapItems,
   updateRoadmapItem
 } from '../services/roadmapService.js';
 
@@ -29,6 +30,11 @@ const itemSchema = z.object({
   displayOrder: z.coerce.number().int().min(0).max(100000).optional().default(0),
   isVisible: z.boolean().optional().default(true),
   sourceFeedbackId: z.string().uuid().nullable().optional()
+});
+
+const reorderSchema = z.object({
+  itemType: z.enum(['fix', 'feature']),
+  ids: z.array(z.string().uuid()).min(1).max(200)
 });
 
 function normalizeItemInput(raw: unknown) {
@@ -70,6 +76,17 @@ adminRouter.post('/', async (req, res, next) => {
     requireInternalKey(req.header('x-internal-metrics-key'));
     const item = await createRoadmapItem(normalizeItemInput(req.body));
     res.status(201).json({ item });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.patch('/reorder', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const input = reorderSchema.parse(req.body);
+    const items = await reorderRoadmapItems(input.itemType, input.ids);
+    res.status(200).json({ items, ...groupRoadmapItems(items) });
   } catch (err) {
     next(err);
   }

@@ -170,6 +170,53 @@ export async function updateRoadmapItem(id: string, input: RoadmapItemInput): Pr
   return getRoadmapItem(id);
 }
 
+export async function reorderRoadmapItems(itemType: RoadmapItemType, ids: string[]): Promise<RoadmapItemRow[]> {
+  const uniqueIds = Array.from(new Set(ids));
+  if (uniqueIds.length !== ids.length) {
+    throw new Error('Roadmap reorder ids must be unique');
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const existing = await client.query<{ id: string }>(
+      `
+      SELECT id
+      FROM public_roadmap_items
+      WHERE item_type = $1 AND id = ANY($2::uuid[])
+      FOR UPDATE
+      `,
+      [itemType, ids]
+    );
+
+    if (existing.rowCount !== ids.length) {
+      throw new Error('Roadmap reorder contains unknown or mismatched items');
+    }
+
+    for (let index = 0; index < ids.length; index += 1) {
+      await client.query(
+        `
+        UPDATE public_roadmap_items
+        SET display_order = $3,
+            updated_at = NOW()
+        WHERE item_type = $1 AND id = $2
+        `,
+        [itemType, ids[index], index]
+      );
+    }
+
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+
+  return listRoadmapItems();
+}
+
 export async function getRoadmapItem(id: string): Promise<RoadmapItemRow | null> {
   const result = await pool.query<DbRoadmapRow>(
     `

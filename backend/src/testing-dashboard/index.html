@@ -886,10 +886,54 @@
     tbody tr:hover {
       background: rgba(34,38,58,0.50);
     }
+    tbody tr.drag-over {
+      background: rgba(99,102,241,0.22);
+      box-shadow: inset 3px 0 0 var(--accent2);
+    }
     tbody td {
       padding: 13px 16px;
       color: #e6e8f3;
     }
+    .drag-cell {
+      width: 44px;
+      padding-right: 4px;
+    }
+    .drag-handle {
+      width: 34px;
+      height: 34px;
+      display: inline-grid;
+      grid-template-columns: repeat(2, 4px);
+      grid-auto-rows: 4px;
+      place-content: center;
+      gap: 4px;
+      border: 1px solid rgba(129,140,248,0.16);
+      border-radius: 10px;
+      background: rgba(34,38,58,0.62);
+      cursor: grab;
+      transition: border-color 0.15s, background 0.15s, transform 0.15s;
+    }
+    .drag-handle:active { cursor: grabbing; transform: scale(0.96); }
+    .drag-handle:hover,
+    .drag-handle:focus-visible {
+      border-color: rgba(129,140,248,0.72);
+      background: rgba(49,54,82,0.90);
+      outline: none;
+    }
+    .drag-handle span {
+      width: 4px;
+      height: 4px;
+      border-radius: 999px;
+      background: #aab0d0;
+      display: block;
+    }
+    .roadmap-reorder-status {
+      min-height: 18px;
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .roadmap-reorder-status.saving { color: var(--accent2); }
+    .roadmap-reorder-status.error { color: #fca5a5; }
     .parse-debug-wrap {
       overflow-x: auto;
     }
@@ -1826,10 +1870,14 @@
           <button class="active" data-roadmap-filter="fix" onclick="setRoadmapFilter('fix')">Upcoming fixes</button>
           <button data-roadmap-filter="feature" onclick="setRoadmapFilter('feature')">Upcoming features</button>
         </div>
+        <div id="roadmap-reorder-status" class="roadmap-reorder-status">
+          Drag the 4-dot handle to set the priority order shown in the app.
+        </div>
         <div class="table-wrap" style="margin-top:12px;">
           <table>
             <thead>
               <tr>
+                <th aria-label="Reorder"></th>
                 <th>Item</th>
                 <th>Status</th>
                 <th>Release</th>
@@ -1840,7 +1888,7 @@
               </tr>
             </thead>
             <tbody id="roadmap-tbody">
-              <tr><td colspan="7" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+              <tr><td colspan="8" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -1962,6 +2010,8 @@ let promptLabRuntimeRefreshTimer = null;
 const PROMPT_LAB_DEFAULT_INPUT = 'cold coffee 8 oz';
 let roadmapItems = [];
 let roadmapFilter = 'fix';
+let roadmapDragId = null;
+let roadmapReorderSaving = false;
 let accuracyBenchmarkCases = [];
 let accuracyBenchmarkRuns = [];
 function switchTab(name, btn) {
@@ -3430,6 +3480,7 @@ function feedbackTypeBadge(type) {
 
 function setRoadmapFilter(type) {
   roadmapFilter = type;
+  roadmapDragId = null;
   document.querySelectorAll('[data-roadmap-filter]').forEach(button => {
     button.classList.toggle('active', button.dataset.roadmapFilter === type);
   });
@@ -3443,24 +3494,38 @@ async function loadRoadmap() {
     roadmapItems = Array.isArray(data.items) ? data.items : [];
     renderRoadmap();
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${escHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${escHtml(e.message)}</td></tr>`;
   }
+}
+
+function setRoadmapReorderStatus(message, state = '') {
+  const el = document.getElementById('roadmap-reorder-status');
+  if (!el) return;
+  el.textContent = message;
+  el.className = `roadmap-reorder-status ${state}`.trim();
 }
 
 function renderRoadmap() {
   const tbody = document.getElementById('roadmap-tbody');
   const items = roadmapItems.filter(item => item.itemType === roadmapFilter);
   if (!items.length) {
-    tbody.innerHTML = `<tr><td colspan="7"><div class="empty-state"><div class="icon">🗺️</div>No ${roadmapFilter === 'fix' ? 'fixes' : 'features'} yet.</div></td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8"><div class="empty-state"><div class="icon">🗺️</div>No ${roadmapFilter === 'fix' ? 'fixes' : 'features'} yet.</div></td></tr>`;
+    setRoadmapReorderStatus('Add items here, then drag the 4-dot handle to set priority.');
     return;
   }
+  setRoadmapReorderStatus(roadmapReorderSaving ? 'Saving priority order…' : 'Drag the 4-dot handle to set the priority order shown in the app.', roadmapReorderSaving ? 'saving' : '');
   tbody.innerHTML = '';
   for (const item of items) {
     const source = item.sourceFeedback
       ? `${feedbackTypeBadge(item.sourceFeedback.feedbackType)}<div class="text-muted" style="margin-top:4px;max-width:220px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escHtml(item.sourceFeedback.message)}</div>`
       : '<span class="text-muted">Manual</span>';
     tbody.innerHTML += `
-      <tr>
+      <tr data-roadmap-id="${item.id}" ondragover="roadmapDragOver(event, '${item.id}')" ondragleave="roadmapDragLeave(event)" ondrop="roadmapDrop(event, '${item.id}')">
+        <td class="drag-cell">
+          <button class="drag-handle" type="button" draggable="true" aria-label="Drag ${escHtml(item.title)} to reorder" title="Drag to reorder" ondragstart="roadmapDragStart(event, '${item.id}')" ondragend="roadmapDragEnd(event)">
+            <span></span><span></span><span></span><span></span>
+          </button>
+        </td>
         <td style="max-width:360px;">
           <strong>${escHtml(item.title)}</strong>
           <div class="text-muted" style="white-space:pre-wrap;margin-top:4px;">${escHtml(item.description || '')}</div>
@@ -3472,6 +3537,83 @@ function renderRoadmap() {
         <td>${source}</td>
         <td><button class="btn btn-ghost" onclick="editRoadmapItem('${item.id}')">Edit</button></td>
       </tr>`;
+  }
+}
+
+function roadmapDragStart(event, id) {
+  if (roadmapReorderSaving) {
+    event.preventDefault();
+    return;
+  }
+  roadmapDragId = id;
+  event.dataTransfer.effectAllowed = 'move';
+  event.dataTransfer.setData('text/plain', id);
+}
+
+function roadmapDragOver(event, targetId) {
+  if (!roadmapDragId || roadmapDragId === targetId || roadmapReorderSaving) return;
+  event.preventDefault();
+  event.currentTarget.classList.add('drag-over');
+  event.dataTransfer.dropEffect = 'move';
+}
+
+function roadmapDragLeave(event) {
+  event.currentTarget.classList.remove('drag-over');
+}
+
+function roadmapDragEnd() {
+  document.querySelectorAll('#roadmap-tbody tr.drag-over').forEach(row => row.classList.remove('drag-over'));
+}
+
+async function roadmapDrop(event, targetId) {
+  event.preventDefault();
+  event.currentTarget.classList.remove('drag-over');
+  if (!roadmapDragId || roadmapDragId === targetId || roadmapReorderSaving) {
+    roadmapDragId = null;
+    return;
+  }
+
+  const bucketItems = roadmapItems
+    .filter(item => item.itemType === roadmapFilter)
+    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0) || new Date(b.createdAt) - new Date(a.createdAt));
+  const fromIndex = bucketItems.findIndex(item => item.id === roadmapDragId);
+  const toIndex = bucketItems.findIndex(item => item.id === targetId);
+  if (fromIndex < 0 || toIndex < 0) {
+    roadmapDragId = null;
+    return;
+  }
+
+  const [moved] = bucketItems.splice(fromIndex, 1);
+  bucketItems.splice(toIndex, 0, moved);
+  const reorderedIds = bucketItems.map(item => item.id);
+  const previousItems = roadmapItems.map(item => ({ ...item }));
+
+  roadmapItems = roadmapItems.map(item => {
+    const index = reorderedIds.indexOf(item.id);
+    return index >= 0 ? { ...item, displayOrder: index } : item;
+  }).sort((a, b) => {
+    if (a.itemType !== b.itemType) return a.itemType.localeCompare(b.itemType);
+    return (a.displayOrder || 0) - (b.displayOrder || 0) || new Date(b.createdAt) - new Date(a.createdAt);
+  });
+
+  roadmapDragId = null;
+  roadmapReorderSaving = true;
+  renderRoadmap();
+
+  try {
+    const data = await api('/roadmap/reorder', {
+      method: 'PATCH',
+      body: JSON.stringify({ itemType: roadmapFilter, ids: reorderedIds })
+    });
+    roadmapItems = Array.isArray(data.items) ? data.items : roadmapItems;
+    roadmapReorderSaving = false;
+    renderRoadmap();
+    setRoadmapReorderStatus('Priority order saved.');
+  } catch (e) {
+    roadmapItems = previousItems;
+    roadmapReorderSaving = false;
+    renderRoadmap();
+    setRoadmapReorderStatus(`Could not save priority order: ${e.message}`, 'error');
   }
 }
 
