@@ -1200,10 +1200,84 @@
         </div>
 
         <div class="card section">
+          <div class="row-actions" style="justify-content:space-between; align-items:flex-start;">
+            <div>
+              <h3 style="margin-bottom:4px;">Benchmark workflow</h3>
+              <p class="text-muted" style="font-size:13px; margin:0;">Add reviewed cases, choose what to run, then read the score immediately below.</p>
+            </div>
+            <span id="benchmark-run-msg" style="display:none; color:var(--muted); font-size:13px;">
+              <span class="spinner"></span>&nbsp;Running…
+            </span>
+          </div>
+          <div class="grid-3" style="margin-bottom:16px;">
+            <div class="stat-card">
+              <div class="stat-label">1 · Add cases</div>
+              <div style="font-weight:700;">Create reference truth</div>
+              <div class="stat-sub">USDA, official brand, restaurant, or curated</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">2 · Run benchmark</div>
+              <div style="font-weight:700;">Send reviewed cases to Food App</div>
+              <div class="stat-sub">Fresh can spend Gemini money</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">3 · Review score</div>
+              <div style="font-weight:700;">Compare against reference</div>
+              <div class="stat-sub">Weak rows show what to fix next</div>
+            </div>
+          </div>
+          <div class="eval-controls">
+            <div class="eval-control">
+              <label for="benchmark-filter-category">Cuisine / category</label>
+              <select id="benchmark-filter-category" onchange="loadAccuracyBenchmarkCases()">
+                <option value="">All</option>
+                <option value="simple">simple</option>
+                <option value="restaurant">restaurant</option>
+                <option value="branded">branded</option>
+                <option value="homemade">homemade</option>
+                <option value="indian">indian</option>
+                <option value="international">international</option>
+                <option value="typo">typo</option>
+                <option value="portion">portion</option>
+                <option value="ambiguous">ambiguous</option>
+              </select>
+            </div>
+            <div class="eval-control">
+              <label for="benchmark-filter-status">Case status</label>
+              <select id="benchmark-filter-status" onchange="loadAccuracyBenchmarkCases()">
+                <option value="">All</option>
+                <option value="draft">draft</option>
+                <option value="reviewed">reviewed</option>
+                <option value="archived">archived</option>
+              </select>
+            </div>
+            <div class="eval-control">
+              <label for="benchmark-run-cache-mode">Run cache</label>
+              <select id="benchmark-run-cache-mode">
+                <option value="cached">cached</option>
+                <option value="fresh">fresh</option>
+              </select>
+            </div>
+            <div class="eval-control">
+              <label for="benchmark-run-max">Max cases</label>
+              <input id="benchmark-run-max" type="number" min="1" max="100" value="25" />
+            </div>
+            <div class="eval-control" style="align-self:end;">
+              <button class="btn btn-ghost" onclick="openBenchmarkEditor()">Add case</button>
+            </div>
+            <div class="eval-control" style="align-self:end;">
+              <button class="btn btn-primary" id="benchmark-run-btn" onclick="runAccuracyBenchmark()">Run benchmark</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="benchmark-latest-detail" style="margin-top:18px;"></div>
+
+        <div class="card section">
           <div class="row-actions" style="justify-content:space-between; margin-bottom:0;">
             <div>
-              <h3 style="margin-bottom:4px;">Cases</h3>
-              <p class="text-muted" style="font-size:13px; margin:0;">Add reviewed truth cases, then run Food App and MyFitnessPal against them.</p>
+              <h3 style="margin-bottom:4px;">1 · Benchmark cases</h3>
+              <p class="text-muted" style="font-size:13px; margin:0;">These are the reviewed reference foods that scoring uses.</p>
             </div>
             <button class="btn btn-primary" onclick="openBenchmarkEditor()">Add case</button>
           </div>
@@ -1313,33 +1387,6 @@
             </div>
           </div>
 
-          <div class="eval-controls" style="margin-top:18px;">
-          <div class="eval-control">
-            <label for="benchmark-filter-category">Filter category</label>
-            <select id="benchmark-filter-category" onchange="loadAccuracyBenchmarkCases()">
-              <option value="">All</option>
-              <option value="simple">simple</option>
-              <option value="restaurant">restaurant</option>
-              <option value="branded">branded</option>
-              <option value="homemade">homemade</option>
-              <option value="indian">indian</option>
-              <option value="international">international</option>
-              <option value="typo">typo</option>
-              <option value="portion">portion</option>
-              <option value="ambiguous">ambiguous</option>
-            </select>
-          </div>
-          <div class="eval-control">
-            <label for="benchmark-filter-status">Filter status</label>
-            <select id="benchmark-filter-status" onchange="loadAccuracyBenchmarkCases()">
-              <option value="">All</option>
-              <option value="draft">draft</option>
-              <option value="reviewed">reviewed</option>
-              <option value="archived">archived</option>
-            </select>
-          </div>
-        </div>
-
         <div class="table-wrap" style="margin-top:12px;">
           <table>
             <thead>
@@ -1363,25 +1410,8 @@
         <div class="card section" style="margin-top:18px;">
           <div class="row-actions" style="justify-content:space-between;">
             <div>
-              <h3 style="margin-bottom:4px;">Runs</h3>
-              <p class="text-muted" style="font-size:13px; margin:0;">Run reviewed cases and compare Food App against the stored reference and MyFitnessPal values.</p>
-            </div>
-            <button class="btn btn-primary" id="benchmark-run-btn" onclick="runAccuracyBenchmark()">Run benchmark</button>
-          </div>
-          <span id="benchmark-run-msg" style="display:none; color:var(--muted); font-size:13px;">
-            <span class="spinner"></span>&nbsp;Running…
-          </span>
-          <div class="eval-controls">
-            <div class="eval-control">
-              <label for="benchmark-run-cache-mode">Run cache</label>
-              <select id="benchmark-run-cache-mode">
-                <option value="cached">cached</option>
-                <option value="fresh">fresh</option>
-              </select>
-            </div>
-            <div class="eval-control">
-              <label for="benchmark-run-max">Max cases</label>
-              <input id="benchmark-run-max" type="number" min="1" max="100" value="25" />
+              <h3 style="margin-bottom:4px;">Run history</h3>
+              <p class="text-muted" style="font-size:13px; margin:0;">Past benchmark runs are kept here. The latest run is summarized at the top.</p>
             </div>
           </div>
 
@@ -1434,7 +1464,6 @@
           <div id="benchmark-public-snapshot-current" class="text-muted" style="font-size:13px; margin-top:12px;">No public snapshot loaded.</div>
         </details>
 
-        <div id="benchmark-run-detail" style="margin-top:18px;"></div>
       </div>
     </div>
 
@@ -2595,6 +2624,8 @@ async function loadAccuracyBenchmarkRuns() {
     renderBenchmarkSnapshotRunOptions();
     if (!accuracyBenchmarkRuns.length) {
       tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">📊</div>No benchmark runs yet.</div></td></tr>';
+      document.getElementById('benchmark-latest-detail').innerHTML =
+        '<div class="card"><div class="empty-state"><div class="icon">📊</div>No benchmark score yet. Add reviewed cases, then run a benchmark.</div></div>';
       return;
     }
     tbody.innerHTML = accuracyBenchmarkRuns.map(run => `
@@ -2610,6 +2641,7 @@ async function loadAccuracyBenchmarkRuns() {
         <td><button class="btn btn-ghost" onclick="loadAccuracyBenchmarkRunDetail('${run.id}')">View</button></td>
       </tr>
     `).join('');
+    await loadAccuracyBenchmarkRunDetail(accuracyBenchmarkRuns[0].id, { targetId: 'benchmark-latest-detail', scroll: false });
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="6" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
@@ -2641,7 +2673,7 @@ async function runAccuracyBenchmark() {
       body: JSON.stringify({ cacheMode, category, maxCases, runLabel: `${category || 'all'} ${cacheMode}` })
     });
     await loadAccuracyBenchmarks();
-    renderAccuracyBenchmarkRunDetail(data);
+    renderAccuracyBenchmarkRunDetail(data, 'benchmark-latest-detail');
   } catch (e) {
     alert('Benchmark run failed: ' + e.message);
   } finally {
@@ -2650,19 +2682,23 @@ async function runAccuracyBenchmark() {
   }
 }
 
-async function loadAccuracyBenchmarkRunDetail(id) {
-  const panel = document.getElementById('benchmark-run-detail');
+async function loadAccuracyBenchmarkRunDetail(id, options = {}) {
+  const targetId = options.targetId || 'benchmark-latest-detail';
+  const panel = document.getElementById(targetId);
   panel.innerHTML = '<div class="card"><span class="spinner"></span>&nbsp;Loading run detail…</div>';
   try {
     const data = await api('/accuracy-benchmarks/runs/' + id);
-    renderAccuracyBenchmarkRunDetail(data);
+    renderAccuracyBenchmarkRunDetail(data, targetId);
+    if (options.scroll !== false) {
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   } catch (e) {
     panel.innerHTML = `<div class="card text-red">${escapeHtml(e.message)}</div>`;
   }
 }
 
-function renderAccuracyBenchmarkRunDetail(data) {
-  const panel = document.getElementById('benchmark-run-detail');
+function renderAccuracyBenchmarkRunDetail(data, targetId = 'benchmark-latest-detail') {
+  const panel = document.getElementById(targetId);
   const run = data.run;
   const results = data.results || [];
   const rows = results.map(result => {
@@ -2698,6 +2734,7 @@ function renderAccuracyBenchmarkRunDetail(data) {
         <div class="text-muted" style="font-size:12px;">Both systems are scored against the same stored reference calories and macros.</div>
       </div>
     </div>
+    <h3 style="margin: 0 0 10px;">Latest run inputs and scores</h3>
     <div class="table-wrap">
       <table>
         <thead><tr><th>Input</th><th>Reference</th><th>Food App</th><th>MyFitnessPal</th><th>Food Score</th><th>MFP Score</th><th>Label</th></tr></thead>
