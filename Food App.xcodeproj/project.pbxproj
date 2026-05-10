@@ -41,6 +41,16 @@
 		CDF100022F60000000AA0002 /* Food Camera Widget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Food Camera Widget.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		CDF1000E2F60000000AA000E /* Exceptions for "Food Camera Widget" folder in "Food Camera Widget" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = CDF100082F60000000AA0008 /* Food Camera Widget */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		CDD80CD52F4268E4008A5987 /* Food App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
@@ -49,6 +59,9 @@
 		};
 		CDF100012F60000000AA0001 /* Food Camera Widget */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				CDF1000E2F60000000AA000E /* Exceptions for "Food Camera Widget" folder in "Food Camera Widget" target */,
+			);
 			path = "Food Camera Widget";
 			sourceTree = "<group>";
 		};
@@ -465,6 +478,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Food Camera";
 				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				INFOPLIST_FILE = "Food Camera Widget/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
@@ -495,6 +509,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Food Camera";
 				INFOPLIST_KEY_NSExtension_NSExtensionPointIdentifier = "com.apple.widgetkit-extension";
+				INFOPLIST_FILE = "Food Camera Widget/Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
