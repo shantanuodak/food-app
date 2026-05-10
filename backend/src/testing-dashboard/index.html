@@ -1187,10 +1187,6 @@
         <div class="row-actions">
           <h2 style="margin:0">Accuracy Benchmarks</h2>
           <button class="btn btn-ghost" onclick="loadAccuracyBenchmarks()">↻ Refresh</button>
-          <button class="btn btn-primary" id="benchmark-run-btn" onclick="runAccuracyBenchmark()">Run benchmark</button>
-          <span id="benchmark-run-msg" style="display:none; color:var(--muted); font-size:13px;">
-            <span class="spinner"></span>&nbsp;Running…
-          </span>
         </div>
         <p class="text-muted" style="font-size:13px; margin-bottom:16px;">
           Reference nutrition is the truth. Food App and MyFitnessPal are both scored against the same reviewed cases.
@@ -1203,98 +1199,121 @@
           <div class="stat-card"><div class="stat-label">MFP Score</div><div class="stat-value" id="bench-mfp-score">—</div><div class="stat-sub" id="bench-mfp-score-sub">manual comparison</div></div>
         </div>
 
-        <div class="eval-controls">
-          <div class="eval-control" style="flex:1; min-width:260px;">
-            <label for="benchmark-input">Input text</label>
-            <input id="benchmark-input" type="text" maxlength="500" placeholder="one bowl dal rice" />
+        <div class="card section">
+          <div class="row-actions" style="justify-content:space-between; margin-bottom:0;">
+            <div>
+              <h3 style="margin-bottom:4px;">Cases</h3>
+              <p class="text-muted" style="font-size:13px; margin:0;">Add reviewed truth cases, then run Food App and MyFitnessPal against them.</p>
+            </div>
+            <button class="btn btn-primary" onclick="openBenchmarkEditor()">Add case</button>
           </div>
-          <div class="eval-control">
-            <label for="benchmark-category">Category</label>
-            <select id="benchmark-category">
-              <option value="simple">simple</option>
-              <option value="restaurant">restaurant</option>
-              <option value="branded">branded</option>
-              <option value="homemade">homemade</option>
-              <option value="indian">indian</option>
-              <option value="international">international</option>
-              <option value="typo">typo</option>
-              <option value="portion">portion</option>
-              <option value="ambiguous">ambiguous</option>
-            </select>
-          </div>
-          <div class="eval-control">
-            <label for="benchmark-status">Status</label>
-            <select id="benchmark-status">
-              <option value="draft">draft</option>
-              <option value="reviewed">reviewed</option>
-              <option value="archived">archived</option>
-            </select>
-          </div>
-          <div class="eval-control">
-            <label for="benchmark-source-type">Source type</label>
-            <select id="benchmark-source-type">
-              <option value="usda">USDA</option>
-              <option value="official_restaurant">Official restaurant</option>
-              <option value="official_brand">Official brand</option>
-              <option value="curated_recipe">Curated recipe</option>
-              <option value="curated_manual">Curated manual</option>
-            </select>
-          </div>
-          <div class="eval-control" style="flex:1; min-width:220px;">
-            <label for="benchmark-source-label">Source label</label>
-            <input id="benchmark-source-label" type="text" maxlength="180" placeholder="USDA FoodData Central" />
-          </div>
-        </div>
 
-        <div class="eval-controls" style="margin-top:10px;">
-          <div class="eval-control"><label for="benchmark-ref-cal">Ref cal</label><input id="benchmark-ref-cal" type="number" min="0" step="0.1" /></div>
-          <div class="eval-control"><label for="benchmark-ref-protein">Ref protein</label><input id="benchmark-ref-protein" type="number" min="0" step="0.1" value="0" /></div>
-          <div class="eval-control"><label for="benchmark-ref-carbs">Ref carbs</label><input id="benchmark-ref-carbs" type="number" min="0" step="0.1" value="0" /></div>
-          <div class="eval-control"><label for="benchmark-ref-fat">Ref fat</label><input id="benchmark-ref-fat" type="number" min="0" step="0.1" value="0" /></div>
-          <div class="eval-control"><label for="benchmark-mfp-cal">MFP cal</label><input id="benchmark-mfp-cal" type="number" min="0" step="0.1" /></div>
-          <div class="eval-control"><label for="benchmark-mfp-protein">MFP protein</label><input id="benchmark-mfp-protein" type="number" min="0" step="0.1" /></div>
-          <div class="eval-control"><label for="benchmark-mfp-carbs">MFP carbs</label><input id="benchmark-mfp-carbs" type="number" min="0" step="0.1" /></div>
-          <div class="eval-control"><label for="benchmark-mfp-fat">MFP fat</label><input id="benchmark-mfp-fat" type="number" min="0" step="0.1" /></div>
-        </div>
+          <div id="benchmark-editor" class="card" style="display:none; margin-top:16px; background:rgba(15,17,23,0.52);">
+            <div class="row-actions" style="justify-content:space-between;">
+              <h3 style="margin:0" id="benchmark-editor-title">Add Benchmark Case</h3>
+              <button class="btn btn-ghost" onclick="closeBenchmarkEditor()">Close</button>
+            </div>
+            <input id="benchmark-id" type="hidden" />
 
-        <div class="eval-controls" style="margin-top:10px;">
-          <div class="eval-control" style="flex:1; min-width:220px;">
-            <label for="benchmark-display-name">Display name</label>
-            <input id="benchmark-display-name" type="text" maxlength="160" placeholder="Optional cleaner label" />
-          </div>
-          <div class="eval-control" style="flex:1; min-width:220px;">
-            <label for="benchmark-source-url">Source URL</label>
-            <input id="benchmark-source-url" type="url" maxlength="600" placeholder="https://..." />
-          </div>
-          <div class="eval-control" style="flex:1; min-width:220px;">
-            <label for="benchmark-mfp-name">MyFitnessPal item</label>
-            <input id="benchmark-mfp-name" type="text" maxlength="180" placeholder="Selected MFP result" />
-          </div>
-        </div>
+            <h3>1. Food Case</h3>
+            <div class="eval-controls">
+              <div class="eval-control" style="flex:1; min-width:260px;">
+                <label for="benchmark-input">Input text</label>
+                <input id="benchmark-input" type="text" maxlength="500" placeholder="one bowl dal rice" />
+              </div>
+              <div class="eval-control" style="flex:1; min-width:220px;">
+                <label for="benchmark-display-name">Display name</label>
+                <input id="benchmark-display-name" type="text" maxlength="160" placeholder="Optional cleaner label" />
+              </div>
+              <div class="eval-control">
+                <label for="benchmark-category">Category</label>
+                <select id="benchmark-category">
+                  <option value="simple">simple</option>
+                  <option value="restaurant">restaurant</option>
+                  <option value="branded">branded</option>
+                  <option value="homemade">homemade</option>
+                  <option value="indian">indian</option>
+                  <option value="international">international</option>
+                  <option value="typo">typo</option>
+                  <option value="portion">portion</option>
+                  <option value="ambiguous">ambiguous</option>
+                </select>
+              </div>
+              <div class="eval-control">
+                <label for="benchmark-status">Status</label>
+                <select id="benchmark-status">
+                  <option value="draft">draft</option>
+                  <option value="reviewed">reviewed</option>
+                  <option value="archived">archived</option>
+                </select>
+              </div>
+            </div>
 
-        <div class="eval-controls" style="margin-top:10px;">
-          <div class="eval-control" style="flex:1; min-width:280px;">
-            <label for="benchmark-serving-notes">Serving notes</label>
-            <textarea id="benchmark-serving-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="What portion/reference assumption this case uses."></textarea>
-          </div>
-          <div class="eval-control" style="flex:1; min-width:280px;">
-            <label for="benchmark-reference-notes">Reference notes</label>
-            <textarea id="benchmark-reference-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="Why this reference is trusted."></textarea>
-          </div>
-          <div class="eval-control" style="flex:1; min-width:280px;">
-            <label for="benchmark-mfp-notes">MFP notes</label>
-            <textarea id="benchmark-mfp-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="Top result, confusing result, duplicate, etc."></textarea>
-          </div>
-        </div>
+            <div class="eval-control" style="margin-top:10px;">
+              <label for="benchmark-serving-notes">Serving notes</label>
+              <textarea id="benchmark-serving-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="What portion/reference assumption this case uses."></textarea>
+            </div>
 
-        <input id="benchmark-id" type="hidden" />
-        <div class="row-actions" style="margin-top:12px;">
-          <label class="provider-toggle"><input id="benchmark-active" type="checkbox" checked /> Active</label>
-          <button class="btn btn-ghost" onclick="resetBenchmarkForm()">Clear</button>
-          <button class="btn btn-primary" onclick="saveBenchmarkCase()">Save benchmark case</button>
-        </div>
+            <h3 style="margin-top:18px;">2. Reference Truth</h3>
+            <div class="eval-controls">
+              <div class="eval-control">
+                <label for="benchmark-source-type">Source type</label>
+                <select id="benchmark-source-type">
+                  <option value="usda">USDA</option>
+                  <option value="official_restaurant">Official restaurant</option>
+                  <option value="official_brand">Official brand</option>
+                  <option value="curated_recipe">Curated recipe</option>
+                  <option value="curated_manual">Curated manual</option>
+                </select>
+              </div>
+              <div class="eval-control" style="flex:1; min-width:220px;">
+                <label for="benchmark-source-label">Source label</label>
+                <input id="benchmark-source-label" type="text" maxlength="180" placeholder="USDA FoodData Central" />
+              </div>
+              <div class="eval-control" style="flex:1; min-width:220px;">
+                <label for="benchmark-source-url">Source URL</label>
+                <input id="benchmark-source-url" type="url" maxlength="600" placeholder="https://..." />
+              </div>
+            </div>
 
-        <div class="eval-controls" style="margin-top:22px;">
+            <div class="eval-controls" style="margin-top:10px;">
+              <div class="eval-control"><label for="benchmark-ref-cal">Ref cal</label><input id="benchmark-ref-cal" type="number" min="0" step="0.1" /></div>
+              <div class="eval-control"><label for="benchmark-ref-protein">Ref protein</label><input id="benchmark-ref-protein" type="number" min="0" step="0.1" value="0" /></div>
+              <div class="eval-control"><label for="benchmark-ref-carbs">Ref carbs</label><input id="benchmark-ref-carbs" type="number" min="0" step="0.1" value="0" /></div>
+              <div class="eval-control"><label for="benchmark-ref-fat">Ref fat</label><input id="benchmark-ref-fat" type="number" min="0" step="0.1" value="0" /></div>
+            </div>
+
+            <div class="eval-control" style="margin-top:10px;">
+              <label for="benchmark-reference-notes">Reference notes</label>
+              <textarea id="benchmark-reference-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="Why this reference is trusted."></textarea>
+            </div>
+
+            <details style="margin-top:18px;">
+              <summary style="cursor:pointer; color:var(--accent2); font-weight:700;">3. MyFitnessPal comparison</summary>
+              <div class="eval-controls" style="margin-top:12px;">
+                <div class="eval-control" style="flex:1; min-width:220px;">
+                  <label for="benchmark-mfp-name">MyFitnessPal item</label>
+                  <input id="benchmark-mfp-name" type="text" maxlength="180" placeholder="Selected MFP result" />
+                </div>
+                <div class="eval-control"><label for="benchmark-mfp-cal">MFP cal</label><input id="benchmark-mfp-cal" type="number" min="0" step="0.1" /></div>
+                <div class="eval-control"><label for="benchmark-mfp-protein">MFP protein</label><input id="benchmark-mfp-protein" type="number" min="0" step="0.1" /></div>
+                <div class="eval-control"><label for="benchmark-mfp-carbs">MFP carbs</label><input id="benchmark-mfp-carbs" type="number" min="0" step="0.1" /></div>
+                <div class="eval-control"><label for="benchmark-mfp-fat">MFP fat</label><input id="benchmark-mfp-fat" type="number" min="0" step="0.1" /></div>
+              </div>
+              <div class="eval-control" style="margin-top:10px;">
+                <label for="benchmark-mfp-notes">MFP notes</label>
+                <textarea id="benchmark-mfp-notes" class="dashboard-input" rows="2" maxlength="1200" placeholder="Top result, confusing result, duplicate, etc."></textarea>
+              </div>
+            </details>
+
+            <div class="row-actions" style="margin-top:16px;">
+              <label class="provider-toggle"><input id="benchmark-active" type="checkbox" checked /> Active</label>
+              <button class="btn btn-ghost" onclick="resetBenchmarkForm()">Clear</button>
+              <button class="btn btn-primary" onclick="saveBenchmarkCase()">Save case</button>
+            </div>
+          </div>
+
+          <div class="eval-controls" style="margin-top:18px;">
           <div class="eval-control">
             <label for="benchmark-filter-category">Filter category</label>
             <select id="benchmark-filter-category" onchange="loadAccuracyBenchmarkCases()">
@@ -1319,17 +1338,6 @@
               <option value="archived">archived</option>
             </select>
           </div>
-          <div class="eval-control">
-            <label for="benchmark-run-cache-mode">Run cache</label>
-            <select id="benchmark-run-cache-mode">
-              <option value="cached">cached</option>
-              <option value="fresh">fresh</option>
-            </select>
-          </div>
-          <div class="eval-control">
-            <label for="benchmark-run-max">Max cases</label>
-            <input id="benchmark-run-max" type="number" min="1" max="100" value="25" />
-          </div>
         </div>
 
         <div class="table-wrap" style="margin-top:12px;">
@@ -1350,8 +1358,34 @@
             </tbody>
           </table>
         </div>
+        </div>
 
-        <div class="table-wrap" style="margin-top:18px;">
+        <div class="card section" style="margin-top:18px;">
+          <div class="row-actions" style="justify-content:space-between;">
+            <div>
+              <h3 style="margin-bottom:4px;">Runs</h3>
+              <p class="text-muted" style="font-size:13px; margin:0;">Run reviewed cases and compare Food App against the stored reference and MyFitnessPal values.</p>
+            </div>
+            <button class="btn btn-primary" id="benchmark-run-btn" onclick="runAccuracyBenchmark()">Run benchmark</button>
+          </div>
+          <span id="benchmark-run-msg" style="display:none; color:var(--muted); font-size:13px;">
+            <span class="spinner"></span>&nbsp;Running…
+          </span>
+          <div class="eval-controls">
+            <div class="eval-control">
+              <label for="benchmark-run-cache-mode">Run cache</label>
+              <select id="benchmark-run-cache-mode">
+                <option value="cached">cached</option>
+                <option value="fresh">fresh</option>
+              </select>
+            </div>
+            <div class="eval-control">
+              <label for="benchmark-run-max">Max cases</label>
+              <input id="benchmark-run-max" type="number" min="1" max="100" value="25" />
+            </div>
+          </div>
+
+          <div class="table-wrap" style="margin-top:12px;">
           <table>
             <thead>
               <tr>
@@ -1367,11 +1401,12 @@
               <tr><td colspan="6" class="text-muted" style="padding:24px; text-align:center;">No runs loaded.</td></tr>
             </tbody>
           </table>
+          </div>
         </div>
 
-        <div class="card section" style="margin-top:18px;">
+        <details class="card section" style="margin-top:18px;">
+          <summary style="cursor:pointer; font-weight:800; color:var(--accent2);">Public Snapshot</summary>
           <div class="row-actions">
-            <h3 style="margin:0">Public Snapshot</h3>
             <button class="btn btn-ghost" onclick="loadBenchmarkPublicSnapshot()">↻ Refresh</button>
             <button class="btn btn-primary" onclick="publishBenchmarkSnapshot()">Publish selected run</button>
           </div>
@@ -1397,7 +1432,7 @@
             <textarea id="benchmark-snapshot-summary" class="dashboard-input" rows="3" maxlength="1200" placeholder="Short public-facing explanation of this benchmark."></textarea>
           </div>
           <div id="benchmark-public-snapshot-current" class="text-muted" style="font-size:13px; margin-top:12px;">No public snapshot loaded.</div>
-        </div>
+        </details>
 
         <div id="benchmark-run-detail" style="margin-top:18px;"></div>
       </div>
@@ -2350,6 +2385,17 @@ function requiredNumber(id, fallback = 0) {
   return value === null ? fallback : value;
 }
 
+function openBenchmarkEditor() {
+  resetBenchmarkForm();
+  document.getElementById('benchmark-editor-title').textContent = 'Add Benchmark Case';
+  document.getElementById('benchmark-editor').style.display = 'block';
+  document.getElementById('benchmark-input').focus();
+}
+
+function closeBenchmarkEditor() {
+  document.getElementById('benchmark-editor').style.display = 'none';
+}
+
 async function loadAccuracyBenchmarks() {
   await Promise.all([loadAccuracyBenchmarkSummary(), loadAccuracyBenchmarkCases(), loadAccuracyBenchmarkRuns(), loadBenchmarkPublicSnapshot()]);
 }
@@ -2457,6 +2503,8 @@ function resetBenchmarkForm() {
 function editBenchmarkCase(id) {
   const item = accuracyBenchmarkCases.find(row => row.id === id);
   if (!item) return;
+  document.getElementById('benchmark-editor-title').textContent = 'Edit Benchmark Case';
+  document.getElementById('benchmark-editor').style.display = 'block';
   document.getElementById('benchmark-id').value = item.id;
   document.getElementById('benchmark-input').value = item.inputText || '';
   document.getElementById('benchmark-display-name').value = item.displayName || '';
@@ -2478,6 +2526,7 @@ function editBenchmarkCase(id) {
   document.getElementById('benchmark-serving-notes').value = item.servingNotes || '';
   document.getElementById('benchmark-reference-notes').value = item.referenceNotes || '';
   document.getElementById('benchmark-mfp-notes').value = item.mfpNotes || '';
+  document.getElementById('benchmark-editor').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function benchmarkCasePayload() {
@@ -2528,6 +2577,7 @@ async function saveBenchmarkCase() {
     body: JSON.stringify(body)
   });
   resetBenchmarkForm();
+  closeBenchmarkEditor();
   await loadAccuracyBenchmarks();
 }
 
