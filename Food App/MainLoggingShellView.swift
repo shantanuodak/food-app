@@ -112,6 +112,8 @@ struct MainLoggingShellView: View {
     @State var currentFoodLogStreak: Int?
     @State var isLoadingFoodLogStreak = false
     @State var isStreakDrawerPresented = false
+    @State var isBadgesTrophyCasePresented = false
+    @State var badgesTrophyCaseStreakDays = 0
     @State var triggeredBadgeAchievement: StreakBadge?
     @State var isKeyboardVisible = false
     @State var isSyncInfoPresented = false

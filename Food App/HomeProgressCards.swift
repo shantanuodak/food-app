@@ -25,7 +25,6 @@ extension ProgressSectionView {
             }
         }
         .pickerStyle(.segmented)
-        .tint(ChartPalette.calorieAccent)
     }
 
     var caloriesHeroCard: some View {
@@ -331,10 +330,7 @@ extension ProgressSectionView {
                         .interpolationMethod(.linear)
                         .foregroundStyle(
                             LinearGradient(
-                                colors: [
-                                    Color(red: 1.0, green: 0.68, blue: 0.24),
-                                    ChartPalette.weightAccent
-                                ],
+                                colors: [Color.cyan, Color.blue],
                                 startPoint: .leading,
                                 endPoint: .trailing
                             )

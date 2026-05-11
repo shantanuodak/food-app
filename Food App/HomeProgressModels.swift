@@ -26,13 +26,13 @@ enum ChartPalette {
     static let targetLine: Color = Color.secondary.opacity(0.7)
 
     // Macros
-    static let protein = Color(red: 0.95, green: 0.47, blue: 0.11)
-    static let carbs   = Color(red: 1.00, green: 0.62, blue: 0.18)
-    static let fat     = Color(red: 0.78, green: 0.30, blue: 0.06)
+    static let protein = Color(red: 0.19, green: 0.72, blue: 0.98)
+    static let carbs   = Color(red: 0.99, green: 0.64, blue: 0.22)
+    static let fat     = Color(red: 0.98, green: 0.38, blue: 0.36)
 
     // Hero card accents (used as 1pt strokes over Material)
-    static let calorieAccent: Color = Color(red: 0.95, green: 0.47, blue: 0.11)
-    static let weightAccent: Color  = Color(red: 1.00, green: 0.54, blue: 0.16)
+    static let calorieAccent: Color = Color.green
+    static let weightAccent: Color  = Color.blue
     static let stepsAccent: Color   = Color.orange
 }
 

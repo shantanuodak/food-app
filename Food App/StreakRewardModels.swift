@@ -14,6 +14,52 @@ struct StreakBadge: Identifiable, Equatable {
     let subtitle: String
     let systemImage: String
     let tier: Tier
+
+    nonisolated init(
+        id: String,
+        title: String,
+        requiredDays: Int,
+        subtitle: String,
+        systemImage: String,
+        tier: Tier
+    ) {
+        self.id = id
+        self.title = title
+        self.requiredDays = requiredDays
+        self.subtitle = subtitle
+        self.systemImage = systemImage
+        self.tier = tier
+    }
+
+    nonisolated init(definition: BadgeDefinition) {
+        self.init(
+            id: definition.id.replacingOccurrences(of: "streak_", with: ""),
+            title: definition.title,
+            requiredDays: definition.requiredValue,
+            subtitle: definition.subtitle,
+            systemImage: definition.systemImage,
+            tier: Tier(rarity: definition.rarity)
+        )
+    }
+
+    var badgeDefinitionId: String {
+        "streak_\(id)"
+    }
+}
+
+extension StreakBadge.Tier {
+    nonisolated init(rarity: BadgeDefinition.Rarity) {
+        switch rarity {
+        case .bronze:
+            self = .bronze
+        case .silver:
+            self = .silver
+        case .gold:
+            self = .gold
+        case .platinum:
+            self = .platinum
+        }
+    }
 }
 
 struct StreakBadgeProgress: Equatable {
@@ -25,72 +71,9 @@ struct StreakBadgeProgress: Equatable {
 }
 
 enum StreakBadges {
-    static let badges: [StreakBadge] = [
-        StreakBadge(
-            id: "first_spark",
-            title: "First Spark",
-            requiredDays: 1,
-            subtitle: "Your first logged day.",
-            systemImage: "sparkle",
-            tier: .bronze
-        ),
-        StreakBadge(
-            id: "getting_warm",
-            title: "Getting Warm",
-            requiredDays: 3,
-            subtitle: "Three days of showing up.",
-            systemImage: "flame.fill",
-            tier: .bronze
-        ),
-        StreakBadge(
-            id: "weekly_flame",
-            title: "Weekly Flame",
-            requiredDays: 7,
-            subtitle: "A full week of logging.",
-            systemImage: "flame.circle.fill",
-            tier: .silver
-        ),
-        StreakBadge(
-            id: "momentum_maker",
-            title: "Momentum Maker",
-            requiredDays: 14,
-            subtitle: "Two weeks of momentum.",
-            systemImage: "forward.circle.fill",
-            tier: .silver
-        ),
-        StreakBadge(
-            id: "locked_in",
-            title: "Locked In",
-            requiredDays: 30,
-            subtitle: "Thirty days of consistency.",
-            systemImage: "lock.circle.fill",
-            tier: .gold
-        ),
-        StreakBadge(
-            id: "ritual_builder",
-            title: "Ritual Builder",
-            requiredDays: 60,
-            subtitle: "Logging has become a ritual.",
-            systemImage: "calendar.badge.checkmark",
-            tier: .gold
-        ),
-        StreakBadge(
-            id: "century_club",
-            title: "Century Club",
-            requiredDays: 100,
-            subtitle: "One hundred days of follow-through.",
-            systemImage: "100.circle.fill",
-            tier: .platinum
-        ),
-        StreakBadge(
-            id: "unbroken_year",
-            title: "Unbroken Year",
-            requiredDays: 365,
-            subtitle: "A full year of logging.",
-            systemImage: "trophy.circle.fill",
-            tier: .platinum
-        )
-    ]
+    static var badges: [StreakBadge] {
+        BadgeCatalog.streakDefinitions.map(StreakBadge.init(definition:))
+    }
 
     static func currentBadge(for currentDays: Int) -> StreakBadge? {
         badges.last { currentDays >= $0.requiredDays }

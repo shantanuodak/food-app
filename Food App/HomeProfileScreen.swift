@@ -229,54 +229,140 @@ struct HomeProfileScreen: View {
 
     @ViewBuilder
     private var bodySection: some View {
-        Section("Body") {
-            Picker("Units", selection: unitsBinding) {
-                ForEach(UnitsOption.allCases) { opt in
-                    Text(L10n.unitsLabel(opt)).tag(opt)
+        Section {
+            VStack(spacing: 0) {
+                Picker("Units", selection: unitsBinding) {
+                    ForEach(UnitsOption.allCases) { opt in
+                        Text(L10n.unitsLabel(opt)).tag(opt)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.bottom, 14)
+
+                Divider()
+
+                bodySexRow
+
+                Divider()
+                    .padding(.leading, 58)
+
+                bodyAgeRow
+
+                Divider()
+                    .padding(.leading, 58)
+
+                bodyNavigationRow(
+                    title: "Height",
+                    value: heightLabel,
+                    systemImage: "ruler",
+                    iconTint: .blue
+                ) {
+                    HeightPickerView(draft: $draft)
+                }
+
+                Divider()
+                    .padding(.leading, 58)
+
+                bodyNavigationRow(
+                    title: "Weight",
+                    value: weightLabel,
+                    systemImage: "scalemass.fill",
+                    iconTint: .blue
+                ) {
+                    WeightPickerView(draft: $draft)
                 }
             }
-            .pickerStyle(.segmented)
+            .padding(14)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(Color.black.opacity(0.035), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.035), radius: 10, y: 4)
+            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 10, trailing: 16))
+            .listRowBackground(Color.clear)
+        } header: {
+            Text("Body")
+        }
+    }
 
-            Picker(selection: sexBinding) {
+    private var bodySexRow: some View {
+        HStack(spacing: 14) {
+            bodyRowIcon(systemImage: "person.fill", tint: .blue)
+
+            Text("Sex")
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.primary)
+
+            Spacer()
+
+            Picker("Sex", selection: sexBinding) {
                 ForEach(SexOption.allCases) { opt in
                     Text(opt.title).tag(Optional(opt))
                 }
                 Text("Not set").tag(Optional<SexOption>.none)
-            } label: {
-                Label("Sex", systemImage: "person.fill")
             }
             .pickerStyle(.menu)
-
-            Stepper(value: ageIntBinding, in: OnboardingBaselineRange.age) {
-                LabeledContent {
-                    Text("\(Int(draft.ageValue))")
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                } label: {
-                    Label("Age", systemImage: "calendar")
-                }
-            }
-
-            NavigationLink {
-                HeightPickerView(draft: $draft)
-            } label: {
-                LabeledContent {
-                    Text(heightLabel).foregroundStyle(.secondary)
-                } label: {
-                    Label("Height", systemImage: "ruler")
-                }
-            }
-
-            NavigationLink {
-                WeightPickerView(draft: $draft)
-            } label: {
-                LabeledContent {
-                    Text(weightLabel).foregroundStyle(.secondary)
-                } label: {
-                    Label("Weight", systemImage: "scalemass.fill")
-                }
-            }
+            .labelsHidden()
+            .tint(.blue)
         }
+        .frame(minHeight: 58)
+    }
+
+    private var bodyAgeRow: some View {
+        HStack(spacing: 14) {
+            bodyRowIcon(systemImage: "calendar", tint: .primary)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Age")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                Text("\(Int(draft.ageValue))")
+                    .font(.system(size: 17, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.secondary)
+            }
+
+            Spacer()
+
+            Stepper("", value: ageIntBinding, in: OnboardingBaselineRange.age)
+                .labelsHidden()
+        }
+        .frame(minHeight: 58)
+    }
+
+    private func bodyNavigationRow<Destination: View>(
+        title: String,
+        value: String,
+        systemImage: String,
+        iconTint: Color,
+        @ViewBuilder destination: @escaping () -> Destination
+    ) -> some View {
+        NavigationLink {
+            destination()
+        } label: {
+            HStack(spacing: 14) {
+                bodyRowIcon(systemImage: systemImage, tint: iconTint)
+
+                Text(title)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.primary)
+
+                Spacer()
+
+                Text(value)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(minHeight: 58)
+        }
+    }
+
+    private func bodyRowIcon(systemImage: String, tint: Color) -> some View {
+        Image(systemName: systemImage)
+            .font(.system(size: 20, weight: .semibold))
+            .foregroundStyle(tint)
+            .frame(width: 30, height: 30)
     }
 
     /// Single explainer at the top of Food preferences. Two short lines

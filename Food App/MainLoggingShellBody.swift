@@ -120,6 +120,15 @@ extension MainLoggingShellView {
                     .presentationDetents([.fraction(0.8), .large])
                     .presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $isBadgesTrophyCasePresented) {
+                NavigationStack {
+                    BadgesTrophyCaseView(currentStreakDays: badgesTrophyCaseStreakDays)
+                        .environmentObject(appStore)
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(24)
+            }
             .fullScreenCover(item: $triggeredBadgeAchievement) { badge in
                 StreakAchievementPopup(badge: badge) {
                     triggeredBadgeAchievement = nil
@@ -257,6 +266,14 @@ extension MainLoggingShellView {
                 refreshCurrentStreak(shouldDetectBadgeUnlock: true)
                 appStore.preloadProfileDashboard(force: true)
                 appStore.preloadProgressCharts(force: true)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openBadgesFromStreakDrawer)) { notification in
+                let days = notification.userInfo?["currentStreakDays"] as? Int
+                badgesTrophyCaseStreakDays = days ?? currentFoodLogStreak ?? 0
+                isStreakDrawerPresented = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    isBadgesTrophyCasePresented = true
+                }
             }
             .sheet(isPresented: $isDetailsDrawerPresented) {
                 detailsDrawer

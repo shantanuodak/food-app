@@ -42,6 +42,16 @@ struct BadgeState: Identifiable, Equatable {
 }
 
 enum BadgeCatalog {
+    static var definitions: [BadgeDefinition] {
+        allDefinitions
+    }
+
+    static var streakDefinitions: [BadgeDefinition] {
+        definitions
+            .filter { $0.category == .streaks }
+            .sorted { $0.requiredValue < $1.requiredValue }
+    }
+
     static func states(totals: BadgesTotals, currentStreakDays: Int) -> [BadgeState] {
         definitions.map { definition in
             BadgeState(definition: definition, currentValue: value(for: definition, totals: totals, currentStreakDays: currentStreakDays))
@@ -95,7 +105,7 @@ enum BadgeCatalog {
         }
     }
 
-    private static let definitions: [BadgeDefinition] = [
+    private static let allDefinitions: [BadgeDefinition] = [
         BadgeDefinition(id: "streak_first_spark", category: .streaks, title: "First Spark", subtitle: "Log your first day.", systemImage: "sparkle", requiredValue: 1, rarity: .bronze),
         BadgeDefinition(id: "streak_weekly_flame", category: .streaks, title: "Weekly Flame", subtitle: "Keep a 7-day streak.", systemImage: "flame.circle.fill", requiredValue: 7, rarity: .silver),
         BadgeDefinition(id: "streak_locked_in", category: .streaks, title: "Locked In", subtitle: "Keep a 30-day streak.", systemImage: "lock.circle.fill", requiredValue: 30, rarity: .gold),
