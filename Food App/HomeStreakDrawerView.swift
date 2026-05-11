@@ -581,48 +581,14 @@ struct StreakBadgeMedallion: View {
                 .fill(backgroundGradient)
                 .overlay {
                     Circle()
-                        .fill(
-                            RadialGradient(
-                                colors: [
-                                    .white.opacity(isEarned ? 0.46 : 0.16),
-                                    .white.opacity(0.06),
-                                    Color.black.opacity(isEarned ? 0.07 : 0.08)
-                                ],
-                                center: UnitPoint(x: 0.34, y: 0.25),
-                                startRadius: size * 0.04,
-                                endRadius: size * 0.68
-                            )
-                        )
-                        .blendMode(isEarned ? .softLight : .normal)
+                        .stroke(Color.white.opacity(isEarned ? 0.82 : 0.48), lineWidth: 1)
                 }
                 .overlay {
                     Circle()
-                        .strokeBorder(
-                            AngularGradient(
-                                colors: [
-                                    .white.opacity(isEarned ? 0.90 : 0.40),
-                                    glowColor.opacity(isEarned ? 0.32 : 0.08),
-                                    Color.black.opacity(isEarned ? 0.18 : 0.06),
-                                    .white.opacity(isEarned ? 0.58 : 0.24),
-                                    .white.opacity(isEarned ? 0.90 : 0.40)
-                                ],
-                                center: .center
-                            ),
-                            lineWidth: max(1.5, size * 0.022)
-                        )
+                        .strokeBorder(Color.black.opacity(isEarned ? 0.10 : 0.04), lineWidth: max(1, size * 0.018))
+                        .padding(size * 0.055)
                 }
-                .overlay {
-                    Circle()
-                        .strokeBorder(Color.black.opacity(isEarned ? 0.18 : 0.06), lineWidth: max(1, size * 0.012))
-                        .padding(size * 0.075)
-                }
-                .overlay {
-                    Circle()
-                        .stroke(.white.opacity(isEarned ? 0.28 : 0.10), lineWidth: 1)
-                        .padding(size * 0.18)
-                }
-                .shadow(color: Color.black.opacity(isEarned ? 0.16 : 0.07), radius: 12, y: 7)
-                .shadow(color: glowColor.opacity(isEarned ? 0.22 : 0.06), radius: 18, y: 4)
+                .shadow(color: glowColor.opacity(isEarned ? 0.26 : 0.08), radius: 14, y: 7)
 
             // Static gloss highlight (top-left) — present on both earned + locked,
             // stronger when earned.
@@ -635,18 +601,6 @@ struct StreakBadgeMedallion: View {
                     )
                 )
                 .padding(size * 0.08)
-                .blendMode(.screen)
-
-            Circle()
-                .fill(
-                    LinearGradient(
-                        colors: [.clear, Color.black.opacity(isEarned ? 0.18 : 0.08)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .padding(size * 0.05)
-                .blendMode(.multiply)
 
             // Animated shimmer band — only on earned medallions. A diagonal
             // light streak that travels from upper-left to lower-right every
@@ -658,18 +612,8 @@ struct StreakBadgeMedallion: View {
 
             Image(systemName: badge?.systemImage ?? "trophy.fill")
                 .font(.system(size: size * 0.40, weight: .heavy))
-                .foregroundStyle(isEarned ? glowColor : Color.primary.opacity(0.38))
-                .padding(size * 0.15)
-                .background(
-                    Circle()
-                        .fill(Color.white.opacity(isEarned ? 0.92 : 0.07))
-                        .overlay(
-                            Circle()
-                                .stroke(glowColor.opacity(isEarned ? 0.16 : 0.08), lineWidth: 1)
-                        )
-                )
-                .shadow(color: .white.opacity(isEarned ? 0.18 : 0), radius: 1, x: -1, y: -1)
-                .shadow(color: Color.black.opacity(isEarned ? 0.24 : 0.08), radius: 7, x: 0, y: 4)
+                .foregroundStyle(isEarned ? .white : Color.primary.opacity(0.38))
+                .shadow(color: glowColor.opacity(isEarned ? 0.24 : 0), radius: 3, y: 1)
 
             if !isEarned {
                 Image(systemName: "lock.fill")
@@ -718,7 +662,7 @@ struct StreakBadgeMedallion: View {
     }
 
     private var backgroundGradient: LinearGradient {
-        guard let badge else {
+        guard isEarned, let badge else {
             return LinearGradient(
                 colors: [Color(.systemGray5), Color(.systemGray4)],
                 startPoint: .topLeading,
@@ -726,57 +670,28 @@ struct StreakBadgeMedallion: View {
             )
         }
 
-        guard isEarned else {
-            switch badge.tier {
-            case .bronze:
-                return LinearGradient(
-                    colors: [Color(.systemGray6), Color(red: 0.82, green: 0.78, blue: 0.73)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            case .silver:
-                return LinearGradient(
-                    colors: [Color(red: 0.90, green: 0.93, blue: 0.97), Color(red: 0.62, green: 0.69, blue: 0.77)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            case .gold:
-                return LinearGradient(
-                    colors: [Color(.systemGray6), Color(red: 0.84, green: 0.79, blue: 0.68)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            case .platinum:
-                return LinearGradient(
-                    colors: [Color(red: 0.58, green: 0.62, blue: 0.72), Color(red: 0.32, green: 0.36, blue: 0.46)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-            }
-        }
-
         switch badge.tier {
         case .bronze:
             return LinearGradient(
-                colors: [Color.white.opacity(0.96), Color(red: 0.78, green: 0.42, blue: 0.18).opacity(0.18), Color.white.opacity(0.78)],
+                colors: [Color(red: 0.98, green: 0.66, blue: 0.36), Color(red: 0.74, green: 0.36, blue: 0.15)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         case .silver:
             return LinearGradient(
-                colors: [Color.white.opacity(0.96), Color(red: 0.58, green: 0.64, blue: 0.72).opacity(0.16), Color.white.opacity(0.78)],
+                colors: [Color(red: 0.89, green: 0.91, blue: 0.94), Color(red: 0.50, green: 0.57, blue: 0.66)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         case .gold:
             return LinearGradient(
-                colors: [Color.white.opacity(0.96), Color.orange.opacity(0.18), Color.white.opacity(0.78)],
+                colors: [Color(red: 1.0, green: 0.80, blue: 0.24), Color(red: 0.91, green: 0.44, blue: 0.08)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
         case .platinum:
             return LinearGradient(
-                colors: [Color.white.opacity(0.94), Color(red: 0.44, green: 0.47, blue: 0.56).opacity(0.18), Color.white.opacity(0.74)],
+                colors: [Color(red: 0.23, green: 0.24, blue: 0.30), Color(red: 0.04, green: 0.05, blue: 0.08)],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )

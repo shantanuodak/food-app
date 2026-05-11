@@ -325,49 +325,21 @@ private struct BadgeCard: View {
                 ZStack {
                     Circle()
                         .fill(iconFill)
-                        .overlay {
-                            Circle()
-                                .fill(
-                                    RadialGradient(
-                                        colors: [
-                                            .white.opacity(state.isEarned ? 0.46 : 0.18),
-                                            .white.opacity(0.06),
-                                            Color.black.opacity(state.isEarned ? 0.07 : 0.05)
-                                        ],
-                                        center: UnitPoint(x: 0.32, y: 0.24),
-                                        startRadius: 2,
-                                        endRadius: 34
-                                    )
-                                )
-                                .blendMode(state.isEarned ? .softLight : .normal)
-                        }
-                        .overlay {
-                            Circle()
-                                .strokeBorder(iconRim, lineWidth: 1.4)
-                        }
-                        .shadow(color: Color.black.opacity(state.isEarned ? 0.13 : 0.04), radius: 7, y: 4)
                     Image(systemName: state.isEarned ? definition.systemImage : "lock.fill")
                         .font(.system(size: 17, weight: .bold))
                         .foregroundStyle(state.isEarned ? .white : BadgeTokens.muted)
-                        .shadow(color: Color.black.opacity(state.isEarned ? 0.22 : 0), radius: 3, y: 2)
                 }
                 .frame(width: 42, height: 42)
                 .accessibilityHidden(true)
 
                 Spacer()
 
-                HStack(spacing: 4) {
-                    if state.isEarned {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 8, weight: .black))
-                    }
-                    Text(state.isEarned ? "Earned" : "\(state.remaining) left")
-                }
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(state.isEarned ? BadgeTokens.orange : BadgeTokens.muted)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 5)
-                .background(statusFill, in: Capsule())
+                Text(state.isEarned ? "Earned" : "\(state.remaining) left")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(state.isEarned ? BadgeTokens.orange : BadgeTokens.muted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(statusFill, in: Capsule())
             }
 
             Text(definition.title)
@@ -399,29 +371,18 @@ private struct BadgeCard: View {
 
     private var iconFill: LinearGradient {
         if state.isEarned {
-            return LinearGradient(
-                colors: [
-                    rarityColor.opacity(0.20),
-                    Color.white.opacity(0.94)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            switch definition.rarity {
+            case .bronze:
+                return BadgeTokens.bronzeGradient
+            case .silver:
+                return BadgeTokens.silverGradient
+            case .gold:
+                return BadgeTokens.goldGradient
+            case .platinum:
+                return BadgeTokens.platinumGradient
+            }
         }
         return LinearGradient(colors: [BadgeTokens.gray200, BadgeTokens.gray100], startPoint: .topLeading, endPoint: .bottomTrailing)
-    }
-
-    private var rarityColor: Color {
-        switch definition.rarity {
-        case .bronze:
-            return Color(red: 0.78, green: 0.42, blue: 0.18)
-        case .silver:
-            return Color(red: 0.58, green: 0.64, blue: 0.72)
-        case .gold:
-            return BadgeTokens.amber
-        case .platinum:
-            return Color(red: 0.44, green: 0.47, blue: 0.56)
-        }
     }
 
     private var cardFill: Color {
@@ -430,19 +391,6 @@ private struct BadgeCard: View {
 
     private var statusFill: Color {
         state.isEarned ? BadgeTokens.amber.opacity(0.13) : BadgeTokens.gray200.opacity(0.7)
-    }
-
-    private var iconRim: AngularGradient {
-        AngularGradient(
-            colors: [
-                .white.opacity(state.isEarned ? 0.80 : 0.42),
-                BadgeTokens.amber.opacity(state.isEarned ? 0.24 : 0.04),
-                Color.black.opacity(state.isEarned ? 0.14 : 0.03),
-                .white.opacity(state.isEarned ? 0.48 : 0.22),
-                .white.opacity(state.isEarned ? 0.80 : 0.42)
-            ],
-            center: .center
-        )
     }
 
     private var accessibilityLabel: String {
