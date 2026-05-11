@@ -48,21 +48,35 @@ struct TargetsEditorScreen: View {
             }
 
             if let calorieTarget = draftStore.draft.savedCalorieTarget {
-                Section("Calculated Targets") {
-                    LabeledContent("Calories") {
-                        Text("\(calorieTarget) kcal").foregroundStyle(.secondary)
-                    }
+                Section {
+                    calorieTargetRow(calorieTarget)
                     if let macros = draftStore.draft.savedMacroTargets {
-                        LabeledContent("Protein") {
-                            Text("\(macros.protein) g").foregroundStyle(.secondary)
-                        }
-                        LabeledContent("Carbs") {
-                            Text("\(macros.carbs) g").foregroundStyle(.secondary)
-                        }
-                        LabeledContent("Fat") {
-                            Text("\(macros.fat) g").foregroundStyle(.secondary)
-                        }
+                        targetMetricRow(
+                            icon: "figure.strengthtraining.traditional",
+                            title: "Protein",
+                            value: "\(macros.protein)",
+                            unit: "g",
+                            color: Self.proteinColor
+                        )
+                        targetMetricRow(
+                            icon: "leaf.fill",
+                            title: "Carbs",
+                            value: "\(macros.carbs)",
+                            unit: "g",
+                            color: Self.carbsColor
+                        )
+                        targetMetricRow(
+                            icon: "drop.fill",
+                            title: "Fat",
+                            value: "\(macros.fat)",
+                            unit: "g",
+                            color: Self.fatColor
+                        )
                     }
+                } header: {
+                    Text("Calculated Targets")
+                } footer: {
+                    Text("Targets update automatically when your goal, activity, or pace changes.")
                 }
             }
         }
@@ -81,5 +95,74 @@ struct TargetsEditorScreen: View {
         .task {
             await draftStore.loadIfNeeded(appStore: appStore)
         }
+    }
+
+    private static let calorieColor = Color.orange
+    private static let proteinColor = Color(red: 0.420, green: 0.369, blue: 1.0)
+    private static let carbsColor = Color(red: 0.106, green: 0.620, blue: 0.353)
+    private static let fatColor = Color(red: 0.000, green: 0.478, blue: 1.0)
+
+    private func calorieTargetRow(_ calories: Int) -> some View {
+        HStack(alignment: .center, spacing: 12) {
+            metricIcon("flame.fill", color: Self.calorieColor)
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Calorie base")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("Daily target")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 12)
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(calories.formatted())
+                    .font(.system(size: 28, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+                Text("kcal")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 8)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Calorie base, \(calories) kilocalories")
+    }
+
+    private func targetMetricRow(
+        icon: String,
+        title: String,
+        value: String,
+        unit: String,
+        color: Color
+    ) -> some View {
+        HStack(spacing: 12) {
+            metricIcon(icon, color: color)
+            Text(title)
+                .font(.system(size: 16, weight: .medium))
+            Spacer(minLength: 12)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(value)
+                    .font(.system(size: 17, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.primary)
+                Text(unit)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title), \(value) \(unit)")
+    }
+
+    private func metricIcon(_ systemName: String, color: Color) -> some View {
+        ZStack {
+            Circle()
+                .fill(color.opacity(0.12))
+            Image(systemName: systemName)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(color)
+        }
+        .frame(width: 34, height: 34)
     }
 }

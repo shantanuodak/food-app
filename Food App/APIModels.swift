@@ -37,6 +37,52 @@ struct HealthResponse: Decodable {
     let status: String
 }
 
+struct RegisterNotificationDeviceRequest: Encodable {
+    let token: String
+    let platform: String
+    let environment: String
+    let appVersion: String?
+    let buildNumber: String?
+    let deviceModel: String?
+    let osVersion: String?
+    let locale: String?
+}
+
+struct RegisterNotificationDeviceResponse: Decodable {
+    struct Device: Decodable {
+        let id: String
+    }
+
+    let device: Device
+}
+
+struct NotificationPreferencesRequest: Encodable {
+    let timezone: String
+    let remindersEnabled: Bool
+    let breakfastEnabled: Bool
+    let lunchEnabled: Bool
+    let dinnerEnabled: Bool
+    let breakfastStart: String
+    let breakfastEnd: String
+    let lunchStart: String
+    let lunchEnd: String
+    let dinnerStart: String
+    let dinnerEnd: String
+    let eatingWindowEnabled: Bool
+    let eatingWindowStart: String
+    let eatingWindowEnd: String
+    let engagementEnabled: Bool
+    let discoveryEnabled: Bool
+}
+
+struct NotificationPreferencesResponse: Decodable {
+    let preferences: NotificationPreferencePayload?
+}
+
+struct NotificationPreferencePayload: Decodable {
+    let user_id: String?
+}
+
 struct OnboardingRequest: Encodable {
     let goal: GoalOption
     let dietPreference: String
@@ -541,13 +587,13 @@ struct StreakDay: Decodable, Identifiable {
     var hasLogs: Bool { logsCount > 0 }
 }
 
-struct RewardsSummaryResponse: Decodable {
+struct BadgesSummaryResponse: Decodable {
     let timezone: String
     let generatedAt: String
-    let totals: RewardsTotals
+    let totals: BadgesTotals
 }
 
-struct RewardsTotals: Decodable, Equatable {
+struct BadgesTotals: Decodable, Equatable {
     let logs: Int
     let foodItems: Int
     let uniqueFoods: Int
@@ -573,22 +619,4 @@ struct AdminFeatureFlagsResponse: Decodable {
 
 struct AdminFeatureFlagsUpdateRequest: Encodable {
     let geminiEnabled: Bool
-}
-
-// MARK: - Tracking Accuracy
-
-struct TrackingAccuracyResponse: Decodable {
-    let period: String
-    let entryCount: Int
-    let averageConfidence: Double
-    let tier: String
-    let lowConfidenceEntries: [LowConfidenceEntry]
-}
-
-struct LowConfidenceEntry: Decodable, Identifiable {
-    var id: String { rawText + loggedAt }
-    let rawText: String
-    let confidence: Double
-    let loggedAt: String
-    let suggestion: String
 }

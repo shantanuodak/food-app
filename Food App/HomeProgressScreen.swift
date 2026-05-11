@@ -52,14 +52,24 @@ struct ProgressSectionView: View {
         }
         .task {
             preferredUnits = currentPreferredUnits()
-            await refreshAllData(reason: "initial")
+            if !hydrateFromCachedProgressSnapshot() {
+                await refreshAllData(reason: "initial")
+            }
         }
         .onChange(of: selectedRange) { _, _ in
-            Task { await refreshAllData(reason: "range_change") }
+            Task {
+                if !hydrateFromCachedProgressSnapshot() {
+                    await refreshAllData(reason: "range_change")
+                }
+            }
         }
         .onChange(of: scenePhase) { _, newPhase in
             if newPhase == .active {
-                Task { await refreshAllData(reason: "foreground") }
+                Task {
+                    if !hydrateFromCachedProgressSnapshot() {
+                        await refreshAllData(reason: "foreground")
+                    }
+                }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { _ in

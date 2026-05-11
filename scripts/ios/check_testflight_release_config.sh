@@ -43,6 +43,7 @@ RELEASE_API_ENV="$(extract_release_value API_ENV)"
 RELEASE_CODE_SIGN_STYLE="$(extract_release_value CODE_SIGN_STYLE)"
 RELEASE_DEVELOPMENT_TEAM="$(extract_release_value DEVELOPMENT_TEAM)"
 RELEASE_BUILD_NUMBER="$(extract_release_value CURRENT_PROJECT_VERSION)"
+RELEASE_APS_ENVIRONMENT="$(extract_release_value APS_ENVIRONMENT)"
 
 if [[ -z "$RELEASE_API_BASE_URL" ]]; then
   echo "ERROR: Release API_BASE_URL is empty." >&2
@@ -71,6 +72,11 @@ if [[ "$RELEASE_CODE_SIGN_STYLE" != "Automatic" ]]; then
   exit 1
 fi
 
+if [[ "$RELEASE_APS_ENVIRONMENT" != "production" ]]; then
+  echo "ERROR: Release APS_ENVIRONMENT must be production for TestFlight push notifications. Current value: $RELEASE_APS_ENVIRONMENT" >&2
+  exit 1
+fi
+
 if [[ -z "$RELEASE_DEVELOPMENT_TEAM" ]]; then
   echo "ERROR: Release DEVELOPMENT_TEAM is empty." >&2
   exit 1
@@ -87,3 +93,4 @@ echo "  API_ENV: $RELEASE_API_ENV"
 echo "  CODE_SIGN_STYLE: $RELEASE_CODE_SIGN_STYLE"
 echo "  DEVELOPMENT_TEAM: $RELEASE_DEVELOPMENT_TEAM"
 echo "  CURRENT_PROJECT_VERSION: $RELEASE_BUILD_NUMBER"
+echo "  APS_ENVIRONMENT: $RELEASE_APS_ENVIRONMENT"

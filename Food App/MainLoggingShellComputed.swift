@@ -11,7 +11,7 @@ extension MainLoggingShellView {
             isLoadingFoodLogStreak: isLoadingFoodLogStreak,
             isKeyboardVisible: isKeyboardVisible,
             isSyncInfoPresented: $isSyncInfoPresented,
-            isStreakDrawerPresented: $isStreakDrawerPresented
+            isProgressChartsPresented: $isProgressChartsPresented
         )
     }
 
@@ -106,7 +106,9 @@ extension MainLoggingShellView {
             hasActiveParseRequest: hasActiveParseRequest,
             minimalStyle: true,
             onInputTapped: {
+                guard !presentMindfulPauseIfNeeded(for: .text) else { return false }
                 inputMode = .text
+                return true
             },
             onCaloriesTapped: { row in
                 presentRowDetails(for: row)

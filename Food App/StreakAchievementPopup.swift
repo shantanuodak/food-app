@@ -23,6 +23,7 @@ struct StreakAchievementPopup: View {
     @State private var titleOffset: CGFloat = 24
     @State private var titleOpacity: Double = 0
     @State private var dismissTask: Task<Void, Never>?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack {
@@ -128,9 +129,11 @@ struct StreakAchievementPopup: View {
                 .opacity(raysOpacity)
 
             // Confetti — short-lived particles seeded behind the medal.
-            ConfettiBurst(seed: badge.id)
-                .frame(width: 320, height: 320)
-                .opacity(raysOpacity)
+            if !reduceMotion {
+                ConfettiBurst(seed: badge.id)
+                    .frame(width: 320, height: 320)
+                    .opacity(raysOpacity)
+            }
 
             // The medal itself — same component as the drawer.
             StreakBadgeMedallion(badge: badge, isEarned: true, size: 156)
@@ -154,17 +157,17 @@ struct StreakAchievementPopup: View {
         generator.notificationOccurred(.success)
 
         // Medal pops in with a spring; rays + halo cross-fade behind it.
-        withAnimation(.spring(response: 0.55, dampingFraction: 0.55, blendDuration: 0)) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.18) : .spring(response: 0.55, dampingFraction: 0.55, blendDuration: 0)) {
             medalScale = 1.0
             medalRotation = 0
         }
 
-        withAnimation(.easeOut(duration: 0.6).delay(0.05)) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.18) : .easeOut(duration: 0.6).delay(0.05)) {
             raysOpacity = 1.0
             raysScale = 1.0
         }
 
-        withAnimation(.easeOut(duration: 0.45).delay(0.18)) {
+        withAnimation(reduceMotion ? .easeOut(duration: 0.18) : .easeOut(duration: 0.45).delay(0.18)) {
             titleOpacity = 1.0
             titleOffset = 0
         }
@@ -211,9 +214,10 @@ struct StreakAchievementPopup: View {
 private struct BurstRays: View {
     let count: Int
     let color: Color
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: false)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
             // Slow rotation for ambient motion. 360° over 12s.
             let rotation = context.date.timeIntervalSinceReferenceDate
                 .truncatingRemainder(dividingBy: 12) / 12 * 360

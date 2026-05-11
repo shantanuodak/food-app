@@ -10,7 +10,6 @@ struct MainLoggingShellView: View {
     @StateObject var speechService = SpeechRecognitionService()
     @StateObject var saveCoordinator = SaveCoordinator()
     @StateObject var parseCoordinator = ParseCoordinator()
-    @StateObject var tutorialController = TutorialController()
     @State var isVoiceOverlayPresented = false
     @State var voiceOverlayPhase: VoiceRecordingOverlay.Phase = .listening
     @State var voiceHandoffTask: Task<Void, Never>?
@@ -57,6 +56,7 @@ struct MainLoggingShellView: View {
     @State var dismissedInsightLogIds: Set<String> = RecentFlaggedMealCard.loadDismissedLogIds()
     /// Once-per-day in-app pause for users whose biggest challenge is emotional eating.
     @State var isMindfulPausePresented = false
+    @State var pendingMindfulPauseAction: MindfulPauseAction?
     /// In-memory cache for adjacent days — keyed by "yyyy-MM-dd" date string.
     @State var dayCacheSummary: [String: DaySummaryResponse] = [:]
     @State var dayCacheLogs: [String: DayLogsResponse] = [:]
@@ -108,9 +108,11 @@ struct MainLoggingShellView: View {
     @State var isCalendarPresented = false
     @State var isProfilePresented = false
     @State var isNutritionSummaryPresented = false
+    @State var isProgressChartsPresented = false
     @State var currentFoodLogStreak: Int?
     @State var isLoadingFoodLogStreak = false
     @State var isStreakDrawerPresented = false
+    @State var triggeredBadgeAchievement: StreakBadge?
     @State var isKeyboardVisible = false
     @State var isSyncInfoPresented = false
     /// Slide direction for day transitions: negative = slide left (going forward), positive = slide right (going back)

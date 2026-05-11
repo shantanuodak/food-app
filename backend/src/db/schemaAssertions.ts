@@ -12,7 +12,11 @@ const requiredColumns: RequiredColumn[] = [
   { table: 'food_logs', column: 'input_kind', migration: '0012_image_log_fields.sql' },
   { table: 'log_save_idempotency', column: 'log_id', migration: '0002_parse_contracts.sql' },
   { table: 'save_attempts', column: 'outcome', migration: '0019_save_attempts.sql' },
-  { table: 'save_attempts', column: 'parse_request_id', migration: '0019_save_attempts.sql' }
+  { table: 'save_attempts', column: 'parse_request_id', migration: '0019_save_attempts.sql' },
+  { table: 'notification_devices', column: 'token', migration: '0023_notification_system.sql' },
+  { table: 'notification_preferences', column: 'reminders_enabled', migration: '0023_notification_system.sql' },
+  { table: 'notification_templates', column: 'template_key', migration: '0023_notification_system.sql' },
+  { table: 'notification_deliveries', column: 'delivery_key', migration: '0023_notification_system.sql' }
 ];
 
 const requiredIndexNames = ['idx_food_logs_user_parse_request_unique', 'food_logs_user_parse_request_unique'];

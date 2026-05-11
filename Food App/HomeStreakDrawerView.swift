@@ -10,13 +10,7 @@ struct HomeStreakDrawerView: View {
     /// Newly-earned badge to celebrate via the full-screen popup. When non-nil,
     /// the popup is presented and the user taps (or waits) to dismiss.
     @State private var triggeredAchievement: StreakBadge?
-
-    /// Persisted comma-separated list of badge IDs we've already shown the
-    /// celebration popup for. Survives launches so we don't replay every time.
-    /// Bootstrapped on first-ever load with the user's currently-earned set so
-    /// existing streak holders don't see retroactive popups for old badges.
-    @AppStorage("celebratedStreakBadgeIds") private var celebratedIdsRaw: String = ""
-    @AppStorage("hasBootstrappedStreakCelebrations") private var hasBootstrappedCelebrations = false
+    @State private var lastLoadedStreakDays: Int?
 
     var body: some View {
         ScrollView {
@@ -29,7 +23,7 @@ struct HomeStreakDrawerView: View {
                     loadingCard
                 } else if let response {
                     badgeHero(for: response)
-                    upcomingRewardsCarousel(for: response.currentDays)
+                    upcomingBadgesCarousel(for: response.currentDays)
                     badgeCollection(for: response.currentDays)
                     #if DEBUG
                     debugPopupPreviewMenu
@@ -45,9 +39,11 @@ struct HomeStreakDrawerView: View {
         }
         .background(Color(.systemBackground))
         .task {
+            applyCachedStreaksIfAvailable()
             await loadStreaks()
         }
         .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { _ in
+            applyCachedStreaksIfAvailable()
             Task { await loadStreaks() }
         }
         .refreshable {
@@ -62,13 +58,7 @@ struct HomeStreakDrawerView: View {
     }
 
     private var drawerTitle: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Your streak")
-                .font(.system(size: 13, weight: .bold))
-                .tracking(1.5)
-                .foregroundStyle(.secondary)
-                .textCase(.uppercase)
-
+        VStack(alignment: .leading, spacing: 0) {
             Text("Badge progress")
                 .font(.system(size: 34, weight: .bold))
                 .foregroundStyle(.primary)
@@ -77,8 +67,8 @@ struct HomeStreakDrawerView: View {
 
     private func badgeHero(for response: StreakResponse) -> some View {
         let currentDays = response.currentDays
-        let currentBadge = StreakRewards.currentBadge(for: currentDays)
-        let nextBadge = StreakRewards.nextBadge(for: currentDays)
+        let currentBadge = StreakBadges.currentBadge(for: currentDays)
+        let nextBadge = StreakBadges.nextBadge(for: currentDays)
 
         return VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .top, spacing: 16) {
@@ -155,8 +145,8 @@ struct HomeStreakDrawerView: View {
     ///
     /// Falls back to a single "all unlocked" card when the user has earned
     /// every defined badge.
-    private func upcomingRewardsCarousel(for currentDays: Int) -> some View {
-        let upcoming = StreakRewards.badges
+    private func upcomingBadgesCarousel(for currentDays: Int) -> some View {
+        let upcoming = StreakBadges.badges
             .filter { currentDays < $0.requiredDays }
             .prefix(3)
 
@@ -261,7 +251,7 @@ struct HomeStreakDrawerView: View {
 
     private var allBadgesUnlockedCard: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Label("All streak badges unlocked", systemImage: "checkmark.seal.fill")
+            Label("All badges unlocked", systemImage: "checkmark.seal.fill")
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(.primary)
 
@@ -291,7 +281,7 @@ struct HomeStreakDrawerView: View {
                 .textCase(.uppercase)
 
             LazyVGrid(columns: columns, spacing: 10) {
-                ForEach(StreakRewards.badges) { badge in
+                ForEach(StreakBadges.badges) { badge in
                     StreakBadgeCollectionCard(
                         badge: badge,
                         isEarned: currentDays >= badge.requiredDays
@@ -360,7 +350,7 @@ struct HomeStreakDrawerView: View {
     @ViewBuilder
     private var debugPopupPreviewMenu: some View {
         Menu {
-            ForEach(StreakRewards.badges) { badge in
+            ForEach(StreakBadges.badges) { badge in
                 Button {
                     triggeredAchievement = badge
                 } label: {
@@ -373,8 +363,22 @@ struct HomeStreakDrawerView: View {
 
             Divider()
 
+            ForEach(StreakBadges.badges) { badge in
+                Button {
+                    StreakBadgeCelebrationState.reset()
+                    let previousDays = max(0, badge.requiredDays - 1)
+                    detectNewlyEarnedBadges(previousDays: previousDays, currentDays: badge.requiredDays)
+                    lastLoadedStreakDays = badge.requiredDays
+                } label: {
+                    Label("Test trigger: \(badge.title)", systemImage: "sparkles")
+                }
+            }
+
+            Divider()
+
             Button(role: .destructive) {
-                celebratedIdsRaw = ""
+                StreakBadgeCelebrationState.reset()
+                lastLoadedStreakDays = nil
             } label: {
                 Label("Reset celebrated IDs", systemImage: "arrow.counterclockwise")
             }
@@ -405,7 +409,7 @@ struct HomeStreakDrawerView: View {
     private var loadingCard: some View {
         HStack(spacing: 10) {
             ProgressView()
-            Text("Loading streak history...")
+            Text("Loading badge history...")
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
         }
@@ -418,7 +422,7 @@ struct HomeStreakDrawerView: View {
     }
 
     private var disabledCard: some View {
-        Text("Streaks are temporarily disabled.")
+        Text("Badges are temporarily unavailable.")
             .font(.subheadline)
             .foregroundStyle(.secondary)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -450,10 +454,26 @@ struct HomeStreakDrawerView: View {
     }
 
     @MainActor
+    private func applyCachedStreaksIfAvailable() {
+        let timezone = TimeZone.current.identifier
+        let toDate = Self.dateKey(for: Date(), timezoneID: timezone)
+        guard let snapshot = appStore.profileDashboardSnapshot,
+              snapshot.isUsable(for: toDate, timezone: timezone, maxAge: 10 * 60),
+              let cachedStreaks = snapshot.streaks else {
+            return
+        }
+
+        response = cachedStreaks
+        lastLoadedStreakDays = cachedStreaks.currentDays
+        isLoading = false
+        errorMessage = nil
+    }
+
+    @MainActor
     private func loadStreaks() async {
         guard appStore.configuration.progressFeatureEnabled else { return }
 
-        isLoading = true
+        isLoading = response == nil
         errorMessage = nil
         defer { isLoading = false }
 
@@ -468,49 +488,23 @@ struct HomeStreakDrawerView: View {
             withAnimation(.easeInOut(duration: 0.28)) {
                 response = result
             }
-            detectNewlyEarnedBadges(currentDays: result.currentDays)
+            detectNewlyEarnedBadges(previousDays: lastLoadedStreakDays, currentDays: result.currentDays)
+            lastLoadedStreakDays = result.currentDays
         } catch let apiError as APIClientError {
-            errorMessage = apiError.errorDescription ?? "Could not load streaks."
+            errorMessage = apiError.errorDescription ?? "Could not load badges."
         } catch {
-            errorMessage = "Could not load streaks."
+            errorMessage = "Could not load badges."
         }
     }
 
-    /// Compares the just-loaded current-streak-days against the persisted
-    /// "celebrated" set. When a new badge has been crossed since the last
-    /// load, fires the full-screen popup for the highest newly-earned badge.
-    ///
-    /// First-ever load is a bootstrap: we mark every currently-earned badge
-    /// as already celebrated so longtime users don't see retroactive popups.
     @MainActor
-    private func detectNewlyEarnedBadges(currentDays: Int) {
-        let earnedNow = StreakRewards.badges.filter { currentDays >= $0.requiredDays }
-        let earnedNowIds = Set(earnedNow.map(\.id))
-
-        if !hasBootstrappedCelebrations {
-            // Bootstrap: don't celebrate retroactively.
-            hasBootstrappedCelebrations = true
-            celebratedIdsRaw = earnedNowIds.sorted().joined(separator: ",")
-            return
+    private func detectNewlyEarnedBadges(previousDays: Int?, currentDays: Int) {
+        if let badge = StreakBadgeCelebrationState.badgeToCelebrate(
+            previousDays: previousDays,
+            currentDays: currentDays
+        ) {
+            triggeredAchievement = badge
         }
-
-        let alreadyCelebrated = Set(
-            celebratedIdsRaw
-                .split(separator: ",")
-                .map(String.init)
-        )
-        let newlyEarned = earnedNow.filter { !alreadyCelebrated.contains($0.id) }
-
-        // If multiple thresholds were crossed at once (e.g. user comes back
-        // after a long absence), celebrate only the highest — sequential
-        // popups would be spammy.
-        if let highest = newlyEarned.max(by: { $0.requiredDays < $1.requiredDays }) {
-            triggeredAchievement = highest
-        }
-
-        // Mark every currently-earned badge as celebrated regardless, so
-        // dismiss-then-reload doesn't re-trigger.
-        celebratedIdsRaw = earnedNowIds.sorted().joined(separator: ",")
     }
 
     static func dateKey(for date: Date, timezoneID: String) -> String {
@@ -528,13 +522,39 @@ struct StreakBadgeMedallion: View {
     let isEarned: Bool
     let size: CGFloat
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ZStack {
+            if isEarned {
+                Circle()
+                    .strokeBorder(
+                        AngularGradient(
+                            colors: [
+                                .white.opacity(0.95),
+                                glowColor.opacity(0.40),
+                                .white.opacity(0.30),
+                                glowColor.opacity(0.70),
+                                .white.opacity(0.95)
+                            ],
+                            center: .center
+                        ),
+                        lineWidth: max(2, size * 0.045)
+                    )
+                    .frame(width: size * 1.16, height: size * 1.16)
+                    .shadow(color: glowColor.opacity(0.22), radius: size * 0.18)
+            }
+
             Circle()
                 .fill(backgroundGradient)
                 .overlay {
                     Circle()
-                        .stroke(Color.white.opacity(isEarned ? 0.74 : 0.48), lineWidth: 1)
+                        .stroke(Color.white.opacity(isEarned ? 0.82 : 0.48), lineWidth: 1)
+                }
+                .overlay {
+                    Circle()
+                        .strokeBorder(Color.black.opacity(isEarned ? 0.10 : 0.04), lineWidth: max(1, size * 0.018))
+                        .padding(size * 0.055)
                 }
                 .shadow(color: glowColor.opacity(isEarned ? 0.26 : 0.08), radius: 14, y: 7)
 
@@ -553,7 +573,7 @@ struct StreakBadgeMedallion: View {
             // Animated shimmer band — only on earned medallions. A diagonal
             // light streak that travels from upper-left to lower-right every
             // ~3.6s, masked to the circle so it stays inside the medal rim.
-            if isEarned {
+            if isEarned && !reduceMotion {
                 shimmerOverlay
                     .clipShape(Circle())
             }
@@ -572,7 +592,7 @@ struct StreakBadgeMedallion: View {
                     .offset(x: size * 0.30, y: size * 0.30)
             }
         }
-        .frame(width: size, height: size)
+        .frame(width: size * 1.16, height: size * 1.16)
     }
 
     /// Diagonal light streak that loops across the medal. Implemented via
@@ -580,7 +600,7 @@ struct StreakBadgeMedallion: View {
     /// system's animation rate. The streak fades in/out within each loop so
     /// it doesn't pop hard at the edges.
     private var shimmerOverlay: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: false)) { context in
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
             // Loop length 3.6s. Phase 0…1 = streak position from off-left to
             // off-right. Idle gap baked in by extending the loop past 1.
             let loop: TimeInterval = 3.6
@@ -665,39 +685,93 @@ private struct StreakBadgeCollectionCard: View {
     let badge: StreakBadge
     let isEarned: Bool
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var hasAppeared = false
+
     var body: some View {
-        HStack(spacing: 10) {
-            StreakBadgeMedallion(badge: badge, isEarned: isEarned, size: 42)
+        VStack(alignment: .center, spacing: 10) {
+            StreakBadgeMedallion(badge: badge, isEarned: isEarned, size: 58)
                 .accessibilityHidden(true)
 
-            VStack(alignment: .leading, spacing: 3) {
+            VStack(spacing: 4) {
                 Text(badge.title)
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 14, weight: .heavy))
                     .foregroundStyle(isEarned ? .primary : .secondary)
+                    .multilineTextAlignment(.center)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
 
                 Text(isEarned ? "Earned at \(badge.requiredDays)d" : "\(badge.requiredDays)d")
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 11, weight: .bold))
                     .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
 
-            Spacer(minLength: 0)
+            if isEarned {
+                Label(badge.tier.rawValue.capitalized, systemImage: "checkmark.seal.fill")
+                    .font(.system(size: 10, weight: .black))
+                    .foregroundStyle(glowColor)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, minHeight: 64, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .top)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(isEarned ? Color(.secondarySystemGroupedBackground) : Color(.systemGray6).opacity(0.72))
+                .fill(cardBackground)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(isEarned ? Color.orange.opacity(0.16) : Color.primary.opacity(0.06), lineWidth: 1)
+                .stroke(isEarned ? glowColor.opacity(0.28) : Color.primary.opacity(0.06), lineWidth: 1)
         }
+        .shadow(color: glowColor.opacity(isEarned ? 0.10 : 0.02), radius: isEarned ? 14 : 4, y: isEarned ? 8 : 2)
         .opacity(isEarned ? 1 : 0.72)
+        .scaleEffect(hasAppeared || reduceMotion ? 1 : 0.94)
+        .onAppear {
+            guard !reduceMotion else {
+                hasAppeared = true
+                return
+            }
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.78).delay(Double(badge.requiredDays % 4) * 0.035)) {
+                hasAppeared = true
+            }
+        }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(accessibilityLabel)
+    }
+
+    private var cardBackground: LinearGradient {
+        if isEarned {
+            return LinearGradient(
+                colors: [
+                    glowColor.opacity(0.16),
+                    Color(.secondarySystemGroupedBackground),
+                    Color(.secondarySystemGroupedBackground)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+        return LinearGradient(
+            colors: [Color(.systemGray6).opacity(0.78), Color(.systemGray5).opacity(0.58)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var glowColor: Color {
+        switch badge.tier {
+        case .bronze:
+            return Color(red: 0.85, green: 0.39, blue: 0.14)
+        case .silver:
+            return Color(red: 0.54, green: 0.59, blue: 0.68)
+        case .gold:
+            return Color.orange
+        case .platinum:
+            return Color(red: 0.22, green: 0.24, blue: 0.32)
+        }
     }
 
     private var accessibilityLabel: String {

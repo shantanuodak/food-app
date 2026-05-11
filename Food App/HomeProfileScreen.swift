@@ -20,8 +20,6 @@ struct HomeProfileScreen: View {
     @State private var isAdmin = false
     @State private var adminGeminiEnabled = false
     @State private var isAdminFlagsLoading = false
-    @State private var trackingAccuracy: TrackingAccuracyResponse?
-    @State private var isLoadingAccuracy = false
     @State private var isSignOutConfirmationPresented = false
 
     // Auto-save
@@ -38,6 +36,8 @@ struct HomeProfileScreen: View {
         // and break back behavior. The internal NavigationLinks (Body /
         // Diet / Plan etc.) push onto the parent stack the same way.
         Form {
+            healthSection
+            bodySection
             appHubSection
         }
         .navigationTitle("Account & App")
@@ -51,7 +51,6 @@ struct HomeProfileScreen: View {
         .task {
             await loadDraftIfNeeded()
             await loadAdminFlags()
-            await loadTrackingAccuracy()
         }
     }
 
@@ -108,7 +107,6 @@ struct HomeProfileScreen: View {
             NavigationLink {
                 HealthInsightsProfileDetailView {
                     healthSection
-                    trackingAccuracySection
                 }
             } label: {
                 ProfileHubRow(
@@ -129,19 +127,6 @@ struct HomeProfileScreen: View {
                 ProfileHubRow(
                     title: "Account",
                     systemImage: accountProviderIcon
-                )
-            }
-
-            NavigationLink {
-                AccountProfileDetailView(title: "App") {
-                    mealReminderSection
-                    healthSection
-                    trackingAccuracySection
-                }
-            } label: {
-                ProfileHubRow(
-                    title: "App",
-                    systemImage: "app.badge"
                 )
             }
 
@@ -364,108 +349,27 @@ struct HomeProfileScreen: View {
         }
     }
 
-    // MARK: - Tracking Accuracy
-
-    @ViewBuilder
-    private var trackingAccuracySection: some View {
-        Section {
-            if isLoadingAccuracy {
-                HStack {
-                    ProgressView().controlSize(.small)
-                    Text("Loading…").foregroundStyle(.secondary)
-                }
-            } else if let accuracy = trackingAccuracy, accuracy.entryCount > 0 {
-                LabeledContent("All-time accuracy") {
-                    Text("\(Int(accuracy.averageConfidence * 100))%")
-                        .foregroundStyle(tierColor(accuracy.tier))
-                        .monospacedDigit()
-                }
-
-                ProgressView(value: accuracy.averageConfidence)
-                    .tint(tierColor(accuracy.tier))
-
-                LabeledContent("Entries logged", value: "\(accuracy.entryCount)")
-
-                Text(tierMessage(accuracy.tier))
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-            } else {
-                ContentUnavailableView(
-                    "No data yet",
-                    systemImage: "chart.bar",
-                    description: Text("Log some food to see your tracking accuracy.")
-                )
-            }
-        } header: {
-            Text("Tracking accuracy")
-        }
-
-        if let accuracy = trackingAccuracy, !accuracy.lowConfidenceEntries.isEmpty {
-            Section {
-                ForEach(accuracy.lowConfidenceEntries) { entry in
-                    VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("\"\(entry.rawText)\"")
-                                .lineLimit(1)
-                            Spacer()
-                            Text("\(Int(entry.confidence * 100))%")
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                        Label(entry.suggestion, systemImage: "lightbulb")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                }
-            } header: {
-                Text("Tips to improve")
-            }
-        }
-    }
-
-    private func tierColor(_ tier: String) -> Color {
-        switch tier {
-        case "excellent": return .green
-        case "good": return .blue
-        case "fair": return .orange
-        case "needs_work": return .red
-        default: return .secondary
-        }
-    }
-
-    private func tierMessage(_ tier: String) -> String {
-        switch tier {
-        case "excellent": return "Your entries are highly specific — great job!"
-        case "good": return "Most entries are solid. A few could be more specific."
-        case "fair": return "Some entries could use more detail for better accuracy."
-        case "needs_work": return "Adding quantities and specifics will improve accuracy."
-        default: return ""
-        }
-    }
-
-    private func loadTrackingAccuracy() async {
-        isLoadingAccuracy = true
-        defer { isLoadingAccuracy = false }
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd"
-        formatter.locale = Locale(identifier: "en_US_POSIX")
-        let today = formatter.string(from: Date())
-        let tz = TimeZone.current.identifier
-        do {
-            trackingAccuracy = try await appStore.apiClient.getTrackingAccuracy(date: today, timezone: tz)
-        } catch {
-            // Silently fail — accuracy card is non-critical
-            _ = appStore.handleAuthFailureIfNeeded(error)
-        }
-    }
-
     private var accountSection: some View {
         Section("Account") {
             LabeledContent {
                 Text(accountProviderName).foregroundStyle(.secondary)
             } label: {
                 Label("Signed in with", systemImage: accountProviderIcon)
+            }
+            LabeledContent {
+                Text(accountDisplayName)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+            } label: {
+                Label("Name", systemImage: "person.crop.circle")
+            }
+            LabeledContent {
+                Text(accountEmail)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.trailing)
+                    .textSelection(.enabled)
+            } label: {
+                Label("Email", systemImage: "envelope")
             }
             Button(role: .destructive) {
                 isSignOutConfirmationPresented = true
@@ -563,15 +467,44 @@ struct HomeProfileScreen: View {
     }
 
     private var accountProviderIcon: String {
-        draft.accountProvider == .apple ? "apple.logo" : "globe"
+        currentAccountProvider == .apple ? "apple.logo" : "globe"
     }
 
     private var accountProviderName: String {
-        switch draft.accountProvider {
+        switch currentAccountProvider {
         case .apple: return "Apple"
         case .google: return "Google"
         case .none: return "Not signed in"
         }
+    }
+
+    private var currentAccountProvider: AccountProvider? {
+        appStore.authSessionStore.session?.provider ?? draft.accountProvider
+    }
+
+    private var accountDisplayName: String {
+        appStore.authSessionStore.session?.displayFullName ?? "Name unavailable"
+    }
+
+    private var accountEmail: String {
+        appStore.authSessionStore.session?.email ?? "Email unavailable"
+    }
+
+    private var mealReminderSummaryText: String {
+        let settings = appStore.mealReminderSettings
+        guard settings.remindersEnabled else { return "Off" }
+
+        var enabledMeals: [String] = []
+        if settings.breakfastEnabled {
+            enabledMeals.append("Breakfast \(timeLabel(for: settings.breakfastStart))-\(timeLabel(for: settings.breakfast))")
+        }
+        if settings.lunchEnabled {
+            enabledMeals.append("Lunch \(timeLabel(for: settings.lunchStart))-\(timeLabel(for: settings.lunch))")
+        }
+        if settings.dinnerEnabled {
+            enabledMeals.append("Dinner \(timeLabel(for: settings.dinnerStart))-\(timeLabel(for: settings.dinner))")
+        }
+        return enabledMeals.isEmpty ? "No meal times selected" : enabledMeals.joined(separator: " · ")
     }
 
     private func preferenceSymbol(for preference: PreferenceChoice) -> String {
@@ -705,6 +638,10 @@ struct HomeProfileScreen: View {
     private func reminderTime(from date: Date) -> MealReminderTime {
         let components = Calendar.current.dateComponents([.hour, .minute], from: date)
         return MealReminderTime(hour: components.hour ?? 12, minute: components.minute ?? 0)
+    }
+
+    private func timeLabel(for time: MealReminderTime) -> String {
+        date(for: time).formatted(date: .omitted, time: .shortened)
     }
 
     private var dietPreferencePayload: String {

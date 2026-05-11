@@ -9,7 +9,7 @@ struct MainLoggingBottomDock: View {
     let isLoadingFoodLogStreak: Bool
     let isKeyboardVisible: Bool
     @Binding var isSyncInfoPresented: Bool
-    @Binding var isStreakDrawerPresented: Bool
+    @Binding var isProgressChartsPresented: Bool
 
     var body: some View {
         VStack(spacing: 10) {
@@ -44,11 +44,11 @@ struct MainLoggingBottomDock: View {
                         streakDockIndicator
 
                         bottomDockButton(
-                            systemImage: "flame.fill",
-                            color: .orange,
-                            accessibilityLabel: "Open nutrition summary"
+                            systemImage: "chart.bar.fill",
+                            color: Color(red: 0.95, green: 0.47, blue: 0.11),
+                            accessibilityLabel: "Open progress charts"
                         ) {
-                            NotificationCenter.default.post(name: .openNutritionSummaryFromTabBar, object: nil)
+                            isProgressChartsPresented = true
                         }
                     }
                 }
@@ -99,7 +99,7 @@ struct MainLoggingBottomDock: View {
 
     private var streakDockIndicator: some View {
         Button {
-            isStreakDrawerPresented = true
+            NotificationCenter.default.post(name: .openStreaksFromNotification, object: nil)
         } label: {
             ZStack(alignment: .bottomTrailing) {
                 trophyStreakIcon
@@ -131,8 +131,8 @@ struct MainLoggingBottomDock: View {
 
     private var streakAccessibilityLabel: String {
         let days = currentFoodLogStreak ?? 0
-        let badgeTitle = StreakRewards.currentBadge(for: days)?.title ?? "First Spark awaits"
-        return "Open \(days)-day food streak, \(badgeTitle)"
+        let badgeTitle = StreakBadges.currentBadge(for: days)?.title ?? "First Spark awaits"
+        return "Open badges, \(days)-day food streak, \(badgeTitle)"
     }
 
     private var trophyStreakIcon: some View {

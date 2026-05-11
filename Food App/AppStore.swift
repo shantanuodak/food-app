@@ -1,6 +1,7 @@
 import Foundation
 import Combine
 import UserNotifications
+import UIKit
 
 @MainActor
 final class AppStore: ObservableObject {
@@ -26,6 +27,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var notificationAuthState: UNAuthorizationStatus = .notDetermined
     @Published private(set) var mealReminderSettings: MealReminderSettings
     @Published private(set) var profileDashboardSnapshot: ProfileDashboardSnapshot? = nil
+    @Published private(set) var progressChartsSnapshot: ProgressChartsSnapshot? = nil
 
     let configuration: AppConfiguration
     let authSessionStore: AuthSessionStore
@@ -45,9 +47,13 @@ final class AppStore: ObservableObject {
     private let healthSyncKey = "app.health.sync.enabled.v1"
     private let challengeKey = "app.challenge.choice.v1"
     private let mealReminderSettingsKey = "app.meal.reminder.settings.v1"
+    private let todayHasLoggedFoodKey = "app.notifications.today.has_logged_food.v1"
+    private let todayHasLoggedFoodDateKey = "app.notifications.today.has_logged_food.date.v1"
+    private let apnsDeviceTokenKey = "app.notifications.apns_token.v1"
     private let networkMonitor: NetworkStatusMonitor
     private var onboardingProfileRefreshTask: Task<Void, Never>?
     private var profileDashboardPreloadTask: Task<Void, Never>?
+    private var progressChartsPreloadTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -123,6 +129,21 @@ final class AppStore: ObservableObject {
             }
             .store(in: &cancellables)
 
+        NotificationCenter.default.publisher(for: .nutritionProgressDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.recordTodayLogState(hasLogs: true)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: .apnsDeviceTokenDidChange)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] notification in
+                guard let token = notification.userInfo?["token"] as? String else { return }
+                self?.recordAPNsDeviceToken(token)
+            }
+            .store(in: &cancellables)
+
         Publishers.CombineLatest(networkMonitor.$isConstrained, networkMonitor.$isExpensive)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] constrained, expensive in
@@ -156,12 +177,14 @@ final class AppStore: ObservableObject {
                 await MainActor.run {
                     self?.isSessionRestored = true
                     self?.scheduleLaunchOnboardingProfileRefreshIfNeeded()
+                    self?.syncNotificationsWithBackend()
                 }
             }
         } else {
             isSessionRestored = true
             if sessionStore.session != nil {
                 scheduleLaunchOnboardingProfileRefreshIfNeeded()
+                syncNotificationsWithBackend()
             }
         }
     }
@@ -182,7 +205,10 @@ final class AppStore: ObservableObject {
         onboardingProfileRefreshTask = nil
         profileDashboardPreloadTask?.cancel()
         profileDashboardPreloadTask = nil
+        progressChartsPreloadTask?.cancel()
+        progressChartsPreloadTask = nil
         profileDashboardSnapshot = nil
+        progressChartsSnapshot = nil
         authService.signOut()
         isOnboardingComplete = false
         defaults.set(false, forKey: onboardingKey)
@@ -325,6 +351,82 @@ final class AppStore: ObservableObject {
         )
     }
 
+    func preloadProgressCharts(range: ProgressRange = .week, force: Bool = false) {
+        guard configuration.progressFeatureEnabled else { return }
+        guard isSessionRestored, isOnboardingComplete, authSessionStore.session != nil else { return }
+        guard isNetworkReachable else { return }
+
+        let timezone = TimeZone.current.identifier
+        if !force,
+           let snapshot = progressChartsSnapshot,
+           snapshot.isUsable(for: range, timezone: timezone) {
+            return
+        }
+
+        if progressChartsPreloadTask != nil, !force {
+            return
+        }
+
+        progressChartsPreloadTask?.cancel()
+        progressChartsPreloadTask = Task(priority: .background) { [weak self] in
+            guard let self else { return }
+            await self.refreshProgressChartsSnapshot(range: range, timezone: timezone)
+            await MainActor.run {
+                self.progressChartsPreloadTask = nil
+            }
+        }
+    }
+
+    func refreshProgressChartsSnapshot(range: ProgressRange = .week, timezone: String = TimeZone.current.identifier) async {
+        guard configuration.progressFeatureEnabled else { return }
+        guard isSessionRestored, isOnboardingComplete, authSessionStore.session != nil else { return }
+        guard isNetworkReachable else { return }
+
+        let bounds = Self.progressChartDateBounds(for: range)
+        let progressResult = try? await apiClient.getProgress(
+            from: bounds.from,
+            to: bounds.to,
+            timezone: timezone
+        )
+
+        var weightSamples: [BodyMassSample] = []
+        var stepsSamples: [DailyStepCount] = []
+        if healthAuthorizationState == .authorized && isHealthSyncEnabled {
+            weightSamples = (try? await fetchBodyMassSamples(from: bounds.startDate, to: bounds.endDate.addingTimeInterval(86_399))) ?? []
+            stepsSamples = (try? await fetchStepCountsByDay(from: bounds.startDate, to: bounds.endDate.addingTimeInterval(86_399))) ?? []
+        }
+
+        if Task.isCancelled { return }
+
+        let fallbackProgress = progressChartsSnapshot?.range == range ? progressChartsSnapshot?.progress : nil
+        progressChartsSnapshot = ProgressChartsSnapshot(
+            range: range,
+            progress: progressResult ?? fallbackProgress,
+            weightSamples: weightSamples,
+            stepsSamples: stepsSamples,
+            preferredUnits: OnboardingPersistence.load(defaults: defaults)?.draft.units ?? .imperial,
+            startDate: bounds.startDate,
+            endDate: bounds.endDate,
+            from: bounds.from,
+            to: bounds.to,
+            timezone: timezone,
+            loadedAt: Date()
+        )
+    }
+
+    private static func progressChartDateBounds(for range: ProgressRange, date: Date = Date()) -> (startDate: Date, endDate: Date, from: String, to: String) {
+        let calendar = Calendar.current
+        let endDate = calendar.startOfDay(for: date)
+        let offset = max(0, range.rawValue - 1)
+        let startDate = calendar.date(byAdding: .day, value: -offset, to: endDate) ?? endDate
+        return (
+            startDate: startDate,
+            endDate: endDate,
+            from: HomeLoggingDateUtils.summaryRequestFormatter.string(from: startDate),
+            to: HomeLoggingDateUtils.summaryRequestFormatter.string(from: endDate)
+        )
+    }
+
     func refreshHealthAuthorizationState() {
         healthKitService.refreshAuthorizationState()
     }
@@ -363,7 +465,26 @@ final class AppStore: ObservableObject {
         if let data = try? JSONEncoder().encode(settings) {
             defaults.set(data, forKey: mealReminderSettingsKey)
         }
-        Task { await reconcileNotifications() }
+        Task {
+            await reconcileNotifications()
+            await syncNotificationPreferencesToBackend()
+        }
+    }
+
+    func setMealRemindersEnabled(_ enabled: Bool) {
+        var settings = mealReminderSettings
+        settings.remindersEnabled = enabled
+
+        if enabled,
+           !settings.breakfastEnabled,
+           !settings.lunchEnabled,
+           !settings.dinnerEnabled {
+            settings.breakfastEnabled = true
+            settings.lunchEnabled = true
+            settings.dinnerEnabled = true
+        }
+
+        setMealReminderSettings(settings)
     }
 
     /// Refresh the cached system notification authorization status from the OS.
@@ -371,6 +492,9 @@ final class AppStore: ObservableObject {
     /// notifications inside iOS Settings.
     func refreshNotificationAuthState() async {
         notificationAuthState = await notificationScheduler.currentAuthorizationStatus()
+        if notificationAuthState == .authorized || notificationAuthState == .provisional || notificationAuthState == .ephemeral {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
     }
 
     /// Ask the user for notification permission via the system prompt.
@@ -379,7 +503,11 @@ final class AppStore: ObservableObject {
     func requestNotificationAuthorization() async -> UNAuthorizationStatus {
         let status = await notificationScheduler.requestAuthorization()
         notificationAuthState = status
+        if status == .authorized || status == .provisional || status == .ephemeral {
+            UIApplication.shared.registerForRemoteNotifications()
+        }
         await reconcileNotifications()
+        await syncNotificationPreferencesToBackend()
         return status
     }
 
@@ -450,8 +578,93 @@ final class AppStore: ObservableObject {
         await notificationScheduler.reconcile(
             challenge: selectedChallenge,
             authState: notificationAuthState,
-            mealReminders: mealReminderSettings
+            mealReminders: mealReminderSettings,
+            hasLoggedToday: todayHasLoggedFood
         )
+    }
+
+    func syncNotificationsWithBackend() {
+        Task {
+            await syncNotificationDeviceToBackend()
+            await syncNotificationPreferencesToBackend()
+        }
+    }
+
+    private func recordAPNsDeviceToken(_ token: String) {
+        defaults.set(token, forKey: apnsDeviceTokenKey)
+        Task { await syncNotificationDeviceToBackend() }
+    }
+
+    private func syncNotificationDeviceToBackend() async {
+        guard authSessionStore.session != nil else { return }
+        guard let token = defaults.string(forKey: apnsDeviceTokenKey), !token.isEmpty else { return }
+
+        let appVersion = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String
+        let buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String
+        let body = RegisterNotificationDeviceRequest(
+            token: token,
+            platform: "ios",
+            environment: Self.apnsEnvironment,
+            appVersion: appVersion,
+            buildNumber: buildNumber,
+            deviceModel: UIDevice.current.model,
+            osVersion: UIDevice.current.systemVersion,
+            locale: Locale.current.identifier
+        )
+        _ = try? await apiClient.registerNotificationDevice(body)
+    }
+
+    private func syncNotificationPreferencesToBackend() async {
+        guard authSessionStore.session != nil else { return }
+        let settings = mealReminderSettings
+        let body = NotificationPreferencesRequest(
+            timezone: TimeZone.current.identifier,
+            remindersEnabled: settings.remindersEnabled,
+            breakfastEnabled: settings.breakfastEnabled,
+            lunchEnabled: settings.lunchEnabled,
+            dinnerEnabled: settings.dinnerEnabled,
+            breakfastStart: Self.apiTime(settings.breakfastStart),
+            breakfastEnd: Self.apiTime(settings.breakfast),
+            lunchStart: Self.apiTime(settings.lunchStart),
+            lunchEnd: Self.apiTime(settings.lunch),
+            dinnerStart: Self.apiTime(settings.dinnerStart),
+            dinnerEnd: Self.apiTime(settings.dinner),
+            eatingWindowEnabled: settings.eatingWindowEnabled,
+            eatingWindowStart: Self.apiTime(settings.eatingWindowStart),
+            eatingWindowEnd: Self.apiTime(settings.eatingWindowEnd),
+            engagementEnabled: true,
+            discoveryEnabled: true
+        )
+        _ = try? await apiClient.updateNotificationPreferences(body)
+    }
+
+    private static var apnsEnvironment: String {
+        #if DEBUG
+        return "development"
+        #else
+        return "production"
+        #endif
+    }
+
+    private static func apiTime(_ time: MealReminderTime) -> String {
+        "\(String(format: "%02d", time.hour)):\(String(format: "%02d", time.minute))"
+    }
+
+    func recordTodayLogState(hasLogs: Bool) {
+        defaults.set(todayDateString, forKey: todayHasLoggedFoodDateKey)
+        defaults.set(hasLogs, forKey: todayHasLoggedFoodKey)
+        Task { await reconcileNotifications() }
+    }
+
+    private var todayHasLoggedFood: Bool {
+        guard defaults.string(forKey: todayHasLoggedFoodDateKey) == todayDateString else {
+            return false
+        }
+        return defaults.bool(forKey: todayHasLoggedFoodKey)
+    }
+
+    private var todayDateString: String {
+        HomeLoggingDateUtils.summaryRequestFormatter.string(from: Date())
     }
 
     func syncNutritionToAppleHealth(totals: NutritionTotals, loggedAt: Date, logId: String, healthWriteKey: String) async throws -> Bool {

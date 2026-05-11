@@ -1,5 +1,6 @@
 import SwiftUI
 import Charts
+import UIKit
 
 /// Bento-style profile dashboard. Replaces the legacy `HomeProfileScreen`
 /// list as the sheet content when the user taps the greeting chip on the
@@ -28,6 +29,7 @@ struct HomeProfileBentoScreen: View {
     @State private var streaks: StreakResponse?
     @State private var isInitialLoad = true
     @State private var errorMessage: String?
+    @State private var isReminderSettingsPresented = false
 
     var body: some View {
         NavigationStack {
@@ -38,17 +40,20 @@ struct HomeProfileBentoScreen: View {
                         errorBanner(errorMessage)
                     }
                     CalorieHeroTile(data: heroData)
-                    NavigationLink {
-                        RewardsTrophyCaseView(currentStreakDays: streakDays)
-                    } label: {
-                        StreakTile(days: streakDays)
-                    }
-                    .buttonStyle(.plain)
                     HStack(alignment: .top, spacing: 12) {
-                        BodyTile(info: bodyData)
-                        DietTile(diet: dietData)
+                        NavigationLink {
+                            BadgesTrophyCaseView(currentStreakDays: streakDays)
+                        } label: {
+                            BadgeTile(days: streakDays)
+                        }
+                        .buttonStyle(.plain)
+
+                        NotificationReminderTile(
+                            summary: reminderSummaryText,
+                            isEnabled: reminderEnabledBinding
+                        )
                     }
-                    SevenDayTrendTile(data: trendData)
+                    DietTile(diet: dietData)
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 4)
@@ -82,6 +87,9 @@ struct HomeProfileBentoScreen: View {
                     }
                     .accessibilityLabel("Close")
                 }
+            }
+            .navigationDestination(isPresented: $isReminderSettingsPresented) {
+                NotificationReminderSettingsView()
             }
         }
         .environmentObject(draftStore)
@@ -235,26 +243,78 @@ struct HomeProfileBentoScreen: View {
         streaks?.currentDays ?? progress?.streaks.currentDays ?? 0
     }
 
-    private var bodyData: BodyTile.Data {
-        guard let profile else {
-            return BodyTile.Data(weight: "—", height: "—", goal: "—")
-        }
-        let units = profile.units
-        let weight = profile.weightKg.map { formatWeight(kg: $0, units: units) } ?? "—"
-        let height = profile.heightCm.map { formatHeight(cm: $0, units: units) } ?? "—"
-        return BodyTile.Data(
-            weight: weight,
-            height: height,
-            goal: L10n.goalLabel(profile.goal)
+    private var reminderSummaryText: String {
+        let settings = appStore.mealReminderSettings
+        guard settings.remindersEnabled else { return "Off" }
+
+        let selected = [
+            settings.breakfastEnabled ? "Breakfast" : nil,
+            settings.lunchEnabled ? "Lunch" : nil,
+            settings.dinnerEnabled ? "Dinner" : nil
+        ].compactMap { $0 }
+
+        if selected.isEmpty { return "No windows selected" }
+        return selected.joined(separator: ", ")
+    }
+
+    private var reminderEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { appStore.mealReminderSettings.remindersEnabled },
+            set: { isEnabled in
+                updateReminderEnabledFromProfileCard(isEnabled)
+            }
         )
+    }
+
+    private func updateReminderEnabledFromProfileCard(_ isEnabled: Bool) {
+        guard isEnabled else {
+            appStore.setMealRemindersEnabled(false)
+            return
+        }
+
+        Task {
+            await appStore.refreshNotificationAuthState()
+
+            switch appStore.notificationAuthState {
+            case .authorized, .provisional, .ephemeral:
+                appStore.setMealRemindersEnabled(true)
+            case .notDetermined:
+                let status = await appStore.requestNotificationAuthorization()
+                switch status {
+                case .authorized, .provisional, .ephemeral:
+                    appStore.setMealRemindersEnabled(true)
+                default:
+                    appStore.setMealRemindersEnabled(false)
+                    return
+                }
+            case .denied:
+                appStore.setMealRemindersEnabled(false)
+                await MainActor.run {
+                    openAppNotificationSettings()
+                }
+                return
+            default:
+                appStore.setMealRemindersEnabled(false)
+                return
+            }
+
+            await MainActor.run {
+                isReminderSettingsPresented = true
+            }
+        }
+    }
+
+    private func openAppNotificationSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private var dietData: DietTile.Data {
         guard let profile else {
-            return DietTile.Data(preference: "—", allergiesCount: 0, pace: "—")
+            return DietTile.Data(preferencesCount: 0, allergiesCount: 0, pace: "—")
         }
         return DietTile.Data(
-            preference: dietPrefLabel(profile.dietPreference),
+            preferencesCount: dietPreferenceCount(profile.dietPreference),
             allergiesCount: profile.allergies.count,
             pace: paceLabel(profile.pace)
         )
@@ -293,34 +353,16 @@ struct HomeProfileBentoScreen: View {
         )
     }
 
-    // MARK: - Formatters
-
-    private func formatWeight(kg: Double, units: UnitsOption) -> String {
-        let value = HealthKitService.displayWeightValue(kilograms: kg, units: units)
-        let label = HealthKitService.weightUnitLabel(for: units)
-        return "\(Int(value.rounded())) \(label)"
-    }
-
-    private func formatHeight(cm: Double, units: UnitsOption) -> String {
-        switch units {
-        case .metric:
-            return "\(Int(cm.rounded())) cm"
-        case .imperial:
-            let totalInches = cm / 2.54
-            let feet = Int(totalInches / 12)
-            let inches = Int(totalInches.truncatingRemainder(dividingBy: 12).rounded())
-            if inches == 12 {
-                return "\(feet + 1)'0\""
+    private func dietPreferenceCount(_ raw: String) -> Int {
+        raw
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { value in
+                !value.isEmpty &&
+                value != "none" &&
+                value != PreferenceChoice.noPreference.rawValue
             }
-            return "\(feet)'\(inches)\""
-        }
-    }
-
-    private func dietPrefLabel(_ raw: String) -> String {
-        if let choice = PreferenceChoice(rawValue: raw) {
-            return choice.title
-        }
-        return raw.replacingOccurrences(of: "_", with: " ").capitalized
+            .count
     }
 
     private func paceLabel(_ raw: String?) -> String {
@@ -493,16 +535,23 @@ private struct CalorieHeroTile: View {
     }
 }
 
-/// Streak — cream gradient 1×1 with trophy icon and brand-orange day count.
-private struct StreakTile: View {
+/// Badges — cream gradient 1×1 with trophy icon and current streak progress.
+private struct BadgeTile: View {
     let days: Int
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            trophyIcon
-                .padding(.bottom, 8)
-                .accessibilityHidden(true)
+            HStack(alignment: .center, spacing: 8) {
+                trophyIcon
+                    .accessibilityHidden(true)
+                Text("Badges")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(BentoTokens.gray900)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .padding(.bottom, 8)
             Text("\(days)")
                 .font(.system(size: 44, weight: .heavy))
                 .foregroundStyle(BentoTokens.brandGradient)
@@ -519,7 +568,7 @@ private struct StreakTile: View {
                 .padding(.top, 4)
             Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
         .bentoTile(
             background: LinearGradient(
                 colors: [Color(red: 1.0, green: 0.969, blue: 0.910),
@@ -530,11 +579,11 @@ private struct StreakTile: View {
             border: Color(red: 1.0, green: 0.839, blue: 0.678)
         )
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(days == 1 ? "1 day streak, \(badgeTitle)" : "\(days) day streak, \(badgeTitle)")
+        .accessibilityLabel(days == 1 ? "Badges, 1 day streak, \(badgeTitle)" : "Badges, \(days) day streak, \(badgeTitle)")
     }
 
     private var badgeTitle: String {
-        StreakRewards.currentBadge(for: days)?.title ?? "First Spark awaits"
+        StreakBadges.currentBadge(for: days)?.title ?? "First Spark awaits"
     }
 
     private var trophyIcon: some View {
@@ -550,84 +599,75 @@ private struct StreakTile: View {
     }
 }
 
-/// Body — light blue tinted card with saturated icon. Tappable.
-private struct BodyTile: View {
-    struct Data {
-        let weight: String
-        let height: String
-        let goal: String
-    }
-
-    /// Named `info` instead of `body` to avoid colliding with `View.body`.
-    let info: Data
+/// Notifications — quick access tile that sits beside streaks.
+private struct NotificationReminderTile: View {
+    let summary: String
+    @Binding var isEnabled: Bool
 
     var body: some View {
-        BentoTappableTile(
+        ZStack(alignment: .topTrailing) {
+            VStack(alignment: .leading, spacing: 0) {
+                ZStack {
+                    Circle()
+                        .fill(Color(red: 0.894, green: 0.949, blue: 1.0))
+                    Image(systemName: "bell.badge.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(Color(red: 0.094, green: 0.459, blue: 0.918))
+                }
+                .frame(width: 38, height: 38)
+                .padding(.bottom, 12)
+                .accessibilityHidden(true)
+
+                Text("Reminders")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(BentoTokens.gray900)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+
+                Text(summary)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.094, green: 0.459, blue: 0.918))
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.82)
+                    .padding(.top, 6)
+
+                Spacer(minLength: 0)
+
+                HStack {
+                    Spacer(minLength: 0)
+                    Toggle("Meal reminders", isOn: $isEnabled)
+                        .labelsHidden()
+                        .tint(Color(red: 0.204, green: 0.780, blue: 0.349))
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(BentoTokens.gray400)
+                .padding(.top, 1)
+            .accessibilityHidden(true)
+        }
+        .bentoTile(
             background: LinearGradient(
                 colors: [
-                    Color(red: 0.933, green: 0.965, blue: 1.0),
-                    Color(red: 0.847, green: 0.914, blue: 0.988)
+                    Color(red: 0.957, green: 0.981, blue: 1.0),
+                    Color(red: 0.894, green: 0.949, blue: 1.0)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            border: Color(red: 0.227, green: 0.659, blue: 0.969).opacity(0.22)
-        ) {
-            BodyEditorScreen()
-        } label: {
-            VStack(alignment: .leading, spacing: 0) {
-                iconCircle
-                    .padding(.bottom, 12)
-                    .accessibilityHidden(true)
-                Text("Body")
-                    .font(.system(size: 17, weight: .bold))
-                    .foregroundStyle(BentoTokens.gray900)
-                    .padding(.bottom, 6)
-                statRow(name: "Weight", value: info.weight)
-                statRow(name: "Height", value: info.height)
-                statRow(name: "Goal",   value: info.goal)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel("Body. Weight \(info.weight). Height \(info.height). Goal \(info.goal).")
-            .accessibilityHint("Opens body details")
-        }
-    }
-
-    private var iconCircle: some View {
-        ZStack {
-            LinearGradient(
-                colors: [BentoTokens.blue500, BentoTokens.blue700],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "figure.stand")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-        .frame(width: 40, height: 40)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: BentoTokens.blue700.opacity(0.25), radius: 4, y: 2)
-    }
-
-    private func statRow(name: String, value: String) -> some View {
-        HStack {
-            Text(name)
-                .font(.system(size: 12))
-                .foregroundStyle(BentoTokens.gray700)
-            Spacer()
-            Text(value)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(BentoTokens.gray900)
-        }
-        .padding(.vertical, 2)
+            border: Color(red: 0.757, green: 0.871, blue: 0.988)
+        )
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Notifications and reminders, \(isEnabled ? "on" : "off"), \(summary)")
     }
 }
 
 /// Diet — light green tinted card with saturated icon. Tappable.
 private struct DietTile: View {
     struct Data {
-        let preference: String
+        let preferencesCount: Int
         let allergiesCount: Int
         let pace: String
     }
@@ -656,13 +696,13 @@ private struct DietTile: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(BentoTokens.gray900)
                     .padding(.bottom, 6)
-                statRow(name: "Pref",      value: diet.preference)
+                statRow(name: "Preferences", value: "\(diet.preferencesCount)")
                 statRow(name: "Allergies", value: "\(diet.allergiesCount)")
-                statRow(name: "Pace",      value: diet.pace)
+                statRow(name: "Pace", value: diet.pace)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
-            .accessibilityLabel("Diet. Preference \(diet.preference). \(diet.allergiesCount == 1 ? "1 allergy" : "\(diet.allergiesCount) allergies"). Pace \(diet.pace).")
+            .accessibilityLabel("Diet. \(diet.preferencesCount == 1 ? "1 preference" : "\(diet.preferencesCount) preferences"). \(diet.allergiesCount == 1 ? "1 allergy" : "\(diet.allergiesCount) allergies"). Pace \(diet.pace).")
             .accessibilityHint("Opens food preferences")
         }
     }
@@ -686,14 +726,14 @@ private struct DietTile: View {
     private func statRow(name: String, value: String) -> some View {
         HStack {
             Text(name)
-                .font(.system(size: 12))
+                .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(BentoTokens.gray700)
             Spacer()
             Text(value)
-                .font(.system(size: 12, weight: .bold))
+                .font(.system(size: 14, weight: .bold))
                 .foregroundStyle(BentoTokens.gray900)
         }
-        .padding(.vertical, 2)
+        .padding(.vertical, 3)
     }
 }
 

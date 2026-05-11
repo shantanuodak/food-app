@@ -10,6 +10,7 @@ struct AuthSession: Codable, Equatable {
     let userID: String?
     let email: String?
     let firstName: String?
+    let lastName: String?
 }
 
 enum AuthSessionStoreError: LocalizedError {

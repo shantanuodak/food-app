@@ -65,6 +65,21 @@ function checkConfigShape(): CheckResult {
   if (config.aiDailyBudgetUsd <= 0) invalids.push('AI_DAILY_BUDGET_USD must be > 0');
   if (config.aiUserSoftCapUsd <= 0) invalids.push('AI_USER_SOFT_CAP_USD must be > 0');
   if (config.aiFallbackCostUsd <= 0) invalids.push('AI_FALLBACK_COST_USD must be > 0');
+  if (config.notificationRunnerEnabled) {
+    if (config.notificationRunnerIntervalMs < 60_000) {
+      invalids.push('NOTIFICATION_RUNNER_INTERVAL_MS must be >= 60000');
+    }
+    if (!config.apnsEnabled) {
+      invalids.push('APNS_ENABLED must be true when NOTIFICATION_RUNNER_ENABLED=true');
+    }
+  }
+  if (config.apnsEnabled) {
+    if (!['development', 'production'].includes(config.apnsEnvironment)) invalids.push('APNS_ENVIRONMENT');
+    if (!config.apnsTeamId.trim()) invalids.push('APNS_TEAM_ID');
+    if (!config.apnsKeyId.trim()) invalids.push('APNS_KEY_ID');
+    if (!config.apnsBundleId.trim()) invalids.push('APNS_BUNDLE_ID');
+    if (!config.apnsPrivateKey.includes('BEGIN PRIVATE KEY')) invalids.push('APNS_PRIVATE_KEY must be a .p8 private key');
+  }
 
   if (invalids.length > 0) {
     return {
@@ -77,7 +92,7 @@ function checkConfigShape(): CheckResult {
   return {
     name: 'config-shape',
     ok: true,
-    details: `Parse namespace: cache=${config.parseCacheSchemaVersion}, parser=${config.parseVersion}, route=${config.parseProviderRouteVersion}, prompt=${config.parsePromptVersion}`
+    details: `Parse namespace: cache=${config.parseCacheSchemaVersion}, parser=${config.parseVersion}, route=${config.parseProviderRouteVersion}, prompt=${config.parsePromptVersion}; notifications runner=${config.notificationRunnerEnabled ? 'on' : 'off'}, apns=${config.apnsEnabled ? config.apnsEnvironment : 'off'}`
   };
 }
 

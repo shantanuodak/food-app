@@ -31,7 +31,9 @@ struct BodyEditorScreen: View {
                 }
                 .pickerStyle(.menu)
 
-                Stepper(value: draftStore.ageIntBinding, in: OnboardingBaselineRange.age) {
+                NavigationLink {
+                    AgePickerView(draft: $draftStore.draft)
+                } label: {
                     LabeledContent {
                         Text("\(Int(draftStore.draft.ageValue))")
                             .foregroundStyle(.secondary)

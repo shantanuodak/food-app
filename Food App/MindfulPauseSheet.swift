@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// One-shot fullscreen pause for users who picked "emotional eating" as
-/// their biggest challenge. Surfaces once per day, just before the user
-/// starts logging — fulfilling the promise made on
+/// their biggest challenge. Surfaces at most once per day, just before
+/// the user starts logging outside their meal windows — fulfilling the promise made on
 /// `OB02cChallengeInsightScreen`: "Just open the app — that one moment
 /// creates a mindful pause."
 ///

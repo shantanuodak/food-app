@@ -242,6 +242,16 @@ final class APIClient {
         try await request(path: "/v1/roadmap", method: "GET", requiresAuth: true)
     }
 
+    @discardableResult
+    func registerNotificationDevice(_ requestBody: RegisterNotificationDeviceRequest) async throws -> RegisterNotificationDeviceResponse {
+        try await request(path: "/v1/notifications/devices", method: "POST", body: requestBody, requiresAuth: true)
+    }
+
+    @discardableResult
+    func updateNotificationPreferences(_ requestBody: NotificationPreferencesRequest) async throws -> NotificationPreferencesResponse {
+        try await request(path: "/v1/notifications/preferences", method: "PUT", body: requestBody, requiresAuth: true)
+    }
+
     func getDaySummary(date: String, timezone: String = TimeZone.current.identifier) async throws -> DaySummaryResponse {
         try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [
             URLQueryItem(name: "date", value: date),
@@ -297,7 +307,7 @@ final class APIClient {
         )
     }
 
-    func getRewardsSummary(timezone: String) async throws -> RewardsSummaryResponse {
+    func getBadgesSummary(timezone: String) async throws -> BadgesSummaryResponse {
         try await request(
             path: "/v1/rewards/summary",
             method: "GET",
@@ -314,18 +324,6 @@ final class APIClient {
 
     func updateAdminFeatureFlags(_ requestBody: AdminFeatureFlagsUpdateRequest) async throws -> AdminFeatureFlagsResponse {
         try await request(path: "/v1/admin/feature-flags", method: "PUT", body: requestBody, requiresAuth: true)
-    }
-
-    func getTrackingAccuracy(date: String, timezone: String) async throws -> TrackingAccuracyResponse {
-        try await request(
-            path: "/v1/profile/tracking-accuracy",
-            method: "GET",
-            queryItems: [
-                URLQueryItem(name: "date", value: date),
-                URLQueryItem(name: "tz", value: timezone)
-            ],
-            requiresAuth: true
-        )
     }
 
     private func request<Response: Decodable>(

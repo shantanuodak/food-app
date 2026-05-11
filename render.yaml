@@ -8,3 +8,32 @@ services:
     startCommand: npm run migrate && npm run start
     healthCheckPath: /health
     autoDeploy: true
+    envVars:
+      - key: DATABASE_SSL
+        value: "true"
+      - key: AUTH_MODE
+        value: supabase
+      - key: APNS_ENVIRONMENT
+        value: production
+      - key: APNS_BUNDLE_ID
+        value: com.shantanu.foodapp
+      - key: NOTIFICATION_RUNNER_ENABLED
+        value: "true"
+      - key: NOTIFICATION_RUNNER_INTERVAL_MS
+        value: "300000"
+      - key: APNS_ENABLED
+        value: "true"
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: INTERNAL_METRICS_KEY
+        sync: false
+      - key: APNS_TEAM_ID
+        sync: false
+      - key: APNS_KEY_ID
+        sync: false
+      - key: APNS_PRIVATE_KEY
+        sync: false

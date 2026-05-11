@@ -1,6 +1,18 @@
 import Foundation
 
 extension AuthSession {
+    var displayFullName: String? {
+        if let fullName = Self.normalizedFullName(firstName: firstName, lastName: lastName) {
+            return fullName
+        }
+
+        if let fullName = Self.normalizedFullName(fromJWT: accessToken) {
+            return fullName
+        }
+
+        return displayFirstName
+    }
+
     var displayFirstName: String? {
         let emailLocalPart = email?
             .split(separator: "@", maxSplits: 1)
@@ -60,6 +72,48 @@ extension AuthSession {
         return normalizedFirstName(from: localPart)
     }
 
+    private static func normalizedFullName(firstName: String?, lastName: String?) -> String? {
+        guard let first = normalizedNameComponent(firstName) else {
+            return nil
+        }
+
+        guard let last = normalizedNameComponent(lastName) else {
+            return first
+        }
+
+        return "\(first) \(last)"
+    }
+
+    private static func normalizedFullName(from rawValue: String?) -> String? {
+        guard let rawValue else {
+            return nil
+        }
+
+        let parts = rawValue
+            .split(whereSeparator: { !$0.isLetter })
+            .map(String.init)
+            .compactMap { normalizedNameComponent($0) }
+
+        guard !parts.isEmpty else {
+            return nil
+        }
+
+        return parts.prefix(3).joined(separator: " ")
+    }
+
+    private static func normalizedNameComponent(_ rawValue: String?) -> String? {
+        guard let rawValue else {
+            return nil
+        }
+
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, trimmed.contains(where: \.isLetter) else {
+            return nil
+        }
+
+        return trimmed.prefix(1).uppercased() + trimmed.dropFirst().lowercased()
+    }
+
     private static func normalizedFirstName(fromJWT token: String?) -> String? {
         guard let token else {
             return nil
@@ -94,6 +148,55 @@ extension AuthSession {
         }
 
         return nil
+    }
+
+    private static func normalizedFullName(fromJWT token: String?) -> String? {
+        guard let token else {
+            return nil
+        }
+
+        let segments = token.split(separator: ".")
+        guard segments.count > 1 else {
+            return nil
+        }
+
+        var payload = String(segments[1])
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+
+        let padding = payload.count % 4
+        if padding > 0 {
+            payload += String(repeating: "=", count: 4 - padding)
+        }
+
+        guard let data = Data(base64Encoded: payload),
+              let jsonObject = try? JSONSerialization.jsonObject(with: data),
+              let claims = jsonObject as? [String: Any] else {
+            return nil
+        }
+
+        if let fullName = extractFullName(from: claims) {
+            return fullName
+        }
+
+        if let metadata = claims["user_metadata"] as? [String: Any] {
+            return extractFullName(from: metadata)
+        }
+
+        return nil
+    }
+
+    private static func extractFullName(from source: [String: Any]) -> String? {
+        for key in ["name", "full_name"] {
+            if let fullName = normalizedFullName(from: source[key] as? String) {
+                return fullName
+            }
+        }
+
+        let givenName = (source["given_name"] as? String) ?? (source["first_name"] as? String)
+        let familyName = (source["family_name"] as? String) ?? (source["last_name"] as? String)
+
+        return normalizedFullName(firstName: givenName, lastName: familyName)
     }
 
     private static func extractFirstName(from source: [String: Any]) -> String? {

@@ -44,15 +44,19 @@ extension OnboardingView {
                 case .authorized, .provisional, .ephemeral:
                     draft.enableNotifications = true
                     notificationStatusMessage = "Notifications enabled."
+                    appStore.setMealRemindersEnabled(true)
                     flow.moveNextOnboarding()
                 case .denied:
                     draft.enableNotifications = false
+                    appStore.setMealRemindersEnabled(false)
                     notificationStatusMessage = "Notifications disabled in iOS Settings — you can re-enable anytime."
                 case .notDetermined:
                     draft.enableNotifications = false
+                    appStore.setMealRemindersEnabled(false)
                     notificationStatusMessage = nil
                 @unknown default:
                     draft.enableNotifications = false
+                    appStore.setMealRemindersEnabled(false)
                     notificationStatusMessage = nil
                 }
             }
@@ -72,6 +76,7 @@ extension OnboardingView {
             switch appStore.notificationAuthState {
             case .authorized, .provisional, .ephemeral:
                 draft.enableNotifications = true
+                appStore.setMealRemindersEnabled(true)
                 flow.moveNextOnboarding()
             default:
                 break

@@ -74,6 +74,7 @@ extension MainLoggingShellView {
             )
             .scrollDismissesKeyboard(.interactively)
             .onTapGesture {
+                guard !presentMindfulPauseIfNeeded(for: .text) else { return }
                 focusComposerInputFromBackgroundTap()
             }
             .navigationTitle("")
@@ -106,11 +107,24 @@ extension MainLoggingShellView {
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
             }
+            .sheet(isPresented: $isProgressChartsPresented) {
+                HomeProgressScreen()
+                    .environmentObject(appStore)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.visible)
+                    .presentationCornerRadius(24)
+            }
             .sheet(isPresented: $isStreakDrawerPresented) {
                 HomeStreakDrawerView()
                     .environmentObject(appStore)
                     .presentationDetents([.fraction(0.8), .large])
                     .presentationDragIndicator(.visible)
+            }
+            .fullScreenCover(item: $triggeredBadgeAchievement) { badge in
+                StreakAchievementPopup(badge: badge) {
+                    triggeredBadgeAchievement = nil
+                }
+                .presentationBackground(.clear)
             }
             .padding()
             .onChange(of: rowTextSignature) { _, _ in
@@ -169,26 +183,19 @@ extension MainLoggingShellView {
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
                 appStore.preloadProfileDashboard()
-                // Surface the mindful-pause sheet once per day for emotional-eating users.
-                if appStore.selectedChallenge == .emotionalEating, MindfulPauseGate.shouldShow() {
-                    isMindfulPausePresented = true
-                }
-                // First-launch tutorial — no-op after the first run, the
-                // controller persists its completion flag in UserDefaults.
-                tutorialController.startIfNeeded()
+                appStore.preloadProgressCharts()
                 if QuickCameraLaunchStore.consumeLaunchRequest() {
+                    guard !presentMindfulPauseIfNeeded(for: .camera(.takePicture, isQuickCapture: true)) else { return }
                     isQuickCameraCaptureActive = true
                     handleCameraSourceSelection(.takePicture)
                 }
-            }
-            .sheet(isPresented: $tutorialController.isPresented) {
-                TutorialOverlay(controller: tutorialController)
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
                 guard ready else { return }
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
                 appStore.preloadProfileDashboard()
+                appStore.preloadProgressCharts()
             }
             .onDisappear {
                 debounceTask?.cancel()
@@ -214,26 +221,42 @@ extension MainLoggingShellView {
                 // Tap on the dock camera button → straight to the custom camera
                 // (no action sheet). The camera's bottom-left album icon
                 // handles "from photo library" once the user is inside it.
+                guard !presentMindfulPauseIfNeeded(for: .camera(.takePicture, isQuickCapture: false)) else { return }
                 handleCameraSourceSelection(.takePicture)
             }
             .onReceive(NotificationCenter.default.publisher(for: .openQuickCameraFromSystem)) { _ in
+                guard !presentMindfulPauseIfNeeded(for: .camera(.takePicture, isQuickCapture: true)) else { return }
                 isQuickCameraCaptureActive = true
                 handleCameraSourceSelection(.takePicture)
             }
             .onReceive(NotificationCenter.default.publisher(for: .quickCameraStatusChanged)) { notification in
                 handleQuickCameraStatusNotification(notification)
             }
-            .onReceive(NotificationCenter.default.publisher(for: .openVoiceFromTabBar)) { _ in
-                inputMode = .voice
-            }
+            .modifier(
+                MainLoggingNotificationRoutingModifier(
+                    inputMode: $inputMode,
+                    isStreakDrawerPresented: $isStreakDrawerPresented,
+                    isProfilePresented: $isProfilePresented,
+                    onVoiceLoggingRequested: {
+                        guard !presentMindfulPauseIfNeeded(for: .voice) else { return }
+                        inputMode = .voice
+                    },
+                    onTextLoggingRequested: {
+                        guard !presentMindfulPauseIfNeeded(for: .text) else { return }
+                        inputMode = .text
+                        NotificationCenter.default.post(name: .focusComposerInputFromBackgroundTap, object: nil)
+                    }
+                )
+            )
             .onReceive(NotificationCenter.default.publisher(for: .openNutritionSummaryFromTabBar)) { _ in
                 refreshNutritionStateForVisibleDay()
                 isNutritionSummaryPresented = true
             }
             .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { notification in
                 refreshNutritionStateAfterProgressChange(notification)
-                refreshCurrentStreak()
+                refreshCurrentStreak(shouldDetectBadgeUnlock: true)
                 appStore.preloadProfileDashboard(force: true)
+                appStore.preloadProgressCharts(force: true)
             }
             .sheet(isPresented: $isDetailsDrawerPresented) {
                 detailsDrawer
@@ -257,9 +280,14 @@ extension MainLoggingShellView {
                     onContinueLogging: {
                         MindfulPauseGate.markShown()
                         isMindfulPausePresented = false
+                        if let action = pendingMindfulPauseAction {
+                            pendingMindfulPauseAction = nil
+                            performMindfulPauseAction(action)
+                        }
                     },
                     onSkipForToday: {
                         MindfulPauseGate.markShown()
+                        pendingMindfulPauseAction = nil
                         isMindfulPausePresented = false
                     }
                 )
@@ -394,4 +422,28 @@ extension MainLoggingShellView {
         }
 }
 
+}
+
+private struct MainLoggingNotificationRoutingModifier: ViewModifier {
+    @Binding var inputMode: HomeInputMode
+    @Binding var isStreakDrawerPresented: Bool
+    @Binding var isProfilePresented: Bool
+    let onVoiceLoggingRequested: () -> Void
+    let onTextLoggingRequested: () -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .onReceive(NotificationCenter.default.publisher(for: .openVoiceFromTabBar)) { _ in
+                onVoiceLoggingRequested()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openTextLoggerFromNotification)) { _ in
+                onTextLoggingRequested()
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openStreaksFromNotification)) { _ in
+                isStreakDrawerPresented = true
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .openRemindersFromNotification)) { _ in
+                isProfilePresented = true
+            }
+    }
 }

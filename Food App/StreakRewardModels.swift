@@ -24,7 +24,7 @@ struct StreakBadgeProgress: Equatable {
     let fraction: Double
 }
 
-enum StreakRewards {
+enum StreakBadges {
     static let badges: [StreakBadge] = [
         StreakBadge(
             id: "first_spark",
@@ -120,6 +120,51 @@ enum StreakRewards {
             completedDays: completed,
             daysRemaining: remaining,
             fraction: Double(completed) / Double(span)
+        )
+    }
+}
+
+enum StreakBadgeCelebrationState {
+    private static let celebratedIdsKey = "celebratedStreakBadgeIds"
+    private static let bootstrappedKey = "hasBootstrappedStreakCelebrations"
+
+    static func badgeToCelebrate(previousDays: Int?, currentDays: Int, defaults: UserDefaults = .standard) -> StreakBadge? {
+        let earnedNow = StreakBadges.badges.filter { currentDays >= $0.requiredDays }
+        let earnedNowIds = Set(earnedNow.map(\.id))
+        let alreadyCelebrated = celebratedIds(defaults: defaults)
+
+        defer {
+            defaults.set(earnedNowIds.sorted().joined(separator: ","), forKey: celebratedIdsKey)
+            defaults.set(true, forKey: bootstrappedKey)
+        }
+
+        if let previousDays, currentDays > previousDays {
+            let crossedNow = earnedNow.filter { badge in
+                previousDays < badge.requiredDays &&
+                currentDays >= badge.requiredDays &&
+                !alreadyCelebrated.contains(badge.id)
+            }
+            return crossedNow.max(by: { $0.requiredDays < $1.requiredDays })
+        }
+
+        guard defaults.bool(forKey: bootstrappedKey) else {
+            return nil
+        }
+
+        let newlyEarned = earnedNow.filter { !alreadyCelebrated.contains($0.id) }
+        return newlyEarned.max(by: { $0.requiredDays < $1.requiredDays })
+    }
+
+    static func reset(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: celebratedIdsKey)
+        defaults.removeObject(forKey: bootstrappedKey)
+    }
+
+    private static func celebratedIds(defaults: UserDefaults) -> Set<String> {
+        Set(
+            (defaults.string(forKey: celebratedIdsKey) ?? "")
+                .split(separator: ",")
+                .map(String.init)
         )
     }
 }

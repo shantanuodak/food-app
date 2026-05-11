@@ -20,7 +20,7 @@ enum QuickCameraNotificationIdentifier {
 }
 
 enum QuickCameraNotificationService {
-    static func configure(center: UNUserNotificationCenter = .current()) {
+    static func categories() -> Set<UNNotificationCategory> {
         let log = UNNotificationAction(
             identifier: QuickCameraNotificationIdentifier.logAction,
             title: "Log",
@@ -55,7 +55,11 @@ enum QuickCameraNotificationService {
             options: []
         )
 
-        center.setNotificationCategories([parsedCategory, reviewCategory])
+        return [parsedCategory, reviewCategory]
+    }
+
+    static func configure(center: UNUserNotificationCenter = .current()) {
+        center.setNotificationCategories(categories())
     }
 
     static func notifyParsed(_ pendingLog: QuickCameraPendingLog) async {

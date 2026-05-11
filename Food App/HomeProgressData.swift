@@ -293,6 +293,38 @@ extension ProgressSectionView {
     }
 
     @MainActor
+    @discardableResult
+    func hydrateFromCachedProgressSnapshot() -> Bool {
+        guard let snapshot = appStore.progressChartsSnapshot,
+              snapshot.isUsable(for: selectedRange, timezone: TimeZone.current.identifier)
+        else {
+            return false
+        }
+
+        preferredUnits = snapshot.preferredUnits
+        progressResponse = snapshot.progress
+        weightSamples = snapshot.weightSamples
+        stepsSamples = snapshot.stepsSamples
+        progressError = nil
+        weightError = nil
+        stepsError = nil
+        isLoadingProgress = false
+        isLoadingWeight = false
+        isLoadingSteps = false
+
+        if let last = caloriePoints.last {
+            selectedCalorieDate = last.date
+        }
+        if let last = weightDisplayPoints.last {
+            selectedWeightDate = last.date
+        }
+        if let last = stepsSamples.filter({ $0.steps > 0 }).last {
+            selectedStepsDate = last.date
+        }
+        return progressResponse != nil || !weightSamples.isEmpty || !stepsSamples.isEmpty
+    }
+
+    @MainActor
     func refreshNutritionData() async {
         guard appStore.configuration.progressFeatureEnabled else { return }
 

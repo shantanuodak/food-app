@@ -32,7 +32,7 @@ extension MainLoggingShellView {
         }
     }
 
-    func refreshCurrentStreak() {
+    func refreshCurrentStreak(shouldDetectBadgeUnlock: Bool = false) {
         guard appStore.configuration.progressFeatureEnabled else {
             currentFoodLogStreak = nil
             return
@@ -50,7 +50,16 @@ extension MainLoggingShellView {
                     to: today,
                     timezone: timezone
                 )
+                let previousDays = shouldDetectBadgeUnlock ? (currentFoodLogStreak ?? 0) : currentFoodLogStreak
                 currentFoodLogStreak = response.currentDays
+                if shouldDetectBadgeUnlock {
+                    if let badge = StreakBadgeCelebrationState.badgeToCelebrate(
+                        previousDays: previousDays,
+                        currentDays: response.currentDays
+                    ) {
+                        triggeredBadgeAchievement = badge
+                    }
+                }
             } catch {
                 handleAuthFailureIfNeeded(error)
             }
@@ -97,6 +106,9 @@ extension MainLoggingShellView {
             dayLogs = response
             dayCacheLogs[dateToLoad] = response
             persistDayLogsToCache(response, date: dateToLoad)
+            if dateToLoad == HomeLoggingDateUtils.summaryRequestFormatter.string(from: Date()) {
+                appStore.recordTodayLogState(hasLogs: !response.logs.isEmpty)
+            }
             syncInputRowsFromDayLogs(response.logs, for: response.date)
         } catch is CancellationError {
             // ignore

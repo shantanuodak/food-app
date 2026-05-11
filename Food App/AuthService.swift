@@ -260,6 +260,7 @@ final class AuthService {
         let userID: String?
         let email: String?
         let firstName: String?
+        let lastName: String?
     }
 #endif
 
@@ -269,6 +270,7 @@ final class AuthService {
         let userID: String?
         let email: String?
         let firstName: String?
+        let lastName: String?
     }
 
     private func signInWithApple() async throws -> AuthSession {
@@ -282,7 +284,8 @@ final class AuthService {
             rawNonce: payload.rawNonce,
             userID: payload.userID,
             email: payload.email,
-            firstName: payload.firstName
+            firstName: payload.firstName,
+            lastName: payload.lastName
         )
     }
 
@@ -331,7 +334,8 @@ final class AuthService {
         rawNonce: String,
         userID: String?,
         email: String?,
-        firstName: String?
+        firstName: String?,
+        lastName: String?
     ) async throws -> AuthSession {
         guard supabaseURL != nil, nonEmpty(supabaseAnonKey) != nil else {
             throw AuthServiceError.missingSupabaseConfiguration
@@ -361,7 +365,8 @@ final class AuthService {
                     provider: .apple,
                     userID: userID,
                     email: email,
-                    firstName: firstName
+                    firstName: firstName,
+                    lastName: lastName
                 )
             )
             return try persistSession(authSession)
@@ -374,6 +379,7 @@ final class AuthService {
         _ = userID
         _ = email
         _ = firstName
+        _ = lastName
         throw AuthServiceError.missingSupabaseSDK
 #endif
     }
@@ -400,7 +406,8 @@ final class AuthService {
             rawNonce: payload.rawNonce,
             userID: payload.userID,
             email: payload.email,
-            firstName: payload.firstName
+            firstName: payload.firstName,
+            lastName: payload.lastName
         )
         return supabaseSession
 #else
@@ -457,7 +464,8 @@ final class AuthService {
                 rawNonce: rawNonce,
                 userID: signInResult.user.userID,
                 email: signInResult.user.profile?.email,
-                firstName: signInResult.user.profile?.givenName
+                firstName: signInResult.user.profile?.givenName,
+                lastName: signInResult.user.profile?.familyName
             )
         }
 
@@ -487,7 +495,8 @@ final class AuthService {
         rawNonce: String?,
         userID: String?,
         email: String?,
-        firstName: String?
+        firstName: String?,
+        lastName: String?
     ) async throws -> AuthSession {
         guard supabaseURL != nil, nonEmpty(supabaseAnonKey) != nil else {
             throw AuthServiceError.missingSupabaseConfiguration
@@ -533,7 +542,8 @@ final class AuthService {
                     provider: .google,
                     userID: userID,
                     email: email,
-                    firstName: firstName
+                    firstName: firstName,
+                    lastName: lastName
                 )
             )
             return try persistSession(authSession)
@@ -547,6 +557,7 @@ final class AuthService {
         _ = userID
         _ = email
         _ = firstName
+        _ = lastName
         throw AuthServiceError.missingSupabaseSDK
 #endif
     }
@@ -575,7 +586,8 @@ final class AuthService {
             provider: provider,
             userID: userID ?? derivedUserID,
             email: email,
-            firstName: nil
+            firstName: nil,
+            lastName: nil
         )
         return try persistSession(session)
     }
@@ -667,7 +679,8 @@ final class AuthService {
             provider: provider,
             userID: existing.userID ?? session.user.id.uuidString,
             email: existing.email ?? session.user.email,
-            firstName: existing.firstName
+            firstName: existing.firstName,
+            lastName: existing.lastName
         )
     }
     #endif
@@ -937,7 +950,8 @@ private final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDele
                 rawNonce: rawNonce,
                 userID: credential.user,
                 email: credential.email,
-                firstName: credential.fullName?.givenName
+                firstName: credential.fullName?.givenName,
+                lastName: credential.fullName?.familyName
             )
         )
     }

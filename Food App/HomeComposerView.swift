@@ -8,7 +8,7 @@ struct HM01LogComposerSection: View {
     let inlineEstimateText: String?
     let hasActiveParseRequest: Bool
     let minimalStyle: Bool
-    let onInputTapped: () -> Void
+    let onInputTapped: () -> Bool
     let onCaloriesTapped: (HomeLogRow) -> Void
     let onFocusedRowChanged: (UUID?) -> Void
     let onServerBackedRowCleared: (HomeLogRow) -> Void
@@ -28,7 +28,7 @@ struct HM01LogComposerSection: View {
         inlineEstimateText: String?,
         hasActiveParseRequest: Bool = false,
         minimalStyle: Bool = false,
-        onInputTapped: @escaping () -> Void,
+        onInputTapped: @escaping () -> Bool,
         onCaloriesTapped: @escaping (HomeLogRow) -> Void = { _ in },
         onFocusedRowChanged: @escaping (UUID?) -> Void = { _ in },
         onServerBackedRowCleared: @escaping (HomeLogRow) -> Void = { _ in },
@@ -86,7 +86,7 @@ struct HM01LogComposerSection: View {
                                     if let index = indexForRowID(row.id) {
                                         rows[index].isSaved = false
                                         rows[index].savedAt = nil
-                                        onInputTapped()
+                                        guard onInputTapped() else { return }
                                         setFocusedMinimalRowID(row.id)
                                     }
                                 } label: {
@@ -114,7 +114,7 @@ struct HM01LogComposerSection: View {
                                         DispatchQueue.main.async {
                                             guard indexForRowID(row.id) != nil else { return }
                                             if isFocused {
-                                                onInputTapped()
+                                                guard onInputTapped() else { return }
                                                 setFocusedMinimalRowID(row.id)
                                             } else if focusedMinimalRowID == row.id {
                                                 setFocusedMinimalRowID(nil)
@@ -164,7 +164,7 @@ struct HM01LogComposerSection: View {
                     .accessibilityLabel(Text(L10n.foodInputPrompt))
                     .accessibilityHint(Text(L10n.foodInputHint))
                     .onTapGesture {
-                        onInputTapped()
+                        guard onInputTapped() else { return }
                         focusBinding.wrappedValue = true
                     }
             }
@@ -373,7 +373,7 @@ struct HM01LogComposerSection: View {
     }
 
     private func focusLastEditableRow() {
-        onInputTapped()
+        guard onInputTapped() else { return }
 
         if minimalStyle {
             if rows.allSatisfy(\.isSaved) {

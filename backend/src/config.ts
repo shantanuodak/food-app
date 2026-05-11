@@ -139,5 +139,13 @@ export const config = {
   alertCostWindowHours: numberWithDefault('ALERT_COST_WINDOW_HOURS', 24),
   alertMinParseRequests: numberWithDefault('ALERT_MIN_PARSE_REQUESTS', 20),
   alertMinLogs: numberWithDefault('ALERT_MIN_LOGS', 20),
-  progressFeatureEnabled: booleanWithDefault('PROGRESS_FEATURE_ENABLED', true)
+  progressFeatureEnabled: booleanWithDefault('PROGRESS_FEATURE_ENABLED', true),
+  notificationRunnerEnabled: booleanWithDefault('NOTIFICATION_RUNNER_ENABLED', false),
+  notificationRunnerIntervalMs: integerWithDefault('NOTIFICATION_RUNNER_INTERVAL_MS', 300_000),
+  apnsEnabled: booleanWithDefault('APNS_ENABLED', false),
+  apnsEnvironment: process.env.APNS_ENVIRONMENT === 'production' ? 'production' : 'development',
+  apnsTeamId: process.env.APNS_TEAM_ID || '',
+  apnsKeyId: process.env.APNS_KEY_ID || '',
+  apnsBundleId: process.env.APNS_BUNDLE_ID || 'com.shantanu.foodapp',
+  apnsPrivateKey: (process.env.APNS_PRIVATE_KEY || '').replace(/\\n/g, '\n')
 };

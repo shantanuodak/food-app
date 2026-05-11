@@ -7,9 +7,24 @@ final class FoodAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         let center = UNUserNotificationCenter.current()
-        QuickCameraNotificationService.configure(center: center)
+        center.setNotificationCategories(
+            FoodNotificationCategory.categories()
+                .union(QuickCameraNotificationService.categories())
+        )
         center.delegate = self
         return true
+    }
+
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        let token = deviceToken.map { String(format: "%02x", $0) }.joined()
+        NotificationCenter.default.post(
+            name: .apnsDeviceTokenDidChange,
+            object: nil,
+            userInfo: ["token": token]
+        )
     }
 
     func userNotificationCenter(
@@ -25,7 +40,9 @@ final class FoodAppDelegate: NSObject, UIApplicationDelegate, UNUserNotification
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         Task {
-            await QuickCameraNotificationActionHandler.handle(response)
+            if !(await FoodNotificationActionHandler.handle(response)) {
+                await QuickCameraNotificationActionHandler.handle(response)
+            }
             completionHandler()
         }
     }

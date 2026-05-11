@@ -22,3 +22,9 @@ enum CameraInputSource {
         }
     }
 }
+
+enum MindfulPauseAction {
+    case text
+    case voice
+    case camera(CameraInputSource, isQuickCapture: Bool)
+}

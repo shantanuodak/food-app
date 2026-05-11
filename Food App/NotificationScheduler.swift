@@ -7,15 +7,99 @@ struct MealReminderTime: Codable, Equatable {
 }
 
 struct MealReminderSettings: Codable, Equatable {
+    var remindersEnabled: Bool
+    var breakfastEnabled: Bool
+    var lunchEnabled: Bool
+    var dinnerEnabled: Bool
+    var breakfastStart: MealReminderTime
+    var lunchStart: MealReminderTime
+    var dinnerStart: MealReminderTime
     var breakfast: MealReminderTime
     var lunch: MealReminderTime
     var dinner: MealReminderTime
+    var eatingWindowEnabled: Bool
+    var eatingWindowStart: MealReminderTime
+    var eatingWindowEnd: MealReminderTime
 
     static let `default` = MealReminderSettings(
-        breakfast: MealReminderTime(hour: 8, minute: 0),
-        lunch: MealReminderTime(hour: 12, minute: 30),
-        dinner: MealReminderTime(hour: 19, minute: 30)
+        remindersEnabled: false,
+        breakfastEnabled: true,
+        lunchEnabled: true,
+        dinnerEnabled: true,
+        breakfastStart: MealReminderTime(hour: 7, minute: 0),
+        lunchStart: MealReminderTime(hour: 11, minute: 30),
+        dinnerStart: MealReminderTime(hour: 18, minute: 0),
+        breakfast: MealReminderTime(hour: 9, minute: 30),
+        lunch: MealReminderTime(hour: 14, minute: 0),
+        dinner: MealReminderTime(hour: 21, minute: 0),
+        eatingWindowEnabled: false,
+        eatingWindowStart: MealReminderTime(hour: 8, minute: 0),
+        eatingWindowEnd: MealReminderTime(hour: 20, minute: 0)
     )
+
+    init(
+        remindersEnabled: Bool,
+        breakfastEnabled: Bool,
+        lunchEnabled: Bool,
+        dinnerEnabled: Bool,
+        breakfastStart: MealReminderTime,
+        lunchStart: MealReminderTime,
+        dinnerStart: MealReminderTime,
+        breakfast: MealReminderTime,
+        lunch: MealReminderTime,
+        dinner: MealReminderTime,
+        eatingWindowEnabled: Bool,
+        eatingWindowStart: MealReminderTime,
+        eatingWindowEnd: MealReminderTime
+    ) {
+        self.remindersEnabled = remindersEnabled
+        self.breakfastEnabled = breakfastEnabled
+        self.lunchEnabled = lunchEnabled
+        self.dinnerEnabled = dinnerEnabled
+        self.breakfastStart = breakfastStart
+        self.lunchStart = lunchStart
+        self.dinnerStart = dinnerStart
+        self.breakfast = breakfast
+        self.lunch = lunch
+        self.dinner = dinner
+        self.eatingWindowEnabled = eatingWindowEnabled
+        self.eatingWindowStart = eatingWindowStart
+        self.eatingWindowEnd = eatingWindowEnd
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case remindersEnabled
+        case breakfastEnabled
+        case lunchEnabled
+        case dinnerEnabled
+        case breakfastStart
+        case lunchStart
+        case dinnerStart
+        case breakfast
+        case lunch
+        case dinner
+        case eatingWindowEnabled
+        case eatingWindowStart
+        case eatingWindowEnd
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = Self.default
+        remindersEnabled = try container.decodeIfPresent(Bool.self, forKey: .remindersEnabled) ?? fallback.remindersEnabled
+        breakfastEnabled = try container.decodeIfPresent(Bool.self, forKey: .breakfastEnabled) ?? fallback.breakfastEnabled
+        lunchEnabled = try container.decodeIfPresent(Bool.self, forKey: .lunchEnabled) ?? fallback.lunchEnabled
+        dinnerEnabled = try container.decodeIfPresent(Bool.self, forKey: .dinnerEnabled) ?? fallback.dinnerEnabled
+        breakfastStart = try container.decodeIfPresent(MealReminderTime.self, forKey: .breakfastStart) ?? fallback.breakfastStart
+        lunchStart = try container.decodeIfPresent(MealReminderTime.self, forKey: .lunchStart) ?? fallback.lunchStart
+        dinnerStart = try container.decodeIfPresent(MealReminderTime.self, forKey: .dinnerStart) ?? fallback.dinnerStart
+        breakfast = try container.decodeIfPresent(MealReminderTime.self, forKey: .breakfast) ?? fallback.breakfast
+        lunch = try container.decodeIfPresent(MealReminderTime.self, forKey: .lunch) ?? fallback.lunch
+        dinner = try container.decodeIfPresent(MealReminderTime.self, forKey: .dinner) ?? fallback.dinner
+        eatingWindowEnabled = try container.decodeIfPresent(Bool.self, forKey: .eatingWindowEnabled) ?? fallback.eatingWindowEnabled
+        eatingWindowStart = try container.decodeIfPresent(MealReminderTime.self, forKey: .eatingWindowStart) ?? fallback.eatingWindowStart
+        eatingWindowEnd = try container.decodeIfPresent(MealReminderTime.self, forKey: .eatingWindowEnd) ?? fallback.eatingWindowEnd
+    }
 }
 
 /// Owns the lifecycle of all `UNNotificationRequest`s the app schedules.
@@ -28,7 +112,7 @@ struct MealReminderSettings: Codable, Equatable {
 /// - `.snacking` → daily 21:00 mindful-snack reminder
 /// - `.inconsistentMeals` → daily 12:30 + 19:30 logging check-ins
 /// - `.emotionalEating` → no scheduled notification (handled by an in-app
-///   `MindfulPauseSheet` on home appear)
+///   `MindfulPauseSheet` when logging starts outside meal windows)
 /// - `.portionControl` / `.eatingOut` → no notifications (the in-flow parse
 ///   feedback already addresses these challenges)
 ///
@@ -46,6 +130,10 @@ enum FoodAppNotificationIdentifier {
     static let snackingNudge = "food-app.snacking.nudge"
     static let consistencyLunch = "food-app.consistency.lunch"
     static let consistencyDinner = "food-app.consistency.dinner"
+    static let endOfDayRecovery = "food-app.engagement.end-of-day"
+    static let reactivation24h = "food-app.engagement.reactivation.24h"
+    static let reactivation48h = "food-app.engagement.reactivation.48h"
+    static let featureDiscovery = "food-app.discovery.next"
 
     static let allFoodAppPrefix = "food-app."
 }
@@ -85,89 +173,29 @@ final class NotificationScheduler {
                 FoodAppNotificationIdentifier.consistencyDinner,
                 FoodAppNotificationIdentifier.mealBreakfast,
                 FoodAppNotificationIdentifier.mealLunch,
-                FoodAppNotificationIdentifier.mealDinner
+                FoodAppNotificationIdentifier.mealDinner,
+                FoodAppNotificationIdentifier.endOfDayRecovery,
+                FoodAppNotificationIdentifier.reactivation24h,
+                FoodAppNotificationIdentifier.reactivation48h,
+                FoodAppNotificationIdentifier.featureDiscovery
             ]
         )
     }
 
     /// The single entry point — call after challenge changes, after permission
     /// grant, and on app launch. Idempotent.
+    ///
+    /// Production reminders and engagement nudges are server-managed through
+    /// APNs so the backend can honor meal windows, no-log checks, template CMS
+    /// changes, and delivery de-dupe. The app keeps this reconciler only to
+    /// remove stale local requests from older builds and to keep permission
+    /// handling in one place.
     func reconcile(
-        challenge: ChallengeChoice?,
-        authState: UNAuthorizationStatus,
-        mealReminders: MealReminderSettings
+        challenge _: ChallengeChoice?,
+        authState _: UNAuthorizationStatus,
+        mealReminders _: MealReminderSettings,
+        hasLoggedToday _: Bool
     ) async {
         cancelAll()
-
-        guard authState == .authorized || authState == .provisional else { return }
-
-        await schedule(
-            identifier: FoodAppNotificationIdentifier.mealBreakfast,
-            title: "Breakfast check-in",
-            body: "Log breakfast when you have a minute.",
-            hour: mealReminders.breakfast.hour,
-            minute: mealReminders.breakfast.minute
-        )
-        await schedule(
-            identifier: FoodAppNotificationIdentifier.mealLunch,
-            title: "Lunch check-in",
-            body: "Anything to log so far today?",
-            hour: mealReminders.lunch.hour,
-            minute: mealReminders.lunch.minute
-        )
-        await schedule(
-            identifier: FoodAppNotificationIdentifier.mealDinner,
-            title: "Dinner check-in",
-            body: "Log dinner or anything else from today.",
-            hour: mealReminders.dinner.hour,
-            minute: mealReminders.dinner.minute
-        )
-
-        guard let challenge else { return }
-
-        switch challenge {
-        case .snacking:
-            await schedule(
-                identifier: FoodAppNotificationIdentifier.snackingNudge,
-                title: "Mindful moment",
-                body: "What does your body actually want right now?",
-                hour: 21,
-                minute: 0
-            )
-
-        case .inconsistentMeals:
-            // Meal reminders cover this challenge without duplicate nudges.
-            break
-
-        case .emotionalEating, .portionControl, .eatingOut:
-            // Handled in-app or by the parse flow itself.
-            break
-        }
-    }
-
-    private func schedule(
-        identifier: String,
-        title: String,
-        body: String,
-        hour: Int,
-        minute: Int
-    ) async {
-        let content = UNMutableNotificationContent()
-        content.title = title
-        content.body = body
-        content.sound = .default
-
-        var components = DateComponents()
-        components.hour = hour
-        components.minute = minute
-
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: true)
-        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
-
-        do {
-            try await center.add(request)
-        } catch {
-            // Schedule failures are non-fatal — user can still log normally.
-        }
     }
 }
