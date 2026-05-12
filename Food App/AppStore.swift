@@ -54,6 +54,7 @@ final class AppStore: ObservableObject {
     private var onboardingProfileRefreshTask: Task<Void, Never>?
     private var profileDashboardPreloadTask: Task<Void, Never>?
     private var progressChartsPreloadTask: Task<Void, Never>?
+    private var progressChartsPreloadRange: ProgressRange?
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -207,6 +208,7 @@ final class AppStore: ObservableObject {
         profileDashboardPreloadTask = nil
         progressChartsPreloadTask?.cancel()
         progressChartsPreloadTask = nil
+        progressChartsPreloadRange = nil
         profileDashboardSnapshot = nil
         progressChartsSnapshot = nil
         authService.signOut()
@@ -363,18 +365,36 @@ final class AppStore: ObservableObject {
             return
         }
 
-        if progressChartsPreloadTask != nil, !force {
-            return
+        if let existingTask = progressChartsPreloadTask, !force {
+            if progressChartsPreloadRange == range {
+                return
+            }
+            existingTask.cancel()
+            progressChartsPreloadTask = nil
+            progressChartsPreloadRange = nil
         }
 
         progressChartsPreloadTask?.cancel()
+        progressChartsPreloadRange = range
         progressChartsPreloadTask = Task(priority: .background) { [weak self] in
             guard let self else { return }
             await self.refreshProgressChartsSnapshot(range: range, timezone: timezone)
             await MainActor.run {
-                self.progressChartsPreloadTask = nil
+                if self.progressChartsPreloadRange == range {
+                    self.progressChartsPreloadTask = nil
+                    self.progressChartsPreloadRange = nil
+                }
             }
         }
+    }
+
+    func waitForProgressChartsPreload(range: ProgressRange) async {
+        guard progressChartsPreloadRange == range,
+              let task = progressChartsPreloadTask
+        else {
+            return
+        }
+        await task.value
     }
 
     func refreshProgressChartsSnapshot(range: ProgressRange = .week, timezone: String = TimeZone.current.identifier) async {

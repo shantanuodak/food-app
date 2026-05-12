@@ -21,6 +21,7 @@ struct HomeProfileScreen: View {
     @State private var adminGeminiEnabled = false
     @State private var isAdminFlagsLoading = false
     @State private var isSignOutConfirmationPresented = false
+    @State private var bodyMetricEditorSheet: BodyMetricEditorSheet?
 
     // Auto-save
     private enum SaveStatus: Equatable {
@@ -251,26 +252,24 @@ struct HomeProfileScreen: View {
                 Divider()
                     .padding(.leading, 58)
 
-                bodyNavigationRow(
+                bodyEditableRow(
                     title: "Height",
                     value: heightLabel,
                     systemImage: "ruler",
-                    iconTint: .blue
-                ) {
-                    HeightPickerView(draft: $draft)
-                }
+                    iconTint: .blue,
+                    editor: .height
+                )
 
                 Divider()
                     .padding(.leading, 58)
 
-                bodyNavigationRow(
+                bodyEditableRow(
                     title: "Weight",
                     value: weightLabel,
                     systemImage: "scalemass.fill",
-                    iconTint: .blue
-                ) {
-                    WeightPickerView(draft: $draft)
-                }
+                    iconTint: .blue,
+                    editor: .weight
+                )
             }
             .padding(14)
             .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
@@ -281,6 +280,9 @@ struct HomeProfileScreen: View {
             .shadow(color: Color.black.opacity(0.035), radius: 10, y: 4)
             .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 10, trailing: 16))
             .listRowBackground(Color.clear)
+            .sheet(item: $bodyMetricEditorSheet) { editor in
+                bodyMetricEditorSheetView(editor)
+            }
         } header: {
             Text("Body")
         }
@@ -310,36 +312,24 @@ struct HomeProfileScreen: View {
     }
 
     private var bodyAgeRow: some View {
-        HStack(spacing: 14) {
-            bodyRowIcon(systemImage: "calendar", tint: .primary)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Age")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Text("\(Int(draft.ageValue))")
-                    .font(.system(size: 17, weight: .medium))
-                    .monospacedDigit()
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Stepper("", value: ageIntBinding, in: OnboardingBaselineRange.age)
-                .labelsHidden()
-        }
-        .frame(minHeight: 58)
+        bodyEditableRow(
+            title: "Age",
+            value: "\(Int(draft.ageValue))",
+            systemImage: "calendar",
+            iconTint: .primary,
+            editor: .age
+        )
     }
 
-    private func bodyNavigationRow<Destination: View>(
+    private func bodyEditableRow(
         title: String,
         value: String,
         systemImage: String,
         iconTint: Color,
-        @ViewBuilder destination: @escaping () -> Destination
+        editor: BodyMetricEditorSheet
     ) -> some View {
-        NavigationLink {
-            destination()
+        Button {
+            bodyMetricEditorSheet = editor
         } label: {
             HStack(spacing: 14) {
                 bodyRowIcon(systemImage: systemImage, tint: iconTint)
@@ -353,9 +343,42 @@ struct HomeProfileScreen: View {
                 Text(value)
                     .font(.system(size: 17, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .monospacedDigit()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.tertiary)
             }
             .frame(minHeight: 58)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func bodyMetricEditorSheetView(_ editor: BodyMetricEditorSheet) -> some View {
+        NavigationStack {
+            Group {
+                switch editor {
+                case .age:
+                    AgePickerView(draft: $draft)
+                case .height:
+                    HeightPickerView(draft: $draft)
+                case .weight:
+                    WeightPickerView(draft: $draft)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        bodyMetricEditorSheet = nil
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 
     private func bodyRowIcon(systemImage: String, tint: Color) -> some View {
@@ -638,16 +661,6 @@ struct HomeProfileScreen: View {
         Binding(
             get: { draft.units ?? .imperial },
             set: { draft.setUnitsPreservingBaseline($0) }
-        )
-    }
-
-    private var ageIntBinding: Binding<Int> {
-        Binding(
-            get: { Int(draft.ageValue) },
-            set: {
-                draft.ageValue = Double($0)
-                draft.baselineTouchedAge = true
-            }
         )
     }
 

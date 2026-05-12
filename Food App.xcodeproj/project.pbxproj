@@ -473,9 +473,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "Food Camera Widget/FoodCameraWidget.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = 9CL8Q244T8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Food Camera Widget/Info.plist";
@@ -504,9 +505,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = "Food Camera Widget/FoodCameraWidget.entitlements";
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 22;
+				CURRENT_PROJECT_VERSION = 24;
 				DEVELOPMENT_TEAM = 9CL8Q244T8;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = "Food Camera Widget/Info.plist";

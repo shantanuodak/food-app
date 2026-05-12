@@ -39,6 +39,7 @@ extension MainLoggingShellView {
                 // padding ≈ 92pt of room).
                 RecentFlaggedMealCard(
                     logs: dayLogs?.logs ?? [],
+                    contextKey: summaryDateString,
                     dismissedLogIds: $dismissedInsightLogIds
                 )
                 .padding(.horizontal, 16)
@@ -117,16 +118,24 @@ extension MainLoggingShellView {
             .sheet(isPresented: $isStreakDrawerPresented) {
                 HomeStreakDrawerView()
                     .environmentObject(appStore)
-                    .presentationDetents([.fraction(0.8), .large])
-                    .presentationDragIndicator(.visible)
+                    .presentationDetents([.large])
+                    .presentationDragIndicator(.hidden)
+                    .presentationCornerRadius(24)
             }
             .sheet(isPresented: $isBadgesTrophyCasePresented) {
                 NavigationStack {
                     BadgesTrophyCaseView(currentStreakDays: badgesTrophyCaseStreakDays)
                         .environmentObject(appStore)
+                        .toolbar {
+                            ToolbarItem(placement: .topBarTrailing) {
+                                AppCloseButton {
+                                    isBadgesTrophyCasePresented = false
+                                }
+                            }
+                        }
                 }
                 .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
+                .presentationDragIndicator(.hidden)
                 .presentationCornerRadius(24)
             }
             .fullScreenCover(item: $triggeredBadgeAchievement) { badge in
@@ -198,6 +207,14 @@ extension MainLoggingShellView {
                     isQuickCameraCaptureActive = true
                     handleCameraSourceSelection(.takePicture)
                 }
+                if QuickCameraLaunchStore.consumeCameraLaunchRequest() {
+                    guard !presentMindfulPauseIfNeeded(for: .camera(.takePicture, isQuickCapture: false)) else { return }
+                    handleCameraSourceSelection(.takePicture)
+                }
+                if QuickCameraLaunchStore.consumeVoiceLaunchRequest() {
+                    guard !presentMindfulPauseIfNeeded(for: .voice) else { return }
+                    handleVoiceModeTapped()
+                }
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
                 guard ready else { return }
@@ -248,7 +265,7 @@ extension MainLoggingShellView {
                     isProfilePresented: $isProfilePresented,
                     onVoiceLoggingRequested: {
                         guard !presentMindfulPauseIfNeeded(for: .voice) else { return }
-                        inputMode = .voice
+                        handleVoiceModeTapped()
                     },
                     onTextLoggingRequested: {
                         guard !presentMindfulPauseIfNeeded(for: .text) else { return }

@@ -30,7 +30,7 @@ struct ProgressChartsSnapshot {
     let timezone: String
     let loadedAt: Date
 
-    func isUsable(for range: ProgressRange, timezone: String, maxAge: TimeInterval = 120) -> Bool {
+    func isUsable(for range: ProgressRange, timezone: String, maxAge: TimeInterval = 900) -> Bool {
         guard self.range == range,
               self.timezone == timezone,
               Date().timeIntervalSince(loadedAt) <= maxAge

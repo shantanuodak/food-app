@@ -1,29 +1,15 @@
 import SwiftUI
 
-/// Floating glass-effect card shown above the home dock when the most
-/// recently logged meal conflicts with the user's diet preferences or
-/// allergies.
-///
-/// Design (2026-04-26 refresh):
-/// - **Text-only.** The leading icon (orange info / red triangle in v1) is
-///   gone — colour-coded severity icons read as scolding and were the
-///   biggest source of visual weight on the home screen.
-/// - **Purple-tinted glass.** Frosted `.ultraThinMaterial` base + a soft
-///   purple wash on the fill + a 1.2 pt purple stroke. Same purple as the
-///   leading stop in `aiShimmerGradient` (HomeFlowComponents.swift) so
-///   the card reads as part of the same AI / insight visual family.
-/// - **Shimmer on appear.** A one-shot diagonal sweep fires after the
-///   slide-up transition settles, matching the shimmer pattern used on
-///   voice-inserted food rows and camera-parse reveals.
-/// - **Sentence subtitle.** Replaces the noun-phrase summary
-///   (`peanut allergy, non-vegan`) with full sentences (`Contains
-///   peanuts. Not vegan.`) so the card reads as guidance rather than
-///   a tag list.
-/// - **One card at a time** — even if multiple saved meals have flags,
-///   only the most-recently-saved unflagged-by-user one renders.
+/// Floating card shown above the home dock when the most recently logged
+/// meal conflicts with the user's diet preferences or allergies.
 struct RecentFlaggedMealCard: View {
     let logs: [DayLogEntry]
+    let contextKey: String
     @Binding var dismissedLogIds: Set<String>
+
+    @State private var visibleEntry: DayLogEntry?
+    @State private var visibleFlags: [DietaryFlag] = []
+    @State private var visibleContextKey: String?
 
     private var mostRecentFlagged: DayLogEntry? {
         // `logs` is server-ordered ASC by loggedAt — last one is the freshest.
@@ -32,23 +18,37 @@ struct RecentFlaggedMealCard: View {
         })
     }
 
+    private var mostRecentFlaggedID: String? {
+        mostRecentFlagged?.id
+    }
+
     var body: some View {
         Group {
-            if let entry = mostRecentFlagged,
-               let flags = entry.dietaryFlags,
-               !flags.isEmpty {
+            if let entry = visibleEntry, !visibleFlags.isEmpty {
                 FloatingInsightCard(
                     entry: entry,
-                    flags: flags,
+                    flags: visibleFlags,
                     onDismiss: {
                         dismissedLogIds.insert(entry.id)
+                        visibleEntry = nil
+                        visibleFlags = []
+                        visibleContextKey = nil
                         RecentFlaggedMealCard.persistDismissedLogIds(dismissedLogIds)
                     }
                 )
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
-        .animation(.spring(response: 0.45, dampingFraction: 0.85), value: mostRecentFlagged?.id)
+        .animation(.spring(response: 0.58, dampingFraction: 0.88), value: visibleEntry?.id)
+        .onAppear {
+            syncVisibleCard(clearWhenMissing: false)
+        }
+        .onChange(of: mostRecentFlaggedID) { _, _ in
+            syncVisibleCard(clearWhenMissing: false)
+        }
+        .onChange(of: contextKey) { _, _ in
+            syncVisibleCard(clearWhenMissing: true)
+        }
     }
 
     // MARK: - Persistence helpers
@@ -62,26 +62,45 @@ struct RecentFlaggedMealCard: View {
     static func persistDismissedLogIds(_ ids: Set<String>, defaults: UserDefaults = .standard) {
         defaults.set(Array(ids), forKey: dismissedKey)
     }
+
+    private func syncVisibleCard(clearWhenMissing: Bool) {
+        if let entry = mostRecentFlagged,
+           let flags = entry.dietaryFlags,
+           !flags.isEmpty {
+            visibleEntry = entry
+            visibleFlags = flags
+            visibleContextKey = contextKey
+        } else if clearWhenMissing || visibleContextKey != contextKey {
+            visibleEntry = nil
+            visibleFlags = []
+            visibleContextKey = nil
+        }
+    }
 }
 
 // MARK: - Floating card
 
-/// Brand purple for insight surfaces. Matches the leading stop in
-/// `aiShimmerGradient` (HomeFlowComponents.swift). Kept inline here so
-/// this file stays standalone; if a third surface needs the same colour,
-/// promote both to a shared `Color+Brand` file.
-private let insightPurple = Color(red: 0.58, green: 0.29, blue: 0.98)
+private let insightOrange = Color(red: 0.96, green: 0.38, blue: 0.08)
+private let insightAmber = Color(red: 1.00, green: 0.67, blue: 0.24)
 
 private struct FloatingInsightCard: View {
     let entry: DayLogEntry
     let flags: [DietaryFlag]
     let onDismiss: () -> Void
 
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var shimmerOffset: CGFloat = -0.6
     @State private var hasShimmered = false
 
     var body: some View {
-        HStack(alignment: .top, spacing: 14) {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "fork.knife.circle.fill")
+                .font(.system(size: 26, weight: .semibold))
+                .symbolRenderingMode(.palette)
+                .foregroundStyle(.white, insightOrange)
+                .shadow(color: insightOrange.opacity(0.24), radius: 8, y: 3)
+                .accessibilityHidden(true)
+
             VStack(alignment: .leading, spacing: 4) {
                 Text(displayName)
                     .font(.system(size: 15, weight: .semibold))
@@ -93,33 +112,32 @@ private struct FloatingInsightCard: View {
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(Text("\(displayName). \(subtitleSentence)"))
 
             Spacer(minLength: 0)
 
-            Button(action: {
-                UIImpactFeedbackGenerator(style: .light).impactOccurred()
-                onDismiss()
-            }) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text("Dismiss insight"))
+            AppCloseButton(
+                action: {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    onDismiss()
+                },
+                visualSize: 36,
+                hitSize: 44,
+                accessibilityLabel: "Dismiss insight"
+            )
+            .accessibilityHint(Text("Keeps this food preference note hidden."))
         }
-        .padding(.horizontal, 16)
+        .padding(.leading, 14)
+        .padding(.trailing, 10)
         .padding(.vertical, 14)
         .background(cardBackground)
         .overlay(shimmerOverlay)
         .overlay(cardStroke)
         .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
         .compositingGroup()
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            Text("\(displayName). \(subtitleSentence)")
-        )
+        .shadow(color: insightOrange.opacity(0.16), radius: 20, y: 10)
+        .shadow(color: Color.black.opacity(0.08), radius: 12, y: 7)
         .onAppear {
             triggerShimmer()
         }
@@ -132,15 +150,36 @@ private struct FloatingInsightCard: View {
             // Frosted glass base
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .fill(.ultraThinMaterial)
-            // Purple tint wash so the card reads as AI / insight context
+
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(insightPurple.opacity(0.10))
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            insightAmber.opacity(0.20),
+                            insightOrange.opacity(0.11),
+                            Color(.systemBackground).opacity(0.18)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         }
     }
 
     private var cardStroke: some View {
         RoundedRectangle(cornerRadius: 18, style: .continuous)
-            .strokeBorder(insightPurple.opacity(0.55), lineWidth: 1.2)
+            .strokeBorder(
+                LinearGradient(
+                    colors: [
+                        insightAmber.opacity(0.70),
+                        insightOrange.opacity(0.40),
+                        .white.opacity(0.46)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 1.2
+            )
     }
 
     // MARK: - Shimmer
@@ -176,12 +215,13 @@ private struct FloatingInsightCard: View {
     }
 
     private func triggerShimmer() {
+        guard !reduceMotion else { return }
         guard !hasShimmered else { return }
         hasShimmered = true
         // Slight delay so the slide-up transition settles before the sweep
         // begins; otherwise both motions compete and the shimmer is missed.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-            withAnimation(.easeInOut(duration: 0.7)) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            withAnimation(.easeInOut(duration: 0.9)) {
                 shimmerOffset = 1.0
             }
         }

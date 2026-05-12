@@ -10,6 +10,7 @@ import SwiftUI
 struct BodyEditorScreen: View {
     @EnvironmentObject private var appStore: AppStore
     @EnvironmentObject private var draftStore: ProfileDraftStore
+    @State private var bodyMetricEditorSheet: BodyMetricEditorSheet?
 
     var body: some View {
         Form {
@@ -31,41 +32,33 @@ struct BodyEditorScreen: View {
                 }
                 .pickerStyle(.menu)
 
-                NavigationLink {
-                    AgePickerView(draft: $draftStore.draft)
-                } label: {
-                    LabeledContent {
-                        Text("\(Int(draftStore.draft.ageValue))")
-                            .foregroundStyle(.secondary)
-                            .monospacedDigit()
-                    } label: {
-                        Label("Age", systemImage: "calendar")
-                    }
-                }
+                bodyEditorRow(
+                    title: "Age",
+                    value: "\(Int(draftStore.draft.ageValue))",
+                    systemImage: "calendar",
+                    editor: .age
+                )
 
-                NavigationLink {
-                    HeightPickerView(draft: $draftStore.draft)
-                } label: {
-                    LabeledContent {
-                        Text(draftStore.heightLabel).foregroundStyle(.secondary)
-                    } label: {
-                        Label("Height", systemImage: "ruler")
-                    }
-                }
+                bodyEditorRow(
+                    title: "Height",
+                    value: draftStore.heightLabel,
+                    systemImage: "ruler",
+                    editor: .height
+                )
 
-                NavigationLink {
-                    WeightPickerView(draft: $draftStore.draft)
-                } label: {
-                    LabeledContent {
-                        Text(draftStore.weightLabel).foregroundStyle(.secondary)
-                    } label: {
-                        Label("Weight", systemImage: "scalemass.fill")
-                    }
-                }
+                bodyEditorRow(
+                    title: "Weight",
+                    value: draftStore.weightLabel,
+                    systemImage: "scalemass.fill",
+                    editor: .weight
+                )
             }
         }
         .navigationTitle("Body Details")
         .navigationBarTitleDisplayMode(.inline)
+        .sheet(item: $bodyMetricEditorSheet) { editor in
+            bodyMetricEditorSheetView(editor)
+        }
         .toolbar {
             ToolbarItem(placement: .navigationBarTrailing) {
                 ProfileSaveStatusIndicator(status: draftStore.saveStatus) {
@@ -79,5 +72,59 @@ struct BodyEditorScreen: View {
         .task {
             await draftStore.loadIfNeeded(appStore: appStore)
         }
+    }
+
+    private func bodyEditorRow(
+        title: String,
+        value: String,
+        systemImage: String,
+        editor: BodyMetricEditorSheet
+    ) -> some View {
+        Button {
+            bodyMetricEditorSheet = editor
+        } label: {
+            HStack(spacing: 12) {
+                Label(title, systemImage: systemImage)
+                    .foregroundStyle(.primary)
+
+                Spacer(minLength: 16)
+
+                Text(value)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    @ViewBuilder
+    private func bodyMetricEditorSheetView(_ editor: BodyMetricEditorSheet) -> some View {
+        NavigationStack {
+            Group {
+                switch editor {
+                case .age:
+                    AgePickerView(draft: $draftStore.draft)
+                case .height:
+                    HeightPickerView(draft: $draftStore.draft)
+                case .weight:
+                    WeightPickerView(draft: $draftStore.draft)
+                }
+            }
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        bodyMetricEditorSheet = nil
+                    }
+                    .fontWeight(.semibold)
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
     }
 }

@@ -406,6 +406,7 @@ private struct BadgeCelebrationPopup: View {
     let onDismiss: () -> Void
 
     private static let displayDuration: TimeInterval = 3.5
+    private static let medallionSize: CGFloat = 156
 
     @State private var hasAppeared = false
     @State private var medalScale: CGFloat = 0.62
@@ -497,15 +498,15 @@ private struct BadgeCelebrationPopup: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [tierGlowColor.opacity(0.16), .clear],
+                        colors: [tierGlowColor.opacity(0.12), .clear],
                         center: .center,
-                        startRadius: 20,
-                        endRadius: 160
+                        startRadius: Self.medallionSize * 0.16,
+                        endRadius: Self.medallionSize * 0.52
                     )
                 )
-                .frame(width: 280, height: 280)
-                .blur(radius: 28)
-                .opacity(raysOpacity * 0.7)
+                .frame(width: Self.medallionSize, height: Self.medallionSize)
+                .clipShape(Circle())
+                .opacity(raysOpacity * 0.55)
 
             if !reduceMotion {
                 BadgeConfettiBurst(seed: badge.id)
@@ -513,10 +514,10 @@ private struct BadgeCelebrationPopup: View {
                     .opacity(raysOpacity)
             }
 
-            BadgeCelebrationMedallion(badge: badge, size: 156)
+            BadgeCelebrationMedallion(badge: badge, size: Self.medallionSize)
                 .scaleEffect(medalScale)
                 .rotationEffect(.degrees(medalRotation))
-                .shadow(color: tierGlowColor.opacity(0.20), radius: 24, y: 10)
+                .shadow(color: tierGlowColor.opacity(0.16), radius: 18, y: 6)
         }
         .frame(width: 320, height: 320)
     }
@@ -599,6 +600,30 @@ private struct BadgeCelebrationMedallion: View {
     let size: CGFloat
 
     var body: some View {
+        badgeFace
+            .frame(width: size, height: size)
+            .clipShape(Circle())
+            .overlay(
+                Circle()
+                    .stroke(
+                        AngularGradient(
+                            colors: [
+                                .white.opacity(0.72),
+                                tierColor.opacity(0.26),
+                                Color.black.opacity(0.18),
+                                .white.opacity(0.44),
+                                .white.opacity(0.72)
+                            ],
+                            center: .center
+                        ),
+                        lineWidth: size * 0.025
+                    )
+            )
+            .compositingGroup()
+            .accessibilityHidden(true)
+    }
+
+    private var badgeFace: some View {
         ZStack {
             Circle()
                 .fill(
@@ -613,8 +638,6 @@ private struct BadgeCelebrationMedallion: View {
                         center: .center
                     )
                 )
-                .shadow(color: Color.black.opacity(0.18), radius: 18, y: 10)
-                .shadow(color: tierColor.opacity(0.28), radius: 20, y: 4)
 
             Circle()
                 .inset(by: size * 0.065)
@@ -677,25 +700,9 @@ private struct BadgeCelebrationMedallion: View {
                         )
                 )
                 .shadow(color: .white.opacity(0.18), radius: 1, x: -1, y: -1)
-                .shadow(color: .black.opacity(0.28), radius: 9, y: 5)
-
-            Circle()
-                .stroke(
-                    AngularGradient(
-                        colors: [
-                            .white.opacity(0.72),
-                            tierColor.opacity(0.26),
-                            Color.black.opacity(0.18),
-                            .white.opacity(0.44),
-                            .white.opacity(0.72)
-                        ],
-                        center: .center
-                    ),
-                    lineWidth: size * 0.025
-                )
+                .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
         }
         .frame(width: size, height: size)
-        .accessibilityHidden(true)
     }
 
     private var medallionFill: LinearGradient {

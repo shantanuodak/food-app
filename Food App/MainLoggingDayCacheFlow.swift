@@ -366,6 +366,7 @@ extension MainLoggingShellView {
         if !skipCache, let cached = dayCacheSummary[dateToLoad] {
             daySummary = cached
             daySummaryError = nil
+            WidgetDailyCaloriesStore.saveToday(summary: cached, dateString: dateToLoad)
             return
         }
 
@@ -383,6 +384,7 @@ extension MainLoggingShellView {
             daySummary = response
             daySummaryError = nil
             dayCacheSummary[dateToLoad] = response
+            WidgetDailyCaloriesStore.saveToday(summary: response, dateString: dateToLoad)
         } catch {
             handleAuthFailureIfNeeded(error)
 

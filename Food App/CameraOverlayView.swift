@@ -20,13 +20,7 @@ struct CameraTopBar: View {
 
             Spacer()
 
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
+            AppCloseButton(action: onClose, variant: .onImage, visualSize: 44, hitSize: 44)
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)

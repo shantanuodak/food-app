@@ -72,20 +72,13 @@ struct HomeProfileBentoScreen: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text("Profile")
-                        .font(.custom("InstrumentSerif-Regular", size: 24))
+                        .font(.custom("InstrumentSerif-Regular", size: 31))
                         .foregroundStyle(BentoTokens.brandGradient)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
+                    AppCloseButton {
                         dismiss()
-                    } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(BentoTokens.gray700)
-                            .frame(width: 30, height: 30)
-                            .background(BentoTokens.gray100, in: Circle())
                     }
-                    .accessibilityLabel("Close")
                 }
             }
             .navigationDestination(isPresented: $isReminderSettingsPresented) {

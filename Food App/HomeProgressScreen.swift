@@ -2,11 +2,20 @@ import SwiftUI
 import Charts
 
 struct HomeProgressScreen: View {
+    @Environment(\.dismiss) private var dismiss
+
     var body: some View {
         NavigationStack {
             ProgressSectionView()
                 .navigationTitle("Progress")
                 .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        AppCloseButton {
+                            dismiss()
+                        }
+                    }
+                }
         }
     }
 }
@@ -53,13 +62,21 @@ struct ProgressSectionView: View {
         .task {
             preferredUnits = currentPreferredUnits()
             if !hydrateFromCachedProgressSnapshot() {
-                await refreshAllData(reason: "initial")
+                appStore.preloadProgressCharts(range: selectedRange)
+                await appStore.waitForProgressChartsPreload(range: selectedRange)
+                if !hydrateFromCachedProgressSnapshot() {
+                    await refreshAllData(reason: "initial")
+                }
             }
         }
         .onChange(of: selectedRange) { _, _ in
             Task {
                 if !hydrateFromCachedProgressSnapshot() {
-                    await refreshAllData(reason: "range_change")
+                    appStore.preloadProgressCharts(range: selectedRange, force: true)
+                    await appStore.waitForProgressChartsPreload(range: selectedRange)
+                    if !hydrateFromCachedProgressSnapshot() {
+                        await refreshAllData(reason: "range_change")
+                    }
                 }
             }
         }

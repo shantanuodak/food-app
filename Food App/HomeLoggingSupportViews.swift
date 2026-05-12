@@ -136,6 +136,49 @@ struct LiquidGlassCapsuleButtonStyle: ButtonStyle {
     }
 }
 
+struct AppCloseButton: View {
+    enum Variant {
+        case sheet
+        case onImage
+    }
+
+    let action: () -> Void
+    var variant: Variant = .sheet
+    var visualSize: CGFloat = 32
+    var hitSize: CGFloat = 44
+    var accessibilityLabel: LocalizedStringKey = "Close"
+
+    var body: some View {
+        Button(action: action) {
+            icon
+                .frame(width: hitSize, height: hitSize)
+                .contentShape(Circle())
+        }
+        .accessibilityLabel(accessibilityLabel)
+    }
+
+    @ViewBuilder
+    private var icon: some View {
+        switch variant {
+        case .sheet:
+            Label(accessibilityLabel, systemImage: "xmark.circle.fill")
+                .labelStyle(.iconOnly)
+                .font(.title2)
+                .foregroundStyle(.secondary)
+        case .onImage:
+            Image(systemName: "xmark")
+                .font(.system(size: max(12, visualSize * 0.40), weight: .semibold))
+                .foregroundStyle(.white)
+                .frame(width: visualSize, height: visualSize)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay {
+                    Circle()
+                        .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                }
+        }
+    }
+}
+
 extension View {
     /// Liquid Glass on iOS 26+, ultra-thin material fallback on iOS 18-25.
     /// Centralizes the `glassEffect` availability guard so call sites stay one-liners.

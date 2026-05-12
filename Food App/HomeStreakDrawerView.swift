@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeStreakDrawerView: View {
     @EnvironmentObject private var appStore: AppStore
+    @Environment(\.dismiss) private var dismiss
 
     @State private var response: StreakResponse?
     @State private var isLoading = false
@@ -13,29 +14,33 @@ struct HomeStreakDrawerView: View {
     @State private var lastLoadedStreakDays: Int?
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
-                drawerTitle
+        VStack(spacing: 0) {
+            drawerHeader
 
-                if !appStore.configuration.progressFeatureEnabled {
-                    disabledCard
-                } else if isLoading && response == nil {
-                    loadingCard
-                } else if let response {
-                    badgeHero(for: response)
-                    upcomingBadgesCarousel(for: response.currentDays)
-                    exploreAllBadgesLink
-                    #if DEBUG
-                    debugPopupPreviewMenu
-                    #endif
-                } else if let errorMessage {
-                    errorCard(errorMessage)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
+                    if !appStore.configuration.progressFeatureEnabled {
+                        disabledCard
+                    } else if isLoading && response == nil {
+                        loadingCard
+                    } else if let response {
+                        badgeHero(for: response)
+                        upcomingBadgesCarousel(for: response.currentDays)
+                        exploreAllBadgesLink
+                        #if DEBUG
+                        debugPopupPreviewMenu
+                        #endif
+                    } else if let errorMessage {
+                        errorCard(errorMessage)
+                    }
+
+                    Spacer(minLength: 0)
                 }
-
-                Spacer(minLength: 0)
+                .padding(.horizontal, 20)
+                .padding(.top, 6)
+                .padding(.bottom, 28)
+                .animation(.easeInOut(duration: 0.28), value: response?.range)
             }
-            .padding(20)
-            .animation(.easeInOut(duration: 0.28), value: response?.range)
         }
         .background(Color(.systemBackground))
         .task {
@@ -55,6 +60,23 @@ struct HomeStreakDrawerView: View {
             }
             .presentationBackground(.clear)
         }
+    }
+
+    private var drawerHeader: some View {
+        ZStack {
+            drawerTitle
+
+            HStack {
+                Spacer()
+                AppCloseButton {
+                    dismiss()
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+        .background(Color(.systemBackground))
     }
 
     private var drawerTitle: some View {

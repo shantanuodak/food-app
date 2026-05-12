@@ -97,6 +97,25 @@ struct AdminProfileDetailView<Content: View>: View {
 
 // MARK: - Body Wheel Pickers
 
+enum BodyMetricEditorSheet: String, Identifiable {
+    case age
+    case height
+    case weight
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .age:
+            return "Age"
+        case .height:
+            return "Height"
+        case .weight:
+            return "Weight"
+        }
+    }
+}
+
 struct AgePickerView: View {
     @Binding var draft: OnboardingDraft
 

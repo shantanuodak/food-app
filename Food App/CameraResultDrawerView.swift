@@ -74,13 +74,7 @@ struct CameraResultDrawerView: View {
                             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                     )
 
-                Button { onDiscard() } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.white)
-                        .frame(width: 28, height: 28)
-                        .background(.black.opacity(0.45), in: Circle())
-                }
+                AppCloseButton(action: onDiscard, variant: .onImage, visualSize: 30, hitSize: 44)
                 .padding(14)
             }
             .padding(.horizontal, 20)
@@ -233,13 +227,7 @@ struct CameraResultDrawerView: View {
                             .frame(width: 30, height: 30)
                             .background(.black.opacity(0.42), in: Circle())
                     }
-                    Button { onDiscard() } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 30, height: 30)
-                            .background(.black.opacity(0.42), in: Circle())
-                    }
+                    AppCloseButton(action: onDiscard, variant: .onImage, visualSize: 30, hitSize: 30)
                 }
                 .padding(13)
             }
