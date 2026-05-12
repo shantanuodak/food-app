@@ -85,6 +85,8 @@ type CandidateRow = PreferenceRow & {
 };
 
 type ApnsResult = { apnsId?: string | null; error?: string | null };
+type CalorieProgress = { consumed: number; target: number };
+export type CalorieNudgeKind = 'halfway' | 'over' | null;
 
 const mealConfigs = [
   {
@@ -159,6 +161,25 @@ function isWithinWindow(nowMinutes: number, start: string, end: string): boolean
   return nowMinutes >= startMinutes || nowMinutes <= endMinutes;
 }
 
+export function discoveryDeliveryKey(localDate: string): string {
+  return `discovery.logging_modes:${localDate}`;
+}
+
+export function calorieHalfwayDeliveryKey(localDate: string): string {
+  return `engagement.calorie_halfway:${localDate}`;
+}
+
+export function calorieOverTargetDeliveryKey(localDate: string): string {
+  return `engagement.calorie_over_target:${localDate}`;
+}
+
+export function classifyCalorieNudge(consumed: number, target: number): CalorieNudgeKind {
+  if (!(target > 0)) return null;
+  if (consumed >= target) return 'over';
+  if (consumed >= target * 0.5) return 'halfway';
+  return null;
+}
+
 function base64url(input: Buffer | string): string {
   return Buffer.from(input).toString('base64url');
 }
@@ -187,65 +208,103 @@ function apnsIsConfigured(): boolean {
   return Boolean(config.apnsEnabled && config.apnsTeamId && config.apnsKeyId && config.apnsPrivateKey && config.apnsBundleId);
 }
 
-async function sendApns(device: DeviceRow, template: TemplateRow, deliveryKey: string): Promise<ApnsResult> {
+export async function sendApns(device: DeviceRow, template: TemplateRow, deliveryKey: string): Promise<ApnsResult> {
   if (!apnsIsConfigured()) {
     return { error: 'APNS_NOT_CONFIGURED' };
   }
 
-  const host = device.environment === 'production' ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com';
-  const payload = JSON.stringify({
-    aps: {
-      alert: { title: template.title, body: template.body },
-      sound: 'default',
-      category:
-        template.kind === 'meal'
-          ? 'food-app.category.meal-reminder'
-          : template.kind === 'discovery'
-            ? 'food-app.category.discovery'
-            : 'food-app.category.engagement'
-    },
-    destination: template.destination,
-    templateKey: template.template_key,
-    deliveryKey
-  });
+  try {
+    const host = device.environment === 'production' ? 'https://api.push.apple.com' : 'https://api.sandbox.push.apple.com';
+    const payload = JSON.stringify({
+      aps: {
+        alert: { title: template.title, body: template.body },
+        sound: 'default',
+        category:
+          template.kind === 'meal'
+            ? 'food-app.category.meal-reminder'
+            : template.kind === 'discovery'
+              ? 'food-app.category.discovery'
+              : 'food-app.category.engagement'
+      },
+      destination: template.destination,
+      templateKey: template.template_key,
+      deliveryKey
+    });
 
-  return new Promise((resolve) => {
-    const client = http2.connect(host);
-    const request = client.request({
-      ':method': 'POST',
-      ':path': `/3/device/${device.token}`,
-      authorization: `bearer ${apnsJwt()}`,
-      'apns-topic': config.apnsBundleId,
-      'apns-push-type': 'alert',
-      'apns-priority': '10'
-    });
-    let responseBody = '';
-    let status = 0;
-    let apnsId: string | null = null;
+    const authorization = `bearer ${apnsJwt()}`;
 
-    request.setEncoding('utf8');
-    request.on('response', (headers) => {
-      status = Number(headers[':status'] || 0);
-      const id = headers['apns-id'];
-      apnsId = Array.isArray(id) ? id[0] || null : id || null;
+    return await new Promise((resolve) => {
+      const client = http2.connect(host);
+      const request = client.request({
+        ':method': 'POST',
+        ':path': `/3/device/${device.token}`,
+        authorization,
+        'apns-topic': config.apnsBundleId,
+        'apns-push-type': 'alert',
+        'apns-priority': '10'
+      });
+      let responseBody = '';
+      let status = 0;
+      let apnsId: string | null = null;
+      let settled = false;
+
+      const finish = (result: ApnsResult) => {
+        if (settled) return;
+        settled = true;
+        client.close();
+        resolve(result);
+      };
+
+      client.on('error', (error) => {
+        finish({ error: error.message });
+      });
+      request.setEncoding('utf8');
+      request.on('response', (headers) => {
+        status = Number(headers[':status'] || 0);
+        const id = headers['apns-id'];
+        apnsId = Array.isArray(id) ? id[0] || null : id || null;
+      });
+      request.on('data', (chunk) => {
+        responseBody += chunk;
+      });
+      request.on('error', (error) => {
+        finish({ error: error.message });
+      });
+      request.on('end', () => {
+        if (status >= 200 && status < 300) {
+          finish({ apnsId });
+        } else {
+          finish({ apnsId, error: responseBody || `APNS_STATUS_${status}` });
+        }
+      });
+      request.end(payload);
     });
-    request.on('data', (chunk) => {
-      responseBody += chunk;
-    });
-    request.on('error', (error) => {
-      client.close();
-      resolve({ error: error.message });
-    });
-    request.on('end', () => {
-      client.close();
-      if (status >= 200 && status < 300) {
-        resolve({ apnsId });
-      } else {
-        resolve({ apnsId, error: responseBody || `APNS_STATUS_${status}` });
-      }
-    });
-    request.end(payload);
-  });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'APNS_SEND_FAILED' };
+  }
+}
+
+async function getTodayCalorieProgress(userId: string, localDate: string, timezone: string): Promise<CalorieProgress | null> {
+  const result = await pool.query<{ calorie_target: string; consumed_calories: string }>(
+    `
+    SELECT
+      op.calorie_target::text AS calorie_target,
+      COALESCE(SUM(fl.total_calories), 0)::text AS consumed_calories
+    FROM onboarding_profiles op
+    LEFT JOIN food_logs fl
+      ON fl.user_id = op.user_id
+      AND (fl.logged_at AT TIME ZONE $3)::date = $2::date
+    WHERE op.user_id = $1
+    GROUP BY op.calorie_target
+    `,
+    [userId, localDate, timezone]
+  );
+  const row = result.rows[0];
+  if (!row) return null;
+  return {
+    consumed: Number(row.consumed_calories) || 0,
+    target: Number(row.calorie_target) || 0
+  };
 }
 
 export async function registerNotificationDevice(userId: string, input: NotificationDeviceInput) {
@@ -526,6 +585,24 @@ export async function runNotificationSweep(now: Date = new Date()) {
 
     if (candidate.engagement_enabled) {
       const hasLoggedToday = await hasLoggedBetween(candidate.user_id, local.date, '00:00', '23:59', timezone);
+      if (hasLoggedToday && local.minutes >= 10 * 60 && local.minutes <= 23 * 60) {
+        const calorieProgress = await getTodayCalorieProgress(candidate.user_id, local.date, timezone);
+        const calorieNudge = calorieProgress
+          ? classifyCalorieNudge(calorieProgress.consumed, calorieProgress.target)
+          : null;
+        if (calorieNudge === 'over') {
+          const over = templates.get('engagement.calorie_over_target');
+          if (over) {
+            bump(await deliver(candidate.user_id, over, calorieOverTargetDeliveryKey(local.date), now));
+          }
+        } else if (calorieNudge === 'halfway') {
+          const halfway = templates.get('engagement.calorie_halfway');
+          if (halfway) {
+            bump(await deliver(candidate.user_id, halfway, calorieHalfwayDeliveryKey(local.date), now));
+          }
+        }
+      }
+
       const eod = templates.get('engagement.end_of_day');
       if (!hasLoggedToday && eod && local.minutes >= 20 * 60 + 45 && local.minutes <= 23 * 60) {
         bump(await deliver(candidate.user_id, eod, `engagement.end_of_day:${local.date}`, now));
@@ -547,8 +624,7 @@ export async function runNotificationSweep(now: Date = new Date()) {
     if (candidate.discovery_enabled) {
       const discovery = templates.get('discovery.logging_modes');
       if (discovery) {
-        const weekdayKey = local.date.slice(0, 8);
-        bump(await deliver(candidate.user_id, discovery, `discovery.logging_modes:${weekdayKey}`, now));
+        bump(await deliver(candidate.user_id, discovery, discoveryDeliveryKey(local.date), now));
       }
     }
   }
