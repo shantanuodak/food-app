@@ -249,6 +249,7 @@ extension MainLoggingShellView {
         hasBootstrappedAuthenticatedHome = true
 
         submitRestoredPendingSaveIfPossible()
+        hydrateCurrentStreakFromCacheIfNeeded()
         refreshDaySummary()
 
         initialHomeBootstrapTask?.cancel()

@@ -28,6 +28,7 @@ final class AppStore: ObservableObject {
     @Published private(set) var mealReminderSettings: MealReminderSettings
     @Published private(set) var profileDashboardSnapshot: ProfileDashboardSnapshot? = nil
     @Published private(set) var progressChartsSnapshot: ProgressChartsSnapshot? = nil
+    @Published private(set) var cachedFoodLogStreak: Int?
 
     let configuration: AppConfiguration
     let authSessionStore: AuthSessionStore
@@ -47,6 +48,7 @@ final class AppStore: ObservableObject {
     private let healthSyncKey = "app.health.sync.enabled.v1"
     private let challengeKey = "app.challenge.choice.v1"
     private let mealReminderSettingsKey = "app.meal.reminder.settings.v1"
+    private let cachedFoodLogStreakKey = "app.rewards.current_food_log_streak.v1"
     private let todayHasLoggedFoodKey = "app.notifications.today.has_logged_food.v1"
     private let todayHasLoggedFoodDateKey = "app.notifications.today.has_logged_food.date.v1"
     private let apnsDeviceTokenKey = "app.notifications.apns_token.v1"
@@ -105,6 +107,8 @@ final class AppStore: ObservableObject {
         self.networkQualityHint = L10n.networkOnline
         self.healthAuthorizationState = healthKitService.authorizationState
         self.mealReminderSettings = Self.loadMealReminderSettings(defaults: defaults, key: mealReminderSettingsKey)
+        let cachedStreak = defaults.integer(forKey: cachedFoodLogStreakKey)
+        self.cachedFoodLogStreak = defaults.object(forKey: cachedFoodLogStreakKey) == nil ? nil : cachedStreak
         self.isHealthSyncEnabled = defaults.bool(forKey: healthSyncKey)
         if healthAuthorizationState != .authorized && isHealthSyncEnabled {
             self.isHealthSyncEnabled = false
@@ -378,6 +382,9 @@ final class AppStore: ObservableObject {
         let streaksResult = try? await streaksTask
 
         if Task.isCancelled { return }
+        if let streaksResult {
+            recordFoodLogStreak(streaksResult.currentDays)
+        }
 
         let previous = profileDashboardSnapshot
         profileDashboardSnapshot = ProfileDashboardSnapshot(
@@ -713,6 +720,12 @@ final class AppStore: ObservableObject {
         defaults.set(todayDateString, forKey: todayHasLoggedFoodDateKey)
         defaults.set(hasLogs, forKey: todayHasLoggedFoodKey)
         Task { await reconcileNotifications() }
+    }
+
+    func recordFoodLogStreak(_ days: Int) {
+        let normalized = max(0, days)
+        cachedFoodLogStreak = normalized
+        defaults.set(normalized, forKey: cachedFoodLogStreakKey)
     }
 
     private var todayHasLoggedFood: Bool {

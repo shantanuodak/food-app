@@ -1716,6 +1716,7 @@
                 <th class="parse-route">Route</th>
                 <th class="parse-cache">Cache</th>
                 <th class="parse-cost">AI Cost</th>
+                <th class="parse-attempt">Image timing</th>
                 <th class="parse-save">Save</th>
                 <th class="parse-attempt">Attempt</th>
                 <th class="parse-number">Cal</th>
@@ -1727,7 +1728,31 @@
               </tr>
             </thead>
             <tbody id="parses-tbody">
-              <tr><td colspan="13" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+              <tr><td colspan="14" class="text-muted" style="padding:24px; text-align:center;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3 style="margin-top:18px;">Recent Image Attempts</h3>
+        <div class="table-wrap parse-debug-wrap">
+          <table class="parse-debug-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>User</th>
+                <th>Outcome</th>
+                <th>Source</th>
+                <th>Total</th>
+                <th>Prep</th>
+                <th>Request</th>
+                <th>Backend</th>
+                <th>Bytes</th>
+                <th>Model</th>
+                <th>Error</th>
+                <th>Parse ID</th>
+              </tr>
+            </thead>
+            <tbody id="image-attempts-tbody">
+              <tr><td colspan="12" class="text-muted" style="padding:20px;text-align:center;">Loading image attempts…</td></tr>
             </tbody>
           </table>
         </div>
@@ -3371,13 +3396,16 @@ function renderSavedLogs(data) {
 /* ====================================================================== */
 async function loadRecentParses() {
   const tbody = document.getElementById('parses-tbody');
-  tbody.innerHTML = '<tr><td colspan="13" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="14" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
   try {
-    const data = await api('/recent-parses');
+    const [data] = await Promise.all([
+      api('/recent-parses'),
+      loadImageParseAttempts()
+    ]);
     allParsesData = data.parses;
     renderParses(allParsesData);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="13" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -3393,7 +3421,7 @@ function filterParses() {
 function renderParses(parses) {
   const tbody = document.getElementById('parses-tbody');
   if (!parses.length) {
-    tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state"><div class="icon">📭</div>No parse requests found.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14"><div class="empty-state"><div class="icon">📭</div>No parse requests found.</div></td></tr>';
     return;
   }
   tbody.innerHTML = '';
@@ -3411,6 +3439,7 @@ function renderParses(parses) {
       ? '<span class="badge badge-green" title="Served from parse cache; no new Gemini spend for this parse">Hit</span>'
       : '<span class="badge badge-muted" title="Cache miss or unresolved parse">Miss</span>';
     const aiCostBadge = renderAiCostBadge(p);
+    const imageTimingBadge = renderImageTimingBadge(p.imageAttempt);
     const attemptBadge = renderSaveAttemptBadge(p);
     const time = new Date(p.createdAt).toLocaleTimeString() + ' ' + new Date(p.createdAt).toLocaleDateString();
     tbody.innerHTML += `
@@ -3420,6 +3449,7 @@ function renderParses(parses) {
         <td class="parse-route">${routeBadge(p.route)}</td>
         <td class="parse-cache">${cacheBadge}</td>
         <td class="parse-cost">${aiCostBadge}</td>
+        <td class="parse-attempt">${imageTimingBadge}</td>
         <td class="parse-save">${saveBadge}</td>
         <td class="parse-attempt">${attemptBadge}</td>
         <td class="mono parse-number">${p.calories !== null ? fmt(p.calories) : '—'}</td>
@@ -3430,6 +3460,69 @@ function renderParses(parses) {
         <td class="parse-clarification">${clarBadge}</td>
       </tr>`;
   }
+}
+
+async function loadImageParseAttempts() {
+  const tbody = document.getElementById('image-attempts-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = '<tr><td colspan="12" class="text-muted" style="padding:20px;text-align:center;">Loading image attempts…</td></tr>';
+  try {
+    const data = await api('/image-parse-attempts?limit=50');
+    renderImageParseAttempts(data.attempts || []);
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="12" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderImageTimingBadge(attempt) {
+  if (!attempt) {
+    return '<span class="badge badge-muted" title="No client image timing telemetry linked yet">—</span>';
+  }
+  const total = attempt.totalMs ?? null;
+  const cls = attempt.outcome === 'failed'
+    ? 'badge-red'
+    : total !== null && total > 10000
+      ? 'badge-yellow'
+      : 'badge-green';
+  const pieces = [
+    attempt.outcome,
+    attempt.totalMs !== null && attempt.totalMs !== undefined ? `total ${fmt(attempt.totalMs, 0)}ms` : null,
+    attempt.prepMs !== null && attempt.prepMs !== undefined ? `prep ${fmt(attempt.prepMs, 0)}ms` : null,
+    attempt.requestMs !== null && attempt.requestMs !== undefined ? `request ${fmt(attempt.requestMs, 0)}ms` : null,
+    attempt.backendMs !== null && attempt.backendMs !== undefined ? `backend ${fmt(attempt.backendMs, 0)}ms` : null,
+    attempt.bytes ? `${fmt(attempt.bytes)} bytes` : null,
+    attempt.model || null,
+    attempt.fallbackUsed === true ? 'fallback used' : null,
+    attempt.errorCode || null
+  ].filter(Boolean);
+  const label = total !== null ? `${fmt(total, 0)}ms` : attempt.outcome;
+  return `<span class="badge ${cls}" title="${escapeHtml(pieces.join(' · '))}">${escapeHtml(label)}</span>`;
+}
+
+function renderImageParseAttempts(attempts) {
+  const tbody = document.getElementById('image-attempts-tbody');
+  if (!attempts.length) {
+    tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state"><div class="icon">📷</div>No image attempts recorded yet.</div></td></tr>';
+    return;
+  }
+  tbody.innerHTML = attempts.map(a => {
+    const outcomeCls = a.outcome === 'succeeded' ? 'badge-green' : 'badge-red';
+    return `
+      <tr>
+        <td class="mono text-muted" style="font-size:12px;white-space:nowrap;">${escapeHtml(fmtTime(a.createdAt))}</td>
+        <td class="truncate" title="${escapeHtml(a.userEmail || a.userId || '')}">${escapeHtml(a.userEmail || '—')}</td>
+        <td><span class="badge ${outcomeCls}">${escapeHtml(a.outcome)}</span></td>
+        <td><span class="badge badge-muted">${escapeHtml(a.source || 'drawer')}</span></td>
+        <td class="mono">${a.totalMs !== null && a.totalMs !== undefined ? fmt(a.totalMs, 0) + 'ms' : '—'}</td>
+        <td class="mono">${a.prepMs !== null && a.prepMs !== undefined ? fmt(a.prepMs, 0) + 'ms' : '—'}</td>
+        <td class="mono">${a.requestMs !== null && a.requestMs !== undefined ? fmt(a.requestMs, 0) + 'ms' : '—'}</td>
+        <td class="mono">${a.backendMs !== null && a.backendMs !== undefined ? fmt(a.backendMs, 0) + 'ms' : '—'}</td>
+        <td class="mono">${a.imageBytes ? fmt(a.imageBytes) : '—'}</td>
+        <td class="truncate" title="${escapeHtml(a.visionModel || '')}">${escapeHtml(a.visionModel || '—')}${a.fallbackUsed ? ' · fallback' : ''}</td>
+        <td class="truncate" title="${escapeHtml(a.errorCode || '')}">${escapeHtml(a.errorCode || '—')}</td>
+        <td class="mono" title="${escapeHtml(a.parseRequestId || a.clientAttemptId || '')}">${escapeHtml((a.parseRequestId || a.clientAttemptId || '—').slice(0, 8))}</td>
+      </tr>`;
+  }).join('');
 }
 
 function renderAiCostBadge(p) {

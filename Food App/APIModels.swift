@@ -37,6 +37,28 @@ struct HealthResponse: Decodable {
     let status: String
 }
 
+struct AcceptedResponse: Decodable {
+    let status: String
+}
+
+struct ImageParseAttemptTelemetryRequest: Encodable {
+    let clientAttemptId: String
+    let parseRequestId: String?
+    let outcome: String
+    let errorCode: String?
+    let prepMs: Int?
+    let requestMs: Int?
+    let totalMs: Int?
+    let backendMs: Int?
+    let imageBytes: Int?
+    let mimeType: String?
+    let visionModel: String?
+    let fallbackUsed: Bool?
+    let clientBuild: String?
+    let source: String
+    let metadata: [String: String]?
+}
+
 struct RegisterNotificationDeviceRequest: Encodable {
     let token: String
     let platform: String

@@ -647,6 +647,17 @@ router.get('/recent-parses', async (req, res, next) => {
       latest_save_error_code: string | null;
       latest_save_latency_ms: number | null;
       latest_save_attempt_at: Date | null;
+      image_attempt_outcome: string | null;
+      image_attempt_error_code: string | null;
+      image_attempt_prep_ms: number | null;
+      image_attempt_request_ms: number | null;
+      image_attempt_total_ms: number | null;
+      image_attempt_backend_ms: number | null;
+      image_attempt_bytes: number | null;
+      image_attempt_model: string | null;
+      image_attempt_fallback_used: boolean | null;
+      image_attempt_source: string | null;
+      image_attempt_at: Date | null;
     }>(
       `SELECT
          pr.request_id,
@@ -674,7 +685,18 @@ router.get('/recent-parses', async (req, res, next) => {
          sa.latest_save_outcome,
          sa.latest_save_error_code,
          sa.latest_save_latency_ms,
-         sa.latest_save_attempt_at
+         sa.latest_save_attempt_at,
+         ipa.outcome AS image_attempt_outcome,
+         ipa.error_code AS image_attempt_error_code,
+         ipa.prep_ms AS image_attempt_prep_ms,
+         ipa.request_ms AS image_attempt_request_ms,
+         ipa.total_ms AS image_attempt_total_ms,
+         ipa.backend_ms AS image_attempt_backend_ms,
+         ipa.image_bytes AS image_attempt_bytes,
+         ipa.vision_model AS image_attempt_model,
+         ipa.fallback_used AS image_attempt_fallback_used,
+         ipa.source AS image_attempt_source,
+         ipa.created_at AS image_attempt_at
        FROM parse_requests pr
        LEFT JOIN LATERAL (
          SELECT fl.*
@@ -716,6 +738,13 @@ router.get('/recent-parses', async (req, res, next) => {
          FROM ai_cost_events ace
          WHERE ace.request_id = pr.request_id
        ) ace ON true
+       LEFT JOIN LATERAL (
+         SELECT *
+         FROM image_parse_attempts ipa
+         WHERE ipa.parse_request_id = pr.request_id
+         ORDER BY ipa.created_at DESC
+         LIMIT 1
+       ) ipa ON true
        ORDER BY pr.created_at DESC
        LIMIT 50`
     );
@@ -747,10 +776,102 @@ router.get('/recent-parses', async (req, res, next) => {
       latestSaveOutcome: r.latest_save_outcome,
       latestSaveErrorCode: r.latest_save_error_code,
       latestSaveLatencyMs: r.latest_save_latency_ms,
-      latestSaveAttemptAt: r.latest_save_attempt_at ? r.latest_save_attempt_at.toISOString() : null
+      latestSaveAttemptAt: r.latest_save_attempt_at ? r.latest_save_attempt_at.toISOString() : null,
+      imageAttempt: r.image_attempt_outcome
+        ? {
+            outcome: r.image_attempt_outcome,
+            errorCode: r.image_attempt_error_code,
+            prepMs: r.image_attempt_prep_ms,
+            requestMs: r.image_attempt_request_ms,
+            totalMs: r.image_attempt_total_ms,
+            backendMs: r.image_attempt_backend_ms,
+            bytes: r.image_attempt_bytes,
+            model: r.image_attempt_model,
+            fallbackUsed: r.image_attempt_fallback_used,
+            source: r.image_attempt_source,
+            createdAt: r.image_attempt_at ? r.image_attempt_at.toISOString() : null
+          }
+        : null
     }));
 
     res.json({ parses });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/image-parse-attempts', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const limit = z.coerce.number().int().min(1).max(100).optional().default(50).parse(req.query.limit);
+    const { rows } = await pool.query<{
+      id: string;
+      user_id: string | null;
+      user_email: string | null;
+      client_attempt_id: string;
+      parse_request_id: string | null;
+      outcome: string;
+      error_code: string | null;
+      prep_ms: number | null;
+      request_ms: number | null;
+      total_ms: number | null;
+      backend_ms: number | null;
+      image_bytes: number | null;
+      mime_type: string | null;
+      vision_model: string | null;
+      fallback_used: boolean | null;
+      client_build: string | null;
+      source: string;
+      created_at: Date;
+    }>(
+      `SELECT
+         ipa.id,
+         ipa.user_id,
+         u.email AS user_email,
+         ipa.client_attempt_id,
+         ipa.parse_request_id,
+         ipa.outcome,
+         ipa.error_code,
+         ipa.prep_ms,
+         ipa.request_ms,
+         ipa.total_ms,
+         ipa.backend_ms,
+         ipa.image_bytes,
+         ipa.mime_type,
+         ipa.vision_model,
+         ipa.fallback_used,
+         ipa.client_build,
+         ipa.source,
+         ipa.created_at
+       FROM image_parse_attempts ipa
+       LEFT JOIN users u ON u.id = ipa.user_id
+       ORDER BY ipa.created_at DESC
+       LIMIT $1`,
+      [limit]
+    );
+
+    res.json({
+      attempts: rows.map((r) => ({
+        id: r.id,
+        userId: r.user_id,
+        userEmail: r.user_email,
+        clientAttemptId: r.client_attempt_id,
+        parseRequestId: r.parse_request_id,
+        outcome: r.outcome,
+        errorCode: r.error_code,
+        prepMs: r.prep_ms,
+        requestMs: r.request_ms,
+        totalMs: r.total_ms,
+        backendMs: r.backend_ms,
+        imageBytes: r.image_bytes,
+        mimeType: r.mime_type,
+        visionModel: r.vision_model,
+        fallbackUsed: r.fallback_used,
+        clientBuild: r.client_build,
+        source: r.source,
+        createdAt: r.created_at.toISOString()
+      }))
+    });
   } catch (err) {
     next(err);
   }

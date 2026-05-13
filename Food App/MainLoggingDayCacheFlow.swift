@@ -41,6 +41,7 @@ extension MainLoggingShellView {
             currentFoodLogStreak = nil
             return
         }
+        hydrateCurrentStreakFromCacheIfNeeded()
 
         Task { @MainActor in
             isLoadingFoodLogStreak = true
@@ -56,6 +57,7 @@ extension MainLoggingShellView {
                 )
                 let previousDays = shouldDetectBadgeUnlock ? (currentFoodLogStreak ?? 0) : currentFoodLogStreak
                 currentFoodLogStreak = response.currentDays
+                appStore.recordFoodLogStreak(response.currentDays)
                 if shouldDetectBadgeUnlock {
                     if let badge = StreakBadgeCelebrationState.badgeToCelebrate(
                         previousDays: previousDays,
@@ -68,6 +70,14 @@ extension MainLoggingShellView {
                 handleAuthFailureIfNeeded(error)
             }
         }
+    }
+
+    func hydrateCurrentStreakFromCacheIfNeeded() {
+        guard currentFoodLogStreak == nil,
+              let cached = appStore.cachedFoodLogStreak else {
+            return
+        }
+        currentFoodLogStreak = cached
     }
 
     func loadDayLogs(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {

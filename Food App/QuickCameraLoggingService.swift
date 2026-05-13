@@ -4,6 +4,8 @@ import UIKit
 enum QuickCameraLoggingService {
     @MainActor
     static func processCapturedImage(_ image: UIImage, apiClient: APIClient) async {
+        let flowStartedAt = Date()
+        let clientAttemptId = UUID().uuidString.lowercased()
         let backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "QuickCameraParse") {}
         defer {
             if backgroundTaskID != .invalid {
@@ -20,8 +22,25 @@ enum QuickCameraLoggingService {
                 continuation.resume(returning: MainLoggingShellView.prepareImagePayload(from: image))
             }
         }
+        let prepMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
 
         guard let prepared else {
+            ImageParseAttemptTelemetry.emit(
+                apiClient: apiClient,
+                clientAttemptId: clientAttemptId,
+                parseRequestId: nil,
+                outcome: "failed",
+                errorCode: "image_prep_failed",
+                prepMs: prepMs,
+                requestMs: nil,
+                totalMs: Int(Date().timeIntervalSince(flowStartedAt) * 1000),
+                backendMs: nil,
+                imageBytes: nil,
+                mimeType: nil,
+                visionModel: nil,
+                fallbackUsed: nil,
+                source: .quickCamera
+            )
             await QuickCameraNotificationService.notifyStatus(
                 id: pendingId,
                 title: "Couldn’t read photo",
@@ -31,10 +50,29 @@ enum QuickCameraLoggingService {
         }
 
         do {
+            let requestStartedAt = Date()
             let response = try await apiClient.parseImageLog(
                 imageData: prepared.uploadData,
                 mimeType: prepared.mimeType,
                 loggedAt: loggedAt
+            )
+            let requestMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
+            let totalMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
+            ImageParseAttemptTelemetry.emit(
+                apiClient: apiClient,
+                clientAttemptId: clientAttemptId,
+                parseRequestId: response.parseRequestId,
+                outcome: "succeeded",
+                errorCode: nil,
+                prepMs: prepMs,
+                requestMs: requestMs,
+                totalMs: totalMs,
+                backendMs: Int(response.parseDurationMs),
+                imageBytes: prepared.uploadData.count,
+                mimeType: prepared.mimeType,
+                visionModel: response.visionModel,
+                fallbackUsed: response.visionFallbackUsed,
+                source: .quickCamera
             )
             let displayName = displayName(for: response)
             let calories = Int(response.totals.calories.rounded())
@@ -55,6 +93,22 @@ enum QuickCameraLoggingService {
             QuickCameraPendingLogStore.save(pendingLog)
             await QuickCameraNotificationService.notifyParsed(pendingLog)
         } catch let apiError as APIClientError {
+            ImageParseAttemptTelemetry.emit(
+                apiClient: apiClient,
+                clientAttemptId: clientAttemptId,
+                parseRequestId: nil,
+                outcome: "failed",
+                errorCode: ImageParseAttemptTelemetry.errorCode(from: apiError),
+                prepMs: prepMs,
+                requestMs: nil,
+                totalMs: Int(Date().timeIntervalSince(flowStartedAt) * 1000),
+                backendMs: nil,
+                imageBytes: prepared.uploadData.count,
+                mimeType: prepared.mimeType,
+                visionModel: nil,
+                fallbackUsed: nil,
+                source: .quickCamera
+            )
             if apiError.isAuthTokenError(treatForbiddenAsAuthFailure: true) {
                 await QuickCameraNotificationService.notifyStatus(
                     id: pendingId,
@@ -69,6 +123,22 @@ enum QuickCameraLoggingService {
                 )
             }
         } catch {
+            ImageParseAttemptTelemetry.emit(
+                apiClient: apiClient,
+                clientAttemptId: clientAttemptId,
+                parseRequestId: nil,
+                outcome: "failed",
+                errorCode: ImageParseAttemptTelemetry.errorCode(from: error),
+                prepMs: prepMs,
+                requestMs: nil,
+                totalMs: Int(Date().timeIntervalSince(flowStartedAt) * 1000),
+                backendMs: nil,
+                imageBytes: prepared.uploadData.count,
+                mimeType: prepared.mimeType,
+                visionModel: nil,
+                fallbackUsed: nil,
+                source: .quickCamera
+            )
             await QuickCameraNotificationService.notifyStatus(
                 id: pendingId,
                 title: "Couldn’t detect food",

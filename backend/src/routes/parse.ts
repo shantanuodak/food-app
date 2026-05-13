@@ -13,6 +13,7 @@ import { parseImageWithGemini } from '../services/imageParseService.js';
 import { checkParseRateLimit } from '../services/parseRateLimiterService.js';
 import { getDietAndAllergies } from '../services/onboardingService.js';
 import { detectDietaryConflicts } from '../services/dietaryConflictService.js';
+import { recordImageParseAttempt } from '../services/imageParseAttemptService.js';
 
 const router = Router();
 const supportedImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/heic']);
@@ -40,9 +41,55 @@ const imageParseSchema = z.object({
     .optional()
 });
 
+const imageParseAttemptSchema = z.object({
+  clientAttemptId: z.string().trim().min(1).max(120),
+  parseRequestId: z.string().trim().min(1).max(120).optional().nullable(),
+  outcome: z.enum(['succeeded', 'failed']),
+  errorCode: z.string().trim().min(1).max(120).optional().nullable(),
+  prepMs: z.number().int().min(0).max(3_600_000).optional().nullable(),
+  requestMs: z.number().int().min(0).max(3_600_000).optional().nullable(),
+  totalMs: z.number().int().min(0).max(3_600_000).optional().nullable(),
+  backendMs: z.number().int().min(0).max(3_600_000).optional().nullable(),
+  imageBytes: z.number().int().min(0).max(20_000_000).optional().nullable(),
+  mimeType: z.string().trim().min(1).max(100).optional().nullable(),
+  visionModel: z.string().trim().min(1).max(120).optional().nullable(),
+  fallbackUsed: z.boolean().optional().nullable(),
+  clientBuild: z.string().trim().min(1).max(80).optional().nullable(),
+  source: z.enum(['drawer', 'quick_camera']).optional().default('drawer'),
+  metadata: z.record(z.string(), z.unknown()).optional()
+});
+
 function roundUsd(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
+
+router.post('/image-attempts', async (req, res, next) => {
+  try {
+    const auth = res.locals.auth as { userId: string };
+    const body = imageParseAttemptSchema.parse(req.body ?? {});
+    await recordImageParseAttempt({
+      userId: auth.userId,
+      clientAttemptId: body.clientAttemptId,
+      parseRequestId: body.parseRequestId,
+      outcome: body.outcome,
+      errorCode: body.errorCode,
+      prepMs: body.prepMs,
+      requestMs: body.requestMs,
+      totalMs: body.totalMs,
+      backendMs: body.backendMs,
+      imageBytes: body.imageBytes,
+      mimeType: body.mimeType,
+      visionModel: body.visionModel,
+      fallbackUsed: body.fallbackUsed,
+      clientBuild: body.clientBuild,
+      source: body.source,
+      metadata: body.metadata
+    });
+    res.status(202).json({ status: 'accepted' });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post('/image', async (req, res, next) => {
   const startedAt = process.hrtime.bigint();

@@ -143,6 +143,7 @@ extension MainLoggingShellView {
     @MainActor
     func parseAndUpdateDrawer(_ image: UIImage) async {
         let flowStartedAt = Date()
+        let clientAttemptId = UUID().uuidString.lowercased()
         // JPEG compression can take 1-2 s on a 12MP photo. Run it on a
         // background queue so the camera result drawer's shimmer state
         // (already presented before this function was awaited) renders
@@ -154,6 +155,22 @@ extension MainLoggingShellView {
         }
         let imagePrepMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
         guard let prepared else {
+            ImageParseAttemptTelemetry.emit(
+                apiClient: appStore.apiClient,
+                clientAttemptId: clientAttemptId,
+                parseRequestId: nil,
+                outcome: "failed",
+                errorCode: "image_prep_failed",
+                prepMs: imagePrepMs,
+                requestMs: nil,
+                totalMs: Int(Date().timeIntervalSince(flowStartedAt) * 1000),
+                backendMs: nil,
+                imageBytes: nil,
+                mimeType: nil,
+                visionModel: nil,
+                fallbackUsed: nil,
+                source: .drawer
+            )
             withAnimation {
                 cameraDrawerState = .error("Unable to process this image.", image)
             }
@@ -171,6 +188,22 @@ extension MainLoggingShellView {
             )
             let requestMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
             let totalMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
+            ImageParseAttemptTelemetry.emit(
+                apiClient: appStore.apiClient,
+                clientAttemptId: clientAttemptId,
+                parseRequestId: response.parseRequestId,
+                outcome: "succeeded",
+                errorCode: nil,
+                prepMs: imagePrepMs,
+                requestMs: requestMs,
+                totalMs: totalMs,
+                backendMs: Int(response.parseDurationMs),
+                imageBytes: prepared.uploadData.count,
+                mimeType: prepared.mimeType,
+                visionModel: response.visionModel,
+                fallbackUsed: response.visionFallbackUsed,
+                source: .drawer
+            )
 #if DEBUG
             print("[image_parse_timing] prepMs=\(imagePrepMs) requestMs=\(requestMs) totalMs=\(totalMs) backendMs=\(Int(response.parseDurationMs)) bytes=\(prepared.uploadData.count) visionModel=\(response.visionModel ?? "unknown") fallback=\(response.visionFallbackUsed == true)")
 #else
@@ -189,6 +222,22 @@ extension MainLoggingShellView {
                 cameraDrawerState = .parsed(image, response.items, response.totals)
             }
         } catch {
+            ImageParseAttemptTelemetry.emit(
+                apiClient: appStore.apiClient,
+                clientAttemptId: clientAttemptId,
+                parseRequestId: nil,
+                outcome: "failed",
+                errorCode: ImageParseAttemptTelemetry.errorCode(from: error),
+                prepMs: imagePrepMs,
+                requestMs: nil,
+                totalMs: Int(Date().timeIntervalSince(flowStartedAt) * 1000),
+                backendMs: nil,
+                imageBytes: prepared.uploadData.count,
+                mimeType: prepared.mimeType,
+                visionModel: nil,
+                fallbackUsed: nil,
+                source: .drawer
+            )
             handleAuthFailureIfNeeded(error)
             withAnimation {
                 cameraDrawerState = .error(userFriendlyParseError(error), image)
