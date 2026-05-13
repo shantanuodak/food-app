@@ -108,7 +108,11 @@ export const config = {
   aiFallbackModelName: process.env.AI_FALLBACK_MODEL_NAME || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash',
   aiFallbackCostUsd: numberWithDefault('AI_FALLBACK_COST_USD', 0.0008),
   aiImageParseEnabled: booleanWithDefault('AI_IMAGE_PARSE_ENABLED', true),
-  aiImagePrimaryModel: process.env.AI_IMAGE_PRIMARY_MODEL || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash',
+  aiImagePrimaryModel:
+    process.env.AI_IMAGE_PRIMARY_MODEL ||
+    process.env.GEMINI_FLASH_LITE_MODEL ||
+    process.env.GEMINI_FLASH_MODEL ||
+    'gemini-2.5-flash-lite',
   aiImageFallbackModel: process.env.AI_IMAGE_FALLBACK_MODEL || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash',
   aiImageEnableFallback: booleanWithDefault('AI_IMAGE_ENABLE_FALLBACK', true),
   aiImageConfidenceMin: numberWithDefault('AI_IMAGE_CONFIDENCE_MIN', 0.7),

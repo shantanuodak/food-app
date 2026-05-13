@@ -15,7 +15,7 @@ extension MainLoggingShellView {
         }
     }
 
-    /// JPEG compression loop. Pure transformation of `image` → encoded `Data`.
+    /// Fast JPEG preparation. Pure transformation of `image` → encoded `Data`.
     ///
     /// `nonisolated static` so callers can run it on a background queue
     /// without an actor hop — a 12MP iPhone photo can take 1-2 s of CPU
@@ -23,43 +23,28 @@ extension MainLoggingShellView {
     /// camera result drawer's shimmer presentation) for the full duration
     /// after picking from the photo library.
     ///
-    /// The inner loop is wrapped in `autoreleasepool` so each
-    /// (dimension, quality) iteration's intermediate `Data` buffers are
-    /// released as soon as the next iteration starts. Without this,
-    /// holding 5-6 intermediates simultaneously can spike memory beyond
-    /// 1 GB during photo processing — see
-    /// `docs/PHASE_8_10_FINDINGS.md` Phase 9 #1.
+    /// Keep this to one normal pass plus one fallback pass. The previous
+    /// dimension/quality search could perform many JPEG encodes before
+    /// landing near 500 KB, which showed up as ~2.5 s of client prep in
+    /// TestFlight telemetry.
     nonisolated static func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
-        let maxBytes = 600_000
-        let dimensionAttempts: [CGFloat] = [1920, 1600, 1280, 1024]
-        let qualityAttempts: [CGFloat] = [0.85, 0.78, 0.70, 0.62, 0.55, 0.45, 0.35]
-        var smallestData: Data?
-
-        for dimension in dimensionAttempts {
-            let resized = resizeImageIfNeeded(image, maxDimension: dimension)
-            for quality in qualityAttempts {
-                let result: PreparedImagePayload? = autoreleasepool {
-                    guard let data = resized.jpegData(compressionQuality: quality) else {
-                        return nil
-                    }
-                    if smallestData.map({ data.count < $0.count }) != false {
-                        smallestData = data
-                    }
-                    if data.count <= maxBytes {
-                        return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
-                    }
-                    return nil
-                }
-                if let result {
-                    return result
-                }
-            }
+        let primary = encodeImage(image, maxDimension: 1280, quality: 0.68)
+        if let primary, primary.count <= 420_000 {
+            return PreparedImagePayload(uploadData: primary, previewData: primary, mimeType: "image/jpeg")
         }
 
-        if let smallestData {
-            return PreparedImagePayload(uploadData: smallestData, previewData: smallestData, mimeType: "image/jpeg")
+        let fallback = encodeImage(image, maxDimension: 1024, quality: 0.60)
+        if let data = fallback ?? primary {
+            return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
         }
         return nil
+    }
+
+    nonisolated static func encodeImage(_ image: UIImage, maxDimension: CGFloat, quality: CGFloat) -> Data? {
+        autoreleasepool {
+            let resized = resizeImageIfNeeded(image, maxDimension: maxDimension)
+            return resized.jpegData(compressionQuality: quality)
+        }
     }
 
     nonisolated static func resizeImageIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
@@ -71,8 +56,13 @@ extension MainLoggingShellView {
 
         let scale = maxDimension / largestSide
         let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let renderer = UIGraphicsImageRenderer(size: targetSize)
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
         return renderer.image { _ in
+            UIColor.white.setFill()
+            UIRectFill(CGRect(origin: .zero, size: targetSize))
             image.draw(in: CGRect(origin: .zero, size: targetSize))
         }
     }

@@ -86,10 +86,11 @@ function estimateCostUsd(usage: GeminiUsage): number {
 function buildImageParsePrompt(): string {
   return [
     'You are a nutrition parsing assistant for food photo logs.',
-    'Analyze the attached food image and return strict JSON only (no markdown).',
+    'Analyze the attached food image quickly and return strict JSON only (no markdown).',
     'Output schema exactly:',
     '{"extractedText":string,"confidence":number,"assumptions":string[],"items":[{"name":string,"quantity":number,"unit":string,"grams":number,"calories":number,"protein":number,"carbs":number,"fat":number,"matchConfidence":number,"foodDescription":string,"explanation":string}]}',
     'Rules:',
+    '- Prefer visible nutrition-label values for packaged foods; otherwise estimate visible servings.',
     '- Use realistic serving assumptions when quantity is unclear.',
     '- Return non-empty items if edible foods are visible.',
     '- Confidence and matchConfidence are in [0,1].',
@@ -97,7 +98,7 @@ function buildImageParsePrompt(): string {
     '- extractedText should be a concise comma-separated phrase list in user-entered order.',
     '- assumptions should be [] unless an assumption is essential.',
     '- nutritionSourceId is not needed in output; it is added downstream.',
-    '- Keep explanations concise and user-friendly (1-2 sentences) and mention the visible food, estimated portion or grams, and how calories/macros were scaled.',
+    '- Keep explanations to one concise user-friendly sentence mentioning visible food, portion/grams, and whether label values or serving estimates were used.',
     '- Do not mention matchConfidence in explanations.',
     '- If image has no food, return confidence 0 and items [].'
   ].join('\n');
@@ -179,6 +180,7 @@ async function runImageModel(model: string, image: ImagePart): Promise<{
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.1,
+    maxOutputTokens: 420,
     parts: [
       { text: buildImageParsePrompt() },
       {

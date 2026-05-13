@@ -26,6 +26,7 @@ type GenerateOptions = {
   model: string;
   prompt: string;
   temperature?: number;
+  maxOutputTokens?: number;
 };
 
 type MultimodalPart =
@@ -43,6 +44,7 @@ type GenerateMultimodalOptions = {
   model: string;
   parts: MultimodalPart[];
   temperature?: number;
+  maxOutputTokens?: number;
 };
 
 type GeminiCandidate = {
@@ -179,7 +181,8 @@ async function sleep(ms: number): Promise<void> {
 async function performGeminiJsonRequest(
   model: string,
   parts: MultimodalPart[],
-  temperature = 0.1
+  temperature = 0.1,
+  maxOutputTokens?: number
 ): Promise<GeminiSuccess | GeminiFailure | null> {
   if (!config.geminiApiKey) {
     return null;
@@ -215,7 +218,8 @@ async function performGeminiJsonRequest(
           ],
           generationConfig: {
             temperature,
-            responseMimeType: 'application/json'
+            responseMimeType: 'application/json',
+            ...(maxOutputTokens ? { maxOutputTokens } : {})
           }
         }),
         signal: controller.signal
@@ -479,20 +483,35 @@ function extractCompleteJsonObjects(
 export async function generateGeminiJson(
   options: GenerateOptions
 ): Promise<GeminiSuccess | null> {
-  const result = await performGeminiJsonRequest(options.model, [{ text: options.prompt }], options.temperature ?? 0.1);
+  const result = await performGeminiJsonRequest(
+    options.model,
+    [{ text: options.prompt }],
+    options.temperature ?? 0.1,
+    options.maxOutputTokens
+  );
   return result && 'jsonText' in result ? result : null;
 }
 
 export async function generateGeminiJsonWithDiagnostics(
   options: GenerateOptions
 ): Promise<GeminiSuccess | GeminiFailure | null> {
-  return performGeminiJsonRequest(options.model, [{ text: options.prompt }], options.temperature ?? 0.1);
+  return performGeminiJsonRequest(
+    options.model,
+    [{ text: options.prompt }],
+    options.temperature ?? 0.1,
+    options.maxOutputTokens
+  );
 }
 
 export async function generateGeminiMultimodalJson(
   options: GenerateMultimodalOptions
 ): Promise<GeminiSuccess | null> {
-  const result = await performGeminiJsonRequest(options.model, options.parts, options.temperature ?? 0.1);
+  const result = await performGeminiJsonRequest(
+    options.model,
+    options.parts,
+    options.temperature ?? 0.1,
+    options.maxOutputTokens
+  );
   return result && 'jsonText' in result ? result : null;
 }
 
