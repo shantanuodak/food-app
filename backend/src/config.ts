@@ -111,7 +111,6 @@ export const config = {
   aiImagePrimaryModel:
     process.env.AI_IMAGE_PRIMARY_MODEL ||
     process.env.GEMINI_FLASH_LITE_MODEL ||
-    process.env.GEMINI_FLASH_MODEL ||
     'gemini-2.5-flash-lite',
   aiImageFallbackModel: process.env.AI_IMAGE_FALLBACK_MODEL || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash',
   aiImageEnableFallback: booleanWithDefault('AI_IMAGE_ENABLE_FALLBACK', true),
