@@ -62,13 +62,20 @@ extension MainLoggingShellView {
 
             // Pre-apply cached data to prevent flicker during transition
             let dateStr = HomeLoggingDateUtils.summaryRequestFormatter.string(from: normalized)
-            if let cachedLogs = dayCacheLogs[dateStr] {
-                dayLogs = cachedLogs
-                syncInputRowsFromDayLogs(cachedLogs.logs, for: cachedLogs.date)
+            if let cachedLogs = dayCacheLogs[dateStr], cachedLogs.date == dateStr {
+                applyVisibleDayLogs(cachedLogs)
+            } else if let diskLogs = loadDayLogsFromCache(date: dateStr), diskLogs.date == dateStr {
+                applyVisibleDayLogs(diskLogs)
+            } else {
+                showLoadingStateForUncachedDay(dateStr)
             }
             if let cachedSummary = dayCacheSummary[dateStr] {
                 daySummary = cachedSummary
                 daySummaryError = nil
+            } else if let diskSummary = loadDaySummaryFromCache(date: dateStr) {
+                daySummary = diskSummary
+                daySummaryError = nil
+                dayCacheSummary[dateStr] = diskSummary
             }
 
             dateTransitionResetHandled = true
@@ -90,6 +97,22 @@ extension MainLoggingShellView {
         resetActiveParseStateForDateChange()
 
         dateTransitionResetHandled = true
+        let dateStr = HomeLoggingDateUtils.summaryRequestFormatter.string(from: normalized)
+        if let cachedLogs = dayCacheLogs[dateStr], cachedLogs.date == dateStr {
+            applyVisibleDayLogs(cachedLogs)
+        } else if let diskLogs = loadDayLogsFromCache(date: dateStr), diskLogs.date == dateStr {
+            applyVisibleDayLogs(diskLogs)
+        } else {
+            showLoadingStateForUncachedDay(dateStr)
+        }
+        if let cachedSummary = dayCacheSummary[dateStr] {
+            daySummary = cachedSummary
+            daySummaryError = nil
+        } else if let diskSummary = loadDaySummaryFromCache(date: dateStr) {
+            daySummary = diskSummary
+            daySummaryError = nil
+            dayCacheSummary[dateStr] = diskSummary
+        }
         withAnimation(.easeInOut(duration: 0.2)) {
             selectedSummaryDate = normalized
         }

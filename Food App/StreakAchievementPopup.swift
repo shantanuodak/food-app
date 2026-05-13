@@ -9,7 +9,7 @@ import UIKit
 /// to dismiss earlier. Fires a success haptic on first appear and a soft
 /// confetti burst.
 struct StreakAchievementPopup: View {
-    let badge: StreakBadge
+    let badge: EarnedBadge
     let onDismiss: () -> Void
 
     /// Total time the popup stays on screen before auto-dismissing.
@@ -24,6 +24,16 @@ struct StreakAchievementPopup: View {
     @State private var titleOpacity: Double = 0
     @State private var dismissTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    init(badge: StreakBadge, onDismiss: @escaping () -> Void) {
+        self.badge = EarnedBadge(streakBadge: badge)
+        self.onDismiss = onDismiss
+    }
+
+    init(badge: EarnedBadge, onDismiss: @escaping () -> Void) {
+        self.badge = badge
+        self.onDismiss = onDismiss
+    }
 
     var body: some View {
         ZStack {
@@ -57,7 +67,7 @@ struct StreakAchievementPopup: View {
                 .opacity(titleOpacity)
                 .offset(y: titleOffset)
 
-                Text("\(badge.requiredDays) day\(badge.requiredDays == 1 ? "" : "s") of consistency")
+                Text(badge.requirementCopy)
                     .font(.system(size: 12, weight: .bold))
                     .tracking(1.4)
                     .foregroundStyle(.white.opacity(0.6))
@@ -135,8 +145,8 @@ struct StreakAchievementPopup: View {
                     .opacity(raysOpacity)
             }
 
-            // The medal itself — same component as the drawer.
-            StreakBadgeMedallion(badge: badge, isEarned: true, size: 156)
+            // The medal itself.
+            AchievementMedallion(badge: badge, size: 156)
                 .scaleEffect(medalScale)
                 .rotationEffect(.degrees(medalRotation))
                 .shadow(color: tierGlowColor.opacity(0.55), radius: 30, y: 12)
@@ -196,7 +206,7 @@ struct StreakAchievementPopup: View {
     // MARK: - Tier-driven palette
 
     private var tierGlowColor: Color {
-        switch badge.tier {
+        switch badge.rarity {
         case .bronze:
             return Color(red: 0.96, green: 0.50, blue: 0.18)
         case .silver:
@@ -205,6 +215,89 @@ struct StreakAchievementPopup: View {
             return Color(red: 1.0, green: 0.74, blue: 0.20)
         case .platinum:
             return Color(red: 0.62, green: 0.66, blue: 0.74)
+        }
+    }
+}
+
+private struct AchievementMedallion: View {
+    let badge: EarnedBadge
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(
+                    AngularGradient(
+                        colors: [
+                            .white.opacity(0.95),
+                            tierColor.opacity(0.42),
+                            Color.black.opacity(0.18),
+                            tierColor.opacity(0.78),
+                            .white.opacity(0.95)
+                        ],
+                        center: .center
+                    )
+                )
+                .shadow(color: Color.black.opacity(0.18), radius: 18, y: 10)
+                .shadow(color: tierColor.opacity(0.28), radius: 20, y: 4)
+
+            Circle()
+                .inset(by: size * 0.065)
+                .fill(tierGradient)
+                .overlay(
+                    Circle()
+                        .inset(by: size * 0.055)
+                        .fill(
+                            RadialGradient(
+                                colors: [
+                                    .white.opacity(0.40),
+                                    .white.opacity(0.08),
+                                    Color.black.opacity(0.18)
+                                ],
+                                center: UnitPoint(x: 0.34, y: 0.24),
+                                startRadius: size * 0.04,
+                                endRadius: size * 0.62
+                            )
+                        )
+                        .blendMode(.softLight)
+                )
+
+            Image(systemName: badge.systemImage)
+                .font(.system(size: size * 0.36, weight: .black))
+                .foregroundStyle(.white)
+                .shadow(color: .white.opacity(0.18), radius: 1, x: -1, y: -1)
+                .shadow(color: .black.opacity(0.28), radius: 9, y: 5)
+
+            Circle()
+                .stroke(.white.opacity(0.72), lineWidth: size * 0.025)
+        }
+        .frame(width: size, height: size)
+        .accessibilityHidden(true)
+    }
+
+    private var tierGradient: LinearGradient {
+        switch badge.rarity {
+        case .bronze:
+            return LinearGradient(colors: [Color(red: 0.86, green: 0.50, blue: 0.27), Color(red: 0.62, green: 0.32, blue: 0.16)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .silver:
+            return LinearGradient(colors: [Color(red: 0.82, green: 0.87, blue: 0.91), Color(red: 0.48, green: 0.55, blue: 0.62)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .gold:
+            return LinearGradient(colors: [Color(red: 1.00, green: 0.76, blue: 0.22), Color(red: 0.91, green: 0.39, blue: 0.10)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .platinum:
+            return LinearGradient(colors: [Color(red: 0.15, green: 0.16, blue: 0.19), Color(red: 0.56, green: 0.58, blue: 0.64)], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+
+    private var tierColor: Color {
+        switch badge.rarity {
+        case .bronze:
+            return Color(red: 0.92, green: 0.45, blue: 0.18)
+        case .silver:
+            return Color(red: 0.76, green: 0.81, blue: 0.88)
+        case .gold:
+            return Color(red: 1.0, green: 0.74, blue: 0.20)
+        case .platinum:
+            return Color(red: 0.64, green: 0.67, blue: 0.74)
         }
     }
 }

@@ -142,6 +142,7 @@ extension MainLoggingShellView {
 
     @MainActor
     func parseAndUpdateDrawer(_ image: UIImage) async {
+        let flowStartedAt = Date()
         // JPEG compression can take 1-2 s on a 12MP photo. Run it on a
         // background queue so the camera result drawer's shimmer state
         // (already presented before this function was awaited) renders
@@ -151,6 +152,7 @@ extension MainLoggingShellView {
                 continuation.resume(returning: MainLoggingShellView.prepareImagePayload(from: image))
             }
         }
+        let imagePrepMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
         guard let prepared else {
             withAnimation {
                 cameraDrawerState = .error("Unable to process this image.", image)
@@ -161,11 +163,19 @@ extension MainLoggingShellView {
         ensureDraftTimingStarted()
 
         do {
+            let requestStartedAt = Date()
             let response = try await appStore.apiClient.parseImageLog(
                 imageData: prepared.uploadData,
                 mimeType: prepared.mimeType,
                 loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
             )
+            let requestMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
+            let totalMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
+#if DEBUG
+            print("[image_parse_timing] prepMs=\(imagePrepMs) requestMs=\(requestMs) totalMs=\(totalMs) backendMs=\(Int(response.parseDurationMs)) bytes=\(prepared.uploadData.count) visionModel=\(response.visionModel ?? "unknown") fallback=\(response.visionFallbackUsed == true)")
+#else
+            NSLog("[image_parse_timing] prepMs=%d requestMs=%d totalMs=%d backendMs=%d bytes=%d visionModel=%@ fallback=%@", imagePrepMs, requestMs, totalMs, Int(response.parseDurationMs), prepared.uploadData.count, response.visionModel ?? "unknown", response.visionFallbackUsed == true ? "true" : "false")
+#endif
 
             // Store the parse result and prepared data for when the user confirms
             parseResult = response

@@ -200,8 +200,7 @@ extension MainLoggingShellView {
                 restorePendingSaveContextIfNeeded()
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
-                appStore.preloadProfileDashboard()
-                appStore.preloadProgressCharts()
+                scheduleSecondaryHomePreloads()
                 if QuickCameraLaunchStore.consumeLaunchRequest() {
                     guard !presentMindfulPauseIfNeeded(for: .camera(.takePicture, isQuickCapture: true)) else { return }
                     isQuickCameraCaptureActive = true
@@ -220,8 +219,17 @@ extension MainLoggingShellView {
                 guard ready else { return }
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
-                appStore.preloadProfileDashboard()
-                appStore.preloadProgressCharts()
+                scheduleSecondaryHomePreloads()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                switch phase {
+                case .active:
+                    refreshVisibleDayOnForeground()
+                case .background:
+                    FoodBackgroundRefreshService.shared.scheduleAppRefresh()
+                default:
+                    break
+                }
             }
             .onDisappear {
                 debounceTask?.cancel()

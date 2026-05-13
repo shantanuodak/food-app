@@ -813,6 +813,9 @@ extension MainLoggingShellView {
         } else {
             await refreshDayAfterMutation(savedDay)
         }
+        if intent != .dateChangeBackground {
+            scheduleBadgeCelebrationCheckAfterSave()
+        }
         return savedDay
     }
 

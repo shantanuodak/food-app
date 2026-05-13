@@ -29,10 +29,18 @@
 	<string>469326671014-3brjp95rijvh94qrttlqdldtp7cpboms.apps.googleusercontent.com</string>
 	<key>GIDServerClientID</key>
 	<string>469326671014-ntevjbtkmldgs655prijlivnu37q2soa.apps.googleusercontent.com</string>
+	<key>BGTaskSchedulerPermittedIdentifiers</key>
+	<array>
+		<string>com.shantanu.foodapp.refresh</string>
+	</array>
 	<key>NSHealthShareUsageDescription</key>
 	<string>Food App reads activity, nutrition, and body weight data to personalize your targets and show progress trends.</string>
 	<key>NSHealthUpdateUsageDescription</key>
 	<string>Food App writes calories and macro entries so your nutrition logs stay in sync with Apple Health.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>fetch</string>
+	</array>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Fonts/InstrumentSerif-Regular.ttf</string>

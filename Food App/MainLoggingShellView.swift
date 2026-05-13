@@ -6,6 +6,7 @@ import UIKit
 struct MainLoggingShellView: View {
     @EnvironmentObject var appStore: AppStore
     @Environment(\.colorScheme) var colorScheme
+    @Environment(\.scenePhase) var scenePhase
 
     @StateObject var speechService = SpeechRecognitionService()
     @StateObject var saveCoordinator = SaveCoordinator()
@@ -114,7 +115,9 @@ struct MainLoggingShellView: View {
     @State var isStreakDrawerPresented = false
     @State var isBadgesTrophyCasePresented = false
     @State var badgesTrophyCaseStreakDays = 0
-    @State var triggeredBadgeAchievement: StreakBadge?
+    @State var triggeredBadgeAchievement: EarnedBadge?
+    @State var badgeCelebrationCheckTask: Task<Void, Never>?
+    @State var lastBadgeCelebrationCheckAt: Date?
     @State var isKeyboardVisible = false
     @State var isSyncInfoPresented = false
     /// Slide direction for day transitions: negative = slide left (going forward), positive = slide right (going back)

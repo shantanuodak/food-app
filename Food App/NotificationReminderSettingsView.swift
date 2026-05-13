@@ -44,7 +44,7 @@ struct NotificationReminderSettingsView: View {
             } header: {
                 Text("Meal windows")
             } footer: {
-                Text("Food App checks these windows and sends one reminder only when no meal has been logged in that window.")
+                Text("Food App schedules one reminder at the end of each enabled meal window on this device.")
             }
             .disabled(!appStore.mealReminderSettings.remindersEnabled)
 

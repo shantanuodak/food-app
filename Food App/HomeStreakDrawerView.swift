@@ -27,9 +27,6 @@ struct HomeStreakDrawerView: View {
                         badgeHero(for: response)
                         upcomingBadgesCarousel(for: response.currentDays)
                         exploreAllBadgesLink
-                        #if DEBUG
-                        debugPopupPreviewMenu
-                        #endif
                     } else if let errorMessage {
                         errorCard(errorMessage)
                     }
@@ -396,69 +393,6 @@ struct HomeStreakDrawerView: View {
         }
         return "No streak badge earned yet, \(streak), first badge at 1 day"
     }
-
-    #if DEBUG
-    /// Debug-only preview menu for the achievement popup. Lets QA fire the
-    /// popup for any badge tier without having to cross the actual threshold.
-    /// Excluded from release builds via the `#if DEBUG` guard above and here.
-    @ViewBuilder
-    private var debugPopupPreviewMenu: some View {
-        Menu {
-            ForEach(StreakBadges.badges) { badge in
-                Button {
-                    triggeredAchievement = badge
-                } label: {
-                    Label(
-                        "\(badge.title) (\(badge.tier.rawValue.capitalized), \(badge.requiredDays)d)",
-                        systemImage: badge.systemImage
-                    )
-                }
-            }
-
-            Divider()
-
-            ForEach(StreakBadges.badges) { badge in
-                Button {
-                    StreakBadgeCelebrationState.reset()
-                    let previousDays = max(0, badge.requiredDays - 1)
-                    detectNewlyEarnedBadges(previousDays: previousDays, currentDays: badge.requiredDays)
-                    lastLoadedStreakDays = badge.requiredDays
-                } label: {
-                    Label("Test trigger: \(badge.title)", systemImage: "sparkles")
-                }
-            }
-
-            Divider()
-
-            Button(role: .destructive) {
-                StreakBadgeCelebrationState.reset()
-                lastLoadedStreakDays = nil
-            } label: {
-                Label("Reset celebrated IDs", systemImage: "arrow.counterclockwise")
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "ladybug.fill")
-                Text("Preview popup (DEBUG)")
-                    .font(.system(size: 12, weight: .semibold))
-                Spacer()
-                Image(systemName: "chevron.up.chevron.down")
-                    .font(.system(size: 10, weight: .semibold))
-            }
-            .foregroundStyle(.secondary)
-            .padding(12)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(Color.yellow.opacity(0.10))
-            )
-            .overlay {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .stroke(Color.yellow.opacity(0.32), style: StrokeStyle(lineWidth: 1, dash: [4]))
-            }
-        }
-    }
-    #endif
 
     private var loadingCard: some View {
         HStack(spacing: 10) {

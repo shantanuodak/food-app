@@ -12,6 +12,10 @@ extension MainLoggingShellView {
             if let cached = dayCacheSummary[dateToLoad] {
                 daySummary = cached
                 daySummaryError = nil
+            } else if let cached = loadDaySummaryFromCache(date: dateToLoad) {
+                daySummary = cached
+                daySummaryError = nil
+                dayCacheSummary[dateToLoad] = cached
             }
             await loadDaySummary(skipCache: true)
         }
@@ -57,7 +61,7 @@ extension MainLoggingShellView {
                         previousDays: previousDays,
                         currentDays: response.currentDays
                     ) {
-                        triggeredBadgeAchievement = badge
+                        triggeredBadgeAchievement = EarnedBadge(streakBadge: badge)
                     }
                 }
             } catch {
@@ -68,6 +72,7 @@ extension MainLoggingShellView {
 
     func loadDayLogs(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
         let dateToLoad = forcedDate ?? summaryDateString
+        let startedAt = Date()
 
         // Serve from cache only if the date still matches what the user is viewing.
         // This prevents stale cache from a prefetch or a race condition from showing
@@ -75,8 +80,7 @@ extension MainLoggingShellView {
         if !skipCache, let cached = dayCacheLogs[dateToLoad], cached.date == dateToLoad {
             // Double-check the user hasn't swiped to a different day while we were loading
             guard summaryDateString == dateToLoad || forcedDate != nil else { return }
-            dayLogs = cached
-            syncInputRowsFromDayLogs(cached.logs, for: cached.date)
+            applyVisibleDayLogs(cached)
             return
         }
 
@@ -87,6 +91,12 @@ extension MainLoggingShellView {
 
         do {
             let response = try await appStore.apiClient.getDayLogs(date: dateToLoad)
+            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+#if DEBUG
+            print("[day_logs_timing] date=\(dateToLoad) skipCache=\(skipCache) retry=\(isRetry) ms=\(elapsedMs) rows=\(response.logs.count)")
+#else
+            NSLog("[day_logs_timing] date=%@ skipCache=%@ retry=%@ ms=%d rows=%d", dateToLoad, skipCache ? "true" : "false", isRetry ? "true" : "false", elapsedMs, response.logs.count)
+#endif
 
             // Validate the response is for the date we requested
             guard response.date == dateToLoad else {
@@ -103,13 +113,12 @@ extension MainLoggingShellView {
                 return
             }
 
-            dayLogs = response
             dayCacheLogs[dateToLoad] = response
             persistDayLogsToCache(response, date: dateToLoad)
             if dateToLoad == HomeLoggingDateUtils.summaryRequestFormatter.string(from: Date()) {
                 appStore.recordTodayLogState(hasLogs: !response.logs.isEmpty)
             }
-            syncInputRowsFromDayLogs(response.logs, for: response.date)
+            applyVisibleDayLogs(response)
         } catch is CancellationError {
             // ignore
         } catch {
@@ -131,8 +140,20 @@ extension MainLoggingShellView {
         HomeDayLogsDiskCache.load(date: date, defaults: defaults)
     }
 
+    func persistDaySummaryToCache(_ response: DaySummaryResponse, date: String) {
+        HomeDaySummaryDiskCache.persist(response, date: date, defaults: defaults)
+    }
+
+    func loadDaySummaryFromCache(date: String) -> DaySummaryResponse? {
+        HomeDaySummaryDiskCache.load(date: date, defaults: defaults)
+    }
+
     func removeDayLogsCacheEntry(date: String) {
         HomeDayLogsDiskCache.remove(date: date, defaults: defaults)
+    }
+
+    func removeDaySummaryCacheEntry(date: String) {
+        HomeDaySummaryDiskCache.remove(date: date, defaults: defaults)
     }
 
     func pendingRowsForDate(_ dateString: String, excluding serverEntries: [DayLogEntry]) -> [HomeLogRow] {
@@ -361,11 +382,18 @@ extension MainLoggingShellView {
 
     func loadDaySummary(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
         let dateToLoad = forcedDate ?? summaryDateString
+        let startedAt = Date()
 
         // Serve from cache if available — instant, no loading spinner
         if !skipCache, let cached = dayCacheSummary[dateToLoad] {
             daySummary = cached
             daySummaryError = nil
+            WidgetDailyCaloriesStore.saveToday(summary: cached, dateString: dateToLoad)
+            return
+        } else if !skipCache, let cached = loadDaySummaryFromCache(date: dateToLoad) {
+            daySummary = cached
+            daySummaryError = nil
+            dayCacheSummary[dateToLoad] = cached
             WidgetDailyCaloriesStore.saveToday(summary: cached, dateString: dateToLoad)
             return
         }
@@ -381,9 +409,16 @@ extension MainLoggingShellView {
 
         do {
             let response = try await appStore.apiClient.getDaySummary(date: dateToLoad)
+            let elapsedMs = Int(Date().timeIntervalSince(startedAt) * 1000)
+#if DEBUG
+            print("[day_summary_timing] date=\(dateToLoad) skipCache=\(skipCache) retry=\(isRetry) ms=\(elapsedMs)")
+#else
+            NSLog("[day_summary_timing] date=%@ skipCache=%@ retry=%@ ms=%d", dateToLoad, skipCache ? "true" : "false", isRetry ? "true" : "false", elapsedMs)
+#endif
             daySummary = response
             daySummaryError = nil
             dayCacheSummary[dateToLoad] = response
+            persistDaySummaryToCache(response, date: dateToLoad)
             WidgetDailyCaloriesStore.saveToday(summary: response, dateString: dateToLoad)
         } catch {
             handleAuthFailureIfNeeded(error)
@@ -434,6 +469,7 @@ extension MainLoggingShellView {
                 guard !Task.isCancelled else { return }
                 for summary in range.summaries {
                     dayCacheSummary[summary.date] = summary
+                    persistDaySummaryToCache(summary, date: summary.date)
                 }
                 for logs in range.logs {
                     dayCacheLogs[logs.date] = logs
@@ -449,7 +485,10 @@ extension MainLoggingShellView {
 
                     async let summaryResult = try? appStore.apiClient.getDaySummary(date: dateStr)
                     async let logsResult = try? appStore.apiClient.getDayLogs(date: dateStr)
-                    if let summary = await summaryResult { dayCacheSummary[dateStr] = summary }
+                    if let summary = await summaryResult {
+                        dayCacheSummary[dateStr] = summary
+                        persistDaySummaryToCache(summary, date: dateStr)
+                    }
                     if let logs = await logsResult {
                         dayCacheLogs[dateStr] = logs
                         persistDayLogsToCache(logs, date: dateStr)
@@ -463,6 +502,7 @@ extension MainLoggingShellView {
     func invalidateDayCache(for dateString: String) {
         dayCacheSummary.removeValue(forKey: dateString)
         dayCacheLogs.removeValue(forKey: dateString)
+        removeDaySummaryCacheEntry(date: dateString)
         removeDayLogsCacheEntry(date: dateString)
     }
 

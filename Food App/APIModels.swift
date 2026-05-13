@@ -468,7 +468,7 @@ struct HealthActivityResponse: Decodable {
     let activeEnergyKcal: Double
 }
 
-struct DaySummaryResponse: Decodable {
+struct DaySummaryResponse: Codable {
     let date: String
     let totals: NutritionTotals
     let targets: NutritionTotals

@@ -290,6 +290,45 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func performBackgroundHomeRefresh() async -> Bool {
+        guard isSessionRestored, isOnboardingComplete, authSessionStore.session != nil else { return false }
+        guard isNetworkReachable else { return false }
+
+        let calendar = Calendar.current
+        let today = Date()
+        let formatter = HomeLoggingDateUtils.summaryRequestFormatter
+        let todayString = formatter.string(from: today)
+        let fromDate = calendar.date(byAdding: .day, value: -2, to: today) ?? today
+        let fromString = formatter.string(from: fromDate)
+
+        do {
+            async let rangeTask = apiClient.getDayRange(from: fromString, to: todayString)
+            async let notificationTask: Void = reconcileNotifications()
+            async let uploadTask: Void = drainDeferredImageUploads()
+
+            let range = try await rangeTask
+            for summary in range.summaries {
+                HomeDaySummaryDiskCache.persist(summary, date: summary.date, defaults: defaults)
+                if summary.date == todayString {
+                    WidgetDailyCaloriesStore.saveToday(summary: summary, dateString: summary.date)
+                }
+            }
+            for logs in range.logs {
+                HomeDayLogsDiskCache.persist(logs, date: logs.date, defaults: defaults)
+                if logs.date == todayString {
+                    recordTodayLogState(hasLogs: !logs.logs.isEmpty)
+                }
+            }
+
+            _ = await (notificationTask, uploadTask)
+            NSLog("[background_refresh] completed from=%@ to=%@", fromString, todayString)
+            return true
+        } catch {
+            NSLog("[background_refresh] failed %@", error.localizedDescription)
+            return false
+        }
+    }
+
     func preloadProfileDashboard(force: Bool = false) {
         guard isSessionRestored, isOnboardingComplete, authSessionStore.session != nil else { return }
         guard isNetworkReachable else { return }

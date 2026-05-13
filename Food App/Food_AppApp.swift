@@ -14,6 +14,7 @@ import GoogleSignIn
 @main
 struct Food_AppApp: App {
     @UIApplicationDelegateAdaptor(FoodAppDelegate.self) private var appDelegate
+    @Environment(\.scenePhase) private var scenePhase
     @StateObject private var appStore = AppStore()
 
     var body: some Scene {
@@ -30,6 +31,8 @@ struct Food_AppApp: App {
 #endif
                 }
                 .task {
+                    FoodBackgroundRefreshService.shared.appStore = appStore
+                    FoodBackgroundRefreshService.shared.scheduleAppRefresh()
                     appStore.warmBackend()
                     // Refresh the cached notification auth state from the OS
                     // (the user may have toggled it inside iOS Settings while
@@ -58,6 +61,11 @@ struct Food_AppApp: App {
                 .onChange(of: appStore.isSessionRestored) { _, restored in
                     guard restored else { return }
                     Task { await appStore.drainDeferredImageUploads() }
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    if phase == .background {
+                        FoodBackgroundRefreshService.shared.scheduleAppRefresh()
+                    }
                 }
         }
     }

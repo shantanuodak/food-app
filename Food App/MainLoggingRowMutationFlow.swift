@@ -220,10 +220,28 @@ extension MainLoggingShellView {
 
     func hydrateVisibleDayLogsFromDiskIfNeeded() {
         let dateString = summaryDateString
-        guard dayLogs == nil, let cached = loadDayLogsFromCache(date: dateString) else { return }
-        dayLogs = cached
-        dayCacheLogs[dateString] = cached
-        syncInputRowsFromDayLogs(cached.logs, for: cached.date)
+        if daySummary == nil, let cachedSummary = loadDaySummaryFromCache(date: dateString) {
+            daySummary = cachedSummary
+            daySummaryError = nil
+            dayCacheSummary[dateString] = cachedSummary
+        }
+        guard dayLogs == nil,
+              let cached = loadDayLogsFromCache(date: dateString),
+              cached.date == dateString else { return }
+        applyVisibleDayLogs(cached)
+    }
+
+    func applyVisibleDayLogs(_ response: DayLogsResponse) {
+        dayLogs = response
+        dayCacheLogs[response.date] = response
+        syncInputRowsFromDayLogs(response.logs, for: response.date)
+    }
+
+    func showLoadingStateForUncachedDay(_ dateString: String) {
+        dayLogs = DayLogsResponse(date: dateString, timezone: TimeZone.current.identifier, logs: [])
+        daySummary = nil
+        daySummaryError = nil
+        inputRows = [.empty()]
     }
 
     func bootstrapAuthenticatedHomeIfNeeded() {
@@ -237,8 +255,26 @@ extension MainLoggingShellView {
         initialHomeBootstrapTask = Task { @MainActor in
             await loadDayLogs(skipCache: true)
             guard !Task.isCancelled else { return }
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            guard !Task.isCancelled else { return }
             refreshCurrentStreak()
             prefetchAdjacentDays(around: selectedSummaryDate)
         }
+    }
+
+    func scheduleSecondaryHomePreloads(force: Bool = false) {
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_800_000_000)
+            guard appStore.isSessionRestored else { return }
+            appStore.preloadProfileDashboard(force: force)
+            appStore.preloadProgressCharts(force: force)
+        }
+    }
+
+    func refreshVisibleDayOnForeground() {
+        guard appStore.isSessionRestored else { return }
+        refreshDaySummary()
+        refreshDayLogs()
+        scheduleSecondaryHomePreloads(force: true)
     }
 }

@@ -20,6 +20,9 @@ struct HomeProfileScreen: View {
     @State private var isAdmin = false
     @State private var adminGeminiEnabled = false
     @State private var isAdminFlagsLoading = false
+    @State private var isAdminNotificationTriggering = false
+    @State private var adminDebugStatus: String?
+    @State private var adminPreviewBadge: EarnedBadge?
     @State private var isSignOutConfirmationPresented = false
     @State private var bodyMetricEditorSheet: BodyMetricEditorSheet?
 
@@ -52,6 +55,11 @@ struct HomeProfileScreen: View {
         .task {
             await loadDraftIfNeeded()
             await loadAdminFlags()
+        }
+        .fullScreenCover(item: $adminPreviewBadge) { badge in
+            StreakAchievementPopup(badge: badge) {
+                adminPreviewBadge = nil
+            }
         }
     }
 
@@ -520,12 +528,70 @@ struct HomeProfileScreen: View {
         }
     }
 
+    @ViewBuilder
     private var adminSection: some View {
-        Section("Admin") {
+        Section("Feature flags") {
             Toggle(isOn: $adminGeminiEnabled) {
                 Label("Gemini AI", systemImage: "sparkles")
             }
             .onChange(of: adminGeminiEnabled) { _, _ in triggerAdminAutoSave() }
+        }
+
+        Section {
+            ForEach(AdminTestNotificationKind.allCases) { kind in
+                Button {
+                    triggerAdminNotification(kind)
+                } label: {
+                    Label("Trigger \(kind.title)", systemImage: kind.systemImage)
+                }
+                .disabled(isAdminNotificationTriggering)
+            }
+
+            if isAdminNotificationTriggering {
+                HStack(spacing: 8) {
+                    ProgressView()
+                    Text("Scheduling test notification…")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } header: {
+            Text("Notification debug")
+        } footer: {
+            Text("Sends an immediate local test notification on this device. If iOS notification permission is blocked, open Settings and allow notifications for Food App.")
+        }
+
+        Section {
+            Menu {
+                ForEach(BadgeCatalog.definitions) { definition in
+                    Button {
+                        adminPreviewBadge = EarnedBadge(definition: definition)
+                    } label: {
+                        Label(definition.title, systemImage: definition.systemImage)
+                    }
+                }
+            } label: {
+                Label("Preview badge popup", systemImage: "sparkles.rectangle.stack.fill")
+            }
+
+            Button(role: .destructive) {
+                StreakBadgeCelebrationState.reset()
+                BadgeCelebrationState.reset()
+                adminDebugStatus = "Badge celebration history reset."
+            } label: {
+                Label("Reset badge celebration history", systemImage: "arrow.counterclockwise")
+            }
+        } header: {
+            Text("Reward debug")
+        } footer: {
+            Text("Admin-only previews for badge reward animations. These controls do not change real badge progress.")
+        }
+
+        if let adminDebugStatus {
+            Section {
+                Text(adminDebugStatus)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -861,6 +927,35 @@ struct HomeProfileScreen: View {
                 _ = appStore.handleAuthFailureIfNeeded(error)
             }
         }
+    }
+
+    private func triggerAdminNotification(_ kind: AdminTestNotificationKind) {
+        guard isAdmin, !isAdminNotificationTriggering else { return }
+        isAdminNotificationTriggering = true
+        adminDebugStatus = "Scheduling \(kind.title)…"
+
+        Task {
+            let result = await AdminNotificationDebugService.trigger(kind)
+            await appStore.refreshNotificationAuthState()
+
+            await MainActor.run {
+                isAdminNotificationTriggering = false
+                switch result {
+                case .scheduled:
+                    adminDebugStatus = "\(kind.title) test notification scheduled. It should appear in about 1 second."
+                case .denied:
+                    adminDebugStatus = "Notifications are blocked for this device. Allow Food App notifications in iOS Settings, then try again."
+                    openAppSettings()
+                case .failed(let message):
+                    adminDebugStatus = "Could not schedule \(kind.title): \(message)"
+                }
+            }
+        }
+    }
+
+    private func openAppSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
     }
 
     private func loadAdminFlags() async {

@@ -104,25 +104,10 @@ struct MealReminderSettings: Codable, Equatable {
 
 /// Owns the lifecycle of all `UNNotificationRequest`s the app schedules.
 ///
-/// Notifications are challenge-driven: depending on which "biggest challenge"
-/// the user picked in onboarding (`ChallengeChoice`), the scheduler installs
-/// a different fixed-time daily nudge.
-///
-/// MVP behavior:
-/// - `.snacking` → daily 21:00 mindful-snack reminder
-/// - `.inconsistentMeals` → daily 12:30 + 19:30 logging check-ins
-/// - `.emotionalEating` → no scheduled notification (handled by an in-app
-///   `MindfulPauseSheet` when logging starts outside meal windows)
-/// - `.portionControl` / `.eatingOut` → no notifications (the in-flow parse
-///   feedback already addresses these challenges)
-///
-/// The scheduler is **idempotent**: calling `reconcile(...)` always cancels
-/// every previously-scheduled request first, then re-installs only the ones
-/// the current challenge requires. Safe to call from anywhere — onboarding
-/// finish, permission grant, app launch, or settings change.
-///
-/// All identifiers are namespaced under `food-app.*` so future code (or
-/// future me) can list / clean / migrate them without ambiguity.
+/// The backend can also send richer APNs nudges, but meal reminders need a
+/// reliable on-device fallback. Calling `reconcile(...)` is idempotent: it
+/// removes stale app-owned requests, then schedules the current meal reminders
+/// if the user has granted notification permission.
 enum FoodAppNotificationIdentifier {
     static let mealBreakfast = "food-app.meal.breakfast"
     static let mealLunch = "food-app.meal.lunch"
@@ -182,20 +167,214 @@ final class NotificationScheduler {
         )
     }
 
-    /// The single entry point — call after challenge changes, after permission
+    /// The single entry point — call after settings changes, after permission
     /// grant, and on app launch. Idempotent.
-    ///
-    /// Production reminders and engagement nudges are server-managed through
-    /// APNs so the backend can honor meal windows, no-log checks, template CMS
-    /// changes, and delivery de-dupe. The app keeps this reconciler only to
-    /// remove stale local requests from older builds and to keep permission
-    /// handling in one place.
     func reconcile(
         challenge _: ChallengeChoice?,
-        authState _: UNAuthorizationStatus,
-        mealReminders _: MealReminderSettings,
+        authState: UNAuthorizationStatus,
+        mealReminders: MealReminderSettings,
         hasLoggedToday _: Bool
     ) async {
         cancelAll()
+        guard canSchedule(authState), mealReminders.remindersEnabled else { return }
+
+        await scheduleMealReminder(
+            identifier: FoodAppNotificationIdentifier.mealBreakfast,
+            mealKey: "breakfast",
+            title: "Breakfast check-in",
+            body: "Log breakfast while the details are still fresh.",
+            time: mealReminders.breakfast,
+            isEnabled: mealReminders.breakfastEnabled
+        )
+        await scheduleMealReminder(
+            identifier: FoodAppNotificationIdentifier.mealLunch,
+            mealKey: "lunch",
+            title: "Lunch check-in",
+            body: "Quickly log lunch by voice, text, or camera.",
+            time: mealReminders.lunch,
+            isEnabled: mealReminders.lunchEnabled
+        )
+        await scheduleMealReminder(
+            identifier: FoodAppNotificationIdentifier.mealDinner,
+            mealKey: "dinner",
+            title: "Dinner check-in",
+            body: "Add dinner now so today's log stays complete.",
+            time: mealReminders.dinner,
+            isEnabled: mealReminders.dinnerEnabled
+        )
+    }
+
+    private func canSchedule(_ authState: UNAuthorizationStatus) -> Bool {
+        switch authState {
+        case .authorized, .provisional, .ephemeral:
+            return true
+        case .notDetermined, .denied:
+            return false
+        @unknown default:
+            return false
+        }
+    }
+
+    private func scheduleMealReminder(
+        identifier: String,
+        mealKey: String,
+        title: String,
+        body: String,
+        time: MealReminderTime,
+        isEnabled: Bool
+    ) async {
+        guard isEnabled else { return }
+
+        var dateComponents = DateComponents()
+        dateComponents.calendar = Calendar.current
+        dateComponents.timeZone = TimeZone.current
+        dateComponents.hour = time.hour
+        dateComponents.minute = time.minute
+
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        content.categoryIdentifier = FoodNotificationCategory.mealReminder
+        content.userInfo = [
+            "source": "local-meal-reminder",
+            "meal": mealKey,
+            "destination": FoodNotificationDestination.voice.rawValue
+        ]
+
+        let trigger = UNCalendarNotificationTrigger(dateMatching: dateComponents, repeats: true)
+        let request = UNNotificationRequest(identifier: identifier, content: content, trigger: trigger)
+        do {
+            try await center.add(request)
+        } catch {
+            NSLog("[notifications] local meal reminder schedule failed %@ %@", identifier, error.localizedDescription)
+        }
+    }
+}
+
+enum AdminTestNotificationKind: String, CaseIterable, Identifiable {
+    case breakfast
+    case lunch
+    case dinner
+    case endOfDay
+    case discovery
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .breakfast:
+            return "Breakfast check-in"
+        case .lunch:
+            return "Lunch check-in"
+        case .dinner:
+            return "Dinner check-in"
+        case .endOfDay:
+            return "Still time to rescue today"
+        case .discovery:
+            return "Food App shortcut"
+        }
+    }
+
+    var body: String {
+        switch self {
+        case .breakfast:
+            return "Had breakfast? Say it, type it, or snap it before the details fade."
+        case .lunch:
+            return "What did lunch look like? A quick voice note is enough."
+        case .dinner:
+            return "Future-you likes data. Log dinner while it is still fresh."
+        case .endOfDay:
+            return "One sentence beats a blank day. Add a quick food log now."
+        case .discovery:
+            return "You can log by voice, text, or camera. Try whichever feels least annoying today."
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .breakfast:
+            return "sunrise.fill"
+        case .lunch:
+            return "sun.max.fill"
+        case .dinner:
+            return "moon.fill"
+        case .endOfDay:
+            return "clock.badge.exclamationmark.fill"
+        case .discovery:
+            return "camera.fill"
+        }
+    }
+
+    var categoryIdentifier: String {
+        switch self {
+        case .breakfast, .lunch, .dinner:
+            return FoodNotificationCategory.mealReminder
+        case .endOfDay:
+            return FoodNotificationCategory.engagement
+        case .discovery:
+            return FoodNotificationCategory.discovery
+        }
+    }
+
+    var destination: FoodNotificationDestination {
+        switch self {
+        case .breakfast, .lunch, .dinner, .endOfDay:
+            return .voice
+        case .discovery:
+            return .camera
+        }
+    }
+}
+
+enum AdminNotificationDebugService {
+    enum Result: Equatable {
+        case scheduled
+        case denied
+        case failed(String)
+    }
+
+    static func trigger(_ kind: AdminTestNotificationKind, delay: TimeInterval = 1) async -> Result {
+        let center = UNUserNotificationCenter.current()
+        let settings = await center.notificationSettings()
+        switch settings.authorizationStatus {
+        case .authorized, .provisional, .ephemeral:
+            break
+        case .notDetermined:
+            do {
+                let granted = try await center.requestAuthorization(options: [.alert, .badge, .sound])
+                guard granted else { return .denied }
+            } catch {
+                return .failed(error.localizedDescription)
+            }
+        case .denied:
+            return .denied
+        @unknown default:
+            return .failed("Unsupported notification authorization state.")
+        }
+
+        let content = UNMutableNotificationContent()
+        content.title = "[Test] \(kind.title)"
+        content.body = kind.body
+        content.sound = .default
+        content.categoryIdentifier = kind.categoryIdentifier
+        content.userInfo = [
+            "source": "admin-notification-debug",
+            "kind": kind.rawValue,
+            "destination": kind.destination.rawValue
+        ]
+
+        let request = UNNotificationRequest(
+            identifier: "food-app.admin.test.\(kind.rawValue).\(UUID().uuidString)",
+            content: content,
+            trigger: UNTimeIntervalNotificationTrigger(timeInterval: delay, repeats: false)
+        )
+
+        do {
+            try await center.add(request)
+            return .scheduled
+        } catch {
+            return .failed(error.localizedDescription)
+        }
     }
 }

@@ -41,6 +41,68 @@ struct BadgeState: Identifiable, Equatable {
     }
 }
 
+struct EarnedBadge: Identifiable, Equatable {
+    let definition: BadgeDefinition
+    let requirementCopy: String
+
+    var id: String { definition.id }
+    var title: String { definition.title }
+    var subtitle: String { definition.subtitle }
+    var systemImage: String { definition.systemImage }
+    var rarity: BadgeDefinition.Rarity { definition.rarity }
+
+    init(definition: BadgeDefinition) {
+        self.definition = definition
+        self.requirementCopy = Self.requirementCopy(for: definition)
+    }
+
+    init(streakBadge: StreakBadge) {
+        let definition = BadgeDefinition(
+            id: streakBadge.badgeDefinitionId,
+            category: .streaks,
+            title: streakBadge.title,
+            subtitle: streakBadge.subtitle,
+            systemImage: streakBadge.systemImage,
+            requiredValue: streakBadge.requiredDays,
+            rarity: BadgeDefinition.Rarity(tier: streakBadge.tier)
+        )
+        self.definition = definition
+        self.requirementCopy = Self.requirementCopy(for: definition)
+    }
+
+    private static func requirementCopy(for definition: BadgeDefinition) -> String {
+        switch definition.category {
+        case .streaks:
+            return "\(definition.requiredValue) day\(definition.requiredValue == 1 ? "" : "s") of consistency"
+        case .logging:
+            return "\(definition.requiredValue) logged meal\(definition.requiredValue == 1 ? "" : "s")"
+        case .input:
+            return "Unlocked by using \(definition.title.lowercased())"
+        case .variety:
+            return "\(definition.requiredValue) unique food\(definition.requiredValue == 1 ? "" : "s")"
+        case .accuracy:
+            return "\(definition.requiredValue) trusted nutrition moment\(definition.requiredValue == 1 ? "" : "s")"
+        case .health:
+            return "\(definition.requiredValue) synced Health day\(definition.requiredValue == 1 ? "" : "s")"
+        }
+    }
+}
+
+extension BadgeDefinition.Rarity {
+    init(tier: StreakBadge.Tier) {
+        switch tier {
+        case .bronze:
+            self = .bronze
+        case .silver:
+            self = .silver
+        case .gold:
+            self = .gold
+        case .platinum:
+            self = .platinum
+        }
+    }
+}
+
 enum BadgeCatalog {
     static var definitions: [BadgeDefinition] {
         allDefinitions
@@ -71,6 +133,12 @@ enum BadgeCatalog {
     }
 
     static var totalCount: Int { definitions.count }
+
+    static func earnedDefinitions(totals: BadgesTotals, currentStreakDays: Int) -> [BadgeDefinition] {
+        states(totals: totals, currentStreakDays: currentStreakDays)
+            .filter(\.isEarned)
+            .map(\.definition)
+    }
 
     private static func value(for definition: BadgeDefinition, totals: BadgesTotals, currentStreakDays: Int) -> Int {
         switch definition.id {
@@ -130,4 +198,76 @@ enum BadgeCatalog {
         BadgeDefinition(id: "active_week", category: .health, title: "Active Week", subtitle: "Sync 7 active Health days.", systemImage: "heart.circle.fill", requiredValue: 7, rarity: .silver),
         BadgeDefinition(id: "ten_k_club", category: .health, title: "Ten-K Club", subtitle: "Reach 10k steps on 3 days.", systemImage: "shoeprints.fill", requiredValue: 3, rarity: .gold)
     ]
+}
+
+@MainActor
+enum BadgeCelebrationState {
+    private static let celebratedIdsKey = "celebratedBadgeDefinitionIds.v1"
+    private static let bootstrappedKey = "hasBootstrappedBadgeCelebrations.v1"
+
+    static func badgeToCelebrate(
+        totals: BadgesTotals,
+        currentStreakDays: Int,
+        defaults: UserDefaults = .standard
+    ) -> EarnedBadge? {
+        let earned = BadgeCatalog.earnedDefinitions(totals: totals, currentStreakDays: currentStreakDays)
+        let earnedIds = Set(earned.map(\.id))
+        let alreadyCelebrated = celebratedIds(defaults: defaults)
+        let newlyEarned = earned.filter { !alreadyCelebrated.contains($0.id) }
+
+        defer {
+            defaults.set(earnedIds.sorted().joined(separator: ","), forKey: celebratedIdsKey)
+            defaults.set(true, forKey: bootstrappedKey)
+        }
+
+        guard !newlyEarned.isEmpty else { return nil }
+
+        // On first observation, show one already-earned badge instead of
+        // replaying the user's entire historical trophy case.
+        let selected = newlyEarned.max { lhs, rhs in
+            priority(for: lhs) < priority(for: rhs)
+        }
+        return selected.map(EarnedBadge.init(definition:))
+    }
+
+    static func reset(defaults: UserDefaults = .standard) {
+        defaults.removeObject(forKey: celebratedIdsKey)
+        defaults.removeObject(forKey: bootstrappedKey)
+    }
+
+    private static func celebratedIds(defaults: UserDefaults) -> Set<String> {
+        let unifiedIds = Set(
+            (defaults.string(forKey: celebratedIdsKey) ?? "")
+                .split(separator: ",")
+                .map(String.init)
+        )
+        let legacyStreakIds = Set(
+            (defaults.string(forKey: "celebratedStreakBadgeIds") ?? "")
+                .split(separator: ",")
+                .map(String.init)
+                .map { id in
+                    id.hasPrefix("streak_") ? id : "streak_\(id)"
+                }
+        )
+        return unifiedIds.union(legacyStreakIds)
+    }
+
+    private static func priority(for definition: BadgeDefinition) -> Int {
+        let categoryWeight: Int
+        switch definition.category {
+        case .streaks:
+            categoryWeight = 600
+        case .logging:
+            categoryWeight = 500
+        case .input:
+            categoryWeight = 400
+        case .variety:
+            categoryWeight = 300
+        case .accuracy:
+            categoryWeight = 200
+        case .health:
+            categoryWeight = 100
+        }
+        return categoryWeight + definition.requiredValue
+    }
 }
