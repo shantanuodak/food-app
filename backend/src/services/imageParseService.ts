@@ -16,6 +16,7 @@ export type ImageParseServiceResult = {
   result: ParseResult;
   model: string;
   fallbackUsed: boolean;
+  lowConfidenceAccepted: boolean;
   usageEvents: ImageParseUsageEvent[];
 };
 
@@ -172,6 +173,33 @@ function parseGeminiOutput(payloadText: string): { extractedText: string; result
   };
 }
 
+function acceptedLowConfidenceResult(
+  candidate: Awaited<ReturnType<typeof runImageModel>>,
+  usageEvents: ImageParseUsageEvent[],
+  fallbackUsed: boolean
+): ImageParseServiceResult | null {
+  if (!candidate || candidate.result.items.length === 0) {
+    return null;
+  }
+
+  // A nutrition-label/package photo can produce exact calories/macros while
+  // still scoring below the broad visual-food threshold. Returning the parsed
+  // result with `needsClarification` is better than blocking the user with
+  // "couldn't understand photo".
+  const confidence = Math.max(candidate.result.confidence, 0.5);
+  return {
+    extractedText: candidate.extractedText,
+    result: {
+      ...candidate.result,
+      confidence
+    },
+    model: candidate.usage.model,
+    fallbackUsed,
+    lowConfidenceAccepted: true,
+    usageEvents
+  };
+}
+
 async function runImageModel(model: string, image: ImagePart): Promise<{
   extractedText: string;
   result: ParseResult;
@@ -235,16 +263,25 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
       result: primary.result,
       model: primary.usage.model,
       fallbackUsed: false,
+      lowConfidenceAccepted: false,
       usageEvents
     };
   }
 
   if (!config.aiImageEnableFallback) {
+    const accepted = acceptedLowConfidenceResult(primary, usageEvents, false);
+    if (accepted) {
+      return accepted;
+    }
     throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
   }
 
   const fallbackModel = config.aiImageFallbackModel;
   if (fallbackModel.trim().toLowerCase() == config.aiImagePrimaryModel.trim().toLowerCase()) {
+    const accepted = acceptedLowConfidenceResult(primary, usageEvents, false);
+    if (accepted) {
+      return accepted;
+    }
     throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
   }
 
@@ -258,6 +295,10 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
   }
 
   if (!fallback || fallback.result.items.length === 0) {
+    const accepted = acceptedLowConfidenceResult(primary, usageEvents, false);
+    if (accepted) {
+      return accepted;
+    }
     throw new ApiError(502, 'IMAGE_PARSE_FAILED', 'Unable to estimate nutrition from this image. Please try another photo.');
   }
 
@@ -266,6 +307,7 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     result: fallback.result,
     model: fallback.usage.model,
     fallbackUsed: true,
+    lowConfidenceAccepted: fallback.result.confidence < config.aiImageConfidenceMin,
     usageEvents
   };
 }

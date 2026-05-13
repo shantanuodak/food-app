@@ -190,6 +190,7 @@ router.post('/image', async (req, res, next) => {
     res.setHeader('x-parse-input-kind', 'image');
     res.setHeader('x-vision-model', parsedImage.model);
     res.setHeader('x-vision-fallback', parsedImage.fallbackUsed ? 'used' : 'not_used');
+    res.setHeader('x-vision-low-confidence-accepted', parsedImage.lowConfidenceAccepted ? 'true' : 'false');
 
     res.status(200).json({
       requestId: parseRequestId,
@@ -226,7 +227,8 @@ router.post('/image', async (req, res, next) => {
         bytes: imageBytes
       },
       visionModel: parsedImage.model,
-      visionFallbackUsed: parsedImage.fallbackUsed
+      visionFallbackUsed: parsedImage.fallbackUsed,
+      visionLowConfidenceAccepted: parsedImage.lowConfidenceAccepted
     });
   } catch (err) {
     if (err && typeof err === 'object' && 'retryAfterSeconds' in err) {
