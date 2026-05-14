@@ -227,7 +227,7 @@ struct AppDrawerHeader<Title: View>: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 6)
         }
-        .background(Color(.systemBackground))
+        .background(Color.white)
     }
 }
 

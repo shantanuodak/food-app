@@ -141,9 +141,9 @@ struct HomeStreakDrawerView: View {
         )
         .overlay {
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.62), lineWidth: 1)
+                .stroke(Color.black.opacity(0.04), lineWidth: 1)
         }
-        .shadow(color: Color.orange.opacity(0.14), radius: 20, y: 10)
+        .shadow(color: Color.black.opacity(0.06), radius: 18, y: 8)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(heroAccessibilityLabel(for: response, badge: currentBadge))
     }
@@ -247,12 +247,33 @@ struct HomeStreakDrawerView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color(.secondarySystemGroupedBackground))
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.0, green: 0.985, blue: 0.955),
+                            Color(red: 0.965, green: 0.965, blue: 0.955)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
         )
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color.primary.opacity(0.04), lineWidth: 1)
+                .stroke(
+                    LinearGradient(
+                        colors: [
+                            Color.white.opacity(0.95),
+                            Color.black.opacity(0.07)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    lineWidth: 1
+                )
         }
+        .shadow(color: Color.black.opacity(0.055), radius: 16, x: 0, y: 8)
+        .shadow(color: Color.orange.opacity(0.035), radius: 18, x: 0, y: 10)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             Text("\(badge.title), \(daysRemaining) days remaining, \(badge.subtitle)")
@@ -335,8 +356,8 @@ struct HomeStreakDrawerView: View {
     private var heroBackground: LinearGradient {
         LinearGradient(
             colors: [
-                Color(red: 1.0, green: 0.97, blue: 0.91),
-                Color(red: 1.0, green: 0.89, blue: 0.76)
+                Color.white,
+                Color.white
             ],
             startPoint: .topLeading,
             endPoint: .bottomTrailing

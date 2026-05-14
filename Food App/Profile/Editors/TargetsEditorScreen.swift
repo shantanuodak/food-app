@@ -22,7 +22,7 @@ struct TargetsEditorScreen: View {
                     }
                     Text("Not set").tag(Optional<GoalOption>.none)
                 } label: {
-                    Label("Goal", systemImage: "target")
+                    Label("Goal", systemImage: "scope")
                 }
                 .pickerStyle(.menu)
 

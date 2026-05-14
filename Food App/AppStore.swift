@@ -2,6 +2,7 @@ import Foundation
 import Combine
 import UserNotifications
 import UIKit
+import SwiftUI
 
 @MainActor
 final class AppStore: ObservableObject {
@@ -29,6 +30,9 @@ final class AppStore: ObservableObject {
     @Published private(set) var profileDashboardSnapshot: ProfileDashboardSnapshot? = nil
     @Published private(set) var progressChartsSnapshot: ProgressChartsSnapshot? = nil
     @Published private(set) var cachedFoodLogStreak: Int?
+    @Published private(set) var isAdminUser: Bool = false
+    @Published private(set) var adminFeatureFlags: AdminFeatureFlags? = nil
+    @Published private(set) var appThemePreference: AppThemePreference = .system
 
     let configuration: AppConfiguration
     let authSessionStore: AuthSessionStore
@@ -57,6 +61,7 @@ final class AppStore: ObservableObject {
     private var profileDashboardPreloadTask: Task<Void, Never>?
     private var progressChartsPreloadTask: Task<Void, Never>?
     private var progressChartsPreloadRange: ProgressRange?
+    private var progressChartsPreloadIncludesHealthSamples = false
     private var cancellables = Set<AnyCancellable>()
 
     init(
@@ -107,6 +112,7 @@ final class AppStore: ObservableObject {
         self.networkQualityHint = L10n.networkOnline
         self.healthAuthorizationState = healthKitService.authorizationState
         self.mealReminderSettings = Self.loadMealReminderSettings(defaults: defaults, key: mealReminderSettingsKey)
+        self.appThemePreference = Self.loadAppThemePreference(defaults: defaults, userID: sessionStore.session?.userID)
         let cachedStreak = defaults.integer(forKey: cachedFoodLogStreakKey)
         self.cachedFoodLogStreak = defaults.object(forKey: cachedFoodLogStreakKey) == nil ? nil : cachedStreak
         self.isHealthSyncEnabled = defaults.bool(forKey: healthSyncKey)
@@ -176,6 +182,20 @@ final class AppStore: ObservableObject {
             }
             .store(in: &cancellables)
 
+        sessionStore.$session
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] session in
+                guard let self else { return }
+                self.appThemePreference = Self.loadAppThemePreference(defaults: self.defaults, userID: session?.userID)
+                guard session != nil else {
+                    self.isAdminUser = false
+                    self.adminFeatureFlags = nil
+                    return
+                }
+                Task { await self.refreshAdminFeatureFlags() }
+            }
+            .store(in: &cancellables)
+
         if sessionStore.session?.refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             Task { [authService, weak self] in
                 await authService.restoreSessionIfPossible()
@@ -213,6 +233,7 @@ final class AppStore: ObservableObject {
         progressChartsPreloadTask?.cancel()
         progressChartsPreloadTask = nil
         progressChartsPreloadRange = nil
+        progressChartsPreloadIncludesHealthSamples = false
         profileDashboardSnapshot = nil
         progressChartsSnapshot = nil
         authService.signOut()
@@ -224,6 +245,42 @@ final class AppStore: ObservableObject {
         selectedChallenge = nil
         defaults.removeObject(forKey: challengeKey)
         lastAPIError = nil
+        isAdminUser = false
+        adminFeatureFlags = nil
+        appThemePreference = .system
+    }
+
+    var isThemeFeatureEnabled: Bool {
+        isAdminUser && (adminFeatureFlags?.darkModeEnabled ?? false)
+    }
+
+    var homePreferredColorScheme: ColorScheme? {
+        isThemeFeatureEnabled ? appThemePreference.preferredColorScheme : .light
+    }
+
+    func setAppThemePreference(_ preference: AppThemePreference) {
+        appThemePreference = preference
+        defaults.set(preference.rawValue, forKey: Self.appThemePreferenceKey(for: authSessionStore.session?.userID))
+    }
+
+    func applyAdminFeatureFlags(_ response: AdminFeatureFlagsResponse) {
+        isAdminUser = response.isAdmin
+        adminFeatureFlags = response.flags
+    }
+
+    func refreshAdminFeatureFlags() async {
+        guard authSessionStore.session != nil else {
+            isAdminUser = false
+            adminFeatureFlags = nil
+            return
+        }
+
+        do {
+            let response = try await apiClient.getAdminFeatureFlags()
+            applyAdminFeatureFlags(response)
+        } catch {
+            _ = handleAuthFailureIfNeeded(error)
+        }
     }
 
     func refreshOnboardingCompletionFromBackend() async {
@@ -399,7 +456,11 @@ final class AppStore: ObservableObject {
         )
     }
 
-    func preloadProgressCharts(range: ProgressRange = .week, force: Bool = false) {
+    func preloadProgressCharts(
+        range: ProgressRange = .week,
+        force: Bool = false,
+        includeHealthSamples: Bool = true
+    ) {
         guard configuration.progressFeatureEnabled else { return }
         guard isSessionRestored, isOnboardingComplete, authSessionStore.session != nil else { return }
         guard isNetworkReachable else { return }
@@ -407,28 +468,41 @@ final class AppStore: ObservableObject {
         let timezone = TimeZone.current.identifier
         if !force,
            let snapshot = progressChartsSnapshot,
-           snapshot.isUsable(for: range, timezone: timezone) {
+           snapshot.isUsable(
+               for: range,
+               timezone: timezone,
+               requiringHealthSamples: includeHealthSamples
+           ) {
             return
         }
 
         if let existingTask = progressChartsPreloadTask, !force {
-            if progressChartsPreloadRange == range {
+            if progressChartsPreloadRange == range,
+               progressChartsPreloadIncludesHealthSamples || !includeHealthSamples {
                 return
             }
             existingTask.cancel()
             progressChartsPreloadTask = nil
             progressChartsPreloadRange = nil
+            progressChartsPreloadIncludesHealthSamples = false
         }
 
         progressChartsPreloadTask?.cancel()
         progressChartsPreloadRange = range
+        progressChartsPreloadIncludesHealthSamples = includeHealthSamples
         progressChartsPreloadTask = Task(priority: .background) { [weak self] in
             guard let self else { return }
-            await self.refreshProgressChartsSnapshot(range: range, timezone: timezone)
+            await self.refreshProgressChartsSnapshot(
+                range: range,
+                timezone: timezone,
+                includeHealthSamples: includeHealthSamples
+            )
             await MainActor.run {
-                if self.progressChartsPreloadRange == range {
+                if self.progressChartsPreloadRange == range,
+                   self.progressChartsPreloadIncludesHealthSamples == includeHealthSamples {
                     self.progressChartsPreloadTask = nil
                     self.progressChartsPreloadRange = nil
+                    self.progressChartsPreloadIncludesHealthSamples = false
                 }
             }
         }
@@ -443,7 +517,11 @@ final class AppStore: ObservableObject {
         await task.value
     }
 
-    func refreshProgressChartsSnapshot(range: ProgressRange = .week, timezone: String = TimeZone.current.identifier) async {
+    func refreshProgressChartsSnapshot(
+        range: ProgressRange = .week,
+        timezone: String = TimeZone.current.identifier,
+        includeHealthSamples: Bool = true
+    ) async {
         guard configuration.progressFeatureEnabled else { return }
         guard isSessionRestored, isOnboardingComplete, authSessionStore.session != nil else { return }
         guard isNetworkReachable else { return }
@@ -457,7 +535,7 @@ final class AppStore: ObservableObject {
 
         var weightSamples: [BodyMassSample] = []
         var stepsSamples: [DailyStepCount] = []
-        if healthAuthorizationState == .authorized && isHealthSyncEnabled {
+        if includeHealthSamples, healthAuthorizationState == .authorized && isHealthSyncEnabled {
             weightSamples = (try? await fetchBodyMassSamples(from: bounds.startDate, to: bounds.endDate.addingTimeInterval(86_399))) ?? []
             stepsSamples = (try? await fetchStepCountsByDay(from: bounds.startDate, to: bounds.endDate.addingTimeInterval(86_399))) ?? []
         }
@@ -470,6 +548,7 @@ final class AppStore: ObservableObject {
             progress: progressResult ?? fallbackProgress,
             weightSamples: weightSamples,
             stepsSamples: stepsSamples,
+            includesHealthSamples: includeHealthSamples,
             preferredUnits: OnboardingPersistence.load(defaults: defaults)?.draft.units ?? .imperial,
             startDate: bounds.startDate,
             endDate: bounds.endDate,
@@ -803,5 +882,20 @@ final class AppStore: ObservableObject {
             return .default
         }
         return decoded
+    }
+
+    private static func appThemePreferenceKey(for userID: String?) -> String {
+        guard let userID, !userID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return "app.theme.preference.guest.v1"
+        }
+        return "app.theme.preference.\(userID).v1"
+    }
+
+    private static func loadAppThemePreference(defaults: UserDefaults, userID: String?) -> AppThemePreference {
+        guard let rawValue = defaults.string(forKey: appThemePreferenceKey(for: userID)),
+              let preference = AppThemePreference(rawValue: rawValue) else {
+            return .system
+        }
+        return preference
     }
 }

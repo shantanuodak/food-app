@@ -63,6 +63,7 @@ struct MainLoggingShellView: View {
     @State var dayCacheLogs: [String: DayLogsResponse] = [:]
     @State var prefetchTask: Task<Void, Never>?
     @State var initialHomeBootstrapTask: Task<Void, Never>?
+    @State var secondaryHomePreloadTask: Task<Void, Never>?
     @State var hasBootstrappedAuthenticatedHome = false
     /// Per-row debounced PATCH task. A key is added when the client-side
     /// quantity fast path scales a row that already has a `serverLogId`; the

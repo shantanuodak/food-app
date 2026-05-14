@@ -264,11 +264,12 @@ extension MainLoggingShellView {
     }
 
     func scheduleSecondaryHomePreloads(force: Bool = false) {
-        Task { @MainActor in
+        secondaryHomePreloadTask?.cancel()
+        secondaryHomePreloadTask = Task { @MainActor in
             try? await Task.sleep(nanoseconds: 1_800_000_000)
-            guard appStore.isSessionRestored else { return }
+            guard !Task.isCancelled, appStore.isSessionRestored else { return }
             appStore.preloadProfileDashboard(force: force)
-            appStore.preloadProgressCharts(force: force)
+            appStore.preloadProgressCharts(force: force, includeHealthSamples: false)
         }
     }
 

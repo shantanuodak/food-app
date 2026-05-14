@@ -124,7 +124,7 @@ struct BodyEditorScreen: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
     }
 }

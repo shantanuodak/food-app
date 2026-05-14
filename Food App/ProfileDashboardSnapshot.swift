@@ -22,6 +22,7 @@ struct ProgressChartsSnapshot {
     let progress: ProgressResponse?
     let weightSamples: [BodyMassSample]
     let stepsSamples: [DailyStepCount]
+    let includesHealthSamples: Bool
     let preferredUnits: UnitsOption
     let startDate: Date
     let endDate: Date
@@ -30,9 +31,15 @@ struct ProgressChartsSnapshot {
     let timezone: String
     let loadedAt: Date
 
-    func isUsable(for range: ProgressRange, timezone: String, maxAge: TimeInterval = 900) -> Bool {
+    func isUsable(
+        for range: ProgressRange,
+        timezone: String,
+        maxAge: TimeInterval = 900,
+        requiringHealthSamples: Bool = false
+    ) -> Bool {
         guard self.range == range,
               self.timezone == timezone,
+              (!requiringHealthSamples || includesHealthSamples),
               Date().timeIntervalSince(loadedAt) <= maxAge
         else {
             return false

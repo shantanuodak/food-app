@@ -23,18 +23,33 @@ extension MainLoggingShellView {
     /// camera result drawer's shimmer presentation) for the full duration
     /// after picking from the photo library.
     ///
-    /// Keep this to one normal pass plus one fallback pass. The previous
-    /// dimension/quality search could perform many JPEG encodes before
-    /// landing near 500 KB, which showed up as ~2.5 s of client prep in
-    /// TestFlight telemetry.
+    /// Keep this bounded to a few passes. The image model needs enough detail
+    /// to read labels and identify small food regions; the older ~180-280 KB
+    /// fallback was fast, but caused real-device photos to land as low
+    /// confidence. Stay comfortably under the backend 6 MB raw-image limit
+    /// while preserving visual detail.
     nonisolated static func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
-        let primary = encodeImage(image, maxDimension: 1280, quality: 0.68)
-        if let primary, primary.count <= 420_000 {
-            return PreparedImagePayload(uploadData: primary, previewData: primary, mimeType: "image/jpeg")
+        let maxPreferredBytes = 1_200_000
+        let candidates: [(dimension: CGFloat, quality: CGFloat)] = [
+            (1_600, 0.78),
+            (1_400, 0.74),
+            (1_280, 0.70)
+        ]
+
+        var largestEncoded: Data?
+        for candidate in candidates {
+            guard let data = encodeImage(image, maxDimension: candidate.dimension, quality: candidate.quality) else {
+                continue
+            }
+            if largestEncoded == nil || data.count > (largestEncoded?.count ?? 0) {
+                largestEncoded = data
+            }
+            if data.count <= maxPreferredBytes {
+                return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
+            }
         }
 
-        let fallback = encodeImage(image, maxDimension: 1024, quality: 0.60)
-        if let data = fallback ?? primary {
+        if let data = largestEncoded {
             return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
         }
         return nil

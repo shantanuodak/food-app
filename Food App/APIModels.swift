@@ -632,6 +632,23 @@ struct BadgesTotals: Decodable, Equatable {
 
 struct AdminFeatureFlags: Codable {
     let geminiEnabled: Bool
+    let darkModeEnabled: Bool
+
+    private enum CodingKeys: String, CodingKey {
+        case geminiEnabled
+        case darkModeEnabled
+    }
+
+    init(geminiEnabled: Bool, darkModeEnabled: Bool) {
+        self.geminiEnabled = geminiEnabled
+        self.darkModeEnabled = darkModeEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        geminiEnabled = try container.decode(Bool.self, forKey: .geminiEnabled)
+        darkModeEnabled = try container.decodeIfPresent(Bool.self, forKey: .darkModeEnabled) ?? false
+    }
 }
 
 struct AdminFeatureFlagsResponse: Decodable {
@@ -641,4 +658,5 @@ struct AdminFeatureFlagsResponse: Decodable {
 
 struct AdminFeatureFlagsUpdateRequest: Encodable {
     let geminiEnabled: Bool
+    let darkModeEnabled: Bool
 }

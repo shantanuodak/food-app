@@ -33,6 +33,7 @@ enum LoadingRouteHint: String, Hashable {
 
 enum RowParsePhase: Equatable {
     case idle
+    case primed(startedAt: Date)
     case active(routeHint: LoadingRouteHint, startedAt: Date)
     case queued
     case failed
@@ -105,6 +106,13 @@ struct HomeLogRow: Identifiable, Equatable {
         return false
     }
 
+    var isPrimed: Bool {
+        if case .primed = parsePhase {
+            return true
+        }
+        return false
+    }
+
     var isQueued: Bool {
         if case .queued = parsePhase {
             return true
@@ -147,10 +155,17 @@ struct HomeLogRow: Identifiable, Equatable {
     }
 
     var loadingStatusStartedAt: Date? {
+        if case let .primed(startedAt) = parsePhase {
+            return startedAt
+        }
         if case let .active(_, startedAt) = parsePhase {
             return startedAt
         }
         return nil
+    }
+
+    mutating func setParsePrimed(startedAt: Date = Date()) {
+        parsePhase = .primed(startedAt: startedAt)
     }
 
     mutating func setParseActive(routeHint: LoadingRouteHint, startedAt: Date = Date()) {

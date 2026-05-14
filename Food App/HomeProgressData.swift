@@ -49,7 +49,9 @@ extension ProgressSectionView {
         switch selectedRange {
         case .sixMonths, .year:
             return Self.monthOnlyFormatter.string(from: date)
-        case .week, .month:
+        case .week:
+            return Self.dayNumberFormatter.string(from: date)
+        case .month:
             return Self.shortDayFormatter.string(from: date)
         }
     }
@@ -580,6 +582,12 @@ extension ProgressSectionView {
     static let shortDayFormatter: DateFormatter = {
         let formatter = DateFormatter()
         formatter.dateFormat = "MMM d"
+        return formatter
+    }()
+
+    static let dayNumberFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "d"
         return formatter
     }()
 

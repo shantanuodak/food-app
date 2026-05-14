@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Floating card shown above the home dock when the most recently logged
-/// meal conflicts with the user's diet preferences or allergies.
+/// meal may include something the user marked as an allergy.
 struct RecentFlaggedMealCard: View {
     let logs: [DayLogEntry]
     let contextKey: String
@@ -14,7 +14,7 @@ struct RecentFlaggedMealCard: View {
     private var mostRecentFlagged: DayLogEntry? {
         // `logs` is server-ordered ASC by loggedAt — last one is the freshest.
         logs.last(where: { entry in
-            (entry.dietaryFlags?.isEmpty == false) && !dismissedLogIds.contains(entry.id)
+            (allergyFlags(for: entry).isEmpty == false) && !dismissedLogIds.contains(entry.id)
         })
     }
 
@@ -64,9 +64,9 @@ struct RecentFlaggedMealCard: View {
     }
 
     private func syncVisibleCard(clearWhenMissing: Bool) {
-        if let entry = mostRecentFlagged,
-           let flags = entry.dietaryFlags,
-           !flags.isEmpty {
+        if let entry = mostRecentFlagged {
+            let flags = allergyFlags(for: entry)
+            guard !flags.isEmpty else { return }
             visibleEntry = entry
             visibleFlags = flags
             visibleContextKey = contextKey
@@ -75,6 +75,10 @@ struct RecentFlaggedMealCard: View {
             visibleFlags = []
             visibleContextKey = nil
         }
+    }
+
+    private func allergyFlags(for entry: DayLogEntry) -> [DietaryFlag] {
+        (entry.dietaryFlags ?? []).filter(\.isAllergy)
     }
 }
 
@@ -94,7 +98,7 @@ private struct FloatingInsightCard: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            Image(systemName: "fork.knife.circle.fill")
+            Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 26, weight: .semibold))
                 .symbolRenderingMode(.palette)
                 .foregroundStyle(.white, insightOrange)
@@ -102,7 +106,7 @@ private struct FloatingInsightCard: View {
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(displayName)
+                Text("Quick allergy check")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.primary)
                     .lineLimit(1)
@@ -113,7 +117,7 @@ private struct FloatingInsightCard: View {
                     .lineLimit(2)
             }
             .accessibilityElement(children: .combine)
-            .accessibilityLabel(Text("\(displayName). \(subtitleSentence)"))
+            .accessibilityLabel(Text("Quick allergy check. \(subtitleSentence)"))
 
             Spacer(minLength: 0)
 
@@ -126,7 +130,7 @@ private struct FloatingInsightCard: View {
                 hitSize: 44,
                 accessibilityLabel: "Dismiss insight"
             )
-            .accessibilityHint(Text("Keeps this food preference note hidden."))
+            .accessibilityHint(Text("Keeps this allergy note hidden."))
         }
         .padding(.leading, 14)
         .padding(.trailing, 10)
@@ -235,8 +239,8 @@ private struct FloatingInsightCard: View {
         flags.first?.itemName ?? entry.rawText
     }
 
-    /// Deduped rule keys preserving first-seen order, so a meal that hits
-    /// both `peanuts` (allergy) and `vegan` (diet) renders one card with both.
+    /// Deduped allergy keys preserving first-seen order, so a meal that hits
+    /// both `peanuts` and `tree_nuts` renders one friendly card.
     private var dedupedRuleKeys: [String] {
         var seen = Set<String>()
         var ordered: [String] = []
@@ -250,28 +254,19 @@ private struct FloatingInsightCard: View {
     }
 
     /// Single-sentence subtitle. Examples:
-    /// - `Contains peanuts.`
-    /// - `Not vegan.`
-    /// - `Contains peanuts and dairy. Not vegan.`
+    /// - `RX Bar may include peanuts. You marked peanuts as an allergy, so it may be worth a quick look.`
+    /// - `This may include peanuts and tree nuts. Worth a quick look before you move on.`
     private var subtitleSentence: String {
         let allergyTerms = dedupedRuleKeys.compactMap(allergyTerm(_:))
-        let dietTerms = dedupedRuleKeys.compactMap(dietTerm(_:))
-        let otherTerms = dedupedRuleKeys.compactMap { key -> String? in
-            if allergyTerm(key) != nil || dietTerm(key) != nil { return nil }
-            return key.replacingOccurrences(of: "_", with: " ")
+        let terms = allergyTerms.isEmpty
+            ? dedupedRuleKeys.map { $0.replacingOccurrences(of: "_", with: " ") }
+            : allergyTerms
+
+        if displayName.isEmpty {
+            return "This may include \(joinTerms(terms)). Worth a quick look before you move on."
         }
 
-        var sentences: [String] = []
-        if !allergyTerms.isEmpty {
-            sentences.append("Contains \(joinTerms(allergyTerms)).")
-        }
-        if !dietTerms.isEmpty {
-            sentences.append("Not \(joinTerms(dietTerms)).")
-        }
-        if !otherTerms.isEmpty {
-            sentences.append("Conflicts with \(joinTerms(otherTerms)).")
-        }
-        return sentences.joined(separator: " ")
+        return "\(displayName) may include \(joinTerms(terms)). You marked \(joinTerms(terms)) as an allergy, so it may be worth a quick look."
     }
 
     private func allergyTerm(_ key: String) -> String? {
@@ -285,16 +280,6 @@ private struct FloatingInsightCard: View {
         case "fish": return "fish"
         case "soy": return "soy"
         case "sesame": return "sesame"
-        default: return nil
-        }
-    }
-
-    private func dietTerm(_ key: String) -> String? {
-        switch key {
-        case "vegetarian": return "vegetarian"
-        case "vegan": return "vegan"
-        case "pescatarian": return "pescatarian"
-        case "halal": return "halal"
         default: return nil
         }
     }

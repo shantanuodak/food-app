@@ -32,7 +32,7 @@ struct OB06PreferencesOptionalScreen: View {
                                 .foregroundStyle(colorScheme == .dark ? .white : .black)
                                 .multilineTextAlignment(.center)
 
-                            Text("Personalize suggestions and flag conflicts.")
+                            Text("Tell Amy what you prefer. Allergies get a clear heads-up after logging.")
                                 .font(.system(size: 15, weight: .medium))
                                 .foregroundStyle(OnboardingGlassTheme.textSecondary)
                                 .multilineTextAlignment(.center)

@@ -5,12 +5,14 @@ struct BadgesTrophyCaseView: View {
     let currentStreakDays: Int
 
     @EnvironmentObject private var appStore: AppStore
+    @Environment(\.dismiss) private var dismiss
     @State private var summary: BadgesSummaryResponse?
     @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var isShareSheetPresented = false
     @State private var shareItems: [Any] = []
     @State private var replayedBadge: BadgeDefinition?
+    @State private var refreshedStreakDays: Int?
 
     private var totals: BadgesTotals {
         summary?.totals ?? BadgesTotals(
@@ -30,22 +32,27 @@ struct BadgesTrophyCaseView: View {
     }
 
     private var groupedBadges: [(BadgeDefinition.Category, [BadgeState])] {
-        BadgeCatalog.statesByCategory(totals: totals, currentStreakDays: currentStreakDays)
+        BadgeCatalog.statesByCategory(totals: totals, currentStreakDays: effectiveCurrentStreakDays)
     }
 
     private var earnedCount: Int {
-        BadgeCatalog.earnedCount(totals: totals, currentStreakDays: currentStreakDays)
+        BadgeCatalog.earnedCount(totals: totals, currentStreakDays: effectiveCurrentStreakDays)
+    }
+
+    private var effectiveCurrentStreakDays: Int {
+        refreshedStreakDays ?? currentStreakDays
     }
 
     private var heroData: BadgeHeroData {
-        let next = StreakBadges.nextBadge(for: currentStreakDays)
-        let current = StreakBadges.currentBadge(for: currentStreakDays)
+        let streakDays = effectiveCurrentStreakDays
+        let next = StreakBadges.nextBadge(for: streakDays)
+        let current = StreakBadges.currentBadge(for: streakDays)
         let featured = next ?? current
         let target = featured?.requiredDays ?? 1
         let title = featured?.title ?? "First Spark"
         let subtitle: String
         if next != nil {
-            subtitle = "Earn \(min(currentStreakDays, target))/\(target)"
+            subtitle = "Earn \(min(streakDays, target))/\(target)"
         } else {
             subtitle = "Every streak badge unlocked"
         }
@@ -54,32 +61,50 @@ struct BadgesTrophyCaseView: View {
             title: title,
             subtitle: subtitle,
             systemImage: featured?.systemImage ?? "sparkle",
-            currentValue: min(currentStreakDays, target),
+            currentValue: min(streakDays, target),
             targetValue: target,
             earnedCount: earnedCount,
             totalCount: BadgeCatalog.totalCount,
-            streakDays: currentStreakDays
+            streakDays: streakDays
         )
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                heroCard
-                if let errorMessage {
-                    errorBanner(errorMessage)
-                }
-                ForEach(groupedBadges, id: \.0.id) { category, badges in
-                    badgeSection(category: category, badges: badges)
-                }
+        VStack(spacing: 0) {
+            AppDrawerHeader(onClose: { dismiss() }) {
+                Text("Your badges")
+                    .font(.custom("InstrumentSerif-Regular", size: 31))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.988, green: 0.545, blue: 0.196),
+                                Color(red: 0.902, green: 0.361, blue: 0.102)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .frame(maxWidth: .infinity, alignment: .center)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 12)
-            .padding(.bottom, 36)
+
+            ScrollView {
+                VStack(alignment: .leading, spacing: 18) {
+                    heroCard
+                    if let errorMessage {
+                        errorBanner(errorMessage)
+                    }
+                    ForEach(groupedBadges, id: \.0.id) { category, badges in
+                        badgeSection(category: category, badges: badges)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 36)
+            }
         }
-        .background(BadgeTokens.canvas.ignoresSafeArea())
-        .navigationTitle("Badges")
-        .navigationBarTitleDisplayMode(.inline)
+        .background(Color.white.ignoresSafeArea())
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         .task {
             await loadBadges()
         }
@@ -145,11 +170,30 @@ struct BadgesTrophyCaseView: View {
     private func loadBadges() async {
         isLoading = true
         errorMessage = nil
+        let timezone = TimeZone.current.identifier
+        async let summaryTask = appStore.apiClient.getBadgesSummary(timezone: timezone)
+        async let streakTask = appStore.apiClient.getStreaks(range: 365, timezone: timezone)
+        var didFail = false
+
         do {
-            summary = try await appStore.apiClient.getBadgesSummary(timezone: TimeZone.current.identifier)
+            summary = try await summaryTask
         } catch is CancellationError {
+            didFail = true
         } catch {
-            errorMessage = "Couldn't load badges yet."
+            didFail = true
+        }
+
+        do {
+            let streak = try await streakTask
+            refreshedStreakDays = streak.currentDays
+        } catch is CancellationError {
+            didFail = true
+        } catch {
+            didFail = true
+        }
+
+        if didFail {
+            errorMessage = "Couldn't refresh all badge progress yet."
         }
         isLoading = false
     }
@@ -363,9 +407,10 @@ private struct BadgeCard: View {
         .background(cardFill, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(state.isEarned ? BadgeTokens.amber.opacity(0.28) : Color.white.opacity(0.72), lineWidth: 1)
+                .stroke(cardStroke, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(state.isEarned ? 0.045 : 0.025), radius: 10, y: 5)
+        .shadow(color: Color.black.opacity(state.isEarned ? 0.045 : 0.04), radius: 13, y: 7)
+        .shadow(color: BadgeTokens.amber.opacity(state.isEarned ? 0.035 : 0.025), radius: 18, y: 10)
         .contentShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
     }
 
@@ -385,8 +430,37 @@ private struct BadgeCard: View {
         return LinearGradient(colors: [BadgeTokens.gray200, BadgeTokens.gray100], startPoint: .topLeading, endPoint: .bottomTrailing)
     }
 
-    private var cardFill: Color {
-        state.isEarned ? Color.white.opacity(0.86) : Color.white.opacity(0.56)
+    private var cardFill: AnyShapeStyle {
+        if state.isEarned {
+            return AnyShapeStyle(Color.white.opacity(0.86))
+        }
+        return AnyShapeStyle(
+            LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.992, blue: 0.972),
+                    Color(red: 0.972, green: 0.972, blue: 0.958)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
+    }
+
+    private var cardStroke: AnyShapeStyle {
+        if state.isEarned {
+            return AnyShapeStyle(BadgeTokens.amber.opacity(0.28))
+        }
+        return AnyShapeStyle(
+            LinearGradient(
+                colors: [
+                    Color.white.opacity(0.96),
+                    BadgeTokens.amber.opacity(0.12),
+                    Color.black.opacity(0.055)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
     }
 
     private var statusFill: Color {

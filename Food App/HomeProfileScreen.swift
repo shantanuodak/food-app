@@ -19,6 +19,7 @@ struct HomeProfileScreen: View {
     @State private var healthPermissionMessage: String?
     @State private var isAdmin = false
     @State private var adminGeminiEnabled = false
+    @State private var adminDarkModeEnabled = false
     @State private var isAdminFlagsLoading = false
     @State private var isAdminNotificationTriggering = false
     @State private var adminDebugStatus: String?
@@ -85,7 +86,7 @@ struct HomeProfileScreen: View {
             } label: {
                 ProfileHubRow(
                     title: "Plan & goals",
-                    systemImage: "target"
+                    systemImage: "scope"
                 )
             }
 
@@ -131,6 +132,9 @@ struct HomeProfileScreen: View {
             NavigationLink {
                 AccountProfileDetailView(title: "Account") {
                     accountSection
+                    if appStore.isThemeFeatureEnabled {
+                        themeSection
+                    }
                 }
             } label: {
                 ProfileHubRow(
@@ -169,6 +173,8 @@ struct HomeProfileScreen: View {
                     )
                 }
             }
+        } header: {
+            Text("Account & App")
         }
     }
 
@@ -210,7 +216,7 @@ struct HomeProfileScreen: View {
                 }
                 Text("Not set").tag(Optional<GoalOption>.none)
             } label: {
-                Label("Goal", systemImage: "target")
+                Label("Goal", systemImage: "scope")
             }
             .pickerStyle(.menu)
 
@@ -239,70 +245,42 @@ struct HomeProfileScreen: View {
     @ViewBuilder
     private var bodySection: some View {
         Section {
-            VStack(spacing: 0) {
-                Picker("Units", selection: unitsBinding) {
-                    ForEach(UnitsOption.allCases) { opt in
-                        Text(L10n.unitsLabel(opt)).tag(opt)
-                    }
+            Picker("Units", selection: unitsBinding) {
+                ForEach(UnitsOption.allCases) { opt in
+                    Text(L10n.unitsLabel(opt)).tag(opt)
                 }
-                .pickerStyle(.segmented)
-                .padding(.bottom, 14)
-
-                Divider()
-
-                bodySexRow
-
-                Divider()
-                    .padding(.leading, 58)
-
-                bodyAgeRow
-
-                Divider()
-                    .padding(.leading, 58)
-
-                bodyEditableRow(
-                    title: "Height",
-                    value: heightLabel,
-                    systemImage: "ruler",
-                    iconTint: .blue,
-                    editor: .height
-                )
-
-                Divider()
-                    .padding(.leading, 58)
-
-                bodyEditableRow(
-                    title: "Weight",
-                    value: weightLabel,
-                    systemImage: "scalemass.fill",
-                    iconTint: .blue,
-                    editor: .weight
-                )
             }
-            .padding(14)
-            .background(Color.white, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color.black.opacity(0.035), lineWidth: 1)
-            }
-            .shadow(color: Color.black.opacity(0.035), radius: 10, y: 4)
-            .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 10, trailing: 16))
-            .listRowBackground(Color.clear)
-            .sheet(item: $bodyMetricEditorSheet) { editor in
-                bodyMetricEditorSheetView(editor)
-            }
+            .pickerStyle(.segmented)
+            .padding(.vertical, 4)
+
+            bodySexRow
+
+            bodyAgeRow
+
+            bodyEditableRow(
+                title: "Height",
+                value: heightLabel,
+                systemImage: "ruler",
+                editor: .height
+            )
+
+            bodyEditableRow(
+                title: "Weight",
+                value: weightLabel,
+                systemImage: "scalemass",
+                editor: .weight
+            )
         } header: {
             Text("Body")
+        }
+        .sheet(item: $bodyMetricEditorSheet) { editor in
+            bodyMetricEditorSheetView(editor)
         }
     }
 
     private var bodySexRow: some View {
-        HStack(spacing: 14) {
-            bodyRowIcon(systemImage: "person.fill", tint: .blue)
-
-            Text("Sex")
-                .font(.system(size: 17, weight: .medium))
-                .foregroundStyle(.primary)
+        HStack(spacing: 12) {
+            profileSettingsLabel("Sex", systemImage: "person")
 
             Spacer()
 
@@ -316,7 +294,6 @@ struct HomeProfileScreen: View {
             .labelsHidden()
             .tint(.blue)
         }
-        .frame(minHeight: 58)
     }
 
     private var bodyAgeRow: some View {
@@ -324,7 +301,6 @@ struct HomeProfileScreen: View {
             title: "Age",
             value: "\(Int(draft.ageValue))",
             systemImage: "calendar",
-            iconTint: .primary,
             editor: .age
         )
     }
@@ -333,18 +309,13 @@ struct HomeProfileScreen: View {
         title: String,
         value: String,
         systemImage: String,
-        iconTint: Color,
         editor: BodyMetricEditorSheet
     ) -> some View {
         Button {
             bodyMetricEditorSheet = editor
         } label: {
-            HStack(spacing: 14) {
-                bodyRowIcon(systemImage: systemImage, tint: iconTint)
-
-                Text(title)
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.primary)
+            HStack(spacing: 12) {
+                profileSettingsLabel(title, systemImage: systemImage)
 
                 Spacer()
 
@@ -357,7 +328,6 @@ struct HomeProfileScreen: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.tertiary)
             }
-            .frame(minHeight: 58)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -385,15 +355,22 @@ struct HomeProfileScreen: View {
                 }
             }
         }
-        .presentationDetents([.medium, .large])
-        .presentationDragIndicator(.visible)
+        .presentationDetents([.large])
+        .presentationDragIndicator(.hidden)
     }
 
-    private func bodyRowIcon(systemImage: String, tint: Color) -> some View {
-        Image(systemName: systemImage)
-            .font(.system(size: 20, weight: .semibold))
-            .foregroundStyle(tint)
-            .frame(width: 30, height: 30)
+    private func profileSettingsLabel(_ title: String, systemImage: String) -> some View {
+        Label {
+            Text(title)
+                .font(.body)
+                .foregroundStyle(.primary)
+        } icon: {
+            Image(systemName: systemImage)
+                .font(.system(size: 17, weight: .semibold))
+                .symbolRenderingMode(.hierarchical)
+                .foregroundStyle(.blue)
+                .frame(width: 24)
+        }
     }
 
     /// Single explainer at the top of Food preferences. Two short lines
@@ -403,10 +380,10 @@ struct HomeProfileScreen: View {
     private var foodPreferencesIntroSection: some View {
         Section {
             VStack(alignment: .leading, spacing: 8) {
-                Text("We'll use these to flag meals that don't match your diet or include allergens.")
+                Text("Diet preferences help Amy understand your usual choices. Allergies get a clear heads-up after logging.")
                     .font(.subheadline)
                     .foregroundStyle(.primary)
-                Text("Set what fits today — you can change this any time.")
+                Text("Set what fits today. You can change this any time.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
@@ -504,6 +481,22 @@ struct HomeProfileScreen: View {
         }
     }
 
+    private var themeSection: some View {
+        Section {
+            Picker("Appearance", selection: themePreferenceBinding) {
+                ForEach(AppThemePreference.allCases) { preference in
+                    Text(preference.title).tag(preference)
+                }
+            }
+            .pickerStyle(.segmented)
+            .padding(.vertical, 4)
+        } header: {
+            Text("Theme")
+        } footer: {
+            Text("This changes the signed-in app only. Onboarding stays in light mode for now.")
+        }
+    }
+
     private var mealReminderSection: some View {
         Section {
             reminderTimePicker(
@@ -535,6 +528,11 @@ struct HomeProfileScreen: View {
                 Label("Gemini AI", systemImage: "sparkles")
             }
             .onChange(of: adminGeminiEnabled) { _, _ in triggerAdminAutoSave() }
+
+            Toggle(isOn: $adminDarkModeEnabled) {
+                Label("Dark mode", systemImage: "moon.fill")
+            }
+            .onChange(of: adminDarkModeEnabled) { _, _ in triggerAdminAutoSave() }
         }
 
         Section {
@@ -603,16 +601,9 @@ struct HomeProfileScreen: View {
         case .idle:
             EmptyView()
         case .saving:
-            HStack(spacing: 4) {
-                ProgressView().scaleEffect(0.7)
-                Text("Saving…").font(.caption).foregroundStyle(.secondary)
-            }
+            EmptyView()
         case .saved:
-            HStack(spacing: 4) {
-                Image(systemName: "checkmark.circle.fill").font(.caption).foregroundStyle(.green)
-                Text("Saved").font(.caption).foregroundStyle(.green)
-            }
-            .transition(.opacity)
+            EmptyView()
         case .failed:
             Button {
                 triggerDebouncedSave(immediate: true)
@@ -918,11 +909,12 @@ struct HomeProfileScreen: View {
         guard isAdmin else { return }
         Task {
             do {
-                let request = AdminFeatureFlagsUpdateRequest(geminiEnabled: adminGeminiEnabled)
+                let request = AdminFeatureFlagsUpdateRequest(
+                    geminiEnabled: adminGeminiEnabled,
+                    darkModeEnabled: adminDarkModeEnabled
+                )
                 let response = try await appStore.apiClient.updateAdminFeatureFlags(request)
-                if let flags = response.flags {
-                    adminGeminiEnabled = flags.geminiEnabled
-                }
+                syncAdminFlags(response)
             } catch {
                 _ = appStore.handleAuthFailureIfNeeded(error)
             }
@@ -964,13 +956,29 @@ struct HomeProfileScreen: View {
         defer { isAdminFlagsLoading = false }
         do {
             let response = try await appStore.apiClient.getAdminFeatureFlags()
-            isAdmin = response.isAdmin
-            if let flags = response.flags, response.isAdmin {
-                adminGeminiEnabled = flags.geminiEnabled
-            }
+            syncAdminFlags(response)
         } catch {
             _ = appStore.handleAuthFailureIfNeeded(error)
         }
+    }
+
+    private func syncAdminFlags(_ response: AdminFeatureFlagsResponse) {
+        isAdmin = response.isAdmin
+        appStore.applyAdminFeatureFlags(response)
+        if let flags = response.flags, response.isAdmin {
+            adminGeminiEnabled = flags.geminiEnabled
+            adminDarkModeEnabled = flags.darkModeEnabled
+        } else {
+            adminGeminiEnabled = false
+            adminDarkModeEnabled = false
+        }
+    }
+
+    private var themePreferenceBinding: Binding<AppThemePreference> {
+        Binding(
+            get: { appStore.appThemePreference },
+            set: { appStore.setAppThemePreference($0) }
+        )
     }
 }
 

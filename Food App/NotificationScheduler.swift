@@ -181,24 +181,24 @@ final class NotificationScheduler {
         await scheduleMealReminder(
             identifier: FoodAppNotificationIdentifier.mealBreakfast,
             mealKey: "breakfast",
-            title: "Breakfast check-in",
-            body: "Log breakfast while the details are still fresh.",
+            title: "Breakfast cameo 🍳",
+            body: "Tiny breakfast check: say it, type it, or snap it before the coffee brain takes over ☕️",
             time: mealReminders.breakfast,
             isEnabled: mealReminders.breakfastEnabled
         )
         await scheduleMealReminder(
             identifier: FoodAppNotificationIdentifier.mealLunch,
             mealKey: "lunch",
-            title: "Lunch check-in",
-            body: "Quickly log lunch by voice, text, or camera.",
+            title: "Lunch roll call 🥗",
+            body: "What did lunch look like? A quick voice note totally counts.",
             time: mealReminders.lunch,
             isEnabled: mealReminders.lunchEnabled
         )
         await scheduleMealReminder(
             identifier: FoodAppNotificationIdentifier.mealDinner,
             mealKey: "dinner",
-            title: "Dinner check-in",
-            body: "Add dinner now so today's log stays complete.",
+            title: "Dinner plot twist 🍽️",
+            body: "Future-you loves a complete log. Add dinner while it is still fresh ✨",
             time: mealReminders.dinner,
             isEnabled: mealReminders.dinnerEnabled
         )
@@ -264,30 +264,30 @@ enum AdminTestNotificationKind: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .breakfast:
-            return "Breakfast check-in"
+            return "Breakfast cameo 🍳"
         case .lunch:
-            return "Lunch check-in"
+            return "Lunch roll call 🥗"
         case .dinner:
-            return "Dinner check-in"
+            return "Dinner plot twist 🍽️"
         case .endOfDay:
-            return "Still time to rescue today"
+            return "Still time for a tiny save 🌙"
         case .discovery:
-            return "Food App shortcut"
+            return "Try the lazy log lane 📸"
         }
     }
 
     var body: String {
         switch self {
         case .breakfast:
-            return "Had breakfast? Say it, type it, or snap it before the details fade."
+            return "Tiny breakfast check: say it, type it, or snap it before the coffee brain takes over ☕️"
         case .lunch:
-            return "What did lunch look like? A quick voice note is enough."
+            return "What did lunch look like? A quick voice note totally counts."
         case .dinner:
-            return "Future-you likes data. Log dinner while it is still fresh."
+            return "Future-you loves a complete log. Add dinner while it is still fresh ✨"
         case .endOfDay:
-            return "One sentence beats a blank day. Add a quick food log now."
+            return "One sentence beats a blank day. Drop in the meal you remember and call it a win."
         case .discovery:
-            return "You can log by voice, text, or camera. Try whichever feels least annoying today."
+            return "Voice, text, or camera — pick the least annoying one and let Amy do the math."
         }
     }
 

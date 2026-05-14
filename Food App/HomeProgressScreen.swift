@@ -8,8 +8,17 @@ struct HomeProgressScreen: View {
         VStack(spacing: 0) {
             AppDrawerHeader(onClose: { dismiss() }) {
                 Text("Progress")
-                    .font(.system(size: 20, weight: .semibold))
-                    .foregroundStyle(.primary)
+                    .font(.custom("InstrumentSerif-Regular", size: 31))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 0.988, green: 0.545, blue: 0.196),
+                                Color(red: 0.902, green: 0.361, blue: 0.102)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .frame(maxWidth: .infinity, alignment: .center)
             }
 

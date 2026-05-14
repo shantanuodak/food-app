@@ -1,6 +1,13 @@
 import SwiftUI
 import AVFoundation
 
+private enum CameraOverlayTokens {
+    static let focusStroke = Color.white
+    static let focusLineWidth: CGFloat = 6
+    static let focusCornerLength: CGFloat = 30
+    static let focusCornerRadius: CGFloat = 16
+}
+
 // MARK: - Camera Top Bar
 
 struct CameraTopBar: View {
@@ -24,6 +31,123 @@ struct CameraTopBar: View {
         }
         .padding(.horizontal, 20)
         .padding(.top, 20)
+    }
+}
+
+// MARK: - Focus Frame
+
+struct CameraFocusFrameOverlay: View {
+    var body: some View {
+        GeometryReader { proxy in
+            let width = min(proxy.size.width * 0.78, 300)
+            let height = min(proxy.size.height * 0.56, 430)
+
+            ZStack {
+                RoundedCornerSegment(corners: [.topLeft])
+                RoundedCornerSegment(corners: [.topRight])
+                RoundedCornerSegment(corners: [.bottomLeft])
+                RoundedCornerSegment(corners: [.bottomRight])
+            }
+            .frame(width: width, height: height)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+        }
+    }
+}
+
+private struct RoundedCornerSegment: View {
+    let corners: UIRectCorner
+
+    var body: some View {
+        ZStack {
+            Path { path in
+                let length = CameraOverlayTokens.focusCornerLength
+                let radius = CameraOverlayTokens.focusCornerRadius
+
+                switch corners {
+                case .topLeft:
+                    path.move(to: CGPoint(x: 0, y: length))
+                    path.addLine(to: CGPoint(x: 0, y: radius))
+                    path.addArc(
+                        center: CGPoint(x: radius, y: radius),
+                        radius: radius,
+                        startAngle: .degrees(180),
+                        endAngle: .degrees(270),
+                        clockwise: false
+                    )
+                    path.addLine(to: CGPoint(x: length, y: 0))
+                case .topRight:
+                    path.move(to: CGPoint(x: 0, y: 0))
+                    path.addLine(to: CGPoint(x: length - radius, y: 0))
+                    path.addArc(
+                        center: CGPoint(x: length - radius, y: radius),
+                        radius: radius,
+                        startAngle: .degrees(270),
+                        endAngle: .degrees(0),
+                        clockwise: false
+                    )
+                    path.addLine(to: CGPoint(x: length, y: length))
+                case .bottomLeft:
+                    path.move(to: CGPoint(x: 0, y: 0))
+                    path.addLine(to: CGPoint(x: 0, y: length - radius))
+                    path.addArc(
+                        center: CGPoint(x: radius, y: length - radius),
+                        radius: radius,
+                        startAngle: .degrees(180),
+                        endAngle: .degrees(90),
+                        clockwise: true
+                    )
+                    path.addLine(to: CGPoint(x: length, y: length))
+                case .bottomRight:
+                    path.move(to: CGPoint(x: 0, y: length))
+                    path.addLine(to: CGPoint(x: length - radius, y: length))
+                    path.addArc(
+                        center: CGPoint(x: length - radius, y: length - radius),
+                        radius: radius,
+                        startAngle: .degrees(90),
+                        endAngle: .degrees(0),
+                        clockwise: true
+                    )
+                    path.addLine(to: CGPoint(x: length, y: 0))
+                default:
+                    break
+                }
+            }
+            .stroke(
+                CameraOverlayTokens.focusStroke.opacity(0.98),
+                style: StrokeStyle(
+                    lineWidth: CameraOverlayTokens.focusLineWidth,
+                    lineCap: .round,
+                    lineJoin: .round
+                )
+            )
+        }
+        .frame(
+            maxWidth: .infinity,
+            maxHeight: .infinity,
+            alignment: alignment(for: corners)
+        )
+        .frame(
+            width: CameraOverlayTokens.focusCornerLength,
+            height: CameraOverlayTokens.focusCornerLength,
+            alignment: alignment(for: corners)
+        )
+    }
+
+    private func alignment(for corner: UIRectCorner) -> Alignment {
+        switch corner {
+        case .topLeft:
+            return .topLeading
+        case .topRight:
+            return .topTrailing
+        case .bottomLeft:
+            return .bottomLeading
+        case .bottomRight:
+            return .bottomTrailing
+        default:
+            return .center
+        }
     }
 }
 

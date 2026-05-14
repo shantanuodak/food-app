@@ -11,7 +11,8 @@ import { purgeParseCacheByScopePrefix } from '../services/parseCacheService.js';
 const router = Router();
 
 const flagsSchema = z.object({
-  geminiEnabled: z.boolean()
+  geminiEnabled: z.boolean(),
+  darkModeEnabled: z.boolean()
 });
 
 const purgeCacheSchema = z.object({

@@ -16,6 +16,7 @@ struct ContentView: View {
             switch flow.route {
             case .onboarding:
                 OnboardingView(flow: flow)
+                    .preferredColorScheme(.light)
             case .home:
                 HomeTabShellView()
             }
@@ -30,8 +31,11 @@ struct ContentView: View {
 }
 
 private struct HomeTabShellView: View {
+    @EnvironmentObject private var appStore: AppStore
+
     var body: some View {
         MainLoggingShellView()
+            .preferredColorScheme(appStore.homePreferredColorScheme)
     }
 }
 

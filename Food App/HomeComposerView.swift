@@ -325,12 +325,18 @@ struct HM01LogComposerSection: View {
                     // Notify the parent so it can schedule persistence (PATCH
                     // for saved rows, or let auto-save pick it up for new rows).
                     onQuantityFastPathUpdated(rowID)
+                    return
                 }
                 // NOTE: Do NOT set parsePhase here. Creating a new Date() on every
                 // keystroke forces SwiftUI to re-diff the row each character, causing
                 // severe typing lag. The debounce timer in scheduleDebouncedParse
                 // handles parse ownership via synchronizeParseOwnership() after the
                 // user pauses typing.
+                if !rows[index].isLoading && !rows[index].isQueued {
+                    rows[index].setParsePrimed(
+                        startedAt: rows[index].loadingStatusStartedAt ?? Date()
+                    )
+                }
             }
         )
     }
@@ -390,9 +396,14 @@ struct HM01LogComposerSection: View {
 
     @ViewBuilder
     private func trailingCaloriesView(for row: HomeLogRow) -> some View {
-        let showCalories = !row.isLoading && !row.isQueued && !row.isUnresolved && !row.isFailed && row.calories != nil
+        let showCalories = !row.isPrimed && !row.isLoading && !row.isQueued && !row.isUnresolved && !row.isFailed && row.calories != nil
 
         ZStack(alignment: .trailing) {
+            if row.isPrimed {
+                RowTypingShimmerStatusView(startedAt: row.loadingStatusStartedAt)
+                    .transition(.opacity)
+            }
+
             if row.isLoading {
                 RowThoughtProcessStatusView(
                     routeHint: row.loadingRouteHint ?? .unknown,

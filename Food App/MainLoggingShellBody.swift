@@ -123,17 +123,8 @@ extension MainLoggingShellView {
                     .presentationCornerRadius(24)
             }
             .sheet(isPresented: $isBadgesTrophyCasePresented) {
-                NavigationStack {
-                    BadgesTrophyCaseView(currentStreakDays: badgesTrophyCaseStreakDays)
-                        .environmentObject(appStore)
-                        .toolbar {
-                            ToolbarItem(placement: .topBarTrailing) {
-                                AppCloseButton {
-                                    isBadgesTrophyCasePresented = false
-                                }
-                            }
-                        }
-                }
+                BadgesTrophyCaseView(currentStreakDays: badgesTrophyCaseStreakDays)
+                    .environmentObject(appStore)
                 .presentationDetents([.large])
                 .presentationDragIndicator(.hidden)
                 .presentationCornerRadius(24)
@@ -237,6 +228,7 @@ extension MainLoggingShellView {
                 cancelAutoSaveTask()
                 prefetchTask?.cancel()
                 initialHomeBootstrapTask?.cancel()
+                secondaryHomePreloadTask?.cancel()
                 unresolvedRetryTask?.cancel()
                 // Drop any pending PATCH tasks; inputRows state is cleared
                 // on the next load anyway.
@@ -290,7 +282,7 @@ extension MainLoggingShellView {
                 refreshNutritionStateAfterProgressChange(notification)
                 refreshCurrentStreak(shouldDetectBadgeUnlock: true)
                 appStore.preloadProfileDashboard(force: true)
-                appStore.preloadProgressCharts(force: true)
+                appStore.preloadProgressCharts(force: true, includeHealthSamples: false)
             }
             .onReceive(NotificationCenter.default.publisher(for: .openBadgesFromStreakDrawer)) { notification in
                 let days = notification.userInfo?["currentStreakDays"] as? Int

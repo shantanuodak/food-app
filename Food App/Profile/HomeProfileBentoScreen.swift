@@ -33,54 +33,49 @@ struct HomeProfileBentoScreen: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
-                    identityRow
-                    if let errorMessage {
-                        errorBanner(errorMessage)
-                    }
-                    CalorieHeroTile(data: heroData)
-                    HStack(alignment: .top, spacing: 12) {
-                        NavigationLink {
-                            BadgesTrophyCaseView(currentStreakDays: streakDays)
-                        } label: {
-                            BadgeTile(days: streakDays)
-                        }
-                        .buttonStyle(.plain)
-
-                        NotificationReminderTile(
-                            summary: reminderSummaryText,
-                            isEnabled: reminderEnabledBinding
-                        )
-                    }
-                    DietTile(diet: dietData)
+            VStack(spacing: 0) {
+                AppDrawerHeader(onClose: { dismiss() }) {
+                    Text("Profile")
+                        .font(.custom("InstrumentSerif-Regular", size: 31))
+                        .foregroundStyle(BentoTokens.brandGradient)
+                        .frame(maxWidth: .infinity, alignment: .center)
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 4)
-                .padding(.bottom, 32)
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        identityRow
+                        if let errorMessage {
+                            errorBanner(errorMessage)
+                        }
+                        CalorieHeroTile(data: heroData)
+                        HStack(alignment: .top, spacing: 12) {
+                            NavigationLink {
+                                BadgesTrophyCaseView(currentStreakDays: streakDays)
+                            } label: {
+                                BadgeTile(days: streakDays)
+                            }
+                            .buttonStyle(.plain)
+
+                            NotificationReminderTile(
+                                summary: reminderSummaryText,
+                                isEnabled: reminderEnabledBinding
+                            )
+                        }
+                        DietTile(diet: dietData)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+                    .padding(.bottom, 32)
+                }
             }
             .scrollIndicators(.hidden)
-            .background(BentoTokens.canvas)
+            .background(Color.white)
             // Cap accessibility text scaling so the dense hero stats grid
             // and ring don't blow out the layout on iPhone SE width.
             // Dynamic Type still scales, just within readable bounds; users
             // can still drill into editor screens which use system Form
             // styling and respect full Dynamic Type natively.
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
-            .navigationTitle("Profile")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .principal) {
-                    Text("Profile")
-                        .font(.custom("InstrumentSerif-Regular", size: 31))
-                        .foregroundStyle(BentoTokens.brandGradient)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    AppCloseButton {
-                        dismiss()
-                    }
-                }
-            }
             .navigationDestination(isPresented: $isReminderSettingsPresented) {
                 NotificationReminderSettingsView()
             }

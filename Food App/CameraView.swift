@@ -82,6 +82,8 @@ struct CameraView: View {
                     .id(focusRingID)
             }
 
+            CameraFocusFrameOverlay()
+
             // Capture flash
             CaptureFlashOverlay(isVisible: $showCaptureFlash)
 

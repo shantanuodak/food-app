@@ -132,6 +132,61 @@ struct FailedRowStatusView: View {
     }
 }
 
+struct RowTypingShimmerStatusView: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let startedAt: Date?
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 0.15, paused: reduceMotion)) { context in
+            let start = startedAt ?? context.date
+            let elapsed = max(0, context.date.timeIntervalSince(start))
+            let shimmer = shimmerProgress(elapsed: elapsed)
+
+            RoundedRectangle(cornerRadius: 999, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.secondary.opacity(0.12),
+                            Color.secondary.opacity(0.18)
+                        ],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                )
+                .frame(width: 74, height: 14)
+                .overlay {
+                    GeometryReader { geometry in
+                        let width = max(geometry.size.width, 1)
+                        let sweepWidth = width * 0.52
+                        let xOffset = (width + sweepWidth) * shimmer - sweepWidth
+
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.0),
+                                Color.white.opacity(0.9),
+                                Color.white.opacity(0.0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                        .frame(width: sweepWidth, height: geometry.size.height)
+                        .offset(x: xOffset)
+                        .blendMode(.plusLighter)
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: 999, style: .continuous))
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityHidden(true)
+        }
+    }
+
+    private func shimmerProgress(elapsed: TimeInterval) -> CGFloat {
+        let cycle = 1.15
+        let value = (elapsed.truncatingRemainder(dividingBy: cycle)) / cycle
+        return CGFloat(value)
+    }
+}
+
 struct QueuedRowStatusView: View {
     var body: some View {
         Text(L10n.parseQueuedShortLabel)

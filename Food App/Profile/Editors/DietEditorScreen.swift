@@ -42,7 +42,7 @@ struct DietEditorScreen: View {
             Text("Dietary Preferences")
         } footer: {
             if activePrefs.isEmpty {
-                Text("Select any that apply.")
+                Text("These help Amy understand your usual choices. They won't create warning cards.")
             }
         }
     }
@@ -59,7 +59,7 @@ struct DietEditorScreen: View {
             Text("Allergies")
         } footer: {
             if draftStore.draft.allergies.isEmpty {
-                Text("We'll flag foods that conflict with these in your daily log.")
+                Text("If a logged food may include one of these, we'll show a clear heads-up.")
             }
         }
     }

@@ -12,14 +12,9 @@ struct ProfileSaveStatusIndicator: View {
         case .idle:
             EmptyView()
         case .saving:
-            ProgressView()
-                .controlSize(.small)
+            EmptyView()
         case .saved:
-            Label("Saved", systemImage: "checkmark.circle.fill")
-                .labelStyle(.iconOnly)
-                .foregroundStyle(.green)
-                .font(.system(size: 16, weight: .semibold))
-                .accessibilityLabel("Saved")
+            EmptyView()
         case .failed(let message):
             Button {
                 onRetry()
