@@ -15,7 +15,7 @@ extension MainLoggingShellView {
         }
     }
 
-    /// Fast JPEG preparation. Pure transformation of `image` → encoded `Data`.
+    /// JPEG compression loop. Pure transformation of `image` -> encoded `Data`.
     ///
     /// `nonisolated static` so callers can run it on a background queue
     /// without an actor hop — a 12MP iPhone photo can take 1-2 s of CPU
@@ -23,43 +23,43 @@ extension MainLoggingShellView {
     /// camera result drawer's shimmer presentation) for the full duration
     /// after picking from the photo library.
     ///
-    /// Keep this bounded to a few passes. The image model needs enough detail
-    /// to read labels and identify small food regions; the older ~180-280 KB
-    /// fallback was fast, but caused real-device photos to land as low
-    /// confidence. Stay comfortably under the backend 6 MB raw-image limit
-    /// while preserving visual detail.
+    /// The inner loop is wrapped in `autoreleasepool` so each
+    /// (dimension, quality) iteration's intermediate `Data` buffers are
+    /// released as soon as the next iteration starts. Without this,
+    /// holding 5-6 intermediates simultaneously can spike memory beyond
+    /// 1 GB during photo processing — see
+    /// `docs/PHASE_8_10_FINDINGS.md` Phase 9 #1.
     nonisolated static func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
-        let maxPreferredBytes = 1_200_000
-        let candidates: [(dimension: CGFloat, quality: CGFloat)] = [
-            (1_600, 0.78),
-            (1_400, 0.74),
-            (1_280, 0.70)
-        ]
+        let maxBytes = 600_000
+        let dimensionAttempts: [CGFloat] = [1920, 1600, 1280, 1024]
+        let qualityAttempts: [CGFloat] = [0.85, 0.78, 0.70, 0.62, 0.55, 0.45, 0.35]
+        var smallestData: Data?
 
-        var largestEncoded: Data?
-        for candidate in candidates {
-            guard let data = encodeImage(image, maxDimension: candidate.dimension, quality: candidate.quality) else {
-                continue
-            }
-            if largestEncoded == nil || data.count > (largestEncoded?.count ?? 0) {
-                largestEncoded = data
-            }
-            if data.count <= maxPreferredBytes {
-                return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
+        for dimension in dimensionAttempts {
+            let resized = resizeImageIfNeeded(image, maxDimension: dimension)
+            for quality in qualityAttempts {
+                let result: PreparedImagePayload? = autoreleasepool {
+                    guard let data = resized.jpegData(compressionQuality: quality) else {
+                        return nil
+                    }
+                    if smallestData.map({ data.count < $0.count }) != false {
+                        smallestData = data
+                    }
+                    if data.count <= maxBytes {
+                        return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
+                    }
+                    return nil
+                }
+                if let result {
+                    return result
+                }
             }
         }
 
-        if let data = largestEncoded {
-            return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
+        if let smallestData {
+            return PreparedImagePayload(uploadData: smallestData, previewData: smallestData, mimeType: "image/jpeg")
         }
         return nil
-    }
-
-    nonisolated static func encodeImage(_ image: UIImage, maxDimension: CGFloat, quality: CGFloat) -> Data? {
-        autoreleasepool {
-            let resized = resizeImageIfNeeded(image, maxDimension: maxDimension)
-            return resized.jpegData(compressionQuality: quality)
-        }
     }
 
     nonisolated static func resizeImageIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {
@@ -71,13 +71,8 @@ extension MainLoggingShellView {
 
         let scale = maxDimension / largestSide
         let targetSize = CGSize(width: size.width * scale, height: size.height * scale)
-        let format = UIGraphicsImageRendererFormat()
-        format.scale = 1
-        format.opaque = true
-        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+        let renderer = UIGraphicsImageRenderer(size: targetSize)
         return renderer.image { _ in
-            UIColor.white.setFill()
-            UIRectFill(CGRect(origin: .zero, size: targetSize))
             image.draw(in: CGRect(origin: .zero, size: targetSize))
         }
     }

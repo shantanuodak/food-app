@@ -31,11 +31,9 @@ struct ContentView: View {
 }
 
 private struct HomeTabShellView: View {
-    @EnvironmentObject private var appStore: AppStore
-
     var body: some View {
         MainLoggingShellView()
-            .preferredColorScheme(appStore.homePreferredColorScheme)
+            .preferredColorScheme(.light)
     }
 }
 

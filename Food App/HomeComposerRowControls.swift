@@ -140,50 +140,56 @@ struct RowTypingShimmerStatusView: View {
         TimelineView(.animation(minimumInterval: 0.15, paused: reduceMotion)) { context in
             let start = startedAt ?? context.date
             let elapsed = max(0, context.date.timeIntervalSince(start))
-            let shimmer = shimmerProgress(elapsed: elapsed)
+            let pulse = pulseProgress(elapsed: elapsed)
 
-            RoundedRectangle(cornerRadius: 999, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.secondary.opacity(0.12),
-                            Color.secondary.opacity(0.18)
-                        ],
-                        startPoint: .leading,
-                        endPoint: .trailing
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color(red: 0.29, green: 0.68, blue: 1.0).opacity(0.18),
+                                Color(red: 0.46, green: 0.39, blue: 0.98).opacity(0.08),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 1,
+                            endRadius: 15
+                        )
                     )
-                )
-                .frame(width: 74, height: 14)
-                .overlay {
-                    GeometryReader { geometry in
-                        let width = max(geometry.size.width, 1)
-                        let sweepWidth = width * 0.52
-                        let xOffset = (width + sweepWidth) * shimmer - sweepWidth
+                    .frame(width: 30, height: 30)
+                    .scaleEffect(0.9 + (pulse * 0.18))
 
+                Circle()
+                    .fill(
                         LinearGradient(
                             colors: [
-                                Color.white.opacity(0.0),
-                                Color.white.opacity(0.9),
-                                Color.white.opacity(0.0)
+                                Color(red: 0.23, green: 0.69, blue: 1.0),
+                                Color(red: 0.42, green: 0.38, blue: 0.98)
                             ],
-                            startPoint: .leading,
-                            endPoint: .trailing
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
                         )
-                        .frame(width: sweepWidth, height: geometry.size.height)
-                        .offset(x: xOffset)
-                        .blendMode(.plusLighter)
+                    )
+                    .frame(width: 12, height: 12)
+                    .overlay {
+                        Circle()
+                            .stroke(Color.white.opacity(0.45), lineWidth: 0.8)
                     }
-                    .clipShape(RoundedRectangle(cornerRadius: 999, style: .continuous))
-                }
+                    .shadow(color: Color(red: 0.29, green: 0.57, blue: 1.0).opacity(0.26), radius: 10, y: 2)
+                    .scaleEffect(0.94 + (pulse * 0.12))
+                    .opacity(0.8 + (pulse * 0.2))
+            }
+            .frame(width: 30, height: 30)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .accessibilityHidden(true)
         }
     }
 
-    private func shimmerProgress(elapsed: TimeInterval) -> CGFloat {
-        let cycle = 1.15
-        let value = (elapsed.truncatingRemainder(dividingBy: cycle)) / cycle
-        return CGFloat(value)
+    private func pulseProgress(elapsed: TimeInterval) -> CGFloat {
+        let cycle = 1.25
+        let normalized = (elapsed.truncatingRemainder(dividingBy: cycle)) / cycle
+        let wave = (sin((normalized * .pi * 2) - (.pi / 2)) + 1) / 2
+        return CGFloat(wave)
     }
 }
 

@@ -31,26 +31,19 @@ struct Food_AppApp: App {
                 }
                 .task {
                     FoodBackgroundRefreshService.shared.appStore = appStore
-                    FoodBackgroundRefreshService.shared.scheduleAppRefresh()
-                    appStore.warmBackend()
-                    // Refresh the cached notification auth state from the OS
-                    // (the user may have toggled it inside iOS Settings while
-                    // the app was backgrounded), then idempotently
-                    // re-schedule any challenge-driven nudges.
-                    await appStore.refreshNotificationAuthState()
-                    await appStore.reconcileNotifications()
-                    // Retry any photo uploads that were stashed to disk by
-                    // a previous session's "decoupled image upload" save
-                    // path but never finished (e.g. user force-quit between
-                    // save success and the background upload firing). The
-                    // food_log rows are already on the server; we just need
-                    // to attach the photos.
-                    //
-                    // No-op when there's no auth or no pending entries.
-                    // Internally bails on the first storage failure so we
-                    // don't burn battery if the bucket is permanently
-                    // unhappy — the rest re-enqueue for the next launch.
-                    await appStore.drainDeferredImageUploads()
+                    Task(priority: .background) { @MainActor in
+                        // Let the first screen render before doing launch
+                        // maintenance. On real devices these OS calls can
+                        // contend with SwiftUI's first paint and look like a
+                        // frozen app, especially after a fresh install.
+                        try? await Task.sleep(nanoseconds: 800_000_000)
+                        guard !Task.isCancelled else { return }
+                        FoodBackgroundRefreshService.shared.scheduleAppRefresh()
+                        appStore.warmBackend()
+                        await appStore.refreshNotificationAuthState()
+                        await appStore.reconcileNotifications()
+                        await appStore.drainDeferredImageUploads()
+                    }
                 }
                 // Cold-start case: when auth restoration hasn't finished by
                 // the time `.task` above runs, the drain inside it is a

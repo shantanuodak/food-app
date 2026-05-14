@@ -24,7 +24,7 @@ struct OB01WelcomeScreen: View {
 
     var body: some View {
         ZStack {
-            OnboardingAnimatedBackground()
+            OnboardingStaticBackground()
 
             VStack(alignment: .leading, spacing: 0) {
                 Spacer()
