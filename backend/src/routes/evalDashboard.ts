@@ -644,6 +644,7 @@ router.get('/recent-parses', async (req, res, next) => {
       save_attempted: boolean;
       save_attempt_count: string | null;
       latest_save_outcome: string | null;
+      latest_save_log_id: string | null;
       latest_save_error_code: string | null;
       latest_save_latency_ms: number | null;
       latest_save_attempt_at: Date | null;
@@ -667,6 +668,7 @@ router.get('/recent-parses', async (req, res, next) => {
          pr.parse_version,
          pr.primary_route,
          pr.cache_hit,
+         sa.latest_save_log_id,
          fl.id AS log_id,
          fl.created_at AS saved_at,
          fl.total_calories::text,
@@ -683,6 +685,7 @@ router.get('/recent-parses', async (req, res, next) => {
          COALESCE(sa.save_attempt_count, 0) > 0 AS save_attempted,
          sa.save_attempt_count::text,
          sa.latest_save_outcome,
+         sa.latest_save_log_id,
          sa.latest_save_error_code,
          sa.latest_save_latency_ms,
          sa.latest_save_attempt_at,
@@ -699,11 +702,23 @@ router.get('/recent-parses', async (req, res, next) => {
          ipa.created_at AS image_attempt_at
        FROM parse_requests pr
        LEFT JOIN LATERAL (
+         SELECT
+           COUNT(*) AS save_attempt_count,
+           (ARRAY_AGG(outcome ORDER BY created_at DESC))[1] AS latest_save_outcome,
+           (ARRAY_AGG(log_id ORDER BY created_at DESC) FILTER (WHERE log_id IS NOT NULL))[1] AS latest_save_log_id,
+           (ARRAY_AGG(error_code ORDER BY created_at DESC))[1] AS latest_save_error_code,
+           (ARRAY_AGG(latency_ms ORDER BY created_at DESC))[1] AS latest_save_latency_ms,
+           MAX(created_at) AS latest_save_attempt_at
+         FROM save_attempts sa
+         WHERE sa.parse_request_id = pr.request_id
+       ) sa ON true
+       LEFT JOIN LATERAL (
          SELECT fl.*
          FROM food_logs fl
          WHERE fl.user_id = pr.user_id
            AND (
-             fl.parse_request_id = pr.request_id
+             fl.id = sa.latest_save_log_id
+             OR fl.parse_request_id = pr.request_id
              OR (
                fl.parse_request_id IS NULL
                AND LOWER(REGEXP_REPLACE(TRIM(fl.raw_text), '\\s+', ' ', 'g')) =
@@ -713,20 +728,14 @@ router.get('/recent-parses', async (req, res, next) => {
              )
            )
          ORDER BY
-           CASE WHEN fl.parse_request_id = pr.request_id THEN 0 ELSE 1 END,
+           CASE
+             WHEN fl.id = sa.latest_save_log_id THEN 0
+             WHEN fl.parse_request_id = pr.request_id THEN 1
+             ELSE 2
+           END,
            ABS(EXTRACT(EPOCH FROM (fl.created_at - pr.created_at)))
          LIMIT 1
        ) fl ON true
-       LEFT JOIN LATERAL (
-         SELECT
-           COUNT(*) AS save_attempt_count,
-           (ARRAY_AGG(outcome ORDER BY created_at DESC))[1] AS latest_save_outcome,
-           (ARRAY_AGG(error_code ORDER BY created_at DESC))[1] AS latest_save_error_code,
-           (ARRAY_AGG(latency_ms ORDER BY created_at DESC))[1] AS latest_save_latency_ms,
-           MAX(created_at) AS latest_save_attempt_at
-         FROM save_attempts sa
-         WHERE sa.parse_request_id = pr.request_id
-       ) sa ON true
        LEFT JOIN LATERAL (
          SELECT
            COUNT(*) AS ai_cost_event_count,
@@ -774,6 +783,7 @@ router.get('/recent-parses', async (req, res, next) => {
       saveAttempted: r.save_attempted,
       saveAttemptCount: r.save_attempt_count !== null ? Number(r.save_attempt_count) : 0,
       latestSaveOutcome: r.latest_save_outcome,
+      latestSaveLogId: r.latest_save_log_id,
       latestSaveErrorCode: r.latest_save_error_code,
       latestSaveLatencyMs: r.latest_save_latency_ms,
       latestSaveAttemptAt: r.latest_save_attempt_at ? r.latest_save_attempt_at.toISOString() : null,

@@ -5,17 +5,15 @@ struct HomeProgressScreen: View {
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
-        NavigationStack {
+        VStack(spacing: 0) {
+            AppDrawerHeader(onClose: { dismiss() }) {
+                Text("Progress")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.primary)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+
             ProgressSectionView()
-                .navigationTitle("Progress")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .topBarTrailing) {
-                        AppCloseButton {
-                            dismiss()
-                        }
-                    }
-                }
         }
     }
 }

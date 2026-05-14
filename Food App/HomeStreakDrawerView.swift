@@ -60,20 +60,9 @@ struct HomeStreakDrawerView: View {
     }
 
     private var drawerHeader: some View {
-        ZStack {
+        AppDrawerHeader(onClose: { dismiss() }) {
             drawerTitle
-
-            HStack {
-                Spacer()
-                AppCloseButton {
-                    dismiss()
-                }
-            }
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 10)
-        .padding(.bottom, 6)
-        .background(Color(.systemBackground))
     }
 
     private var drawerTitle: some View {

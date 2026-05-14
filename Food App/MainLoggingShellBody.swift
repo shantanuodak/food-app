@@ -112,7 +112,7 @@ extension MainLoggingShellView {
                 HomeProgressScreen()
                     .environmentObject(appStore)
                     .presentationDetents([.large])
-                    .presentationDragIndicator(.visible)
+                    .presentationDragIndicator(.hidden)
                     .presentationCornerRadius(24)
             }
             .sheet(isPresented: $isStreakDrawerPresented) {

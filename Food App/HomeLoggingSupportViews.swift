@@ -144,7 +144,7 @@ struct AppCloseButton: View {
 
     let action: () -> Void
     var variant: Variant = .sheet
-    var visualSize: CGFloat = 32
+    var visualSize: CGFloat = 44
     var hitSize: CGFloat = 44
     var accessibilityLabel: LocalizedStringKey = "Close"
 
@@ -161,10 +161,26 @@ struct AppCloseButton: View {
     private var icon: some View {
         switch variant {
         case .sheet:
-            Label(accessibilityLabel, systemImage: "xmark.circle.fill")
-                .labelStyle(.iconOnly)
-                .font(.title2)
-                .foregroundStyle(.secondary)
+            ZStack {
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(0.98),
+                                Color(red: 0.969, green: 0.969, blue: 0.969).opacity(0.92)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+
+                Image(systemName: "xmark")
+                    .font(.system(size: max(15, visualSize * 0.34), weight: .medium))
+                    .foregroundStyle(Color(red: 0.102, green: 0.102, blue: 0.102))
+            }
+            .frame(width: visualSize, height: visualSize)
+            .aspectRatio(1, contentMode: .fit)
+            .shadow(color: Color.black.opacity(0.12), radius: 20, y: 8)
         case .onImage:
             Image(systemName: "xmark")
                 .font(.system(size: max(12, visualSize * 0.40), weight: .semibold))
@@ -176,6 +192,42 @@ struct AppCloseButton: View {
                         .stroke(Color.white.opacity(0.20), lineWidth: 1)
                 }
         }
+    }
+}
+
+struct AppDrawerHeader<Title: View>: View {
+    let title: Title
+    let onClose: () -> Void
+
+    init(
+        onClose: @escaping () -> Void,
+        @ViewBuilder title: () -> Title
+    ) {
+        self.onClose = onClose
+        self.title = title()
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Capsule()
+                .fill(Color.secondary.opacity(0.24))
+                .frame(width: 36, height: 5)
+                .padding(.top, 8)
+                .padding(.bottom, 12)
+                .accessibilityHidden(true)
+
+            ZStack {
+                title
+
+                HStack {
+                    Spacer()
+                    AppCloseButton(action: onClose)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.bottom, 6)
+        }
+        .background(Color(.systemBackground))
     }
 }
 
