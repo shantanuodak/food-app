@@ -84,16 +84,18 @@ function estimateCostUsd(usage: GeminiUsage): number {
   return round(inputCost + outputCost, 6);
 }
 
-function buildImageParsePrompt(): string {
-  return [
-    'You are a nutrition parsing assistant for food photo logs.',
-    'Analyze the attached food image quickly and return strict JSON only (no markdown).',
+type ImagePromptMode = 'primary' | 'rescue';
+
+function buildImageParsePrompt(mode: ImagePromptMode = 'primary'): string {
+  const sharedRules = [
     'Output schema exactly:',
     '{"extractedText":string,"confidence":number,"assumptions":string[],"items":[{"name":string,"quantity":number,"unit":string,"grams":number,"calories":number,"protein":number,"carbs":number,"fat":number,"matchConfidence":number,"foodDescription":string,"explanation":string}]}',
     'Rules:',
     '- Prefer visible nutrition-label values for packaged foods; otherwise estimate visible servings.',
     '- Use realistic serving assumptions when quantity is unclear.',
     '- Return non-empty items if edible foods are visible.',
+    '- Do not fail only because the exact portion is uncertain; estimate a common visible serving and explain the assumption.',
+    '- For common foods such as pizza, rice bowls, sandwiches, salads, drinks, snacks, and desserts, return a best-effort item even when the exact recipe is unknown.',
     '- Confidence and matchConfidence are in [0,1].',
     '- Do not return negative numbers.',
     '- extractedText should be a concise comma-separated phrase list in user-entered order.',
@@ -102,6 +104,23 @@ function buildImageParsePrompt(): string {
     '- Keep explanations to one concise user-friendly sentence mentioning visible food, portion/grams, and whether label values or serving estimates were used.',
     '- Do not mention matchConfidence in explanations.',
     '- If image has no food, return confidence 0 and items [].'
+  ];
+
+  if (mode === 'rescue') {
+    return [
+      'You are a food-photo fallback parser. The first parse attempt did not produce usable nutrition JSON.',
+      'Look at the image again and return strict JSON only (no markdown).',
+      'Bias toward a safe best-effort food log rather than rejecting the photo.',
+      'If any edible food is visible, items must contain at least one item.',
+      'Use broad names when needed, e.g. "pizza", "rice bowl", "sandwich", "coffee", "snack bar".',
+      ...sharedRules
+    ].join('\n');
+  }
+
+  return [
+    'You are a nutrition parsing assistant for food photo logs.',
+    'Analyze the attached food image quickly and return strict JSON only (no markdown).',
+    ...sharedRules
   ].join('\n');
 }
 
@@ -200,7 +219,7 @@ function acceptedLowConfidenceResult(
   };
 }
 
-async function runImageModel(model: string, image: ImagePart): Promise<{
+async function runImageModel(model: string, image: ImagePart, mode: ImagePromptMode = 'primary'): Promise<{
   extractedText: string;
   result: ParseResult;
   usage: GeminiUsage;
@@ -208,9 +227,9 @@ async function runImageModel(model: string, image: ImagePart): Promise<{
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.1,
-    maxOutputTokens: 420,
+    maxOutputTokens: mode === 'rescue' ? 700 : 900,
     parts: [
-      { text: buildImageParsePrompt() },
+      { text: buildImageParsePrompt(mode) },
       {
         inlineData: {
           mimeType: image.mimeType,
@@ -268,24 +287,41 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     };
   }
 
+  const acceptedPrimary = acceptedLowConfidenceResult(primary, usageEvents, false);
+  if (acceptedPrimary && !config.aiImageEnableFallback) {
+    return acceptedPrimary;
+  }
+
   if (!config.aiImageEnableFallback) {
-    const accepted = acceptedLowConfidenceResult(primary, usageEvents, false);
-    if (accepted) {
-      return accepted;
-    }
     throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
   }
 
   const fallbackModel = config.aiImageFallbackModel;
   if (fallbackModel.trim().toLowerCase() == config.aiImagePrimaryModel.trim().toLowerCase()) {
-    const accepted = acceptedLowConfidenceResult(primary, usageEvents, false);
-    if (accepted) {
-      return accepted;
+    if (acceptedPrimary) {
+      return acceptedPrimary;
+    }
+
+    // Render/local envs often configure the same model for primary and
+    // fallback. Still run a second pass with a rescue prompt so an obvious
+    // food photo does not dead-end at "couldn't understand photo" just
+    // because the first response was empty, truncated, or overly cautious.
+    const rescued = await runImageModel(fallbackModel, image, 'rescue');
+    if (rescued?.usage) {
+      usageEvents.push({
+        feature: 'parse_image_fallback',
+        usage: rescued.usage,
+        estimatedCostUsd: estimateCostUsd(rescued.usage)
+      });
+    }
+    const acceptedRescue = acceptedLowConfidenceResult(rescued, usageEvents, true);
+    if (acceptedRescue) {
+      return acceptedRescue;
     }
     throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
   }
 
-  const fallback = await runImageModel(fallbackModel, image);
+  const fallback = await runImageModel(fallbackModel, image, 'rescue');
   if (fallback?.usage) {
     usageEvents.push({
       feature: 'parse_image_fallback',
