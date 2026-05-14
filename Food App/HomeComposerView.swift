@@ -396,14 +396,9 @@ struct HM01LogComposerSection: View {
 
     @ViewBuilder
     private func trailingCaloriesView(for row: HomeLogRow) -> some View {
-        let showCalories = !row.isPrimed && !row.isLoading && !row.isQueued && !row.isUnresolved && !row.isFailed && row.calories != nil
+        let showCalories = !row.isLoading && !row.isQueued && !row.isUnresolved && !row.isFailed && row.calories != nil
 
         ZStack(alignment: .trailing) {
-            if row.isPrimed {
-                RowTypingShimmerStatusView(startedAt: row.loadingStatusStartedAt)
-                    .transition(.opacity)
-            }
-
             if row.isLoading {
                 RowThoughtProcessStatusView(
                     routeHint: row.loadingRouteHint ?? .unknown,
