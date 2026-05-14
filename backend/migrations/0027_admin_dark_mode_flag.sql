@@ -1,2 +1,0 @@
-ALTER TABLE admin_feature_flags
-  ADD COLUMN IF NOT EXISTS dark_mode_enabled BOOLEAN NOT NULL DEFAULT FALSE;

@@ -2,7 +2,6 @@ import Foundation
 import Combine
 import UserNotifications
 import UIKit
-import SwiftUI
 
 @MainActor
 final class AppStore: ObservableObject {
@@ -30,9 +29,6 @@ final class AppStore: ObservableObject {
     @Published private(set) var profileDashboardSnapshot: ProfileDashboardSnapshot? = nil
     @Published private(set) var progressChartsSnapshot: ProgressChartsSnapshot? = nil
     @Published private(set) var cachedFoodLogStreak: Int?
-    @Published private(set) var isAdminUser: Bool = false
-    @Published private(set) var adminFeatureFlags: AdminFeatureFlags? = nil
-    @Published private(set) var appThemePreference: AppThemePreference = .system
 
     let configuration: AppConfiguration
     let authSessionStore: AuthSessionStore
@@ -112,7 +108,6 @@ final class AppStore: ObservableObject {
         self.networkQualityHint = L10n.networkOnline
         self.healthAuthorizationState = healthKitService.authorizationState
         self.mealReminderSettings = Self.loadMealReminderSettings(defaults: defaults, key: mealReminderSettingsKey)
-        self.appThemePreference = Self.loadAppThemePreference(defaults: defaults, userID: sessionStore.session?.userID)
         let cachedStreak = defaults.integer(forKey: cachedFoodLogStreakKey)
         self.cachedFoodLogStreak = defaults.object(forKey: cachedFoodLogStreakKey) == nil ? nil : cachedStreak
         self.isHealthSyncEnabled = defaults.bool(forKey: healthSyncKey)
@@ -182,20 +177,6 @@ final class AppStore: ObservableObject {
             }
             .store(in: &cancellables)
 
-        sessionStore.$session
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] session in
-                guard let self else { return }
-                self.appThemePreference = Self.loadAppThemePreference(defaults: self.defaults, userID: session?.userID)
-                guard session != nil else {
-                    self.isAdminUser = false
-                    self.adminFeatureFlags = nil
-                    return
-                }
-                Task { await self.refreshAdminFeatureFlags() }
-            }
-            .store(in: &cancellables)
-
         if sessionStore.session?.refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             Task { [authService, weak self] in
                 await authService.restoreSessionIfPossible()
@@ -245,42 +226,6 @@ final class AppStore: ObservableObject {
         selectedChallenge = nil
         defaults.removeObject(forKey: challengeKey)
         lastAPIError = nil
-        isAdminUser = false
-        adminFeatureFlags = nil
-        appThemePreference = .system
-    }
-
-    var isThemeFeatureEnabled: Bool {
-        isAdminUser && (adminFeatureFlags?.darkModeEnabled ?? false)
-    }
-
-    var homePreferredColorScheme: ColorScheme? {
-        isThemeFeatureEnabled ? appThemePreference.preferredColorScheme : .light
-    }
-
-    func setAppThemePreference(_ preference: AppThemePreference) {
-        appThemePreference = preference
-        defaults.set(preference.rawValue, forKey: Self.appThemePreferenceKey(for: authSessionStore.session?.userID))
-    }
-
-    func applyAdminFeatureFlags(_ response: AdminFeatureFlagsResponse) {
-        isAdminUser = response.isAdmin
-        adminFeatureFlags = response.flags
-    }
-
-    func refreshAdminFeatureFlags() async {
-        guard authSessionStore.session != nil else {
-            isAdminUser = false
-            adminFeatureFlags = nil
-            return
-        }
-
-        do {
-            let response = try await apiClient.getAdminFeatureFlags()
-            applyAdminFeatureFlags(response)
-        } catch {
-            _ = handleAuthFailureIfNeeded(error)
-        }
     }
 
     func refreshOnboardingCompletionFromBackend() async {
@@ -884,18 +829,4 @@ final class AppStore: ObservableObject {
         return decoded
     }
 
-    private static func appThemePreferenceKey(for userID: String?) -> String {
-        guard let userID, !userID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            return "app.theme.preference.guest.v1"
-        }
-        return "app.theme.preference.\(userID).v1"
-    }
-
-    private static func loadAppThemePreference(defaults: UserDefaults, userID: String?) -> AppThemePreference {
-        guard let rawValue = defaults.string(forKey: appThemePreferenceKey(for: userID)),
-              let preference = AppThemePreference(rawValue: rawValue) else {
-            return .system
-        }
-        return preference
-    }
 }

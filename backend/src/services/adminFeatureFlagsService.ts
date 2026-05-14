@@ -4,7 +4,6 @@ import { config } from '../config.js';
 
 export type AdminFeatureFlags = {
   geminiEnabled: boolean;
-  darkModeEnabled: boolean;
 };
 
 function normalizeEmail(email: string | null | undefined): string {
@@ -21,10 +20,7 @@ export function isAdminEmail(email: string | null | undefined): boolean {
 
 export function defaultAdminFeatureFlags(): AdminFeatureFlags {
   const geminiEnabled = Boolean(config.geminiApiKey);
-  return {
-    geminiEnabled,
-    darkModeEnabled: false
-  };
+  return { geminiEnabled };
 }
 
 export async function getAdminFeatureFlagsForUser(
@@ -34,7 +30,7 @@ export async function getAdminFeatureFlagsForUser(
   const db = client || pool;
   const result = await db.query(
     `
-    SELECT gemini_enabled, dark_mode_enabled
+    SELECT gemini_enabled
     FROM admin_feature_flags
     WHERE user_id = $1
     `,
@@ -45,8 +41,7 @@ export async function getAdminFeatureFlagsForUser(
   }
   const row = result.rows[0];
   return {
-    geminiEnabled: Boolean(row.gemini_enabled),
-    darkModeEnabled: Boolean(row.dark_mode_enabled)
+    geminiEnabled: Boolean(row.gemini_enabled)
   };
 }
 
@@ -71,20 +66,18 @@ export async function upsertAdminFeatureFlags(
   // The column is no longer read or surfaced anywhere in the application.
   const result = await db.query(
     `
-    INSERT INTO admin_feature_flags (user_id, gemini_enabled, dark_mode_enabled, fatsecret_enabled)
-    VALUES ($1, $2, $3, false)
+    INSERT INTO admin_feature_flags (user_id, gemini_enabled, fatsecret_enabled)
+    VALUES ($1, $2, false)
     ON CONFLICT (user_id) DO UPDATE
     SET
       gemini_enabled = EXCLUDED.gemini_enabled,
-      dark_mode_enabled = EXCLUDED.dark_mode_enabled,
       updated_at = NOW()
-    RETURNING gemini_enabled, dark_mode_enabled
+    RETURNING gemini_enabled
     `,
-    [userId, flags.geminiEnabled, flags.darkModeEnabled]
+    [userId, flags.geminiEnabled]
   );
   const row = result.rows[0];
   return {
-    geminiEnabled: Boolean(row.gemini_enabled),
-    darkModeEnabled: Boolean(row.dark_mode_enabled)
+    geminiEnabled: Boolean(row.gemini_enabled)
   };
 }

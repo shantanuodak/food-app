@@ -19,7 +19,6 @@ struct HomeProfileScreen: View {
     @State private var healthPermissionMessage: String?
     @State private var isAdmin = false
     @State private var adminGeminiEnabled = false
-    @State private var adminDarkModeEnabled = false
     @State private var isAdminFlagsLoading = false
     @State private var isAdminNotificationTriggering = false
     @State private var adminDebugStatus: String?
@@ -132,9 +131,6 @@ struct HomeProfileScreen: View {
             NavigationLink {
                 AccountProfileDetailView(title: "Account") {
                     accountSection
-                    if appStore.isThemeFeatureEnabled {
-                        themeSection
-                    }
                 }
             } label: {
                 ProfileHubRow(
@@ -481,22 +477,6 @@ struct HomeProfileScreen: View {
         }
     }
 
-    private var themeSection: some View {
-        Section {
-            Picker("Appearance", selection: themePreferenceBinding) {
-                ForEach(AppThemePreference.allCases) { preference in
-                    Text(preference.title).tag(preference)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.vertical, 4)
-        } header: {
-            Text("Theme")
-        } footer: {
-            Text("This changes the signed-in app only. Onboarding stays in light mode for now.")
-        }
-    }
-
     private var mealReminderSection: some View {
         Section {
             reminderTimePicker(
@@ -528,11 +508,6 @@ struct HomeProfileScreen: View {
                 Label("Gemini AI", systemImage: "sparkles")
             }
             .onChange(of: adminGeminiEnabled) { _, _ in triggerAdminAutoSave() }
-
-            Toggle(isOn: $adminDarkModeEnabled) {
-                Label("Dark mode", systemImage: "moon.fill")
-            }
-            .onChange(of: adminDarkModeEnabled) { _, _ in triggerAdminAutoSave() }
         }
 
         Section {
@@ -909,10 +884,7 @@ struct HomeProfileScreen: View {
         guard isAdmin else { return }
         Task {
             do {
-                let request = AdminFeatureFlagsUpdateRequest(
-                    geminiEnabled: adminGeminiEnabled,
-                    darkModeEnabled: adminDarkModeEnabled
-                )
+                let request = AdminFeatureFlagsUpdateRequest(geminiEnabled: adminGeminiEnabled)
                 let response = try await appStore.apiClient.updateAdminFeatureFlags(request)
                 syncAdminFlags(response)
             } catch {
@@ -964,21 +936,11 @@ struct HomeProfileScreen: View {
 
     private func syncAdminFlags(_ response: AdminFeatureFlagsResponse) {
         isAdmin = response.isAdmin
-        appStore.applyAdminFeatureFlags(response)
         if let flags = response.flags, response.isAdmin {
             adminGeminiEnabled = flags.geminiEnabled
-            adminDarkModeEnabled = flags.darkModeEnabled
         } else {
             adminGeminiEnabled = false
-            adminDarkModeEnabled = false
         }
-    }
-
-    private var themePreferenceBinding: Binding<AppThemePreference> {
-        Binding(
-            get: { appStore.appThemePreference },
-            set: { appStore.setAppThemePreference($0) }
-        )
     }
 }
 

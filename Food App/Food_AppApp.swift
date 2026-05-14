@@ -21,6 +21,7 @@ struct Food_AppApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appStore)
+                .preferredColorScheme(.light)
                 .onOpenURL { url in
                     if QuickCameraLaunchStore.handle(url: url) {
                         return
