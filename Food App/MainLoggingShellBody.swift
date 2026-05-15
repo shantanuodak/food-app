@@ -374,9 +374,11 @@ extension MainLoggingShellView {
             .sheet(isPresented: $isCameraAnalysisSheetPresented, onDismiss: {
                 cameraDrawerState = .idle
                 cameraDrawerImage = nil
+                cameraDrawerContextNote = ""
             }) {
                 CameraResultDrawerView(
                     state: cameraDrawerState,
+                    contextNote: $cameraDrawerContextNote,
                     onLogIt: {
                         handleDrawerLogIt()
                     },
@@ -386,7 +388,7 @@ extension MainLoggingShellView {
                     onRetry: {
                         if let image = cameraDrawerImage {
                             cameraDrawerState = .analyzing(image)
-                            Task { await parseAndUpdateDrawer(image) }
+                            Task { await parseAndUpdateDrawer(image, contextNote: cameraDrawerContextNote) }
                         }
                     }
                 )

@@ -141,7 +141,7 @@ extension MainLoggingShellView {
     // MARK: - Custom Camera Drawer Flow
 
     @MainActor
-    func parseAndUpdateDrawer(_ image: UIImage) async {
+    func parseAndUpdateDrawer(_ image: UIImage, contextNote: String? = nil) async {
         let flowStartedAt = Date()
         let clientAttemptId = UUID().uuidString.lowercased()
         // JPEG compression can take 1-2 s on a 12MP photo. Run it on a
@@ -184,7 +184,8 @@ extension MainLoggingShellView {
             let response = try await appStore.apiClient.parseImageLog(
                 imageData: prepared.uploadData,
                 mimeType: prepared.mimeType,
-                loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate())
+                loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate()),
+                contextNote: contextNote
             )
             let requestMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
             let totalMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
@@ -324,6 +325,7 @@ extension MainLoggingShellView {
         try? await Task.sleep(for: .milliseconds(350))
 
         cameraDrawerImage = image
+        cameraDrawerContextNote = ""
         cameraDrawerState = .analyzing(image)
         isCameraAnalysisSheetPresented = true
         await parseAndUpdateDrawer(image)

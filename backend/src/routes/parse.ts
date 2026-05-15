@@ -35,6 +35,11 @@ const escalateSchema = z.object({
 const imageParseSchema = z.object({
   imageBase64: z.string().trim().min(1),
   mimeType: z.string().trim().min(1).max(100),
+  contextNote: z
+    .string()
+    .trim()
+    .max(240)
+    .optional(),
   loggedAt: z
     .string()
     .datetime()
@@ -127,7 +132,8 @@ router.post('/image', async (req, res, next) => {
     const parseRequestId = res.locals.requestId as string;
     const parsedImage = await parseImageWithGemini({
       mimeType: body.mimeType,
-      dataBase64: body.imageBase64
+      dataBase64: body.imageBase64,
+      contextNote: body.contextNote
     });
 
     let budget = await getBudgetSnapshotForUser({

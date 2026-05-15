@@ -130,6 +130,7 @@ struct MainLoggingShellView: View {
     @State var quickCameraPrompt: QuickCameraPendingLog?
     @State var cameraDrawerState: CameraDrawerState = .idle
     @State var cameraDrawerImage: UIImage?
+    @State var cameraDrawerContextNote: String = ""
     @State var isCameraAnalysisSheetPresented = false
 
     @State var autoSavedParseIDs: Set<String> = []

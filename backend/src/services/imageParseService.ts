@@ -23,6 +23,7 @@ export type ImageParseServiceResult = {
 type ImagePart = {
   mimeType: string;
   dataBase64: string;
+  contextNote?: string;
 };
 
 const parseItemSchema = z.object({
@@ -62,6 +63,186 @@ function trimSafe(value: string | undefined | null): string {
   return (value || '').trim();
 }
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+}
+
+function getFirst(record: Record<string, unknown>, keys: string[]): unknown {
+  for (const key of keys) {
+    if (record[key] !== undefined && record[key] !== null) {
+      return record[key];
+    }
+  }
+  return undefined;
+}
+
+function asText(value: unknown): string {
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return String(value);
+  }
+  return '';
+}
+
+function asNumber(value: unknown): number | null {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const normalized = value.trim().replace(/,/g, '');
+  if (!normalized) {
+    return null;
+  }
+
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  if (!match) {
+    return null;
+  }
+
+  const parsed = Number(match[0]);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function clampConfidence(value: unknown, fallback = 0.5): number {
+  const parsed = asNumber(value);
+  if (parsed === null) {
+    return fallback;
+  }
+  return Math.min(1, Math.max(0, parsed));
+}
+
+function stringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.map((item) => asText(item)).filter(Boolean).slice(0, 8);
+}
+
+function extractJsonCandidate(payloadText: string): string | null {
+  const trimmed = payloadText.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1]?.trim() || trimmed;
+  const start = candidate.indexOf('{');
+  if (start < 0) {
+    return null;
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < candidate.length; index += 1) {
+    const char = candidate[index];
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+    if (inString) {
+      continue;
+    }
+    if (char === '{') {
+      depth += 1;
+    } else if (char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return candidate.slice(start, index + 1);
+      }
+    }
+  }
+
+  return null;
+}
+
+function normalizeGeminiItem(rawItem: unknown, topLevelConfidence: number): z.input<typeof parseItemSchema> | null {
+  const record = asRecord(rawItem);
+  if (!record) {
+    return null;
+  }
+
+  const name =
+    asText(getFirst(record, ['name', 'foodName', 'food', 'item', 'label', 'description', 'foodDescription'])) ||
+    'Food item';
+  const quantity = nonNegative(asNumber(getFirst(record, ['quantity', 'amount', 'servings', 'servingCount', 'count'])) ?? 1);
+  const unit =
+    asText(getFirst(record, ['unit', 'servingUnit', 'serving_unit', 'portionUnit', 'portion_unit', 'serving', 'portion'])) ||
+    'serving';
+  const grams = nonNegative(
+    asNumber(getFirst(record, ['grams', 'gramWeight', 'weightGrams', 'weight_grams', 'weightG', 'servingGrams', 'serving_grams'])) ?? 0
+  );
+  const calories = nonNegative(
+    asNumber(getFirst(record, ['calories', 'caloriesKcal', 'calories_kcal', 'kcal', 'energyKcal', 'energy_kcal'])) ?? 0
+  );
+  const protein = nonNegative(asNumber(getFirst(record, ['protein', 'proteinG', 'protein_g', 'proteinGrams'])) ?? 0);
+  const carbs = nonNegative(asNumber(getFirst(record, ['carbs', 'carbohydrates', 'carbsG', 'carbs_g', 'carbohydratesG', 'carbohydrates_g'])) ?? 0);
+  const fat = nonNegative(asNumber(getFirst(record, ['fat', 'fatG', 'fat_g', 'totalFat', 'total_fat', 'totalFatG'])) ?? 0);
+  const hasUsableNutrition = calories > 0 || protein > 0 || carbs > 0 || fat > 0;
+
+  if (!name.trim() || !hasUsableNutrition) {
+    return null;
+  }
+
+  return {
+    name,
+    quantity: Math.max(quantity, 0.0001),
+    unit,
+    grams,
+    calories,
+    protein,
+    carbs,
+    fat,
+    matchConfidence: clampConfidence(getFirst(record, ['matchConfidence', 'confidence', 'foodConfidence']), topLevelConfidence),
+    foodDescription: asText(getFirst(record, ['foodDescription', 'description', 'visibleDescription'])) || name,
+    explanation:
+      asText(getFirst(record, ['explanation', 'reasoning', 'assumption', 'notes'])) ||
+      'AI image estimate based on visible foods; review portion if needed.'
+  };
+}
+
+function normalizeGeminiPayload(parsed: unknown): z.input<typeof imageParseSchema> | null {
+  const record = asRecord(parsed);
+  if (!record) {
+    return null;
+  }
+
+  const confidence = clampConfidence(getFirst(record, ['confidence', 'overallConfidence', 'imageConfidence']), 0.5);
+  const rawItems =
+    getFirst(record, ['items', 'foods', 'foodItems', 'detectedFoods', 'detected_foods', 'results', 'matches']) ??
+    (getFirst(record, ['name', 'foodName', 'food']) ? [record] : []);
+  if (!Array.isArray(rawItems)) {
+    return null;
+  }
+
+  const items = rawItems
+    .map((item) => normalizeGeminiItem(item, confidence))
+    .filter((item): item is z.input<typeof parseItemSchema> => item !== null);
+  if (items.length === 0) {
+    return null;
+  }
+
+  return {
+    extractedText: asText(getFirst(record, ['extractedText', 'detectedText', 'summary', 'caption'])),
+    confidence,
+    assumptions: stringArray(getFirst(record, ['assumptions', 'notes', 'warnings'])),
+    items
+  };
+}
+
 function priceForModel(model: string): { inputUsdPer1M: number; outputUsdPer1M: number } {
   const normalized = model.trim().toLowerCase();
   if (normalized.includes('flash-lite')) {
@@ -86,7 +267,8 @@ function estimateCostUsd(usage: GeminiUsage): number {
 
 type ImagePromptMode = 'primary' | 'rescue';
 
-function buildImageParsePrompt(mode: ImagePromptMode = 'primary'): string {
+function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: string): string {
+  const note = trimSafe(contextNote);
   const sharedRules = [
     'Output schema exactly:',
     '{"extractedText":string,"confidence":number,"assumptions":string[],"items":[{"name":string,"quantity":number,"unit":string,"grams":number,"calories":number,"protein":number,"carbs":number,"fat":number,"matchConfidence":number,"foodDescription":string,"explanation":string}]}',
@@ -103,7 +285,15 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary'): string {
     '- nutritionSourceId is not needed in output; it is added downstream.',
     '- Keep explanations to one concise user-friendly sentence mentioning visible food, portion/grams, and whether label values or serving estimates were used.',
     '- Do not mention matchConfidence in explanations.',
-    '- If image has no food, return confidence 0 and items [].'
+    '- If image has no food, return confidence 0 and items [].',
+    ...(note
+      ? [
+          '',
+          'User-provided photo context:',
+          note,
+          'Use this context to identify foods and portions when it is compatible with the image. Do not invent foods that contradict the image.'
+        ]
+      : [])
   ];
 
   if (mode === 'rescue') {
@@ -127,12 +317,21 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary'): string {
 function parseGeminiOutput(payloadText: string): { extractedText: string; result: ParseResult } | null {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(payloadText);
+    const jsonCandidate = extractJsonCandidate(payloadText);
+    if (!jsonCandidate) {
+      return null;
+    }
+    parsed = JSON.parse(jsonCandidate);
   } catch {
     return null;
   }
 
-  const validated = imageParseSchema.safeParse(parsed);
+  const normalizedPayload = normalizeGeminiPayload(parsed);
+  if (!normalizedPayload) {
+    return null;
+  }
+
+  const validated = imageParseSchema.safeParse(normalizedPayload);
   if (!validated.success) {
     return null;
   }
@@ -229,7 +428,7 @@ async function runImageModel(model: string, image: ImagePart, mode: ImagePromptM
     temperature: 0.1,
     maxOutputTokens: mode === 'rescue' ? 700 : 900,
     parts: [
-      { text: buildImageParsePrompt(mode) },
+      { text: buildImageParsePrompt(mode, image.contextNote) },
       {
         inlineData: {
           mimeType: image.mimeType,
@@ -313,6 +512,20 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
         usage: rescued.usage,
         estimatedCostUsd: estimateCostUsd(rescued.usage)
       });
+    }
+    const rescuedAccepted =
+      rescued &&
+      rescued.result.items.length > 0 &&
+      rescued.result.confidence >= config.aiImageConfidenceMin;
+    if (rescuedAccepted) {
+      return {
+        extractedText: rescued.extractedText,
+        result: rescued.result,
+        model: rescued.usage.model,
+        fallbackUsed: true,
+        lowConfidenceAccepted: false,
+        usageEvents
+      };
     }
     const acceptedRescue = acceptedLowConfidenceResult(rescued, usageEvents, true);
     if (acceptedRescue) {

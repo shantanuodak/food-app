@@ -20,6 +20,7 @@ enum CameraDrawerState {
 
 struct CameraResultDrawerView: View {
     let state: CameraDrawerState
+    @Binding var contextNote: String
     let onLogIt: () -> Void
     let onDiscard: () -> Void
     let onRetry: () -> Void
@@ -60,7 +61,7 @@ struct CameraResultDrawerView: View {
     // MARK: - Analyzing State
 
     private func analyzingContent(image: UIImage) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        return VStack(alignment: .leading, spacing: 0) {
             // Full-width image with shimmer sweep
             ZStack(alignment: .topTrailing) {
                 Image(uiImage: image)
@@ -195,7 +196,9 @@ struct CameraResultDrawerView: View {
     // MARK: - Parsed State
 
     private func parsedContent(image: UIImage, items: [ParsedFoodItem], totals: NutritionTotals) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        let needsReview = reviewRecommended(items: items)
+
+        return VStack(alignment: .leading, spacing: 0) {
             // Hero image with re-parse + close icons
             ZStack(alignment: .topTrailing) {
                 Image(uiImage: image)
@@ -208,7 +211,7 @@ struct CameraResultDrawerView: View {
                 VStack {
                     Spacer()
                     HStack {
-                        Label("Detected from photo", systemImage: "camera.viewfinder")
+                        Label(needsReview ? "Review recommended" : "Detected from photo", systemImage: needsReview ? "exclamationmark.triangle.fill" : "camera.viewfinder")
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 10)
@@ -234,6 +237,12 @@ struct CameraResultDrawerView: View {
             .padding(.horizontal, 20)
             .padding(.top, 28)
 
+            if needsReview {
+                reviewRecommendedCard(items: items)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 16)
+            }
+
             LoggingResultDrawerBody(
                 foodName: foodDisplayName(items: items),
                 totals: totals,
@@ -246,6 +255,11 @@ struct CameraResultDrawerView: View {
 
             // CTA
             VStack(spacing: 10) {
+                photoContextNoteEditor(
+                    title: "Improve this estimate",
+                    placeholder: "Optional: 2 slices, homemade, with chutney..."
+                )
+
                 Button(action: onLogIt) {
                     Text("Log it")
                         .font(.system(size: 17, weight: .semibold))
@@ -265,7 +279,7 @@ struct CameraResultDrawerView: View {
                 .buttonStyle(.plain)
 
                 Button(action: onRetry) {
-                    Label("Recalculate", systemImage: "arrow.clockwise")
+                    Label(contextNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Recalculate" : "Recalculate with note", systemImage: "arrow.clockwise")
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(Color(red: 0.420, green: 0.370, blue: 1.0))
                         .frame(maxWidth: .infinity)
@@ -289,6 +303,69 @@ struct CameraResultDrawerView: View {
             .padding(.horizontal, 20)
             .padding(.top, 20)
             .padding(.bottom, 32)
+        }
+    }
+
+    private func reviewRecommended(items: [ParsedFoodItem]) -> Bool {
+        items.contains { item in
+            item.needsClarification == true || item.matchConfidence < 0.7
+        }
+    }
+
+    private func reviewRecommendedCard(items: [ParsedFoodItem]) -> some View {
+        let question = items.count > 1
+            ? "Food App found visible foods, but portions may need a quick check before logging."
+            : "Food App found \(items.first?.name ?? "this food"), but the portion may need a quick check before logging."
+
+        return HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 16, weight: .bold))
+                .foregroundStyle(Color.orange)
+                .frame(width: 30, height: 30)
+                .background(Color.orange.opacity(0.14), in: Circle())
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Review recommended")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text(question)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Color.orange.opacity(0.09))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(Color.orange.opacity(0.22), lineWidth: 1)
+                )
+        )
+    }
+
+    private func photoContextNoteEditor(title: String, placeholder: String) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            TextField(placeholder, text: $contextNote, axis: .vertical)
+                .font(.system(size: 15, weight: .medium))
+                .lineLimit(1...3)
+                .textInputAutocapitalization(.sentences)
+                .disableAutocorrection(false)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(Color(.systemGray6))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.black.opacity(0.06), lineWidth: 1)
+                )
         }
     }
 
@@ -346,6 +423,15 @@ struct CameraResultDrawerView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 32)
             }
+
+            HStack(spacing: 12) {
+                photoContextNoteEditor(
+                    title: "Add a hint and try again",
+                    placeholder: "Example: pizza, 2 slices"
+                )
+                .padding(.bottom, 2)
+            }
+            .padding(.horizontal, 20)
 
             HStack(spacing: 12) {
                 Button(action: onDiscard) {

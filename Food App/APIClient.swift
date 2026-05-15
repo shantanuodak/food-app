@@ -156,15 +156,18 @@ final class APIClient {
         throw APIClientError.networkFailure("Stream ended without done event")
     }
 
-    func parseImageLog(imageData: Data, mimeType: String, loggedAt: String?) async throws -> ParseLogResponse {
+    func parseImageLog(imageData: Data, mimeType: String, loggedAt: String?, contextNote: String? = nil) async throws -> ParseLogResponse {
         struct ImageParseBody: Encodable {
             let imageBase64: String
             let mimeType: String
+            let contextNote: String?
             let loggedAt: String?
         }
+        let trimmedContextNote = contextNote?.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = ImageParseBody(
             imageBase64: imageData.base64EncodedString(),
             mimeType: mimeType,
+            contextNote: trimmedContextNote?.isEmpty == false ? trimmedContextNote : nil,
             loggedAt: loggedAt
         )
         return try await request(

@@ -131,4 +131,134 @@ describe('image parse service', () => {
     expect(parsed.result.items[0].name).toBe('Margherita pizza');
     expect(parsed.result.totals.calories).toBe(560);
   });
+
+  test('accepts fenced Gemini JSON with food-app style alternate field names', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'false';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson: vi.fn(async () => ({
+        jsonText: [
+          '```json',
+          JSON.stringify({
+            caption: 'margherita pizza',
+            overallConfidence: '0.62',
+            notes: ['Estimated as two visible slices.'],
+            foods: [
+              {
+                foodName: 'Margherita pizza',
+                amount: '2',
+                servingUnit: 'slices',
+                weightGrams: '220 g',
+                caloriesKcal: '560 kcal',
+                proteinG: '22g',
+                carbsG: '66 g',
+                fatG: '22g',
+                foodConfidence: '0.60',
+                description: 'Margherita pizza, 2 slices'
+              }
+            ]
+          }),
+          '```'
+        ].join('\n'),
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 120,
+          outputTokens: 90
+        }
+      }))
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'pizza-image'
+    });
+
+    expect(parsed.lowConfidenceAccepted).toBe(true);
+    expect(parsed.fallbackUsed).toBe(false);
+    expect(parsed.extractedText).toBe('margherita pizza');
+    expect(parsed.result.items[0].name).toBe('Margherita pizza');
+    expect(parsed.result.items[0].unit).toBe('slice');
+    expect(parsed.result.items[0].quantity).toBe(2);
+    expect(parsed.result.items[0].gramsPerUnit).toBe(110);
+    expect(parsed.result.items[0].needsClarification).toBe(true);
+    expect(parsed.result.totals).toMatchObject({
+      calories: 560,
+      protein: 22,
+      carbs: 66,
+      fat: 22
+    });
+  });
+
+  test('does not mark high-confidence same-model rescue results as low-confidence accepted', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: JSON.stringify({
+          extractedText: '',
+          confidence: 0,
+          assumptions: [],
+          items: []
+        }),
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 120,
+          outputTokens: 20
+        }
+      })
+      .mockResolvedValueOnce({
+        jsonText: JSON.stringify({
+          extractedText: 'turkey sandwich',
+          confidence: 0.91,
+          assumptions: [],
+          items: [
+            {
+              name: 'Turkey sandwich',
+              quantity: 1,
+              unit: 'sandwich',
+              grams: 210,
+              calories: 430,
+              protein: 28,
+              carbs: 38,
+              fat: 18,
+              matchConfidence: 0.9,
+              foodDescription: 'Turkey sandwich, 1 sandwich',
+              explanation: 'Estimated from the visible sandwich using a typical full sandwich serving.'
+            }
+          ]
+        }),
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 130,
+          outputTokens: 80
+        }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'sandwich-image'
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
+    expect(parsed.fallbackUsed).toBe(true);
+    expect(parsed.lowConfidenceAccepted).toBe(false);
+    expect(parsed.result.confidence).toBe(0.91);
+    expect(parsed.result.items[0].needsClarification).toBe(false);
+  });
 });
