@@ -132,6 +132,76 @@ describe('image parse service', () => {
     expect(parsed.result.totals.calories).toBe(560);
   });
 
+  test('rescue prompt explicitly supports Indian flatbread photos', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: JSON.stringify({
+          extractedText: '',
+          confidence: 0,
+          assumptions: [],
+          items: []
+        }),
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 120,
+          outputTokens: 20
+        }
+      })
+      .mockResolvedValueOnce({
+        jsonText: JSON.stringify({
+          extractedText: 'methi paratha with chutney',
+          confidence: 0.56,
+          assumptions: ['Estimated as one visible Indian flatbread with chutney.'],
+          items: [
+            {
+              name: 'Methi paratha',
+              quantity: 1,
+              unit: 'piece',
+              grams: 120,
+              calories: 300,
+              protein: 8,
+              carbs: 42,
+              fat: 11,
+              matchConfidence: 0.58,
+              foodDescription: 'Methi paratha, 1 piece',
+              explanation: 'Estimated from the visible flatbread using a typical paratha serving.'
+            }
+          ]
+        }),
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 140,
+          outputTokens: 85
+        }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'flatbread-image'
+    });
+
+    const rescuePrompt = generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text;
+    expect(rescuePrompt).toContain('paratha');
+    expect(rescuePrompt).toContain('flatbread');
+    expect(parsed.lowConfidenceAccepted).toBe(true);
+    expect(parsed.fallbackUsed).toBe(true);
+    expect(parsed.result.items[0].name).toBe('Methi paratha');
+    expect(parsed.result.totals.calories).toBe(300);
+  });
+
   test('accepts fenced Gemini JSON with food-app style alternate field names', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
     process.env.AI_IMAGE_PARSE_ENABLED = 'true';

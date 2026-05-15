@@ -277,7 +277,9 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
     '- Use realistic serving assumptions when quantity is unclear.',
     '- Return non-empty items if edible foods are visible.',
     '- Do not fail only because the exact portion is uncertain; estimate a common visible serving and explain the assumption.',
-    '- For common foods such as pizza, rice bowls, sandwiches, salads, drinks, snacks, and desserts, return a best-effort item even when the exact recipe is unknown.',
+    '- For common foods such as pizza, rice bowls, sandwiches, salads, drinks, snacks, desserts, roti, chapati, paratha, thepla, naan, dosa, idli, poha, dal, curry, and chutney, return a best-effort item even when the exact recipe is unknown.',
+    '- For visible edible foods, calories must be greater than 0. Do not output zero nutrition just because recipe or portion is uncertain.',
+    '- If the image shows a flatbread-like food, estimate it as the closest visible broad category such as "paratha", "roti", "thepla", "naan", or "flatbread" instead of returning no items.',
     '- Confidence and matchConfidence are in [0,1].',
     '- Do not return negative numbers.',
     '- extractedText should be a concise comma-separated phrase list in user-entered order.',
@@ -302,7 +304,8 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
       'Look at the image again and return strict JSON only (no markdown).',
       'Bias toward a safe best-effort food log rather than rejecting the photo.',
       'If any edible food is visible, items must contain at least one item.',
-      'Use broad names when needed, e.g. "pizza", "rice bowl", "sandwich", "coffee", "snack bar".',
+      'Use broad names when needed, e.g. "pizza", "rice bowl", "sandwich", "coffee", "snack bar", "paratha", "roti", "thepla", "flatbread".',
+      'If a cooked bread/flatbread is visible, return an estimated item even if the exact filling or flour type is uncertain.',
       ...sharedRules
     ].join('\n');
   }
