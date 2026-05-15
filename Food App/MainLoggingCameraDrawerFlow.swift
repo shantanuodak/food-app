@@ -247,14 +247,22 @@ extension MainLoggingShellView {
     }
 
     @MainActor
-    func handleDrawerLogIt() {
+    func handleDrawerLogIt(editedItems: [ParsedFoodItem]? = nil, editedTotals: NutritionTotals? = nil) {
         guard case .parsed(_, let items, _) = cameraDrawerState,
               let response = parseResult else { return }
+
+        let confirmedItems = editedItems ?? items
+        let confirmedTotals = editedTotals ?? response.totals
+        let confirmedResponse = photoResponse(
+            from: response,
+            confirmedItems: confirmedItems,
+            confirmedTotals: confirmedTotals
+        )
 
         // Populate the input row with a short display name.
         // Full detail (brand, protein content, flavor, etc.) lives in the items
         // and is shown in the details drawer — the home screen just needs a readable label.
-        let rowText = HomeLoggingDisplayText.shortenedFoodLabel(items: items, extractedText: response.extractedText)
+        let rowText = HomeLoggingDisplayText.shortenedFoodLabel(items: confirmedItems, extractedText: response.extractedText)
 
         var row = HomeLogRow.empty()
         row.text = rowText
@@ -271,13 +279,14 @@ extension MainLoggingShellView {
         inputRows = savedRows + unsavedNonEmpty + [row]
         clearParseSchedulerState()
 
-        latestParseInputKind = normalizedInputKind(response.inputKind, fallback: "image")
-        editableItems = response.items.map(EditableParsedItem.init(apiItem:))
+        parseResult = confirmedResponse
+        latestParseInputKind = normalizedInputKind(confirmedResponse.inputKind, fallback: "image")
+        editableItems = confirmedItems.map(EditableParsedItem.init(apiItem:))
 
         // Find the camera row we just inserted (the one with the image data)
         let cameraRowIndex = inputRows.lastIndex(where: { $0.id == row.id })
         let cameraRowIDSet: Set<UUID> = [row.id]
-        applyRowParseResult(response, targetRowIDs: cameraRowIDSet)
+        applyRowParseResult(confirmedResponse, targetRowIDs: cameraRowIDSet)
         if let idx = cameraRowIndex {
             inputRows[idx].imagePreviewData = pendingImagePreviewData
             inputRows[idx].imageRef = pendingImageStorageRef
@@ -289,13 +298,48 @@ extension MainLoggingShellView {
         appStore.setError(nil)
         upsertParseSnapshot(
             rowID: row.id,
-            response: response,
+            response: confirmedResponse,
             fallbackRawText: rowText
         )
         scheduleAutoSave()
 
         // Dismiss the sheet — food appears on home screen
         isCameraAnalysisSheetPresented = false
+    }
+
+    private func photoResponse(
+        from response: ParseLogResponse,
+        confirmedItems: [ParsedFoodItem],
+        confirmedTotals: NutritionTotals
+    ) -> ParseLogResponse {
+        ParseLogResponse(
+            requestId: response.requestId,
+            parseRequestId: response.parseRequestId,
+            parseVersion: response.parseVersion,
+            route: response.route,
+            cacheHit: response.cacheHit,
+            sourcesUsed: response.sourcesUsed,
+            fallbackUsed: response.fallbackUsed,
+            fallbackModel: response.fallbackModel,
+            budget: response.budget,
+            needsClarification: false,
+            clarificationQuestions: [],
+            reasonCodes: response.reasonCodes,
+            retryAfterSeconds: response.retryAfterSeconds,
+            parseDurationMs: response.parseDurationMs,
+            loggedAt: response.loggedAt,
+            confidence: response.confidence,
+            totals: confirmedTotals,
+            items: confirmedItems,
+            assumptions: response.assumptions,
+            cacheDebug: response.cacheDebug,
+            inputKind: response.inputKind,
+            extractedText: response.extractedText,
+            imageMeta: response.imageMeta,
+            visionModel: response.visionModel,
+            visionFallbackUsed: response.visionFallbackUsed,
+            dietaryFlags: response.dietaryFlags
+        )
     }
 
     @MainActor

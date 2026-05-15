@@ -379,8 +379,8 @@ extension MainLoggingShellView {
                 CameraResultDrawerView(
                     state: cameraDrawerState,
                     contextNote: $cameraDrawerContextNote,
-                    onLogIt: {
-                        handleDrawerLogIt()
+                    onLogIt: { editedItems, editedTotals in
+                        handleDrawerLogIt(editedItems: editedItems, editedTotals: editedTotals)
                     },
                     onDiscard: {
                         isCameraAnalysisSheetPresented = false

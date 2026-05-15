@@ -284,7 +284,7 @@ struct EditableParsedItem: Identifiable {
     private let originalFat: Double
     private let originalNutritionSourceIdSnapshot: String
 
-    init(apiItem: ParsedFoodItem) {
+    nonisolated init(apiItem: ParsedFoodItem) {
         let quantityBasis = apiItem.amount ?? apiItem.quantity
         let safeQuantity = max(quantityBasis, 0.0001)
         name = apiItem.name

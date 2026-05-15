@@ -15,7 +15,7 @@ extension MainLoggingShellView {
         }
     }
 
-    /// JPEG compression loop. Pure transformation of `image` -> encoded `Data`.
+    /// High-quality JPEG preparation for vision parsing.
     ///
     /// `nonisolated static` so callers can run it on a background queue
     /// without an actor hop — a 12MP iPhone photo can take 1-2 s of CPU
@@ -23,16 +23,18 @@ extension MainLoggingShellView {
     /// camera result drawer's shimmer presentation) for the full duration
     /// after picking from the photo library.
     ///
-    /// The inner loop is wrapped in `autoreleasepool` so each
-    /// (dimension, quality) iteration's intermediate `Data` buffers are
-    /// released as soon as the next iteration starts. Without this,
-    /// holding 5-6 intermediates simultaneously can spike memory beyond
-    /// 1 GB during photo processing — see
-    /// `docs/PHASE_8_10_FINDINGS.md` Phase 9 #1.
+    /// Do not aggressively shrink these images. Package/can labels need
+    /// enough pixels for OCR-like vision behavior, and forcing everything
+    /// near 600 KB caused obvious branded items to become unreadable.
+    ///
+    /// The backend accepts ~6 MB raw images, and Express accepts a 10 MB
+    /// JSON body, so we target ~4.5 MB here to leave base64/JSON headroom.
+    /// The loop still runs off the main thread and each encode is scoped by
+    /// `autoreleasepool` to avoid retaining large intermediate buffers.
     nonisolated static func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
-        let maxBytes = 600_000
-        let dimensionAttempts: [CGFloat] = [1920, 1600, 1280, 1024]
-        let qualityAttempts: [CGFloat] = [0.85, 0.78, 0.70, 0.62, 0.55, 0.45, 0.35]
+        let maxBytes = 4_500_000
+        let dimensionAttempts: [CGFloat] = [3024, 2560, 2048, 1920, 1600]
+        let qualityAttempts: [CGFloat] = [0.95, 0.92, 0.88, 0.84, 0.80]
         var smallestData: Data?
 
         for dimension in dimensionAttempts {

@@ -21,13 +21,15 @@ enum CameraDrawerState {
 struct CameraResultDrawerView: View {
     let state: CameraDrawerState
     @Binding var contextNote: String
-    let onLogIt: () -> Void
+    let onLogIt: ([ParsedFoodItem], NutritionTotals) -> Void
     let onDiscard: () -> Void
     let onRetry: () -> Void
 
     @State private var shimmerPhase: CGFloat = -1
     @State private var analyzePhaseIndex: Int = 0
     @State private var phaseTimer: Timer?
+    @State private var editablePhotoItems: [EditableParsedItem] = []
+    @State private var editablePhotoSeedSignature = ""
 
     private let analyzingPhrases = [
         "Reading the image",
@@ -46,6 +48,12 @@ struct CameraResultDrawerView: View {
                     analyzingContent(image: image)
                 case .parsed(let image, let items, let totals):
                     parsedContent(image: image, items: items, totals: totals)
+                        .onAppear {
+                            seedEditablePhotoItemsIfNeeded(items, force: false)
+                        }
+                        .onChange(of: itemSignature(items)) { _, _ in
+                            seedEditablePhotoItemsIfNeeded(items, force: true)
+                        }
                 case .error(let message, let image):
                     errorContent(message: message, image: image)
                 }
@@ -196,7 +204,9 @@ struct CameraResultDrawerView: View {
     // MARK: - Parsed State
 
     private func parsedContent(image: UIImage, items: [ParsedFoodItem], totals: NutritionTotals) -> some View {
-        let needsReview = reviewRecommended(items: items)
+        let displayItems = displayedPhotoItems(fallback: items)
+        let displayTotals = editablePhotoItems.isEmpty ? totals : totalsForItems(displayItems)
+        let needsReview = reviewRecommended(items: displayItems)
 
         return VStack(alignment: .leading, spacing: 0) {
             // Hero image with re-parse + close icons
@@ -238,18 +248,20 @@ struct CameraResultDrawerView: View {
             .padding(.top, 28)
 
             if needsReview {
-                reviewRecommendedCard(items: items)
+                reviewRecommendedCard(items: displayItems)
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
             }
 
             LoggingResultDrawerBody(
-                foodName: foodDisplayName(items: items),
-                totals: totals,
-                items: items,
-                thoughtProcess: cameraThoughtProcess(items: items),
+                foodName: foodDisplayName(items: displayItems),
+                totals: displayTotals,
+                items: displayItems,
+                thoughtProcess: cameraThoughtProcess(items: displayItems),
                 mode: .photoReview,
-                onItemQuantityChange: nil,
+                onItemQuantityChange: { itemOffset, quantity in
+                    updatePhotoItemQuantity(itemOffset: itemOffset, quantity: quantity, fallbackItems: items)
+                },
                 onRecalculate: nil
             )
 
@@ -260,7 +272,9 @@ struct CameraResultDrawerView: View {
                     placeholder: "Optional: 2 slices, homemade, with chutney..."
                 )
 
-                Button(action: onLogIt) {
+                Button {
+                    onLogIt(displayItems, displayTotals)
+                } label: {
                     Text("Log it")
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.white)
@@ -304,6 +318,57 @@ struct CameraResultDrawerView: View {
             .padding(.top, 20)
             .padding(.bottom, 32)
         }
+    }
+
+    private func seedEditablePhotoItemsIfNeeded(_ items: [ParsedFoodItem], force: Bool) {
+        let signature = itemSignature(items)
+        guard force || signature != editablePhotoSeedSignature else { return }
+        editablePhotoSeedSignature = signature
+        editablePhotoItems = items.map(EditableParsedItem.init(apiItem:))
+    }
+
+    private func itemSignature(_ items: [ParsedFoodItem]) -> String {
+        items.map { item in
+            [
+                item.name,
+                String(item.quantity),
+                item.unit,
+                String(item.amount ?? item.quantity),
+                String(item.calories),
+                String(item.protein),
+                String(item.carbs),
+                String(item.fat)
+            ].joined(separator: "|")
+        }
+        .joined(separator: "||")
+    }
+
+    private func displayedPhotoItems(fallback items: [ParsedFoodItem]) -> [ParsedFoodItem] {
+        if editablePhotoItems.isEmpty {
+            return items
+        }
+        return editablePhotoItems.map { $0.asParsedFoodItem() }
+    }
+
+    private func totalsForItems(_ items: [ParsedFoodItem]) -> NutritionTotals {
+        NutritionTotals(
+            calories: roundOneDecimal(items.reduce(0) { $0 + $1.calories }),
+            protein: roundOneDecimal(items.reduce(0) { $0 + $1.protein }),
+            carbs: roundOneDecimal(items.reduce(0) { $0 + $1.carbs }),
+            fat: roundOneDecimal(items.reduce(0) { $0 + $1.fat })
+        )
+    }
+
+    private func roundOneDecimal(_ value: Double) -> Double {
+        (value * 10).rounded() / 10
+    }
+
+    private func updatePhotoItemQuantity(itemOffset: Int, quantity: Double, fallbackItems: [ParsedFoodItem]) {
+        if editablePhotoItems.isEmpty {
+            editablePhotoItems = fallbackItems.map(EditableParsedItem.init(apiItem:))
+        }
+        guard editablePhotoItems.indices.contains(itemOffset) else { return }
+        editablePhotoItems[itemOffset].updateQuantity(quantity)
     }
 
     private func reviewRecommended(items: [ParsedFoodItem]) -> Bool {
