@@ -14,6 +14,7 @@ import internalMetricsRoutes from './routes/internalMetrics.js';
 import evalDashboardRoutes from './routes/evalDashboard.js';
 import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js';
 import healthRoutes from './routes/health.js';
+import waitlistRoutes from './routes/waitlist.js';
 import { submitRouter as feedbackSubmitRoutes, adminRouter as feedbackAdminRoutes } from './routes/feedback.js';
 import { publicRouter as roadmapPublicRoutes, adminRouter as roadmapAdminRoutes } from './routes/roadmap.js';
 import { userRouter as notificationRoutes, adminRouter as notificationAdminRoutes } from './routes/notifications.js';
@@ -175,6 +176,7 @@ export function createApp() {
   app.use('/v1/rewards', authRequired, rewardsRoutes);
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
   app.use('/v1/health', authRequired, healthRoutes);
+  app.use('/v1/waitlist', waitlistRoutes);
   app.use('/v1/roadmap', authRequired, roadmapPublicRoutes);
   app.use('/v1/notifications', authRequired, notificationRoutes);
   // User feedback submission (auth-gated). Admin list views are mounted under
