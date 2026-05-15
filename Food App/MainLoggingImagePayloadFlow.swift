@@ -28,13 +28,15 @@ extension MainLoggingShellView {
     /// near 600 KB caused obvious branded items to become unreadable.
     ///
     /// The backend accepts ~6 MB raw images, and Express accepts a 10 MB
-    /// JSON body, so we target ~4.5 MB here to leave base64/JSON headroom.
+    /// JSON body, so we now target ~5.8 MB. This is intentionally slower:
+    /// the image parser is a core MVP feature and accuracy matters more than
+    /// shaving a second off photo preparation.
     /// The loop still runs off the main thread and each encode is scoped by
     /// `autoreleasepool` to avoid retaining large intermediate buffers.
     nonisolated static func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
-        let maxBytes = 4_500_000
-        let dimensionAttempts: [CGFloat] = [3024, 2560, 2048, 1920, 1600]
-        let qualityAttempts: [CGFloat] = [0.95, 0.92, 0.88, 0.84, 0.80]
+        let maxBytes = 5_800_000
+        let dimensionAttempts: [CGFloat] = [4032, 3600, 3024, 2560, 2048, 1920]
+        let qualityAttempts: [CGFloat] = [0.98, 0.95, 0.92, 0.88, 0.84, 0.80]
         var smallestData: Data?
 
         for dimension in dimensionAttempts {

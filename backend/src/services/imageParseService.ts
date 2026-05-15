@@ -252,6 +252,13 @@ function priceForModel(model: string): { inputUsdPer1M: number; outputUsdPer1M: 
     };
   }
 
+  if (normalized.includes('pro')) {
+    return {
+      inputUsdPer1M: config.geminiProInputUsdPer1M,
+      outputUsdPer1M: config.geminiProOutputUsdPer1M
+    };
+  }
+
   return {
     inputUsdPer1M: config.geminiFlashInputUsdPer1M,
     outputUsdPer1M: config.geminiFlashOutputUsdPer1M
@@ -304,6 +311,8 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
       'Look at the image again and return strict JSON only (no markdown).',
       'Bias toward a safe best-effort food log rather than rejecting the photo.',
       'If any edible food is visible, items must contain at least one item.',
+      'Only return no items when the image clearly contains no edible food or drink.',
+      'If the image is blurry, cropped, partially obstructed, or portion size is uncertain, still return the most likely visible food with a conservative serving estimate.',
       'Use broad names when needed, e.g. "pizza", "rice bowl", "sandwich", "coffee", "snack bar", "paratha", "roti", "thepla", "flatbread".',
       'If a cooked bread/flatbread is visible, return an estimated item even if the exact filling or flour type is uncertain.',
       ...sharedRules
@@ -312,7 +321,7 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
 
   return [
     'You are a nutrition parsing assistant for food photo logs.',
-    'Analyze the attached food image quickly and return strict JSON only (no markdown).',
+    'Analyze the attached food image carefully and return strict JSON only (no markdown).',
     ...sharedRules
   ].join('\n');
 }
@@ -429,7 +438,7 @@ async function runImageModel(model: string, image: ImagePart, mode: ImagePromptM
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.1,
-    maxOutputTokens: mode === 'rescue' ? 700 : 900,
+    maxOutputTokens: mode === 'rescue' ? 1400 : 1200,
     parts: [
       { text: buildImageParsePrompt(mode, image.contextNote) },
       {

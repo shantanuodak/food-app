@@ -2,7 +2,7 @@ services:
   - type: web
     name: food-app-backend
     env: node
-    plan: free
+    plan: starter
     rootDir: backend
     buildCommand: npm install --no-audit --no-fund && npm run build
     startCommand: npm run migrate && npm run start
@@ -29,6 +29,14 @@ services:
         sync: false
       - key: GEMINI_API_KEY
         sync: false
+      - key: AI_IMAGE_PRIMARY_MODEL
+        value: gemini-2.5-flash
+      - key: AI_IMAGE_FALLBACK_MODEL
+        value: gemini-2.5-pro
+      - key: GEMINI_TIMEOUT_MS
+        value: "45000"
+      - key: GEMINI_RETRY_MAX_ATTEMPTS
+        value: "2"
       - key: INTERNAL_METRICS_KEY
         sync: false
       - key: APNS_TEAM_ID

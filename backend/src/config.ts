@@ -112,7 +112,7 @@ export const config = {
     process.env.AI_IMAGE_PRIMARY_MODEL ||
     process.env.GEMINI_FLASH_LITE_MODEL ||
     'gemini-2.5-flash-lite',
-  aiImageFallbackModel: process.env.AI_IMAGE_FALLBACK_MODEL || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash',
+  aiImageFallbackModel: process.env.AI_IMAGE_FALLBACK_MODEL || 'gemini-2.5-pro',
   aiImageEnableFallback: booleanWithDefault('AI_IMAGE_ENABLE_FALLBACK', true),
   aiImageConfidenceMin: numberWithDefault('AI_IMAGE_CONFIDENCE_MIN', 0.7),
   aiImageMaxBytes: integerWithDefault('AI_IMAGE_MAX_BYTES', 6_291_456),
@@ -120,6 +120,8 @@ export const config = {
   geminiFlashLiteOutputUsdPer1M: numberWithDefault('GEMINI_FLASH_LITE_OUTPUT_USD_PER_1M', 0.40),
   geminiFlashInputUsdPer1M: numberWithDefault('GEMINI_FLASH_INPUT_USD_PER_1M', 0.30),
   geminiFlashOutputUsdPer1M: numberWithDefault('GEMINI_FLASH_OUTPUT_USD_PER_1M', 2.50),
+  geminiProInputUsdPer1M: numberWithDefault('GEMINI_PRO_INPUT_USD_PER_1M', 1.25),
+  geminiProOutputUsdPer1M: numberWithDefault('GEMINI_PRO_OUTPUT_USD_PER_1M', 10.0),
   aiEscalationEnabled: process.env.AI_ESCALATION_ENABLED === 'true',
   aiEscalationModelName: process.env.AI_ESCALATION_MODEL_NAME || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash',
   aiEscalationCostUsd: numberWithDefault('AI_ESCALATION_COST_USD', 0.003),
