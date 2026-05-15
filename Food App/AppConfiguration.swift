@@ -55,7 +55,11 @@ struct AppConfiguration {
         let resolvedBaseURL = processInfo.environment[overrideKey] ?? bundleBaseURL
         let baseURL = resolveBaseURL(from: resolvedBaseURL, environment: environment, processInfo: processInfo)
 
+        #if DEBUG
         let defaultToken = "dev-11111111-1111-1111-1111-111111111111"
+        #else
+        let defaultToken = ""
+        #endif
         let authToken = processInfo.environment["API_AUTH_TOKEN"] ?? defaultToken
 
         let googleClientID = processInfo.environment["GOOGLE_CLIENT_ID"] ??

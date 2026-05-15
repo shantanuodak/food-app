@@ -2237,7 +2237,7 @@ function passrateClass(r) {
 }
 function routeBadge(r) {
   const map = { gemini:'badge-blue', cache:'badge-green', deterministic:'badge-muted', unresolved:'badge-red', error:'badge-red' };
-  return `<span class="badge ${map[r] || 'badge-muted'}">${r || '—'}</span>`;
+  return `<span class="badge ${map[r] || 'badge-muted'}">${escapeHtml(r || '—')}</span>`;
 }
 function escapeHtml(value) {
   return String(value || '').replace(/[&<>"']/g, ch => ({
@@ -3259,7 +3259,7 @@ async function loadEvalHistory() {
         </tr>`;
     }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -3283,8 +3283,8 @@ async function toggleHistoryDetail(runId) {
         <tbody>`;
       for (const c of r.cases) {
         const s = c.pass ? '<span class="badge badge-green">PASS</span>' : '<span class="badge badge-red">FAIL</span>';
-        html += `<tr><td><span class="badge badge-muted">${c.cuisine}</span></td>
-          <td class="truncate">${c.input}</td>
+        html += `<tr><td><span class="badge badge-muted">${escapeHtml(c.cuisine)}</span></td>
+          <td class="truncate">${escapeHtml(c.input)}</td>
           <td>${routeBadge(c.route)}</td>
           <td class="mono">${fmt(c.actualCalories)}</td>
           <td class="mono ${confClass(c.confidence)}">${fmt(c.confidence, 2)}</td>
@@ -3293,7 +3293,7 @@ async function toggleHistoryDetail(runId) {
       html += '</tbody></table></div>';
       panel.innerHTML = html;
     } catch (e) {
-      panel.innerHTML = `<span class="text-red">${e.message}</span>`;
+      panel.innerHTML = `<span class="text-red">${escapeHtml(e.message)}</span>`;
     }
   }
 }
@@ -3322,7 +3322,7 @@ async function loadSavedLogs() {
     const data = await api(url);
     renderSavedLogs(data);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="12" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="12" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -3581,8 +3581,8 @@ async function loadCosts() {
       const cpr = row.requestCount > 0 ? (row.totalCostUsd / row.requestCount) : 0;
       tbody.innerHTML += `
         <tr>
-          <td class="mono">${row.day}</td>
-          <td><span class="badge badge-blue">${row.feature}</span></td>
+          <td class="mono">${escapeHtml(row.day)}</td>
+          <td><span class="badge badge-blue">${escapeHtml(row.feature)}</span></td>
           <td class="mono">${fmt(row.requestCount)}</td>
           <td class="mono">${fmt(row.inputTokens)}</td>
           <td class="mono">${fmt(row.outputTokens)}</td>
@@ -3591,7 +3591,7 @@ async function loadCosts() {
         </tr>`;
     }
   } catch (e) {
-    document.getElementById('cost-tbody').innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    document.getElementById('cost-tbody').innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -3617,7 +3617,7 @@ async function loadCache() {
         <tr>
           <td>${escHtml(e.foodName) || '<span class="text-muted">—</span>'}</td>
           <td class="mono">${fmt(e.calories)}</td>
-          <td><span class="badge badge-muted">${e.cacheScope || '—'}</span></td>
+          <td><span class="badge badge-muted">${escapeHtml(e.cacheScope || '—')}</span></td>
           <td class="mono ${confClass(e.confidence)}">${fmt(e.confidence, 2)}</td>
           <td class="mono text-green">${fmt(e.hitCount)}</td>
           <td class="mono text-muted" style="font-size:12px">${fmtTime(e.lastUsedAt)}</td>
@@ -3625,7 +3625,7 @@ async function loadCache() {
         </tr>`;
     }
   } catch (e) {
-    document.getElementById('cache-tbody').innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    document.getElementById('cache-tbody').innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -3673,7 +3673,7 @@ async function loadFeedback() {
         </tr>`;
     }
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${e.message}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="8" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
