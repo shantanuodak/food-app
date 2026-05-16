@@ -995,4 +995,69 @@ describe('image parse service', () => {
       })
     );
   });
+
+  test('accepts fenced top-level food item arrays from Gemini image parsing', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'false';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi.fn(async () => ({
+      jsonText: [
+        '```json',
+        JSON.stringify([
+          {
+            name: 'Dal',
+            quantity: 1,
+            unit: 'bowl',
+            grams: 240,
+            calories: 260,
+            protein: 14,
+            carbs: 38,
+            fat: 7,
+            matchConfidence: 0.9,
+            foodDescription: 'Dal, 1 bowl',
+            explanation: 'Estimated from one visible bowl of dal.'
+          },
+          {
+            name: 'Baati',
+            quantity: 2,
+            unit: 'pieces',
+            grams: 160,
+            calories: 420,
+            protein: 10,
+            carbs: 62,
+            fat: 14,
+            matchConfidence: 0.84,
+            foodDescription: 'Baati, 2 pieces',
+            explanation: 'Estimated from two visible baati pieces.'
+          }
+        ]),
+        '```'
+      ].join('\n'),
+      usage: {
+        model: 'gemini-2.5-flash',
+        inputTokens: 700,
+        outputTokens: 180
+      }
+    }));
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText: vi.fn(async () => null)
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'thali-array-image'
+    });
+
+    expect(parsed.fallbackUsed).toBe(false);
+    expect(parsed.lowConfidenceAccepted).toBe(false);
+    expect(parsed.extractedText).toBe('Dal, Baati');
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['Dal', 'Baati']);
+    expect(parsed.result.totals.calories).toBe(680);
+  });
 });

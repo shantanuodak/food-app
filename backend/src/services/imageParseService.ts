@@ -141,20 +141,13 @@ function stringArray(value: unknown): string[] {
   return value.map((item) => asText(item)).filter(Boolean).slice(0, 8);
 }
 
-function extractJsonCandidate(payloadText: string): string | null {
-  const trimmed = payloadText.trim();
-  if (!trimmed) {
+function balancedJsonSlice(candidate: string, start: number): string | null {
+  const opener = candidate[start];
+  if (opener !== '{' && opener !== '[') {
     return null;
   }
 
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  const candidate = fenced?.[1]?.trim() || trimmed;
-  const start = candidate.indexOf('{');
-  if (start < 0) {
-    return null;
-  }
-
-  let depth = 0;
+  const stack: string[] = [];
   let inString = false;
   let escaped = false;
   for (let index = start; index < candidate.length; index += 1) {
@@ -175,12 +168,47 @@ function extractJsonCandidate(payloadText: string): string | null {
       continue;
     }
     if (char === '{') {
-      depth += 1;
-    } else if (char === '}') {
-      depth -= 1;
-      if (depth === 0) {
+      stack.push('}');
+    } else if (char === '[') {
+      stack.push(']');
+    } else if (char === '}' || char === ']') {
+      if (stack[stack.length - 1] !== char) {
+        return null;
+      }
+      stack.pop();
+      if (stack.length === 0) {
         return candidate.slice(start, index + 1);
       }
+    }
+  }
+
+  return null;
+}
+
+function extractJsonCandidate(payloadText: string): string | null {
+  const trimmed = payloadText.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1]?.trim() || trimmed;
+
+  for (let index = 0; index < candidate.length; index += 1) {
+    const char = candidate[index];
+    if (char !== '{' && char !== '[') {
+      continue;
+    }
+    const slice = balancedJsonSlice(candidate, index);
+    if (!slice) {
+      continue;
+    }
+    try {
+      JSON.parse(slice);
+      return slice;
+    } catch {
+      // Keep scanning; Gemini sometimes includes prose examples before the
+      // actual payload.
     }
   }
 
@@ -339,6 +367,23 @@ function normalizeGeminiItem(rawItem: unknown, topLevelConfidence: number): z.in
 }
 
 function normalizeGeminiPayload(parsed: unknown): z.input<typeof imageParseSchema> | null {
+  if (Array.isArray(parsed)) {
+    const items = parsed
+      .map((item) => normalizeGeminiItem(item, 0.75))
+      .filter((item): item is z.input<typeof parseItemSchema> => item !== null);
+    if (items.length === 0) {
+      return null;
+    }
+    const confidence =
+      items.reduce((sum, item) => sum + clampConfidence(item.matchConfidence, 0.75), 0) / items.length;
+    return {
+      extractedText: items.map((item) => item.name).join(', '),
+      confidence,
+      assumptions: [],
+      items
+    };
+  }
+
   const record = asRecord(parsed);
   if (!record) {
     return null;
