@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { runEscalationParse } from '../services/aiEscalationService.js';
-import { getBudgetSnapshotForUser, recordAiCostWithBudgetGuard } from '../services/aiCostService.js';
+import { getBudgetSnapshotForUser, recordAiCostWithBudgetGuard, writeAiCostEvent } from '../services/aiCostService.js';
 import { assertLoggedAtNotInFutureForUser } from '../services/dateIntegrityService.js';
 import { createParseRequest, getParseRequestForUser, isParseRequestStale } from '../services/parseRequestService.js';
 import { ApiError } from '../utils/errors.js';
@@ -143,17 +143,55 @@ router.post('/image', async (req, res, next) => {
     });
 
     for (const usageEvent of parsedImage.usageEvents) {
-      budget = await recordAiCostWithBudgetGuard({
-        userId: auth.userId,
-        requestId: parseRequestId,
-        feature: usageEvent.feature,
-        model: usageEvent.usage.model,
-        inputTokens: usageEvent.usage.inputTokens,
-        outputTokens: usageEvent.usage.outputTokens,
-        estimatedCostUsd: usageEvent.estimatedCostUsd,
-        dailyBudgetUsd: config.aiDailyBudgetUsd,
-        userSoftCapUsd: config.aiUserSoftCapUsd
-      });
+      try {
+        budget = await recordAiCostWithBudgetGuard({
+          userId: auth.userId,
+          requestId: parseRequestId,
+          feature: usageEvent.feature,
+          model: usageEvent.usage.model,
+          inputTokens: usageEvent.usage.inputTokens,
+          outputTokens: usageEvent.usage.outputTokens,
+          estimatedCostUsd: usageEvent.estimatedCostUsd,
+          dailyBudgetUsd: config.aiDailyBudgetUsd,
+          userSoftCapUsd: config.aiUserSoftCapUsd
+        });
+      } catch (err) {
+        // Image parsing has already spent the model call by this point. Do not
+        // discard a usable parse because budget accounting crossed its soft
+        // guard after the fact; record best-effort cost telemetry and return
+        // the parse so the app does not show a false "try again" state.
+        if (err instanceof ApiError && err.code === 'BUDGET_EXCEEDED') {
+          console.warn(
+            '[image_parse_budget_guard_bypassed]',
+            JSON.stringify({
+              requestId: parseRequestId,
+              feature: usageEvent.feature,
+              model: usageEvent.usage.model,
+              estimatedCostUsd: usageEvent.estimatedCostUsd
+            })
+          );
+          try {
+            await writeAiCostEvent({
+              userId: auth.userId,
+              requestId: parseRequestId,
+              feature: usageEvent.feature,
+              model: usageEvent.usage.model,
+              inputTokens: usageEvent.usage.inputTokens,
+              outputTokens: usageEvent.usage.outputTokens,
+              estimatedCostUsd: usageEvent.estimatedCostUsd
+            });
+            budget = await getBudgetSnapshotForUser({
+              userId: auth.userId,
+              dailyBudgetUsd: config.aiDailyBudgetUsd,
+              userSoftCapUsd: config.aiUserSoftCapUsd
+            });
+          } catch (costErr) {
+            console.warn('[image_parse_cost_record_failed]', costErr);
+          }
+          continue;
+        }
+        throw err;
+      }
     }
 
     const needsClarification = parsedImage.result.confidence < config.aiImageConfidenceMin;
