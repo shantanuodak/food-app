@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import sharp from 'sharp';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import type { ParseResult, ParsedItem } from './deterministicParser.js';
@@ -103,6 +104,7 @@ type ImagePart = {
   dataBase64: string;
   contextNote?: string;
   debugEvents?: ImageParseDebugEvent[];
+  variantLabel?: string;
 };
 
 const parseItemSchema = z.object({
@@ -1190,7 +1192,7 @@ async function runImageCaptionFallback(
       stage: 'image_caption',
       ok: true,
       model: response.usage.model,
-      reason: `${mode}_caption`,
+      reason: `${image.variantLabel ?? 'original'}_${mode}_caption`,
       ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
       caption
     });
@@ -1263,6 +1265,47 @@ function mergeCaptionTexts(captions: string[]): string {
     }
   }
   return segments.slice(0, 12).join(', ');
+}
+
+async function buildRotatedImageVariant(image: ImagePart, angle: 90 | -90): Promise<ImagePart | null> {
+  const startedAt = process.hrtime.bigint();
+  try {
+    const buffer = Buffer.from(image.dataBase64, 'base64');
+    const rotated = await sharp(buffer, { failOn: 'none' })
+      .rotate(angle)
+      .jpeg({ quality: 82, mozjpeg: true })
+      .toBuffer();
+    image.debugEvents?.push({
+      stage: 'image_variant',
+      ok: true,
+      reason: angle === 90 ? 'rotated_90' : 'rotated_minus_90',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+      caption: `${buffer.length}B -> ${rotated.length}B`
+    });
+    return {
+      ...image,
+      mimeType: 'image/jpeg',
+      dataBase64: rotated.toString('base64'),
+      variantLabel: angle === 90 ? 'rotated_90' : 'rotated_minus_90'
+    };
+  } catch (err) {
+    image.debugEvents?.push({
+      stage: 'image_variant',
+      ok: false,
+      reason: angle === 90 ? 'rotate_90_failed' : 'rotate_minus_90_failed',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+      caption: err instanceof Error ? err.message.slice(0, 120) : undefined
+    });
+    return null;
+  }
+}
+
+function captionInventoryLooksSparse(caption: string): boolean {
+  const segments = splitCaptionFoodSegments(caption);
+  if (segments.length < 4) {
+    return true;
+  }
+  return segments.some((segment) => /^(green|red|brown|white|yellow)$/i.test(segment.trim()));
 }
 
 function coverageFromCaptionInventory(caption: string, result: ParseResult): ImageParseCoverage {
@@ -1348,11 +1391,33 @@ async function recoverWithV2CaptionEnsemble(
   usageEvents: ImageParseUsageEvent[]
 ): Promise<ImageParseServiceResult | null> {
   const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
-  const modes: ImageCaptionPromptMode[] = ['concise', 'inventory', 'staples', 'sides'];
   const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 3_500), 7_000);
-  const captions = (
-    await Promise.all(modes.map((mode) => runImageCaptionFallback(model, image, mode, timeoutMs)))
-  ).filter((caption): caption is { caption: string; usage: GeminiUsage } => Boolean(caption?.caption.trim()));
+  const captions: Array<{ caption: string; usage: GeminiUsage }> = [];
+
+  const originalModes: ImageCaptionPromptMode[] = ['concise', 'inventory', 'staples', 'sides'];
+  captions.push(
+    ...(
+      await Promise.all(originalModes.map((mode) => runImageCaptionFallback(model, image, mode, timeoutMs)))
+    ).filter((caption): caption is { caption: string; usage: GeminiUsage } => Boolean(caption?.caption.trim()))
+  );
+
+  let mergedCaption = mergeCaptionTexts(captions.map((caption) => caption.caption));
+  if (captionInventoryLooksSparse(mergedCaption)) {
+    const rotatedVariants = (
+      await Promise.all([buildRotatedImageVariant(image, 90), buildRotatedImageVariant(image, -90)])
+    ).filter((variant): variant is ImagePart => Boolean(variant));
+    const rotatedModes: ImageCaptionPromptMode[] = ['inventory', 'staples', 'sides'];
+    captions.push(
+      ...(
+        await Promise.all(
+          rotatedVariants.flatMap((variant) =>
+            rotatedModes.map((mode) => runImageCaptionFallback(model, variant, mode, timeoutMs))
+          )
+        )
+      ).filter((caption): caption is { caption: string; usage: GeminiUsage } => Boolean(caption?.caption.trim()))
+    );
+    mergedCaption = mergeCaptionTexts(captions.map((caption) => caption.caption));
+  }
 
   for (const caption of captions) {
     usageEvents.push({
@@ -1362,7 +1427,6 @@ async function recoverWithV2CaptionEnsemble(
     });
   }
 
-  const mergedCaption = mergeCaptionTexts(captions.map((caption) => caption.caption));
   if (!mergedCaption) {
     image.debugEvents?.push({
       stage: 'image_caption_ensemble_v2',
