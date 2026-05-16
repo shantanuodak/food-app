@@ -115,6 +115,16 @@ extension MainLoggingShellView {
                     .presentationDragIndicator(.hidden)
                     .presentationCornerRadius(24)
             }
+            .sheet(isPresented: $isLoggingTipsPresented) {
+                FoodLoggingTipsView(
+                    presentationStyle: .sheet(onClose: {
+                        isLoggingTipsPresented = false
+                    })
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationCornerRadius(24)
+            }
             .sheet(isPresented: $isStreakDrawerPresented) {
                 HomeStreakDrawerView()
                     .environmentObject(appStore)
@@ -430,13 +440,38 @@ extension MainLoggingShellView {
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
+            .homeFirstRunTutorialHost(
+                isPresented: $isHomeTutorialPresented,
+                step: $homeTutorialStep,
+                onFocusComposer: {
+                    focusComposerInputFromBackgroundTap()
+                },
+                onOpenCamera: {
+                    NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
+                },
+                onOpenProgress: {
+                    isProgressChartsPresented = true
+                },
+                onFinish: {
+                    finishHomeTutorial()
+                }
+            )
             .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
             .animation(.easeInOut(duration: 0.2), value: isKeyboardVisible)
+            .onChange(of: homeTutorialEstimatedFoodSignature) { _, _ in
+                advanceHomeTutorialIfEstimateIsReady()
+            }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 isKeyboardVisible = true
             }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
                 isKeyboardVisible = false
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .replayHomeTutorialFromAdmin)) { _ in
+                isProfilePresented = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+                    startHomeTutorialDebug()
+                }
             }
             .onChange(of: speechService.isListening) { wasListening, isNowListening in
                 guard wasListening && !isNowListening && isVoiceOverlayPresented else { return }

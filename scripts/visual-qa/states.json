@@ -1,0 +1,304 @@
+{
+  "schemaVersion": 1,
+  "device": "iPhone 17 Pro",
+  "appearance": "light",
+  "bundleIdentifier": "com.shantanu.foodapp",
+  "outputDirectory": "artifacts/visual-qa/screenshots",
+  "states": [
+    {
+      "id": "onboarding/welcome/default",
+      "name": "Onboarding - Welcome - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/goal/default",
+      "name": "Onboarding - Goal - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/social-proof/default",
+      "name": "Onboarding - Social Proof - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/experience/default",
+      "name": "Onboarding - Experience - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/how-it-works/default",
+      "name": "Onboarding - How It Works - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/challenge/default",
+      "name": "Onboarding - Challenge - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/challenge-insight/default",
+      "name": "Onboarding - Challenge Insight - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/age/default",
+      "name": "Onboarding - Age - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/baseline/default",
+      "name": "Onboarding - Baseline - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/activity/default",
+      "name": "Onboarding - Activity - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/pace/default",
+      "name": "Onboarding - Pace - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/preferences/default",
+      "name": "Onboarding - Food Preferences - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/goal-validation/default",
+      "name": "Onboarding - Goal Validation - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/account/default",
+      "name": "Onboarding - Account - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/apple-health/default",
+      "name": "Onboarding - Apple Health Permission - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/notifications/default",
+      "name": "Onboarding - Notifications Permission - Default",
+      "implemented": true
+    },
+    {
+      "id": "onboarding/ready/default",
+      "name": "Onboarding - Ready - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/default",
+      "name": "Home - Composer - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/profile-bento/default",
+      "name": "Home - Profile Bento - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/badges/default",
+      "name": "Home - Badges Trophy Case - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/streak-drawer/default",
+      "name": "Home - Badge Progress Drawer - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/progress/default",
+      "name": "Home - Progress Charts - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/logging-tips/default",
+      "name": "Home - Logging Tips - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/mindful-pause/default",
+      "name": "Home - Mindful Pause Popup - Default",
+      "implemented": true
+    },
+    {
+      "id": "profile/legacy/default",
+      "name": "Profile - Legacy Settings - Default",
+      "implemented": true
+    },
+    {
+      "id": "feedback/default",
+      "name": "Feedback - Default",
+      "implemented": true
+    },
+    {
+      "id": "widget-guide/default",
+      "name": "Widget Guide - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/empty",
+      "name": "Home - Composer - Empty Row",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/text-typed",
+      "name": "Home - Composer - Text Typed",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/parse-loading",
+      "name": "Home - Composer - Parse Loading",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/parse-success-single",
+      "name": "Home - Composer - Parse Success Single Item",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/parse-success-multiple",
+      "name": "Home - Composer - Parse Success Multiple Items",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/parse-error",
+      "name": "Home - Composer - Parse Error",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/save-loading",
+      "name": "Home - Composer - Save Loading",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/save-success",
+      "name": "Home - Composer - Save Success",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/save-error",
+      "name": "Home - Composer - Save Error",
+      "implemented": true
+    },
+    {
+      "id": "home/composer/offline",
+      "name": "Home - Composer - Offline",
+      "implemented": true
+    },
+    {
+      "id": "home/insight-card/default",
+      "name": "Home - Food Preference Insight Card - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/voice/listening",
+      "name": "Home - Voice Overlay - Listening",
+      "implemented": true
+    },
+    {
+      "id": "home/voice/processing",
+      "name": "Home - Voice Overlay - Processing",
+      "implemented": true
+    },
+    {
+      "id": "home/camera/permission-denied",
+      "name": "Camera - Permission Denied",
+      "implemented": true
+    },
+    {
+      "id": "home/camera/review",
+      "name": "Camera - Review Captured Photo",
+      "implemented": true
+    },
+    {
+      "id": "home/camera-analysis/loading",
+      "name": "Camera Analysis Drawer - Loading",
+      "implemented": true
+    },
+    {
+      "id": "home/camera-analysis/success",
+      "name": "Camera Analysis Drawer - Success",
+      "implemented": true
+    },
+    {
+      "id": "home/camera-analysis/error",
+      "name": "Camera Analysis Drawer - Error",
+      "implemented": true
+    },
+    {
+      "id": "home/details-drawer/default",
+      "name": "Food Details Drawer - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/details-drawer/delete-confirmation",
+      "name": "Food Details Drawer - Delete Confirmation",
+      "implemented": true
+    },
+    {
+      "id": "home/nutrition-summary/default",
+      "name": "Nutrition Summary Sheet - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/calendar/default",
+      "name": "Calendar Sheet - Default",
+      "implemented": true
+    },
+    {
+      "id": "home/badge-unlock/first-spark",
+      "name": "Badge Unlock Popup - First Spark",
+      "implemented": true
+    },
+    {
+      "id": "home/badge-unlock/momentum-maker",
+      "name": "Badge Unlock Popup - Momentum Maker",
+      "implemented": true
+    },
+    {
+      "id": "home/badges/share-sheet",
+      "name": "Badges Trophy Case - Share Sheet",
+      "implemented": true
+    },
+    {
+      "id": "profile/diet-editor/default",
+      "name": "Profile - Diet Editor - Default",
+      "implemented": true
+    },
+    {
+      "id": "profile/body-editor/default",
+      "name": "Profile - Body Editor - Default",
+      "implemented": true
+    },
+    {
+      "id": "profile/targets-editor/default",
+      "name": "Profile - Targets Editor - Default",
+      "implemented": true
+    },
+    {
+      "id": "profile/sign-out-confirmation",
+      "name": "Profile - Sign Out Confirmation",
+      "implemented": true
+    },
+    {
+      "id": "feedback/empty-validation",
+      "name": "Feedback - Empty Validation",
+      "implemented": true
+    },
+    {
+      "id": "feedback/submitting",
+      "name": "Feedback - Submitting",
+      "implemented": true
+    },
+    {
+      "id": "feedback/success",
+      "name": "Feedback - Success Alert",
+      "implemented": true
+    }
+  ]
+}

@@ -64,7 +64,11 @@ extension MainLoggingShellView {
             parseInfoMessage: parseInfoMessage,
             inputModeStatusMessage: inputModeStatusMessage,
             shouldShowRetryParseButton: shouldShowRetryParseButton,
-            onRetryParse: triggerParseNow
+            shouldShowLoggingTipsButton: shouldShowLoggingTipsButton,
+            onRetryParse: triggerParseNow,
+            onLoggingTips: {
+                isLoggingTipsPresented = true
+            }
         )
     }
 
@@ -76,6 +80,18 @@ extension MainLoggingShellView {
             return true
         }
         return parseInfoMessage == L10n.parseStillProcessingLabel
+    }
+
+    var shouldShowLoggingTipsButton: Bool {
+        if let result = parseResult,
+           result.needsClarification || result.confidence < 0.70 || result.route == "unresolved" {
+            return true
+        }
+        if parseInfoMessage == L10n.parseClarificationHint {
+            return true
+        }
+        guard let parseError else { return false }
+        return !MainLoggingHomeStatusStrip.isConnectivityParseError(parseError)
     }
 
     var inputModeStatusMessage: String? {

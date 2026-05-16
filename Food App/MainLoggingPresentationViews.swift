@@ -184,13 +184,22 @@ struct MainLoggingHomeStatusStrip: View {
     let parseInfoMessage: String?
     let inputModeStatusMessage: String?
     let shouldShowRetryParseButton: Bool
+    let shouldShowLoggingTipsButton: Bool
     let onRetryParse: () -> Void
+    let onLoggingTips: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
             statusText
 
             Spacer(minLength: 0)
+
+            if shouldShowLoggingTipsButton {
+                Button("Logging tips", action: onLoggingTips)
+                    .font(.system(size: 13, weight: .semibold))
+                    .buttonStyle(.bordered)
+                    .accessibilityHint(Text("Shows examples of food descriptions that improve nutrition estimates."))
+            }
 
             if shouldShowRetryParseButton {
                 Button(L10n.retryParseButton, action: onRetryParse)
@@ -239,7 +248,7 @@ struct MainLoggingHomeStatusStrip: View {
         }
     }
 
-    private static func isConnectivityParseError(_ message: String) -> Bool {
+    static func isConnectivityParseError(_ message: String) -> Bool {
         message == L10n.noNetworkParse || message == L10n.parseNetworkFailure
     }
 }

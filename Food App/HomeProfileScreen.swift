@@ -23,6 +23,7 @@ struct HomeProfileScreen: View {
     @State private var isAdminNotificationTriggering = false
     @State private var adminDebugStatus: String?
     @State private var adminPreviewBadge: EarnedBadge?
+    @State private var isAdminWidgetGuidePresented = false
     @State private var isSignOutConfirmationPresented = false
     @State private var bodyMetricEditorSheet: BodyMetricEditorSheet?
 
@@ -60,6 +61,15 @@ struct HomeProfileScreen: View {
             StreakAchievementPopup(badge: badge) {
                 adminPreviewBadge = nil
             }
+        }
+        .sheet(isPresented: $isAdminWidgetGuidePresented) {
+            WidgetSetupGuideView(
+                presentationStyle: .sheet {
+                    isAdminWidgetGuidePresented = false
+                }
+            )
+            .presentationDetents([.large])
+            .presentationDragIndicator(.hidden)
         }
     }
 
@@ -145,6 +155,15 @@ struct HomeProfileScreen: View {
                 ProfileHubRow(
                     title: "Send feedback",
                     systemImage: "envelope"
+                )
+            }
+
+            NavigationLink {
+                FoodLoggingTipsView()
+            } label: {
+                ProfileHubRow(
+                    title: "Logging tips",
+                    systemImage: "text.magnifyingglass"
                 )
             }
 
@@ -557,6 +576,31 @@ struct HomeProfileScreen: View {
             Text("Reward debug")
         } footer: {
             Text("Admin-only previews for badge reward animations. These controls do not change real badge progress.")
+        }
+
+        Section {
+            Button {
+                isAdminWidgetGuidePresented = true
+            } label: {
+                Label("Preview widget guide", systemImage: "rectangle.on.rectangle.angled")
+            }
+        } header: {
+            Text("Feature exploration")
+        } footer: {
+            Text("Opens the widget setup resource screen directly so you can review the Home Screen and Lock Screen instructions.")
+        }
+
+        Section {
+            Button {
+                NotificationCenter.default.post(name: .replayHomeTutorialFromAdmin, object: nil)
+                adminDebugStatus = "Home tutorial replay triggered."
+            } label: {
+                Label("Replay home tutorial", systemImage: "wand.and.sparkles")
+            }
+        } header: {
+            Text("Tutorial debug")
+        } footer: {
+            Text("Closes Profile and starts the guided home tutorial. Admin-only; this does not reset onboarding.")
         }
 
         if let adminDebugStatus {

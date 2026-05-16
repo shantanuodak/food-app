@@ -48,6 +48,8 @@ struct HomeProfileBentoScreen: View {
                             errorBanner(errorMessage)
                         }
                         CalorieHeroTile(data: heroData)
+                        LoggingTipsTile()
+                        WidgetSetupTile()
                         HStack(alignment: .top, spacing: 12) {
                             NavigationLink {
                                 BadgesTrophyCaseView(currentStreakDays: streakDays)
@@ -520,6 +522,150 @@ private struct CalorieHeroTile: View {
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("\(label), \(value)\(suffix.map { " \($0)" } ?? "")")
+    }
+}
+
+/// Full-width resource card that reopens the food logging guidance experience.
+private struct LoggingTipsTile: View {
+    var body: some View {
+        BentoTappableTile(
+            background: LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.971, blue: 0.929),
+                    Color(red: 1.0, green: 0.936, blue: 0.866)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            border: Color(red: 1.0, green: 0.835, blue: 0.675)
+        ) {
+            FoodLoggingTipsView()
+        } label: {
+            HStack(alignment: .center, spacing: 14) {
+                iconStack
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Logging tips")
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(BentoTokens.gray900)
+
+                    Text("Tiny details make estimates sharper.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(BentoTokens.gray700)
+                        .lineLimit(2)
+
+                    clueChips
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Logging tips. Tiny details make estimates sharper.")
+            .accessibilityHint("Opens examples for better food logging.")
+        }
+    }
+
+    private var iconStack: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 1.0, green: 0.878, blue: 0.761))
+            Image(systemName: "sparkle.magnifyingglass")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(BentoTokens.orange700)
+        }
+        .frame(width: 42, height: 42)
+        .shadow(color: BentoTokens.orange700.opacity(0.12), radius: 8, y: 4)
+    }
+
+    private var clueChips: some View {
+        HStack(spacing: 6) {
+            ForEach(["Brand", "Amount", "Count"], id: \.self) { clue in
+                Text(clue)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(BentoTokens.orange700)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 5)
+                    .background(Color.white.opacity(0.58), in: Capsule())
+                    .overlay {
+                        Capsule()
+                            .stroke(Color(red: 1.0, green: 0.835, blue: 0.675).opacity(0.72), lineWidth: 0.75)
+                    }
+            }
+        }
+    }
+}
+
+/// Widgets — resource card that teaches Home Screen + Lock Screen setup.
+private struct WidgetSetupTile: View {
+    var body: some View {
+        BentoTappableTile(
+            background: LinearGradient(
+                colors: [
+                    Color(red: 0.936, green: 0.969, blue: 1.0),
+                    Color(red: 0.984, green: 0.956, blue: 1.0)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            border: Color(red: 0.753, green: 0.878, blue: 1.0)
+        ) {
+            WidgetSetupGuideView()
+        } label: {
+            HStack(alignment: .center, spacing: 14) {
+                widgetStack
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Add widgets")
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(BentoTokens.gray900)
+
+                    Text("Quick shortcuts for camera and voice logging.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(BentoTokens.gray700)
+                        .lineLimit(2)
+
+                    HStack(spacing: 6) {
+                        resourceChip("Home")
+                        resourceChip("Lock")
+                        resourceChip("Camera")
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Add widgets. Quick shortcuts for camera and voice logging.")
+            .accessibilityHint("Opens widget setup steps.")
+        }
+    }
+
+    private var widgetStack: some View {
+        ZStack {
+            Circle()
+                .fill(Color(red: 0.894, green: 0.949, blue: 1.0))
+            Image(systemName: "rectangle.stack.badge.plus")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(BentoTokens.blue700)
+        }
+        .frame(width: 42, height: 42)
+        .shadow(color: BentoTokens.blue700.opacity(0.10), radius: 8, y: 4)
+    }
+
+    private func resourceChip(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(BentoTokens.blue700)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.62), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color(red: 0.753, green: 0.878, blue: 1.0).opacity(0.9), lineWidth: 0.75)
+            }
     }
 }
 

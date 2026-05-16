@@ -111,6 +111,10 @@ struct MainLoggingShellView: View {
     @State var isProfilePresented = false
     @State var isNutritionSummaryPresented = false
     @State var isProgressChartsPresented = false
+    @State var isLoggingTipsPresented = false
+    @State var isHomeTutorialPresented = false
+    @State var homeTutorialStep: HomeFirstRunTutorialStep = .composer
+    @State var homeTutorialIgnoredEstimatedRowIDs: Set<UUID> = []
     @State var currentFoodLogStreak: Int?
     @State var isLoadingFoodLogStreak = false
     @State var isStreakDrawerPresented = false

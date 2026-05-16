@@ -39,6 +39,9 @@ struct OB02eHowItWorksScreen: View {
 
                         TakePhotoCardView()
                             .modifier(StaggeredEntry(index: 2, appeared: appeared))
+
+                        WidgetShortcutCardView()
+                            .modifier(StaggeredEntry(index: 3, appeared: appeared))
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 28)
@@ -509,5 +512,104 @@ private struct TakePhotoCardView: View {
         withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: false)) {
             shimmerPhase = 1
         }
+    }
+}
+
+// MARK: - Widget Shortcut Card
+
+private struct WidgetShortcutCardView: View {
+    @State private var glow = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 16) {
+            widgetPreview
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Add a widget later")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
+
+                Text("Home Screen and Lock Screen shortcuts keep logging close.")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                    .lineSpacing(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 20)
+        .padding(.vertical, 12)
+        .frame(height: 142)
+        .frame(maxWidth: .infinity)
+        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
+        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                glow = true
+            }
+        }
+    }
+
+    private var widgetPreview: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.055, green: 0.060, blue: 0.085),
+                            Color(red: 0.090, green: 0.075, blue: 0.125),
+                            Color(red: 0.060, green: 0.085, blue: 0.115)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .strokeBorder(.white.opacity(0.16), lineWidth: 1)
+                )
+                .shadow(color: OnboardingGlassTheme.accentEnd.opacity(glow ? 0.34 : 0.12), radius: glow ? 18 : 8, y: 8)
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("842")
+                        .font(.system(size: 23, weight: .black, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                    Text("cal")
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.62))
+                }
+
+                Capsule()
+                    .fill(.white.opacity(0.16))
+                    .frame(height: 5)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(
+                                LinearGradient(
+                                    colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+                                    startPoint: .leading,
+                                    endPoint: .trailing
+                                )
+                            )
+                            .frame(width: 56, height: 5)
+                    }
+
+                HStack(spacing: 8) {
+                    Image(systemName: "camera.fill")
+                    Image(systemName: "mic.fill")
+                }
+                .font(.system(size: 13, weight: .black))
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(12)
+        }
+        .frame(width: 117, height: 117)
     }
 }

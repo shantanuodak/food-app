@@ -43,8 +43,8 @@
 	</array>
 	<key>UIAppFonts</key>
 	<array>
-		<string>Fonts/InstrumentSerif-Regular.ttf</string>
-		<string>Fonts/InstrumentSerif-Italic.ttf</string>
+		<string>InstrumentSerif-Regular.ttf</string>
+		<string>InstrumentSerif-Italic.ttf</string>
 	</array>
 	<key>SupabaseAnonKey</key>
 	<string>sb_publishable_PmQWhxR1aafmI_QgeXHhIQ_HRAgEJdD</string>

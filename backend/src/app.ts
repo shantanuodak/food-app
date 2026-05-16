@@ -2,6 +2,7 @@ import express from 'express';
 import helmet from 'helmet';
 import path from 'path';
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'url';
 import type { Request, Response, NextFunction } from 'express';
 import { requestIdMiddleware } from './utils/requestId.js';
@@ -107,8 +108,21 @@ function requireDashboardPageAccess(req: Request, res: Response, next: NextFunct
   renderDashboardLogin(res);
 }
 
+function resolveDashboardArtifactsRoot(): string {
+  const configured = process.env.QA_ARTIFACTS_DIR;
+  const candidates = [
+    configured,
+    path.resolve(process.cwd(), 'artifacts'),
+    path.resolve(process.cwd(), '..', 'artifacts'),
+    path.resolve(__dirname, '..', '..', 'artifacts')
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  return candidates.find((candidate) => existsSync(candidate)) ?? candidates[0];
+}
+
 export function createApp() {
   const app = express();
+  const dashboardArtifactsRoot = resolveDashboardArtifactsRoot();
   app.set('trust proxy', 1);
 
   app.use(requestIdMiddleware);
@@ -170,6 +184,22 @@ export function createApp() {
   app.get('/testing-dashboard', requireDashboardPageAccess, (_req, res) => {
     res.sendFile(path.join(__dirname, 'testing-dashboard', 'index.html'));
   });
+  app.use(
+    '/testing-dashboard/artifacts/visual-qa',
+    requireDashboardPageAccess,
+    express.static(path.join(dashboardArtifactsRoot, 'visual-qa', 'screenshots'), {
+      fallthrough: false,
+      index: false
+    })
+  );
+  app.use(
+    '/testing-dashboard/artifacts/qa',
+    requireDashboardPageAccess,
+    express.static(path.join(dashboardArtifactsRoot, 'qa'), {
+      fallthrough: false,
+      index: false
+    })
+  );
 
   app.use('/v1/onboarding', authRequired, onboardingRoutes);
   app.use('/v1/logs/parse', authRequired, parseRoutes);

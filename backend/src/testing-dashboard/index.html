@@ -129,9 +129,12 @@
     @media (max-width: 900px) {
       .grid-4 { grid-template-columns: repeat(2, 1fr); }
       .grid-3 { grid-template-columns: repeat(2, 1fr); }
+      .qa-hero, .qa-finding-grid { grid-template-columns: 1fr; }
+      .qa-shot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 600px) {
       .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+      .qa-shot-grid { grid-template-columns: 1fr; }
     }
 
     .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
@@ -217,6 +220,64 @@
     }
     .attention-item strong { display: block; margin-bottom: 2px; }
     .attention-item p { color: var(--muted); font-size: 12px; margin: 0; }
+    .qa-hero {
+      display: grid;
+      grid-template-columns: 1.35fr 0.65fr;
+      gap: 16px;
+      align-items: stretch;
+      margin-bottom: 18px;
+    }
+    .qa-summary-title {
+      font-size: 24px;
+      font-weight: 800;
+      line-height: 1.05;
+      margin-bottom: 10px;
+    }
+    .qa-summary-copy { color: var(--muted); max-width: 820px; }
+    .qa-status-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+    .qa-finding-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .qa-finding {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px;
+      background: rgba(255,255,255,0.025);
+    }
+    .qa-finding strong { display: block; margin-bottom: 6px; }
+    .qa-finding p { color: var(--muted); font-size: 12px; margin: 0; }
+    .qa-finding.p1 { border-color: rgba(239,68,68,0.42); background: rgba(239,68,68,0.08); }
+    .qa-finding.p2 { border-color: rgba(234,179,8,0.35); background: rgba(234,179,8,0.07); }
+    .qa-shot-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .qa-shot {
+      display: block;
+      color: inherit;
+      text-decoration: none;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      background: var(--surface2);
+    }
+    .qa-shot img {
+      display: block;
+      width: 100%;
+      aspect-ratio: 9 / 19.5;
+      object-fit: cover;
+      object-position: top center;
+      background: #111827;
+    }
+    .qa-shot span {
+      display: block;
+      padding: 8px 10px;
+      color: var(--muted);
+      font-size: 11px;
+      font-family: var(--font-mono);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .qa-link-list { display: grid; gap: 8px; }
+    .qa-link-list a { color: var(--accent2); word-break: break-word; }
+    .qa-next-list { margin: 0; padding-left: 18px; color: var(--muted); }
+    .qa-next-list li { margin: 6px 0; }
 
     /* ---- Eval result summary ---- */
     .eval-summary {
@@ -1090,6 +1151,7 @@
     <div class="logo">🍱 Testing Dashboard <span>/ Nutrition Parser</span></div>
     <nav>
       <button class="active" onclick="switchTab('overview', this)">Health</button>
+      <button onclick="switchTab('qa-report', this)">QA Report</button>
       <button onclick="switchTab('eval-runner', this)">Food Quality</button>
       <button onclick="switchTab('benchmarks', this)">Benchmarks</button>
       <button onclick="switchTab('prompt-lab', this)">Prompt Lab</button>
@@ -1135,6 +1197,128 @@
           <div id="ov-alltime">
             <div class="text-muted">Loading…</div>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== QA REPORT ==================== -->
+    <div id="tab-qa-report" class="tab-panel">
+      <div class="qa-hero">
+        <div class="card">
+          <h3>Full App QA Sweep</h3>
+          <div class="qa-summary-title">Clear-cut release risk summary</div>
+          <p class="qa-summary-copy">
+            Last sweep: May 15, 2026. iPhone 17 Pro light-mode visual coverage passed across 59 named PNG states. Backend build and unit/security tests passed. Database integration coverage is still blocked because the test database URL is not configured.
+          </p>
+          <div class="qa-status-row">
+            <span class="badge badge-green">iOS build passed</span>
+            <span class="badge badge-green">59/59 PNGs captured</span>
+            <span class="badge badge-green">Backend tests passed</span>
+            <span class="badge badge-red">1 high audit finding</span>
+            <span class="badge badge-yellow">DB integration skipped</span>
+          </div>
+        </div>
+        <div class="card">
+          <h3>Artifacts</h3>
+          <div class="qa-link-list">
+            <a href="/testing-dashboard/artifacts/qa/2026-05-15-full-app-qa-report.md">Full QA report markdown</a>
+            <a href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/report.json">Screenshot manifest JSON</a>
+            <span class="text-muted mono">Run folder: 2026-05-15T22-22-49-390Z</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="qa-finding-grid">
+        <div class="qa-finding p1">
+          <strong>P1 - Database/API integration did not run</strong>
+          <p><code>DATABASE_URL_TEST</code> is missing, so migrations, RLS, persistence, and full API flows were not certified in this sweep.</p>
+        </div>
+        <div class="qa-finding p1">
+          <strong>P1 - Production config can fail open</strong>
+          <p><code>AUTH_MODE</code> defaults to dev, <code>RLS_STRICT_MODE</code> defaults false, and <code>DATABASE_SSL</code> defaults false. Production should fail startup unless these are explicitly safe.</p>
+        </div>
+        <div class="qa-finding p1">
+          <strong>P1 - High dependency advisory</strong>
+          <p><code>path-to-regexp@0.1.12</code> is vulnerable to ReDoS through Express. Run the safe dependency update path and re-run <code>npm audit --omit=dev</code>.</p>
+        </div>
+        <div class="qa-finding p2">
+          <strong>P2 - CSP disabled globally</strong>
+          <p>Helmet is active, but Content Security Policy is off because the dashboard still uses inline CSS/JS. Split assets or add nonces/hashes and re-enable CSP.</p>
+        </div>
+        <div class="qa-finding p2">
+          <strong>P2 - Sensitive debug logging risk</strong>
+          <p>Swift debug logs include normalized food text, row maps, parse telemetry, and identifiers. Keep them debug-only and route through a redacting logger.</p>
+        </div>
+        <div class="qa-finding p2">
+          <strong>P2 - Visual QA is not interaction QA</strong>
+          <p>The screenshots are deterministic and broad. Add XCUITests for onboarding, parse/save, camera denial, badge share, delete, feedback, sign-out, offline retry, and animation triggers.</p>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card section">
+          <h3>Fix First</h3>
+          <ol class="qa-next-list">
+            <li>Provision a disposable test database and run the integration suite.</li>
+            <li>Remove the high <code>path-to-regexp</code> audit finding.</li>
+            <li>Add production startup validation for auth mode, RLS, SSL, and internal keys.</li>
+            <li>Re-enable CSP for the dashboard.</li>
+            <li>Promote top visual states into true XCUITest flows.</li>
+          </ol>
+        </div>
+        <div class="card section">
+          <h3>Verification Snapshot</h3>
+          <table style="width:100%; font-size:13px;">
+            <tr><td class="text-muted" style="padding:5px 0">Visual capture</td><td class="mono" style="text-align:right">59/59</td></tr>
+            <tr><td class="text-muted" style="padding:5px 0">Suspicious screenshots</td><td class="mono" style="text-align:right">0</td></tr>
+            <tr><td class="text-muted" style="padding:5px 0">Backend tests</td><td class="mono" style="text-align:right">80 passed</td></tr>
+            <tr><td class="text-muted" style="padding:5px 0">Skipped tests</td><td class="mono" style="text-align:right">33</td></tr>
+            <tr><td class="text-muted" style="padding:5px 0">Audit findings</td><td class="mono" style="text-align:right">1 high</td></tr>
+            <tr><td class="text-muted" style="padding:5px 0">Database certification</td><td class="mono" style="text-align:right">blocked</td></tr>
+          </table>
+        </div>
+      </div>
+
+      <div class="card section">
+        <div class="row-actions" style="justify-content:space-between; align-items:flex-start;">
+          <div>
+            <h3 style="margin-bottom:4px;">Image References</h3>
+            <p class="text-muted" style="font-size:13px; margin:0;">Representative screenshots from the full 59-PNG run. Open the manifest above for every named screen/state.</p>
+          </div>
+        </div>
+        <div class="qa-shot-grid">
+          <a class="qa-shot" href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/onboarding_welcome_default__onboarding_welcome_default.png">
+            <img src="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/onboarding_welcome_default__onboarding_welcome_default.png" alt="Onboarding welcome screenshot" />
+            <span>onboarding welcome</span>
+          </a>
+          <a class="qa-shot" href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_default__home_composer_default.png">
+            <img src="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_default__home_composer_default.png" alt="Home composer screenshot" />
+            <span>home composer</span>
+          </a>
+          <a class="qa-shot" href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_composer_parse_error__home_composer_parse_error.png">
+            <img src="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_composer_parse_error__home_composer_parse_error.png" alt="Parse error screenshot" />
+            <span>parse error</span>
+          </a>
+          <a class="qa-shot" href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_badges_share_sheet__badges_trophy_case_share_sheet.png">
+            <img src="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_badges_share_sheet__badges_trophy_case_share_sheet.png" alt="Badges share sheet screenshot" />
+            <span>badges share</span>
+          </a>
+          <a class="qa-shot" href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_camera_permission_denied__camera_permission_denied.png">
+            <img src="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_camera_permission_denied__camera_permission_denied.png" alt="Camera permission denied screenshot" />
+            <span>camera denied</span>
+          </a>
+          <a class="qa-shot" href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_camera_analysis_error__camera_analysis_drawer_error.png">
+            <img src="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/home_camera_analysis_error__camera_analysis_drawer_error.png" alt="Camera analysis error screenshot" />
+            <span>camera error</span>
+          </a>
+          <a class="qa-shot" href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/profile_sign_out_confirmation__profile_sign_out_confirmation.png">
+            <img src="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/profile_sign_out_confirmation__profile_sign_out_confirmation.png" alt="Sign-out confirmation screenshot" />
+            <span>sign-out confirm</span>
+          </a>
+          <a class="qa-shot" href="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/feedback_success__feedback_success_alert.png">
+            <img src="/testing-dashboard/artifacts/visual-qa/2026-05-15T22-22-49-390Z/feedback_success__feedback_success_alert.png" alt="Feedback success screenshot" />
+            <span>feedback success</span>
+          </a>
         </div>
       </div>
     </div>

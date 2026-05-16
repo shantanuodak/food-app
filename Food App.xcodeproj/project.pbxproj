@@ -10,6 +10,8 @@
 		CDB5B13A2F4B642600A82851 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B1392F4B642600A82851 /* GoogleSignIn */; };
 		CDB5B1412F4B7A2C00A82851 /* Supabase in Frameworks */ = {isa = PBXBuildFile; productRef = CDB5B1402F4B7A2C00A82851 /* Supabase */; };
 		CDF100032F60000000AA0003 /* Food Camera Widget.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = CDF100022F60000000AA0002 /* Food Camera Widget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		CDF200012F80000000BB0001 /* Food App/Fonts/InstrumentSerif-Regular.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDF200032F80000000BB0003 /* Food App/Fonts/InstrumentSerif-Regular.ttf */; };
+		CDF200022F80000000BB0002 /* Food App/Fonts/InstrumentSerif-Italic.ttf in Resources */ = {isa = PBXBuildFile; fileRef = CDF200042F80000000BB0004 /* Food App/Fonts/InstrumentSerif-Italic.ttf */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -39,6 +41,8 @@
 /* Begin PBXFileReference section */
 		CDD80CD32F4268E4008A5987 /* Food App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Food App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		CDF100022F60000000AA0002 /* Food Camera Widget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = "Food Camera Widget.appex"; sourceTree = BUILT_PRODUCTS_DIR; };
+		CDF200032F80000000BB0003 /* Food App/Fonts/InstrumentSerif-Regular.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Food App/Fonts/InstrumentSerif-Regular.ttf"; sourceTree = "<group>"; };
+		CDF200042F80000000BB0004 /* Food App/Fonts/InstrumentSerif-Italic.ttf */ = {isa = PBXFileReference; lastKnownFileType = file; path = "Food App/Fonts/InstrumentSerif-Italic.ttf"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -87,6 +91,15 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		CDB197522FB7ABD6003D0B22 /* Recovered References */ = {
+			isa = PBXGroup;
+			children = (
+				CDF200032F80000000BB0003 /* Food App/Fonts/InstrumentSerif-Regular.ttf */,
+				CDF200042F80000000BB0004 /* Food App/Fonts/InstrumentSerif-Italic.ttf */,
+			);
+			name = "Recovered References";
+			sourceTree = "<group>";
+		};
 		CDB5B13F2F4B7A2C00A82851 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
@@ -101,6 +114,7 @@
 				CDF100012F60000000AA0001 /* Food Camera Widget */,
 				CDB5B13F2F4B7A2C00A82851 /* Frameworks */,
 				CDD80CD42F4268E4008A5987 /* Products */,
+				CDB197522FB7ABD6003D0B22 /* Recovered References */,
 			);
 			sourceTree = "<group>";
 		};
@@ -219,6 +233,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CDF200012F80000000BB0001 /* Food App/Fonts/InstrumentSerif-Regular.ttf in Resources */,
+				CDF200022F80000000BB0002 /* Food App/Fonts/InstrumentSerif-Italic.ttf in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

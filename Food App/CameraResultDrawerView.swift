@@ -49,7 +49,10 @@ struct CameraResultDrawerView: View {
                 case .parsed(let image, let items, let totals):
                     parsedContent(image: image, items: items, totals: totals)
                         .onAppear {
-                            seedEditablePhotoItemsIfNeeded(items, force: false)
+                            // Always reseed after a fresh analyze -> parsed transition.
+                            // Otherwise a retry that returns the same detected item
+                            // signature can keep stale local edits from the prior pass.
+                            seedEditablePhotoItemsIfNeeded(items, force: true)
                         }
                         .onChange(of: itemSignature(items)) { _, _ in
                             seedEditablePhotoItemsIfNeeded(items, force: true)
@@ -240,7 +243,7 @@ struct CameraResultDrawerView: View {
                             .frame(width: 30, height: 30)
                             .background(.black.opacity(0.42), in: Circle())
                     }
-                    AppCloseButton(action: onDiscard, variant: .onImage, visualSize: 30, hitSize: 30)
+                    AppCloseButton(action: onDiscard, variant: .onImage, visualSize: 30, hitSize: 44)
                 }
                 .padding(13)
             }

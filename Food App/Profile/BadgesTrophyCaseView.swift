@@ -3,16 +3,23 @@ import UIKit
 
 struct BadgesTrophyCaseView: View {
     let currentStreakDays: Int
+    private let autoLoadsRemoteProgress: Bool
 
     @EnvironmentObject private var appStore: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var summary: BadgesSummaryResponse?
-    @State private var isLoading = true
+    @State private var isLoading: Bool
     @State private var errorMessage: String?
     @State private var isShareSheetPresented = false
     @State private var shareItems: [Any] = []
     @State private var replayedBadge: BadgeDefinition?
     @State private var refreshedStreakDays: Int?
+
+    init(currentStreakDays: Int, autoLoadsRemoteProgress: Bool = true) {
+        self.currentStreakDays = currentStreakDays
+        self.autoLoadsRemoteProgress = autoLoadsRemoteProgress
+        _isLoading = State(initialValue: autoLoadsRemoteProgress)
+    }
 
     private var totals: BadgesTotals {
         summary?.totals ?? BadgesTotals(
@@ -106,6 +113,7 @@ struct BadgesTrophyCaseView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .task {
+            guard autoLoadsRemoteProgress else { return }
             await loadBadges()
         }
         .refreshable {
