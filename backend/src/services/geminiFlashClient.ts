@@ -46,6 +46,7 @@ type GenerateMultimodalOptions = {
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  responseMimeType?: 'application/json' | 'text/plain';
 };
 
 type GeminiCandidate = {
@@ -184,7 +185,8 @@ async function performGeminiJsonRequest(
   parts: MultimodalPart[],
   temperature = 0.1,
   maxOutputTokens?: number,
-  timeoutMsOverride?: number
+  timeoutMsOverride?: number,
+  responseMimeType: 'application/json' | 'text/plain' = 'application/json'
 ): Promise<GeminiSuccess | GeminiFailure | null> {
   if (!config.geminiApiKey) {
     return null;
@@ -220,7 +222,7 @@ async function performGeminiJsonRequest(
           ],
           generationConfig: {
             temperature,
-            responseMimeType: 'application/json',
+            responseMimeType,
             ...(maxOutputTokens ? { maxOutputTokens } : {})
           }
         }),
@@ -513,7 +515,22 @@ export async function generateGeminiMultimodalJson(
     options.parts,
     options.temperature ?? 0.1,
     options.maxOutputTokens,
-    options.timeoutMs
+    options.timeoutMs,
+    options.responseMimeType
+  );
+  return result && 'jsonText' in result ? result : null;
+}
+
+export async function generateGeminiMultimodalText(
+  options: Omit<GenerateMultimodalOptions, 'responseMimeType'>
+): Promise<GeminiSuccess | null> {
+  const result = await performGeminiJsonRequest(
+    options.model,
+    options.parts,
+    options.temperature ?? 0.1,
+    options.maxOutputTokens,
+    options.timeoutMs,
+    'text/plain'
   );
   return result && 'jsonText' in result ? result : null;
 }

@@ -43,7 +43,8 @@ describe('image parse service', () => {
           inputTokens: 100,
           outputTokens: 50
         }
-      }))
+      })),
+      generateGeminiMultimodalText: vi.fn(async () => null)
     }));
 
     const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
@@ -84,7 +85,6 @@ describe('image parse service', () => {
           outputTokens: 20
         }
       })
-      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         jsonText: JSON.stringify({
           extractedText: 'margherita pizza',
@@ -113,8 +113,11 @@ describe('image parse service', () => {
         }
       });
 
+    const generateGeminiMultimodalText = vi.fn().mockResolvedValueOnce(null);
+
     vi.doMock('../src/services/geminiFlashClient.js', () => ({
-      generateGeminiMultimodalJson
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
     }));
 
     const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
@@ -123,8 +126,9 @@ describe('image parse service', () => {
       dataBase64: 'pizza-image'
     });
 
-    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(3);
-    expect(generateGeminiMultimodalJson.mock.calls[2]?.[0]?.parts[0]?.text).toContain('fallback parser');
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
+    expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text).toContain('fallback parser');
     expect(parsed.lowConfidenceAccepted).toBe(true);
     expect(parsed.fallbackUsed).toBe(true);
     expect(parsed.result.confidence).toBe(0.5);
@@ -156,7 +160,6 @@ describe('image parse service', () => {
           outputTokens: 20
         }
       })
-      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         jsonText: JSON.stringify({
           extractedText: 'methi paratha with chutney',
@@ -185,8 +188,11 @@ describe('image parse service', () => {
         }
       });
 
+    const generateGeminiMultimodalText = vi.fn().mockResolvedValueOnce(null);
+
     vi.doMock('../src/services/geminiFlashClient.js', () => ({
-      generateGeminiMultimodalJson
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
     }));
 
     const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
@@ -195,7 +201,8 @@ describe('image parse service', () => {
       dataBase64: 'flatbread-image'
     });
 
-    const rescuePrompt = generateGeminiMultimodalJson.mock.calls[2]?.[0]?.parts[0]?.text;
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    const rescuePrompt = generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text;
     expect(rescuePrompt).toContain('paratha');
     expect(rescuePrompt).toContain('flatbread');
     expect(parsed.lowConfidenceAccepted).toBe(true);
@@ -241,7 +248,8 @@ describe('image parse service', () => {
           inputTokens: 120,
           outputTokens: 90
         }
-      }))
+      })),
+      generateGeminiMultimodalText: vi.fn(async () => null)
     }));
 
     const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
@@ -289,7 +297,6 @@ describe('image parse service', () => {
           outputTokens: 20
         }
       })
-      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         jsonText: JSON.stringify({
           extractedText: 'turkey sandwich',
@@ -318,8 +325,11 @@ describe('image parse service', () => {
         }
       });
 
+    const generateGeminiMultimodalText = vi.fn().mockResolvedValueOnce(null);
+
     vi.doMock('../src/services/geminiFlashClient.js', () => ({
-      generateGeminiMultimodalJson
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
     }));
 
     const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
@@ -328,7 +338,8 @@ describe('image parse service', () => {
       dataBase64: 'sandwich-image'
     });
 
-    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(3);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
     expect(parsed.fallbackUsed).toBe(true);
     expect(parsed.lowConfidenceAccepted).toBe(false);
     expect(parsed.result.confidence).toBe(0.91);
@@ -345,20 +356,20 @@ describe('image parse service', () => {
 
     const generateGeminiMultimodalJson = vi
       .fn()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        jsonText: JSON.stringify({
-          caption: 'white rice with dal, salad, and crunchy Indian snack garnish'
-        }),
-        usage: {
-          model: 'gemini-2.5-flash',
-          inputTokens: 780,
-          outputTokens: 32
-        }
-      });
+      .mockResolvedValueOnce(null);
+
+    const generateGeminiMultimodalText = vi.fn().mockResolvedValueOnce({
+      jsonText: 'white rice with dal, salad, and crunchy Indian snack garnish',
+      usage: {
+        model: 'gemini-2.5-flash',
+        inputTokens: 780,
+        outputTokens: 32
+      }
+    });
 
     vi.doMock('../src/services/geminiFlashClient.js', () => ({
-      generateGeminiMultimodalJson
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
     }));
 
     vi.doMock('../src/services/aiNormalizerService.js', () => ({
@@ -411,8 +422,9 @@ describe('image parse service', () => {
       dataBase64: 'rice-dal-image'
     });
 
-    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
-    expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text).toContain('caption');
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText.mock.calls[0]?.[0]?.parts[0]?.text).toContain('Do not return JSON');
     expect(parsed.extractedText).toBe('white rice with dal, salad, and crunchy Indian snack garnish');
     expect(parsed.fallbackUsed).toBe(true);
     expect(parsed.lowConfidenceAccepted).toBe(true);
@@ -437,18 +449,20 @@ describe('image parse service', () => {
 
     const generateGeminiMultimodalJson = vi
       .fn()
-      .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        jsonText: 'masala dosa with sambar and three chutneys',
-        usage: {
-          model: 'gemini-2.5-flash',
-          inputTokens: 770,
-          outputTokens: 12
-        }
-      });
+      .mockResolvedValueOnce(null);
+
+    const generateGeminiMultimodalText = vi.fn().mockResolvedValueOnce({
+      jsonText: 'masala dosa with sambar and three chutneys',
+      usage: {
+        model: 'gemini-2.5-flash',
+        inputTokens: 770,
+        outputTokens: 12
+      }
+    });
 
     vi.doMock('../src/services/geminiFlashClient.js', () => ({
-      generateGeminiMultimodalJson
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
     }));
 
     vi.doMock('../src/services/aiNormalizerService.js', () => ({
@@ -503,7 +517,8 @@ describe('image parse service', () => {
       debugEvents
     });
 
-    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
     expect(parsed.extractedText).toBe('masala dosa with sambar and three chutneys');
     expect(parsed.result.items[0].name).toBe('Masala dosa with sambar and chutneys');
     expect(debugEvents.some((event) => event.stage === 'image_caption' && event.ok && event.caption === parsed.extractedText)).toBe(true);
@@ -520,18 +535,20 @@ describe('image parse service', () => {
     const generateGeminiMultimodalJson = vi
       .fn()
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce({
-        jsonText: 'Here is the JSON requested:\n```json',
-        usage: {
-          model: 'gemini-2.5-flash',
-          inputTokens: 454,
-          outputTokens: 9
-        }
-      })
       .mockResolvedValueOnce(null);
 
+    const generateGeminiMultimodalText = vi.fn().mockResolvedValueOnce({
+      jsonText: 'Here is the JSON requested:\n```json',
+      usage: {
+        model: 'gemini-2.5-flash',
+        inputTokens: 454,
+        outputTokens: 9
+      }
+    });
+
     vi.doMock('../src/services/geminiFlashClient.js', () => ({
-      generateGeminiMultimodalJson
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
     }));
 
     vi.doMock('../src/services/aiNormalizerService.js', () => ({

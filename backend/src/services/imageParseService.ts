@@ -4,7 +4,7 @@ import { ApiError } from '../utils/errors.js';
 import type { ParseResult, ParsedItem } from './deterministicParser.js';
 import { createEmptyParseResult } from './parsePipelineResultUtils.js';
 import { normalizeParseResultContract } from './parseContractService.js';
-import { generateGeminiMultimodalJson, type GeminiUsage } from './geminiFlashClient.js';
+import { generateGeminiMultimodalJson, generateGeminiMultimodalText, type GeminiUsage } from './geminiFlashClient.js';
 import { tryGeminiPrimaryParse } from './aiNormalizerService.js';
 
 type ImageParseUsageEvent = {
@@ -412,8 +412,12 @@ function buildImageCaptionFallbackPrompt(contextNote?: string): string {
   const note = trimSafe(contextNote);
   return [
     'Identify the edible food and drink visible in this image.',
-    'Return strict JSON only with this exact shape: {"caption":string}.',
-    'The caption should be a concise comma-separated meal description suitable for a nutrition logger.',
+    'Return only a concise comma-separated food description suitable for a nutrition logger.',
+    'Do not return JSON. Do not use markdown. Do not explain.',
+    'Good examples:',
+    '- masala dosa, sambar, coconut chutney, tomato chutney',
+    '- white rice, dal, salad, crunchy garnish',
+    '- white rice, rajma, red onion, lemon',
     'Include likely portions when visible or strongly implied.',
     'Use broad names if exact recipes are uncertain.',
     'For Indian meals, recognize common foods such as rice, dal, rajma, chole, dosa, chutney, sambar, curries, sabzi, roti, naan, paratha, thepla, makhana, and snacks.',
@@ -604,10 +608,10 @@ async function runImageCaptionFallback(
   image: ImagePart
 ): Promise<{ caption: string; usage: GeminiUsage } | null> {
   const startedAt = process.hrtime.bigint();
-  const response = await generateGeminiMultimodalJson({
+  const response = await generateGeminiMultimodalText({
     model,
     temperature: 0.1,
-    maxOutputTokens: 240,
+    maxOutputTokens: 80,
     timeoutMs: config.aiImageTimeoutMs,
     parts: [
       { text: buildImageCaptionFallbackPrompt(image.contextNote) },

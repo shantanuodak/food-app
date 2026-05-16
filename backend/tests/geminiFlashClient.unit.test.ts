@@ -52,4 +52,58 @@ describe('gemini circuit breaker', () => {
     expect(third).toBeNull();
     expect(fetchCalls).toBe(2);
   });
+
+  test('multimodal text requests use text/plain response mime type', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.GEMINI_API_KEY = 'test-key';
+    process.env.GEMINI_RETRY_MAX_ATTEMPTS = '1';
+    process.env.GEMINI_ABORT_RETRY_COUNT = '0';
+
+    let requestBody: unknown;
+    globalThis.fetch = vi.fn(async (_input, init) => {
+      requestBody = JSON.parse(String(init?.body));
+      return new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: 'masala dosa, sambar, chutney' }]
+              }
+            }
+          ],
+          usageMetadata: {
+            promptTokenCount: 10,
+            candidatesTokenCount: 8,
+            totalTokenCount: 18
+          }
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } }
+      );
+    }) as typeof fetch;
+
+    const module = await import('../src/services/geminiFlashClient.js');
+    module.resetGeminiCircuitBreakerStateForTests();
+
+    const result = await module.generateGeminiMultimodalText({
+      model: 'gemini-2.5-flash',
+      temperature: 0.1,
+      maxOutputTokens: 80,
+      parts: [
+        { text: 'Name visible foods only.' },
+        {
+          inlineData: {
+            mimeType: 'image/jpeg',
+            data: 'abc123'
+          }
+        }
+      ]
+    });
+
+    expect(result?.jsonText).toBe('masala dosa, sambar, chutney');
+    expect(requestBody).toMatchObject({
+      generationConfig: {
+        responseMimeType: 'text/plain'
+      }
+    });
+  });
 });
