@@ -454,9 +454,12 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
     '- Use realistic serving assumptions when quantity is unclear.',
     '- Return non-empty items if edible foods are visible.',
     '- Do not fail only because the exact portion is uncertain; estimate a common visible serving and explain the assumption.',
+    '- The photo may be rotated sideways or upside down. Mentally rotate it and inspect all edges/corners before deciding what foods are visible.',
     '- Scan the whole image before answering. For trays, thalis, compartment plates, bowls with sides, or meals with condiments, include every visible edible component, not only the largest item.',
+    '- For metal trays, shiny reflections, shadows, or rotation can make foods less obvious; still inspect every compartment and do not stop after the first liquid/curry.',
     '- Include small but visible sides such as chutney, onion, pickle, salad, sauces, dry chutney/powder, garnish, and drinks as separate low-calorie items when visible.',
     '- For Indian thali-style meals, list dal/curry, bread/rice, sabzi, chutneys, onion/salad, pickle/powder separately when visible.',
+    '- For dal baati / dal bati plates, include the baati/bati breads, dal, sabzi, chutney, onion, and dry churma/chutney/powder when visible.',
     '- If multiple edible components are visible, items must contain multiple items.',
     '- For common foods such as pizza, rice bowls, sandwiches, salads, drinks, snacks, desserts, roti, chapati, paratha, thepla, naan, dosa, idli, poha, dal, curry, and chutney, return a best-effort item even when the exact recipe is unknown.',
     '- For visible edible foods, calories must be greater than 0. Do not output zero nutrition just because recipe or portion is uncertain.',
@@ -481,10 +484,11 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
 
   if (mode === 'rescue') {
     return [
-      'You are a food-photo fallback parser. The first parse attempt did not produce usable nutrition JSON.',
-      'Look at the image again and return strict JSON only (no markdown).',
-      'Bias toward a safe best-effort food log rather than rejecting the photo.',
-      'If any edible food is visible, items must contain at least one item.',
+    'You are a food-photo fallback parser. The first parse attempt did not produce usable nutrition JSON.',
+    'Look at the image again and return strict JSON only (no markdown).',
+    'Bias toward a safe best-effort food log rather than rejecting the photo.',
+    'First, mentally rotate the image through 0, 90, 180, and 270 degrees; then inspect all tray compartments and edges.',
+    'If any edible food is visible, items must contain at least one item.',
       'Only return no items when the image clearly contains no edible food or drink.',
       'If the image is blurry, cropped, partially obstructed, or portion size is uncertain, still return the most likely visible food with a conservative serving estimate.',
       'Use broad names when needed, e.g. "pizza", "rice bowl", "sandwich", "coffee", "snack bar", "paratha", "roti", "thepla", "flatbread".',
@@ -514,9 +518,12 @@ function buildImageCaptionFallbackPrompt(contextNote?: string, mode: ImageCaptio
       : [];
   return [
     'Identify the edible food and drink visible in this image.',
+    'The image may be rotated sideways or upside down; mentally rotate it and inspect every edge/corner.',
     'Inspect the entire image, including all plate/tray compartments and small side bowls.',
+    'For shiny metal trays, ignore reflections and look for food in each compartment.',
     'List every distinct visible edible component, not just the largest or most obvious food.',
     'For thalis/trays, include breads/rice, dal/curry, sabzi, chutney, onion/salad, pickle, and dry chutney/powder when visible.',
+    'For dal baati / dal bati trays, include baati/bati breads, dal, sabzi, chutney, onions, and dry churma/chutney/powder when visible.',
     'If the image contains multiple foods, return multiple comma-separated foods.',
     ...inventoryRules,
     'Reply with one plain line of comma-separated food names suitable for a nutrition logger.',
@@ -812,36 +819,42 @@ async function recoverWithStructuredRescue(
   image: ImagePart,
   usageEvents: ImageParseUsageEvent[]
 ): Promise<ImageParseServiceResult | null> {
-  const fallbackModel = config.aiImageFallbackModel.trim();
-  if (!fallbackModel) {
-    return null;
+  const rescueModels = Array.from(
+    new Set([config.aiImagePrimaryModel.trim(), config.aiImageFallbackModel.trim()].filter(Boolean))
+  );
+
+  for (const model of rescueModels) {
+    const rescued = await runImageModel(model, image, 'rescue');
+    if (rescued?.usage) {
+      usageEvents.push({
+        feature: 'parse_image_fallback',
+        usage: rescued.usage,
+        estimatedCostUsd: estimateCostUsd(rescued.usage)
+      });
+    }
+
+    const rescuedAccepted =
+      rescued &&
+      rescued.result.items.length > 0 &&
+      rescued.result.confidence >= config.aiImageConfidenceMin;
+    if (rescuedAccepted) {
+      return {
+        extractedText: rescued.extractedText,
+        result: rescued.result,
+        model: rescued.usage.model,
+        fallbackUsed: true,
+        lowConfidenceAccepted: false,
+        usageEvents
+      };
+    }
+
+    const acceptedRescue = acceptedLowConfidenceResult(rescued, usageEvents, true);
+    if (acceptedRescue) {
+      return acceptedRescue;
+    }
   }
 
-  const rescued = await runImageModel(fallbackModel, image, 'rescue');
-  if (rescued?.usage) {
-    usageEvents.push({
-      feature: 'parse_image_fallback',
-      usage: rescued.usage,
-      estimatedCostUsd: estimateCostUsd(rescued.usage)
-    });
-  }
-
-  const rescuedAccepted =
-    rescued &&
-    rescued.result.items.length > 0 &&
-    rescued.result.confidence >= config.aiImageConfidenceMin;
-  if (rescuedAccepted) {
-    return {
-      extractedText: rescued.extractedText,
-      result: rescued.result,
-      model: rescued.usage.model,
-      fallbackUsed: true,
-      lowConfidenceAccepted: false,
-      usageEvents
-    };
-  }
-
-  return acceptedLowConfidenceResult(rescued, usageEvents, true);
+  return null;
 }
 
 async function recoverWithCaptionFallback(
