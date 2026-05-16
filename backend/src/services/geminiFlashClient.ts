@@ -46,6 +46,7 @@ type GenerateMultimodalOptions = {
   temperature?: number;
   maxOutputTokens?: number;
   timeoutMs?: number;
+  maxAttempts?: number;
   responseMimeType?: 'application/json' | 'text/plain';
 };
 
@@ -186,7 +187,8 @@ async function performGeminiJsonRequest(
   temperature = 0.1,
   maxOutputTokens?: number,
   timeoutMsOverride?: number,
-  responseMimeType: 'application/json' | 'text/plain' = 'application/json'
+  responseMimeType: 'application/json' | 'text/plain' = 'application/json',
+  maxAttemptsOverride?: number
 ): Promise<GeminiSuccess | GeminiFailure | null> {
   if (!config.geminiApiKey) {
     return null;
@@ -200,7 +202,10 @@ async function performGeminiJsonRequest(
     config.geminiApiKey
   )}`;
 
-  const maxAttempts = Math.max(1, config.geminiRetryMaxAttempts, config.geminiAbortRetryCount + 1);
+  const maxAttempts =
+    maxAttemptsOverride !== undefined
+      ? Math.max(1, maxAttemptsOverride)
+      : Math.max(1, config.geminiRetryMaxAttempts, config.geminiAbortRetryCount + 1);
   const timeoutMs = Math.max(1_000, timeoutMsOverride ?? config.geminiTimeoutMs);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
@@ -516,7 +521,8 @@ export async function generateGeminiMultimodalJson(
     options.temperature ?? 0.1,
     options.maxOutputTokens,
     options.timeoutMs,
-    options.responseMimeType
+    options.responseMimeType,
+    options.maxAttempts
   );
   return result && 'jsonText' in result ? result : null;
 }
@@ -530,7 +536,8 @@ export async function generateGeminiMultimodalText(
     options.temperature ?? 0.1,
     options.maxOutputTokens,
     options.timeoutMs,
-    'text/plain'
+    'text/plain',
+    options.maxAttempts
   );
   return result && 'jsonText' in result ? result : null;
 }

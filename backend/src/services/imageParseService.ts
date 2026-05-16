@@ -507,7 +507,7 @@ function estimateCostUsd(usage: GeminiUsage): number {
 }
 
 type ImagePromptMode = 'primary' | 'rescue';
-type ImageCaptionPromptMode = 'concise' | 'inventory';
+type ImageCaptionPromptMode = 'concise' | 'inventory' | 'staples' | 'sides';
 
 function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: string): string {
   const note = trimSafe(contextNote);
@@ -583,6 +583,22 @@ function buildImageCaptionFallbackPrompt(contextNote?: string, mode: ImageCaptio
           'If a tray contains breads plus dal plus sides, include the breads and all side compartments.'
         ]
       : [];
+  const stapleRules =
+    mode === 'staples'
+      ? [
+          'This is a staple-food pass. Focus on carb/staple items that are easy to miss.',
+          'Look specifically for bread balls, baati/bati, buns, rolls, roti, chapati, naan, paratha, dosa, rice, noodles, potatoes, pasta, tortillas, wraps, pancakes, waffles, and cereal.',
+          'Do not stop at the curry/liquid. If any bread/rice/starch is visible, name it clearly.'
+        ]
+      : [];
+  const sideRules =
+    mode === 'sides'
+      ? [
+          'This is a side-component pass. Focus on small compartments, edges, sauces, dips, salads, pickles, chutneys, powders, garnishes, and vegetables.',
+          'Look specifically for sliced onion, green chutney, potato sabzi, dry chutney/churma powder, pickle, salad, lemon, sauces, and dressings.',
+          'Return only edible side components you can see.'
+        ]
+      : [];
   return [
     'Identify the edible food and drink visible in this image.',
     'The image may be rotated sideways or upside down; mentally rotate it and inspect every edge/corner.',
@@ -595,6 +611,8 @@ function buildImageCaptionFallbackPrompt(contextNote?: string, mode: ImageCaptio
     'Look specifically for round brown baati/bati breads, diced potato sabzi, sliced red onion, green chutney, dal, and dry brown chutney/churma powder.',
     'If the image contains multiple foods, return multiple comma-separated foods.',
     ...inventoryRules,
+    ...stapleRules,
+    ...sideRules,
     'Reply with one plain line of comma-separated food names suitable for a nutrition logger.',
     'No intro text, no labels, no code blocks, no bullet points, and no explanation.',
     'Good examples:',
@@ -955,6 +973,7 @@ async function runImageInventoryV2(image: ImagePart): Promise<{
     temperature: 0.05,
     maxOutputTokens: 1100,
     timeoutMs: config.aiImageFastTimeoutMs,
+    maxAttempts: 1,
     parts: [
       { text: buildImageInventoryV2Prompt(image.contextNote) },
       {
@@ -1111,14 +1130,16 @@ async function runImageInventoryV2(image: ImagePart): Promise<{
 async function runImageCaptionFallback(
   model: string,
   image: ImagePart,
-  mode: ImageCaptionPromptMode = 'concise'
+  mode: ImageCaptionPromptMode = 'concise',
+  timeoutMs = config.aiImageTimeoutMs
 ): Promise<{ caption: string; usage: GeminiUsage } | null> {
   const startedAt = process.hrtime.bigint();
   const response = await generateGeminiMultimodalText({
     model,
     temperature: 0.1,
     maxOutputTokens: mode === 'inventory' ? 120 : 80,
-    timeoutMs: config.aiImageTimeoutMs,
+    timeoutMs,
+    maxAttempts: 1,
     parts: [
       { text: buildImageCaptionFallbackPrompt(image.contextNote, mode) },
       {
@@ -1169,7 +1190,7 @@ async function runImageCaptionFallback(
       stage: 'image_caption',
       ok: true,
       model: response.usage.model,
-      reason: mode === 'inventory' ? 'inventory_caption' : 'concise_caption',
+      reason: `${mode}_caption`,
       ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
       caption
     });
@@ -1203,6 +1224,177 @@ function imageSafeResult(result: ParseResult): ParseResult {
         item.explanation ||
         `Estimated from the visible photo via a brief meal description: ${item.name}. Please confirm portions if needed.`
     }))
+  };
+}
+
+function splitCaptionFoodSegments(caption: string): string[] {
+  return caption
+    .split(/[,;\n]+|\s+\band\b\s+|\s+\bwith\b\s+/i)
+    .map((segment) =>
+      segment
+        .trim()
+        .replace(/^[-*\d.)\s]+/, '')
+        .replace(/\s+/g, ' ')
+    )
+    .filter((segment) => segment.length >= 2)
+    .filter((segment) => !captionRejectionReason(segment));
+}
+
+function captionSegmentKey(segment: string): string {
+  return segment
+    .toLowerCase()
+    .replace(/\b(bati)\b/g, 'baati')
+    .replace(/\b(chur)\b/g, 'churma')
+    .replace(/\b(green sauce)\b/g, 'green chutney')
+    .replace(/\b(red onion|onion slices)\b/g, 'onion')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function mergeCaptionTexts(captions: string[]): string {
+  const segments: string[] = [];
+  const seen = new Set<string>();
+  for (const caption of captions) {
+    for (const segment of splitCaptionFoodSegments(caption)) {
+      const key = captionSegmentKey(segment);
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      segments.push(segment);
+    }
+  }
+  return segments.slice(0, 12).join(', ');
+}
+
+function coverageFromCaptionInventory(caption: string, result: ParseResult): ImageParseCoverage {
+  const segments = splitCaptionFoodSegments(caption);
+  const visibleComponentCount = Math.max(segments.length, result.items.length);
+  const parsedItemCount = result.items.length;
+  const score = visibleComponentCount > 0 ? round(Math.min(1, parsedItemCount / visibleComponentCount), 2) : 0;
+  const partial = visibleComponentCount >= 3 && parsedItemCount < visibleComponentCount;
+  return {
+    imageType: visibleComponentCount >= 3 ? 'multi_component_meal' : 'unclear',
+    cuisineHints: [],
+    visibleComponents: segments.map((name) => ({
+      name,
+      category: 'food',
+      zone: 'caption probe',
+      portionHint: 'visible portion',
+      confidence: 0.7,
+      isSmallSide: /chutney|sauce|pickle|onion|salad|powder|garnish|dip/i.test(name)
+    })),
+    visibleComponentCount,
+    parsedItemCount,
+    score,
+    warnings: partial ? ['Some visible foods may need review because the image inventory was assembled from fast caption probes.'] : [],
+    partial
+  };
+}
+
+async function parseCaptionToImageResult(
+  caption: string,
+  image: ImagePart,
+  usageEvents: ImageParseUsageEvent[],
+  orchestratorVersion: 'v1' | 'v2',
+  coverage?: ImageParseCoverage
+): Promise<ImageParseServiceResult | null> {
+  const textStartedAt = process.hrtime.bigint();
+  const textAttempt = await tryGeminiPrimaryParse(caption, createEmptyParseResult(caption));
+  if (!textAttempt?.result.items.length || !resultHasPositiveNutrition(textAttempt.result)) {
+    image.debugEvents?.push({
+      stage: 'image_caption_text',
+      ok: false,
+      reason: textAttempt?.result.items.length ? 'text_parse_non_food_or_zero_nutrition' : 'text_parse_failed',
+      ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
+      caption
+    });
+    return null;
+  }
+
+  usageEvents.push({
+    feature: 'parse_image_caption_text',
+    usage: {
+      model: textAttempt.usage.model,
+      inputTokens: textAttempt.usage.inputTokens,
+      outputTokens: textAttempt.usage.outputTokens
+    },
+    estimatedCostUsd: textAttempt.usage.estimatedCostUsd
+  });
+
+  const result = imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini'));
+  const resolvedCoverage = coverage ?? coverageFromCaptionInventory(caption, result);
+  image.debugEvents?.push({
+    stage: 'image_caption_text',
+    ok: true,
+    model: textAttempt.usage.model,
+    ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
+    confidence: result.confidence,
+    items: result.items.length,
+    caption
+  });
+  return {
+    extractedText: caption,
+    result,
+    model: textAttempt.usage.model,
+    fallbackUsed: true,
+    lowConfidenceAccepted: true,
+    usageEvents,
+    orchestratorVersion,
+    coverage: orchestratorVersion === 'v2' ? resolvedCoverage : undefined
+  };
+}
+
+async function recoverWithV2CaptionEnsemble(
+  image: ImagePart,
+  usageEvents: ImageParseUsageEvent[]
+): Promise<ImageParseServiceResult | null> {
+  const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
+  const modes: ImageCaptionPromptMode[] = ['concise', 'inventory', 'staples', 'sides'];
+  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 3_500), 7_000);
+  const captions = (
+    await Promise.all(modes.map((mode) => runImageCaptionFallback(model, image, mode, timeoutMs)))
+  ).filter((caption): caption is { caption: string; usage: GeminiUsage } => Boolean(caption?.caption.trim()));
+
+  for (const caption of captions) {
+    usageEvents.push({
+      feature: 'parse_image_caption',
+      usage: caption.usage,
+      estimatedCostUsd: estimateCostUsd(caption.usage)
+    });
+  }
+
+  const mergedCaption = mergeCaptionTexts(captions.map((caption) => caption.caption));
+  if (!mergedCaption) {
+    image.debugEvents?.push({
+      stage: 'image_caption_ensemble_v2',
+      ok: false,
+      model,
+      reason: 'empty_merged_caption',
+      ms: 0
+    });
+    return null;
+  }
+
+  image.debugEvents?.push({
+    stage: 'image_caption_ensemble_v2',
+    ok: true,
+    model,
+    reason: 'merged_caption_inventory',
+    ms: 0,
+    items: captionFoodSegmentCount(mergedCaption),
+    caption: mergedCaption.slice(0, 180)
+  });
+
+  const coverage = coverageFromCaptionInventory(mergedCaption, createEmptyParseResult(mergedCaption));
+  const parsed = await parseCaptionToImageResult(mergedCaption, image, usageEvents, 'v2', coverage);
+  if (!parsed) {
+    return null;
+  }
+
+  const finalCoverage = coverageFromCaptionInventory(mergedCaption, parsed.result);
+  return {
+    ...parsed,
+    coverage: finalCoverage,
+    lowConfidenceAccepted: parsed.lowConfidenceAccepted || finalCoverage.partial || finalCoverage.score < config.aiImageCoverageMin
   };
 }
 
@@ -1256,13 +1448,14 @@ async function recoverWithCaptionFallback(
   const captionModels = [config.aiImagePrimaryModel, config.aiImageFallbackModel]
     .map((model) => model.trim())
     .filter(Boolean);
+  const rawCaptionAttempts: Array<{ model: string | undefined; mode: ImageCaptionPromptMode }> = [
+    { model: captionModels[0], mode: 'concise' },
+    { model: captionModels[0], mode: 'inventory' },
+    { model: captionModels[1], mode: 'inventory' }
+  ];
   const captionAttempts = Array.from(
     new Map(
-      [
-        { model: captionModels[0], mode: 'concise' as const },
-        { model: captionModels[0], mode: 'inventory' as const },
-        { model: captionModels[1], mode: 'inventory' as const }
-      ]
+      rawCaptionAttempts
         .filter((attempt): attempt is { model: string; mode: ImageCaptionPromptMode } => Boolean(attempt.model))
         .map((attempt) => [`${attempt.model}:${attempt.mode}`, attempt])
     ).values()
@@ -1393,6 +1586,11 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
   const useV2 = config.aiImageOrchestratorVersion.trim().toLowerCase() === 'v2';
 
   if (useV2) {
+    const captionEnsemble = await recoverWithV2CaptionEnsemble(image, usageEvents);
+    if (captionEnsemble && resultHasPositiveNutrition(captionEnsemble.result)) {
+      return captionEnsemble;
+    }
+
     const inventoryV2 = await runImageInventoryV2(image);
     if (inventoryV2?.usage) {
       usageEvents.push({
