@@ -519,7 +519,7 @@ describe('image parse service', () => {
     });
 
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
-    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
     expect(parsed.extractedText).toBe('masala dosa with sambar and three chutneys');
     expect(parsed.result.items[0].name).toBe('Masala dosa with sambar and chutneys');
     expect(debugEvents.some((event) => event.stage === 'image_caption' && event.ok && event.caption === parsed.extractedText)).toBe(true);
@@ -725,6 +725,93 @@ describe('image parse service', () => {
         caption: 'dal'
       })
     );
+  });
+
+  test('escalates two-item captions after failed structured image parsing', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-pro';
+
+    const generateGeminiMultimodalJson = vi.fn().mockResolvedValueOnce(null);
+
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: 'dal, baati',
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 561,
+          outputTokens: 4
+        }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'dal, baati, potato sabzi, green chutney, sliced onion, dry chutney powder',
+        usage: {
+          model: 'gemini-2.5-pro',
+          inputTokens: 840,
+          outputTokens: 20
+        }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryGeminiPrimaryParse: vi.fn(async (caption: string) => ({
+        result: {
+          confidence: 0.88,
+          assumptions: [],
+          items: caption.split(',').map((name, index) => ({
+            name: name.trim(),
+            quantity: 1,
+            amount: 1,
+            unit: index === 0 ? 'cup' : 'serving',
+            unitNormalized: index === 0 ? 'cup' : 'serving',
+            grams: 50,
+            gramsPerUnit: 50,
+            calories: [230, 280, 140, 20, 10, 35][index] ?? 20,
+            protein: [18, 8, 3, 1, 0.3, 1][index] ?? 1,
+            carbs: [40, 48, 20, 4, 2, 6][index] ?? 4,
+            fat: [0.8, 6, 6, 0.2, 0.1, 1.5][index] ?? 1,
+            matchConfidence: 0.88,
+            nutritionSourceId: 'gemini_estimate',
+            originalNutritionSourceId: 'gemini_estimate',
+            sourceFamily: 'gemini',
+            needsClarification: false,
+            manualOverride: false,
+            foodDescription: name.trim(),
+            explanation: 'Estimated from visible thali component.'
+          })),
+          totals: {
+            calories: 715,
+            protein: 31.3,
+            carbs: 120,
+            fat: 14.6
+          }
+        },
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 330,
+          outputTokens: 160,
+          estimatedCostUsd: 0.00055
+        }
+      }))
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'thali-image'
+    });
+
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
+    expect(parsed.extractedText).toBe('dal, baati, potato sabzi, green chutney, sliced onion, dry chutney powder');
+    expect(parsed.result.items).toHaveLength(6);
   });
 
   test('rejects Gemini boilerplate captions instead of saving zero-calorie non-food rows', async () => {

@@ -257,12 +257,16 @@ function captionFoodSegmentCount(caption: string): number {
 
 function shouldTryStrongerCaptionModel(caption: string, contextNote?: string): boolean {
   const segmentCount = captionFoodSegmentCount(caption);
-  if (segmentCount >= 2) {
+  if (segmentCount < 3) {
+    return true;
+  }
+
+  if (segmentCount >= 4) {
     return false;
   }
 
   const note = trimSafe(contextNote);
-  if (captionFoodSegmentCount(note) >= 2) {
+  if (captionFoodSegmentCount(note) > segmentCount) {
     return true;
   }
 
