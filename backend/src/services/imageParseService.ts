@@ -1333,6 +1333,98 @@ function coverageFromCaptionInventory(caption: string, result: ParseResult): Ima
   };
 }
 
+type CaptionEstimate = {
+  name: string;
+  aliases: string[];
+  quantity: number;
+  unit: string;
+  grams: number;
+  calories: number;
+  protein: number;
+  carbs: number;
+  fat: number;
+};
+
+const captionEstimateLibrary: CaptionEstimate[] = [
+  { name: 'Green chutney', aliases: ['green chutney', 'mint chutney', 'cilantro chutney'], quantity: 2, unit: 'tbsp', grams: 30, calories: 30, protein: 1, carbs: 4, fat: 1 },
+  { name: 'Potato sabzi', aliases: ['potato sabzi', 'aloo sabzi', 'potato sab'], quantity: 1, unit: 'serving', grams: 120, calories: 160, protein: 3, carbs: 25, fat: 6 },
+  { name: 'Baati', aliases: ['baati', 'bati'], quantity: 2, unit: 'pieces', grams: 120, calories: 360, protein: 9, carbs: 58, fat: 12 },
+  { name: 'Churma powder', aliases: ['churma', 'dry chutney powder', 'dry chutney', 'chutney powder'], quantity: 2, unit: 'tbsp', grams: 25, calories: 110, protein: 2, carbs: 16, fat: 5 },
+  { name: 'Dal', aliases: ['dal', 'daal', 'lentil curry'], quantity: 1, unit: 'serving', grams: 240, calories: 240, protein: 14, carbs: 38, fat: 6 },
+  { name: 'Onion', aliases: ['onion', 'sliced onion', 'red onion'], quantity: 1, unit: 'small side', grams: 40, calories: 16, protein: 0.4, carbs: 3.7, fat: 0 },
+  { name: 'White rice', aliases: ['white rice', 'rice'], quantity: 1, unit: 'cup', grams: 158, calories: 205, protein: 4.3, carbs: 44.5, fat: 0.4 },
+  { name: 'Rajma', aliases: ['rajma', 'kidney bean curry'], quantity: 1, unit: 'serving', grams: 200, calories: 300, protein: 15, carbs: 40, fat: 10 },
+  { name: 'Chole', aliases: ['chole', 'chickpea curry'], quantity: 1, unit: 'serving', grams: 200, calories: 330, protein: 14, carbs: 48, fat: 10 },
+  { name: 'Chapati', aliases: ['chapati', 'roti'], quantity: 1, unit: 'piece', grams: 45, calories: 120, protein: 3.5, carbs: 20, fat: 3 },
+  { name: 'Paratha', aliases: ['paratha'], quantity: 1, unit: 'piece', grams: 80, calories: 250, protein: 6, carbs: 32, fat: 11 },
+  { name: 'Dosa', aliases: ['dosa', 'masala dosa'], quantity: 1, unit: 'piece', grams: 180, calories: 300, protein: 6, carbs: 48, fat: 9 },
+  { name: 'Sambar', aliases: ['sambar'], quantity: 1, unit: 'bowl', grams: 180, calories: 120, protein: 6, carbs: 18, fat: 3 },
+  { name: 'Coconut chutney', aliases: ['coconut chutney'], quantity: 2, unit: 'tbsp', grams: 30, calories: 80, protein: 1, carbs: 4, fat: 7 },
+  { name: 'Pizza slice', aliases: ['pizza slice', 'pizza'], quantity: 1, unit: 'slice', grams: 110, calories: 290, protein: 12, carbs: 30, fat: 14 },
+  { name: 'Burger', aliases: ['burger'], quantity: 1, unit: 'burger', grams: 220, calories: 550, protein: 25, carbs: 45, fat: 30 },
+  { name: 'Fries', aliases: ['fries', 'french fries'], quantity: 1, unit: 'serving', grams: 120, calories: 365, protein: 4, carbs: 48, fat: 17 },
+  { name: 'Fried rice', aliases: ['fried rice'], quantity: 1, unit: 'serving', grams: 300, calories: 500, protein: 14, carbs: 75, fat: 16 },
+  { name: 'Noodles', aliases: ['noodles', 'chow mein'], quantity: 1, unit: 'serving', grams: 300, calories: 450, protein: 12, carbs: 70, fat: 14 },
+  { name: 'Pasta', aliases: ['pasta'], quantity: 1, unit: 'serving', grams: 300, calories: 450, protein: 16, carbs: 70, fat: 12 }
+];
+
+function findCaptionEstimate(segment: string): CaptionEstimate | null {
+  const key = captionSegmentKey(segment);
+  if (key.length < 3) {
+    return null;
+  }
+  return (
+    captionEstimateLibrary.find((estimate) =>
+      estimate.aliases.some((alias) => key === captionSegmentKey(alias) || key.includes(captionSegmentKey(alias)))
+    ) ?? null
+  );
+}
+
+function captionHeuristicResult(caption: string): ParseResult | null {
+  const segments = splitCaptionFoodSegments(caption);
+  const items: ParsedItem[] = [];
+  const seen = new Set<string>();
+
+  for (const segment of segments) {
+    const estimate = findCaptionEstimate(segment);
+    if (!estimate || seen.has(estimate.name)) continue;
+    seen.add(estimate.name);
+    items.push({
+      name: estimate.name,
+      quantity: estimate.quantity,
+      unit: estimate.unit,
+      grams: estimate.grams,
+      calories: estimate.calories,
+      protein: estimate.protein,
+      carbs: estimate.carbs,
+      fat: estimate.fat,
+      matchConfidence: 0.72,
+      nutritionSourceId: 'image_caption_heuristic',
+      originalNutritionSourceId: 'image_caption_heuristic',
+      sourceFamily: 'gemini',
+      needsClarification: true,
+      foodDescription: `${estimate.name}, ${estimate.quantity} ${estimate.unit}`,
+      explanation: `Estimated from the photo inventory as ${estimate.quantity} ${estimate.unit}; please review portions if needed.`
+    });
+  }
+
+  if (items.length === 0 || items.length / Math.max(1, segments.length) < 0.5) {
+    return null;
+  }
+
+  return {
+    confidence: 0.72,
+    assumptions: ['Estimated from fast photo inventory; review portions if anything looks off.'],
+    items,
+    totals: {
+      calories: round(items.reduce((sum, item) => sum + item.calories, 0), 1),
+      protein: round(items.reduce((sum, item) => sum + item.protein, 0), 1),
+      carbs: round(items.reduce((sum, item) => sum + item.carbs, 0), 1),
+      fat: round(items.reduce((sum, item) => sum + item.fat, 0), 1)
+    }
+  };
+}
+
 async function parseCaptionToImageResult(
   caption: string,
   image: ImagePart,
@@ -1447,6 +1539,31 @@ async function recoverWithV2CaptionEnsemble(
     items: captionFoodSegmentCount(mergedCaption),
     caption: mergedCaption.slice(0, 180)
   });
+
+  const heuristic = captionHeuristicResult(mergedCaption);
+  if (heuristic) {
+    const heuristicCoverage = coverageFromCaptionInventory(mergedCaption, heuristic);
+    image.debugEvents?.push({
+      stage: 'image_caption_heuristic_v2',
+      ok: true,
+      model: 'heuristic',
+      reason: 'common_food_inventory_estimate',
+      ms: 0,
+      confidence: heuristic.confidence,
+      items: heuristic.items.length,
+      caption: mergedCaption.slice(0, 180)
+    });
+    return {
+      extractedText: mergedCaption,
+      result: heuristic,
+      model,
+      fallbackUsed: true,
+      lowConfidenceAccepted: true,
+      usageEvents,
+      orchestratorVersion: 'v2',
+      coverage: heuristicCoverage
+    };
+  }
 
   const coverage = coverageFromCaptionInventory(mergedCaption, createEmptyParseResult(mergedCaption));
   const parsed = await parseCaptionToImageResult(mergedCaption, image, usageEvents, 'v2', coverage);
