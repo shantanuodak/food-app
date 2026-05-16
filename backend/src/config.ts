@@ -116,6 +116,7 @@ export const config = {
   aiImageEnableFallback: booleanWithDefault('AI_IMAGE_ENABLE_FALLBACK', true),
   aiImageConfidenceMin: numberWithDefault('AI_IMAGE_CONFIDENCE_MIN', 0.7),
   aiImageMaxBytes: integerWithDefault('AI_IMAGE_MAX_BYTES', 6_291_456),
+  aiImageTimeoutMs: integerWithDefault('AI_IMAGE_TIMEOUT_MS', 35_000),
   geminiFlashLiteInputUsdPer1M: numberWithDefault('GEMINI_FLASH_LITE_INPUT_USD_PER_1M', 0.10),
   geminiFlashLiteOutputUsdPer1M: numberWithDefault('GEMINI_FLASH_LITE_OUTPUT_USD_PER_1M', 0.40),
   geminiFlashInputUsdPer1M: numberWithDefault('GEMINI_FLASH_INPUT_USD_PER_1M', 0.30),

@@ -45,6 +45,7 @@ type GenerateMultimodalOptions = {
   parts: MultimodalPart[];
   temperature?: number;
   maxOutputTokens?: number;
+  timeoutMs?: number;
 };
 
 type GeminiCandidate = {
@@ -182,7 +183,8 @@ async function performGeminiJsonRequest(
   model: string,
   parts: MultimodalPart[],
   temperature = 0.1,
-  maxOutputTokens?: number
+  maxOutputTokens?: number,
+  timeoutMsOverride?: number
 ): Promise<GeminiSuccess | GeminiFailure | null> {
   if (!config.geminiApiKey) {
     return null;
@@ -197,7 +199,7 @@ async function performGeminiJsonRequest(
   )}`;
 
   const maxAttempts = Math.max(1, config.geminiRetryMaxAttempts, config.geminiAbortRetryCount + 1);
-  const timeoutMs = Math.max(1_000, config.geminiTimeoutMs);
+  const timeoutMs = Math.max(1_000, timeoutMsOverride ?? config.geminiTimeoutMs);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
     const controller = new AbortController();
@@ -510,7 +512,8 @@ export async function generateGeminiMultimodalJson(
     options.model,
     options.parts,
     options.temperature ?? 0.1,
-    options.maxOutputTokens
+    options.maxOutputTokens,
+    options.timeoutMs
   );
   return result && 'jsonText' in result ? result : null;
 }

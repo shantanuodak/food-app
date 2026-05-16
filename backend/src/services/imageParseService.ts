@@ -443,6 +443,7 @@ async function runImageModel(model: string, image: ImagePart, mode: ImagePromptM
     model,
     temperature: 0.1,
     maxOutputTokens: mode === 'rescue' ? 1400 : 1200,
+    timeoutMs: config.aiImageTimeoutMs,
     parts: [
       { text: buildImageParsePrompt(mode, image.contextNote) },
       {
