@@ -763,7 +763,7 @@ async function recoverWithCaptionFallback(
 
   const deferredSparseCaptions: Array<{ caption: string; usage: GeminiUsage }> = [];
 
-  async function parseCaptionText(caption: { caption: string; usage: GeminiUsage }): Promise<ImageParseServiceResult | null> {
+  async function parseCaptionText(caption: { caption: string }): Promise<ImageParseServiceResult | null> {
     const textStartedAt = process.hrtime.bigint();
     const textAttempt = await tryGeminiPrimaryParse(caption.caption, createEmptyParseResult(caption.caption));
     if (!textAttempt?.result.items.length || !resultHasPositiveNutrition(textAttempt.result)) {
@@ -835,6 +835,25 @@ async function recoverWithCaptionFallback(
     const parsed = await parseCaptionText(caption);
     if (parsed) {
       return parsed;
+    }
+  }
+
+  const contextCaption = trimSafe(image.contextNote);
+  if (captionFoodSegmentCount(contextCaption) >= 3) {
+    image.debugEvents?.push({
+      stage: 'image_caption',
+      ok: true,
+      model: 'context',
+      reason: 'using_multi_food_context_after_sparse_caption',
+      ms: 0,
+      caption: contextCaption
+    });
+    const parsed = await parseCaptionText({ caption: contextCaption });
+    if (parsed) {
+      return {
+        ...parsed,
+        extractedText: contextCaption
+      };
     }
   }
 
