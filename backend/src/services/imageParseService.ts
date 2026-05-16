@@ -187,6 +187,40 @@ function extractJsonCandidate(payloadText: string): string | null {
   return null;
 }
 
+function parseCaptionPayload(payloadText: string): string | null {
+  const trimmed = payloadText.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const jsonCandidate = extractJsonCandidate(trimmed);
+  if (jsonCandidate) {
+    try {
+      const parsed = captionSchema.parse(JSON.parse(jsonCandidate) as unknown);
+      return parsed.caption;
+    } catch {
+      // Fall through to tolerate JSON strings or plain text below.
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed === 'string') {
+      return parsed.trim().slice(0, 500) || null;
+    }
+    const record = asRecord(parsed);
+    if (record) {
+      const caption = asText(getFirst(record, ['caption', 'description', 'meal', 'text']));
+      return caption ? caption.slice(0, 500) : null;
+    }
+  } catch {
+    // Plain text is acceptable for caption fallback because it is fed into
+    // the stricter text nutrition parser next.
+  }
+
+  return trimmed.slice(0, 500);
+}
+
 function normalizeGeminiItem(rawItem: unknown, topLevelConfidence: number): z.input<typeof parseItemSchema> | null {
   const record = asRecord(rawItem);
   if (!record) {
@@ -568,20 +602,26 @@ async function runImageCaptionFallback(
   }
 
   try {
-    const jsonCandidate = extractJsonCandidate(response.jsonText);
-    if (!jsonCandidate) {
+    const caption = parseCaptionPayload(response.jsonText);
+    if (!caption) {
+      image.debugEvents?.push({
+        stage: 'image_caption',
+        ok: false,
+        model: response.usage.model,
+        reason: 'empty_caption',
+        ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+      });
       return null;
     }
-    const parsed = captionSchema.parse(JSON.parse(jsonCandidate) as unknown);
     image.debugEvents?.push({
       stage: 'image_caption',
       ok: true,
       model: response.usage.model,
       ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
-      caption: parsed.caption
+      caption
     });
     return {
-      caption: parsed.caption,
+      caption,
       usage: response.usage
     };
   } catch {

@@ -426,4 +426,86 @@ describe('image parse service', () => {
       'parse_image_caption_text'
     ]);
   });
+
+  test('accepts plain-text image captions before text nutrition recovery', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-pro';
+
+    const generateGeminiMultimodalJson = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        jsonText: 'masala dosa with sambar and three chutneys',
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 770,
+          outputTokens: 12
+        }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson
+    }));
+
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryGeminiPrimaryParse: vi.fn(async () => ({
+        result: {
+          confidence: 0.84,
+          assumptions: [],
+          items: [
+            {
+              name: 'Masala dosa with sambar and chutneys',
+              quantity: 1,
+              amount: 1,
+              unit: 'plate',
+              unitNormalized: 'plate',
+              grams: 520,
+              gramsPerUnit: 520,
+              calories: 720,
+              protein: 18,
+              carbs: 104,
+              fat: 26,
+              matchConfidence: 0.84,
+              nutritionSourceId: 'gemini_estimate',
+              originalNutritionSourceId: 'gemini_estimate',
+              sourceFamily: 'gemini',
+              needsClarification: false,
+              manualOverride: false,
+              foodDescription: 'Masala dosa with sambar and chutneys',
+              explanation: 'Estimated as one restaurant plate of masala dosa with sambar and chutneys.'
+            }
+          ],
+          totals: {
+            calories: 720,
+            protein: 18,
+            carbs: 104,
+            fat: 26
+          }
+        },
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 300,
+          outputTokens: 120,
+          estimatedCostUsd: 0.00042
+        }
+      }))
+    }));
+
+    const debugEvents: Array<{ stage: string; ok: boolean; caption?: string }> = [];
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'dosa-image',
+      debugEvents
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
+    expect(parsed.extractedText).toBe('masala dosa with sambar and three chutneys');
+    expect(parsed.result.items[0].name).toBe('Masala dosa with sambar and chutneys');
+    expect(debugEvents.some((event) => event.stage === 'image_caption' && event.ok && event.caption === parsed.extractedText)).toBe(true);
+  });
 });
