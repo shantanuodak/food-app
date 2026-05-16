@@ -187,9 +187,9 @@ router.post('/image', async (req, res, next) => {
         });
       } catch (err) {
         // Image parsing has already spent the model call by this point. Do not
-        // discard a usable parse because budget accounting crossed its soft
-        // guard after the fact; record best-effort cost telemetry and return
-        // the parse so the app does not show a false "try again" state.
+        // discard a usable parse because cost telemetry crossed a soft guard or
+        // failed schema/accounting. Return the parse so the app does not show a
+        // false "try again" state for bookkeeping failures.
         if (err instanceof ApiError && err.code === 'BUDGET_EXCEEDED') {
           console.warn(
             '[image_parse_budget_guard_bypassed]',
@@ -220,7 +220,17 @@ router.post('/image', async (req, res, next) => {
           }
           continue;
         }
-        throw err;
+        const costError = err instanceof Error ? { name: err.name, message: err.message } : { message: String(err) };
+        console.warn(
+          '[image_parse_cost_record_failed_nonfatal]',
+          JSON.stringify({
+            requestId: parseRequestId,
+            feature: usageEvent.feature,
+            model: usageEvent.usage.model,
+            error: costError
+          })
+        );
+        continue;
       }
     }
 
