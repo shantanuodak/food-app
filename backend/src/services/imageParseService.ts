@@ -247,6 +247,44 @@ function captionRejectionReason(caption: string): string | null {
   return null;
 }
 
+function captionFoodSegmentCount(caption: string): number {
+  return caption
+    .split(/[,;\n]+|\s+\band\b\s+/i)
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length >= 2)
+    .length;
+}
+
+function shouldTryStrongerCaptionModel(caption: string, contextNote?: string): boolean {
+  const segmentCount = captionFoodSegmentCount(caption);
+  if (segmentCount >= 2) {
+    return false;
+  }
+
+  const note = trimSafe(contextNote);
+  if (captionFoodSegmentCount(note) >= 2) {
+    return true;
+  }
+
+  const multiFoodSignals = [
+    'thali',
+    'tray',
+    'plate',
+    'bowl with',
+    'with chutney',
+    'with onions',
+    'with onion',
+    'with rice',
+    'with dal',
+    'with curry',
+    'with sabzi',
+    'compartment',
+    'sides'
+  ];
+
+  return multiFoodSignals.some((signal) => note.toLowerCase().includes(signal));
+}
+
 function resultHasPositiveNutrition(result: ParseResult): boolean {
   return result.items.some((item) => item.calories > 0 || item.protein > 0 || item.carbs > 0 || item.fat > 0);
 }
@@ -366,6 +404,10 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
     '- Use realistic serving assumptions when quantity is unclear.',
     '- Return non-empty items if edible foods are visible.',
     '- Do not fail only because the exact portion is uncertain; estimate a common visible serving and explain the assumption.',
+    '- Scan the whole image before answering. For trays, thalis, compartment plates, bowls with sides, or meals with condiments, include every visible edible component, not only the largest item.',
+    '- Include small but visible sides such as chutney, onion, pickle, salad, sauces, dry chutney/powder, garnish, and drinks as separate low-calorie items when visible.',
+    '- For Indian thali-style meals, list dal/curry, bread/rice, sabzi, chutneys, onion/salad, pickle/powder separately when visible.',
+    '- If multiple edible components are visible, items must contain multiple items.',
     '- For common foods such as pizza, rice bowls, sandwiches, salads, drinks, snacks, desserts, roti, chapati, paratha, thepla, naan, dosa, idli, poha, dal, curry, and chutney, return a best-effort item even when the exact recipe is unknown.',
     '- For visible edible foods, calories must be greater than 0. Do not output zero nutrition just because recipe or portion is uncertain.',
     '- If the image shows a flatbread-like food, estimate it as the closest visible broad category such as "paratha", "roti", "thepla", "naan", or "flatbread" instead of returning no items.',
@@ -412,6 +454,10 @@ function buildImageCaptionFallbackPrompt(contextNote?: string): string {
   const note = trimSafe(contextNote);
   return [
     'Identify the edible food and drink visible in this image.',
+    'Inspect the entire image, including all plate/tray compartments and small side bowls.',
+    'List every distinct visible edible component, not just the largest or most obvious food.',
+    'For thalis/trays, include breads/rice, dal/curry, sabzi, chutney, onion/salad, pickle, and dry chutney/powder when visible.',
+    'If the image contains multiple foods, return multiple comma-separated foods.',
     'Reply with one plain line of comma-separated food names suitable for a nutrition logger.',
     'No intro text, no labels, no code blocks, no bullet points, and no explanation.',
     'Good examples:',
@@ -711,18 +757,9 @@ async function recoverWithCaptionFallback(
     )
   );
 
-  for (const captionModel of captionModels) {
-    const caption = await runImageCaptionFallback(captionModel, image);
-    if (!caption?.caption.trim()) {
-      continue;
-    }
+  const deferredSparseCaptions: Array<{ caption: string; usage: GeminiUsage }> = [];
 
-    usageEvents.push({
-      feature: 'parse_image_caption',
-      usage: caption.usage,
-      estimatedCostUsd: estimateCostUsd(caption.usage)
-    });
-
+  async function parseCaptionText(caption: { caption: string; usage: GeminiUsage }): Promise<ImageParseServiceResult | null> {
     const textStartedAt = process.hrtime.bigint();
     const textAttempt = await tryGeminiPrimaryParse(caption.caption, createEmptyParseResult(caption.caption));
     if (!textAttempt?.result.items.length || !resultHasPositiveNutrition(textAttempt.result)) {
@@ -733,7 +770,7 @@ async function recoverWithCaptionFallback(
         ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
         caption: caption.caption
       });
-      continue;
+      return null;
     }
 
     usageEvents.push({
@@ -764,6 +801,44 @@ async function recoverWithCaptionFallback(
       lowConfidenceAccepted: true,
       usageEvents
     };
+  }
+
+  for (const [index, captionModel] of captionModels.entries()) {
+    const caption = await runImageCaptionFallback(captionModel, image);
+    if (!caption?.caption.trim()) {
+      continue;
+    }
+
+    usageEvents.push({
+      feature: 'parse_image_caption',
+      usage: caption.usage,
+      estimatedCostUsd: estimateCostUsd(caption.usage)
+    });
+
+    if (index < captionModels.length - 1 && shouldTryStrongerCaptionModel(caption.caption, image.contextNote)) {
+      image.debugEvents?.push({
+        stage: 'image_caption',
+        ok: false,
+        model: caption.usage.model,
+        reason: 'caption_too_sparse_for_multi_food_context',
+        ms: 0,
+        caption: caption.caption
+      });
+      deferredSparseCaptions.push(caption);
+      continue;
+    }
+
+    const parsed = await parseCaptionText(caption);
+    if (parsed) {
+      return parsed;
+    }
+  }
+
+  for (const caption of deferredSparseCaptions) {
+    const parsed = await parseCaptionText(caption);
+    if (parsed) {
+      return parsed;
+    }
   }
 
   return null;
