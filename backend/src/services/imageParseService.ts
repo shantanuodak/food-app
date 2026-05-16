@@ -836,10 +836,117 @@ function imagePayloadToParseResult(value: z.infer<typeof imageParseSchema>): { e
       fat: 0
     }
   };
+  const result = normalizeImageParseResult(normalizeParseResultContract(baseResult, 'gemini'));
 
   return {
     extractedText,
-    result: normalizeParseResultContract(baseResult, 'gemini')
+    result
+  };
+}
+
+function itemSpecificity(item: ParsedItem, key: string): number {
+  return (
+    captionSegmentSpecificity(item.name, key) +
+    Math.min(1, Math.max(0, item.matchConfidence || 0)) * 10 +
+    (item.calories > 0 || item.protein > 0 || item.carbs > 0 || item.fat > 0 ? 5 : 0)
+  );
+}
+
+function combineItemsAsCompound(items: ParsedItem[], compoundName: string, indexes: number[]): ParsedItem {
+  const first = items[indexes[0]];
+  const quantity = compoundName.toLowerCase().includes('chutney') ? 2 : 1;
+  const unit = compoundName.toLowerCase().includes('chutney') ? 'tbsp' : 'serving';
+  const grams = round(indexes.reduce((sum, index) => sum + nonNegative(items[index].grams), 0), 1);
+  const calories = round(indexes.reduce((sum, index) => sum + nonNegative(items[index].calories), 0), 1);
+  const protein = round(indexes.reduce((sum, index) => sum + nonNegative(items[index].protein), 0), 1);
+  const carbs = round(indexes.reduce((sum, index) => sum + nonNegative(items[index].carbs), 0), 1);
+  const fat = round(indexes.reduce((sum, index) => sum + nonNegative(items[index].fat), 0), 1);
+  const confidence = round(
+    indexes.reduce((sum, index) => sum + Math.min(1, Math.max(0, items[index].matchConfidence || 0.65)), 0) / indexes.length,
+    2
+  );
+
+  return {
+    ...first,
+    name: compoundName,
+    quantity,
+    amount: quantity,
+    unit,
+    unitNormalized: unit,
+    grams,
+    gramsPerUnit: grams > 0 ? round(grams / quantity, 4) : null,
+    calories,
+    protein,
+    carbs,
+    fat,
+    matchConfidence: confidence,
+    foodDescription: `${compoundName}, ${quantity} ${unit}`,
+    explanation: first.explanation || `Estimated visible ${compoundName.toLowerCase()} from the photo.`
+  };
+}
+
+function addParsedCompoundItems(items: ParsedItem[]): ParsedItem[] {
+  const keyed = items.map((item, index) => ({ item, index, key: captionSegmentKey(item.name) }));
+  const consumed = new Set<number>();
+  const additions: ParsedItem[] = [];
+
+  const addIfPresent = (name: string, leftKeys: string[], rightKeys: string[]): void => {
+    const left = keyed.find((entry) => !consumed.has(entry.index) && leftKeys.includes(entry.key));
+    const right = keyed.find((entry) => !consumed.has(entry.index) && rightKeys.includes(entry.key));
+    if (!left || !right || left.index === right.index) return;
+    consumed.add(left.index);
+    consumed.add(right.index);
+    additions.push(combineItemsAsCompound(items, name, [left.index, right.index]));
+  };
+
+  addIfPresent('Mango chutney', ['mango'], ['chutney']);
+  addIfPresent('Green chutney', ['green'], ['chutney']);
+  addIfPresent('Potato sabzi', ['potato', 'aloo'], ['sabzi', 'vegetable', 'vegetables']);
+
+  if (additions.length === 0) {
+    return items;
+  }
+  return [...items.filter((_item, index) => !consumed.has(index)), ...additions];
+}
+
+function rebuildTotals(items: ParsedItem[]): ParseResult['totals'] {
+  return {
+    calories: round(items.reduce((sum, item) => sum + nonNegative(item.calories), 0), 1),
+    protein: round(items.reduce((sum, item) => sum + nonNegative(item.protein), 0), 1),
+    carbs: round(items.reduce((sum, item) => sum + nonNegative(item.carbs), 0), 1),
+    fat: round(items.reduce((sum, item) => sum + nonNegative(item.fat), 0), 1)
+  };
+}
+
+function normalizeImageParseResult(result: ParseResult): ParseResult {
+  const combinedItems = addParsedCompoundItems(result.items);
+  const totalItems = combinedItems.length;
+  const selected = new Map<string, { item: ParsedItem; specificity: number; index: number }>();
+
+  combinedItems.forEach((item, index) => {
+    const key = captionSegmentKey(item.name);
+    if (unsafeCaptionSegmentReason(key, totalItems)) {
+      return;
+    }
+    const groupKey = captionSemanticGroupKey(key);
+    const specificity = itemSpecificity(item, key);
+    const existing = selected.get(groupKey);
+    if (!existing || specificity > existing.specificity) {
+      selected.set(groupKey, { item, specificity, index });
+    }
+  });
+
+  const items = Array.from(selected.values())
+    .sort((left, right) => left.index - right.index)
+    .map(({ item }) => item);
+  if (items.length === 0) {
+    return result;
+  }
+
+  return {
+    ...result,
+    items,
+    totals: rebuildTotals(items)
   };
 }
 
@@ -1242,6 +1349,41 @@ function splitCaptionFoodSegments(caption: string): string[] {
     .filter((segment) => !captionRejectionReason(segment));
 }
 
+function toDisplayFoodName(key: string, fallback: string): string {
+  const knownNames: Record<string, string> = {
+    dal: 'Dal',
+    daal: 'Dal',
+    baati: 'Baati',
+    bati: 'Baati',
+    'green chutney': 'Green chutney',
+    'mint chutney': 'Green chutney',
+    'cilantro chutney': 'Green chutney',
+    'mango chutney': 'Mango chutney',
+    'potato sabzi': 'Potato sabzi',
+    'aloo sabzi': 'Potato sabzi',
+    churma: 'Churma powder',
+    'churma powder': 'Churma powder',
+    'dry chutney': 'Churma powder',
+    'dry chutney powder': 'Churma powder',
+    onion: 'Onion',
+    'sliced onion': 'Onion',
+    'red onion': 'Onion',
+    'methi paratha': 'Methi paratha',
+    'fenugreek paratha': 'Methi paratha',
+    'methi flatbread': 'Methi paratha',
+    'fenugreek flatbread': 'Methi paratha',
+    thepla: 'Thepla',
+    'methi thepla': 'Thepla'
+  };
+  if (knownNames[key]) {
+    return knownNames[key];
+  }
+  return fallback
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
 function captionSegmentKey(segment: string): string {
   return segment
     .toLowerCase()
@@ -1253,18 +1395,167 @@ function captionSegmentKey(segment: string): string {
     .trim();
 }
 
-function mergeCaptionTexts(captions: string[]): string {
-  const segments: string[] = [];
-  const seen = new Set<string>();
-  for (const caption of captions) {
-    for (const segment of splitCaptionFoodSegments(caption)) {
-      const key = captionSegmentKey(segment);
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      segments.push(segment);
+function captionSemanticGroupKey(key: string): string {
+  if (/\b(methi|fenugreek)\s+(paratha|flatbread)\b/.test(key) || key === 'thepla' || key === 'methi thepla') {
+    return 'methi_flatbread';
+  }
+  if (/\b(green|mint|cilantro)\s+chutney\b/.test(key)) {
+    return 'green_chutney';
+  }
+  if (key === 'churma' || /\b(churma|dry chutney)\s*(powder)?\b/.test(key)) {
+    return 'churma_powder';
+  }
+  if (/\b(mango)\s+chutney\b/.test(key)) {
+    return 'mango_chutney';
+  }
+  if (/\b(potato|aloo)\s+sabzi\b/.test(key)) {
+    return 'potato_sabzi';
+  }
+  if (/\bmixed\s+vegetables?\b/.test(key)) {
+    return 'mixed_vegetables';
+  }
+  if (/\b(red|sliced)?\s*onion\b/.test(key)) {
+    return 'onion';
+  }
+  return key;
+}
+
+function captionSegmentSpecificity(name: string, key: string): number {
+  let score = key.length;
+  if (/\b(chutney|sabzi|curry|powder|paratha|flatbread|thepla|baati)\b/.test(key)) score += 20;
+  if (/^(green|red|white|brown|yellow|vegetable|mango|potato|chutney)$/.test(key)) score -= 25;
+  if (key === 'methi paratha') score += 12;
+  if (key === 'fenugreek paratha') score += 10;
+  if (key === 'methi flatbread') score += 8;
+  if (key === 'thepla') score += 5;
+  return score + name.length / 100;
+}
+
+function unsafeCaptionSegmentReason(key: string, totalSegments: number): string | null {
+  if (!key || key.length < 3) return 'short_fragment';
+  const fragments = new Set([
+    'al',
+    'ba',
+    'meth',
+    'methi par',
+    'fenugreek par',
+    'green',
+    'red',
+    'white',
+    'brown',
+    'yellow'
+  ]);
+  if (fragments.has(key)) return 'unsafe_fragment';
+  if (totalSegments > 1 && /^(vegetable|vegetables|chutney|sauce|potato)$/.test(key)) return 'generic_fragment';
+  return null;
+}
+
+type CaptionSegmentCandidate = {
+  name: string;
+  key: string;
+  groupKey: string;
+  specificity: number;
+};
+
+function makeCaptionCandidate(segment: string, totalSegments: number): CaptionSegmentCandidate | null {
+  const key = captionSegmentKey(segment);
+  if (unsafeCaptionSegmentReason(key, totalSegments)) {
+    return null;
+  }
+  const name = toDisplayFoodName(key, segment);
+  return {
+    name,
+    key,
+    groupKey: captionSemanticGroupKey(key),
+    specificity: captionSegmentSpecificity(name, key)
+  };
+}
+
+function addCombinedCompoundCandidates(
+  candidates: CaptionSegmentCandidate[],
+  rawSegments: string[],
+  totalSegments: number
+): CaptionSegmentCandidate[] {
+  const keys = new Set(rawSegments.map(captionSegmentKey).filter(Boolean));
+  const additions: string[] = [];
+
+  if (keys.has('mango') && keys.has('chutney')) additions.push('mango chutney');
+  if (keys.has('green') && keys.has('chutney')) additions.push('green chutney');
+  if ((keys.has('potato') || keys.has('aloo')) && (keys.has('sabzi') || keys.has('vegetable') || keys.has('vegetables'))) {
+    additions.push('potato sabzi');
+  }
+
+  const added = additions
+    .map((segment) => makeCaptionCandidate(segment, totalSegments))
+    .filter((candidate): candidate is CaptionSegmentCandidate => Boolean(candidate));
+
+  return [...candidates, ...added];
+}
+
+function shouldDropStandaloneBecauseCompoundExists(
+  candidate: CaptionSegmentCandidate,
+  candidates: CaptionSegmentCandidate[]
+): boolean {
+  const singletonKeys = new Set(['mango', 'green', 'chutney', 'potato', 'aloo', 'sabzi', 'churma']);
+  if (!singletonKeys.has(candidate.key)) {
+    return false;
+  }
+  return candidates.some(
+    (other) =>
+      other !== candidate &&
+      other.key.includes(candidate.key) &&
+      other.key !== candidate.key &&
+      /\b(chutney|sabzi|powder)\b/.test(other.key)
+  );
+}
+
+function captionCandidateFirstIndex(rawSegments: string[], candidate: CaptionSegmentCandidate): number {
+  const directIndex = rawSegments.findIndex((segment) => captionSemanticGroupKey(captionSegmentKey(segment)) === candidate.groupKey);
+  if (directIndex >= 0) {
+    return directIndex;
+  }
+
+  const rawKeys = rawSegments.map(captionSegmentKey);
+  if (candidate.groupKey === 'mango_chutney') {
+    return Math.min(...['mango', 'chutney'].map((key) => rawKeys.indexOf(key)).filter((index) => index >= 0));
+  }
+  if (candidate.groupKey === 'green_chutney') {
+    return Math.min(...['green', 'chutney'].map((key) => rawKeys.indexOf(key)).filter((index) => index >= 0));
+  }
+  if (candidate.groupKey === 'potato_sabzi') {
+    return Math.min(...['potato', 'aloo', 'sabzi', 'vegetable', 'vegetables'].map((key) => rawKeys.indexOf(key)).filter((index) => index >= 0));
+  }
+
+  return Number.MAX_SAFE_INTEGER;
+}
+
+function normalizeCaptionInventorySegments(captions: string[]): string[] {
+  const rawSegments = captions.flatMap(splitCaptionFoodSegments);
+  const totalSegments = rawSegments.length;
+  const initialCandidates = rawSegments
+    .map((segment) => makeCaptionCandidate(segment, totalSegments))
+    .filter((candidate): candidate is CaptionSegmentCandidate => Boolean(candidate));
+
+  const candidates = addCombinedCompoundCandidates(initialCandidates, rawSegments, totalSegments).filter(
+    (candidate, _index, all) => !shouldDropStandaloneBecauseCompoundExists(candidate, all)
+  );
+
+  const selected = new Map<string, CaptionSegmentCandidate>();
+  for (const candidate of candidates) {
+    const existing = selected.get(candidate.groupKey);
+    if (!existing || candidate.specificity > existing.specificity) {
+      selected.set(candidate.groupKey, candidate);
     }
   }
-  return segments.slice(0, 12).join(', ');
+
+  return Array.from(selected.values())
+    .sort((left, right) => captionCandidateFirstIndex(rawSegments, left) - captionCandidateFirstIndex(rawSegments, right))
+    .map((candidate) => candidate.name)
+    .slice(0, 12);
+}
+
+function mergeCaptionTexts(captions: string[]): string {
+  return normalizeCaptionInventorySegments(captions).join(', ');
 }
 
 async function buildRotatedImageVariant(image: ImagePart, angle: 90 | -90): Promise<ImagePart | null> {
@@ -1347,11 +1638,14 @@ type CaptionEstimate = {
 
 const captionEstimateLibrary: CaptionEstimate[] = [
   { name: 'Green chutney', aliases: ['green chutney', 'mint chutney', 'cilantro chutney'], quantity: 2, unit: 'tbsp', grams: 30, calories: 30, protein: 1, carbs: 4, fat: 1 },
+  { name: 'Mango chutney', aliases: ['mango chutney', 'mango pickle', 'mango sauce'], quantity: 2, unit: 'tbsp', grams: 35, calories: 70, protein: 0.3, carbs: 17, fat: 0.2 },
   { name: 'Potato sabzi', aliases: ['potato sabzi', 'aloo sabzi', 'potato sab'], quantity: 1, unit: 'serving', grams: 120, calories: 160, protein: 3, carbs: 25, fat: 6 },
   { name: 'Baati', aliases: ['baati', 'bati'], quantity: 2, unit: 'pieces', grams: 120, calories: 360, protein: 9, carbs: 58, fat: 12 },
   { name: 'Churma powder', aliases: ['churma', 'dry chutney powder', 'dry chutney', 'chutney powder'], quantity: 2, unit: 'tbsp', grams: 25, calories: 110, protein: 2, carbs: 16, fat: 5 },
   { name: 'Dal', aliases: ['dal', 'daal', 'lentil curry'], quantity: 1, unit: 'serving', grams: 240, calories: 240, protein: 14, carbs: 38, fat: 6 },
   { name: 'Onion', aliases: ['onion', 'sliced onion', 'red onion'], quantity: 1, unit: 'small side', grams: 40, calories: 16, protein: 0.4, carbs: 3.7, fat: 0 },
+  { name: 'Methi paratha', aliases: ['methi paratha', 'fenugreek paratha', 'methi flatbread', 'fenugreek flatbread', 'thepla', 'methi thepla'], quantity: 1, unit: 'piece', grams: 90, calories: 230, protein: 6, carbs: 30, fat: 10 },
+  { name: 'Mixed vegetables', aliases: ['mixed vegetables', 'mixed vegetable sabzi', 'vegetable sabzi'], quantity: 1, unit: 'cup', grams: 140, calories: 120, protein: 4, carbs: 18, fat: 4 },
   { name: 'White rice', aliases: ['white rice', 'rice'], quantity: 1, unit: 'cup', grams: 158, calories: 205, protein: 4.3, carbs: 44.5, fat: 0.4 },
   { name: 'Rajma', aliases: ['rajma', 'kidney bean curry'], quantity: 1, unit: 'serving', grams: 200, calories: 300, protein: 15, carbs: 40, fat: 10 },
   { name: 'Chole', aliases: ['chole', 'chickpea curry'], quantity: 1, unit: 'serving', grams: 200, calories: 330, protein: 14, carbs: 48, fat: 10 },
@@ -1455,7 +1749,7 @@ async function parseCaptionToImageResult(
     estimatedCostUsd: textAttempt.usage.estimatedCostUsd
   });
 
-  const result = imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini'));
+  const result = normalizeImageParseResult(imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini')));
   const resolvedCoverage = coverage ?? coverageFromCaptionInventory(caption, result);
   image.debugEvents?.push({
     stage: 'image_caption_text',
@@ -1668,7 +1962,7 @@ async function recoverWithCaptionFallback(
       estimatedCostUsd: textAttempt.usage.estimatedCostUsd
     });
 
-    const result = imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini'));
+    const result = normalizeImageParseResult(imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini')));
     image.debugEvents?.push({
       stage: 'image_caption_text',
       ok: true,

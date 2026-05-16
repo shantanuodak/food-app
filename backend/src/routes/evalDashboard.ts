@@ -628,6 +628,7 @@ router.get('/recent-parses', async (req, res, next) => {
       parse_version: string;
       primary_route: string;
       cache_hit: boolean;
+      parse_result_json: unknown | null;
       log_id: string | null;
       saved_at: Date | null;
       total_calories: string | null;
@@ -668,6 +669,7 @@ router.get('/recent-parses', async (req, res, next) => {
          pr.parse_version,
          pr.primary_route,
          pr.cache_hit,
+         pr.parse_result_json,
          sa.latest_save_log_id,
          fl.id AS log_id,
          fl.created_at AS saved_at,
@@ -766,6 +768,7 @@ router.get('/recent-parses', async (req, res, next) => {
       parseVersion: r.parse_version,
       route: r.primary_route,
       cacheHit: r.cache_hit,
+      parseResult: r.parse_result_json ?? null,
       saveStatus: r.log_id ? 'saved' : 'parse_only',
       logId: r.log_id,
       savedAt: r.saved_at ? r.saved_at.toISOString() : null,

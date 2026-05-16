@@ -1,6 +1,7 @@
 import { pool } from '../db.js';
 import { config } from '../config.js';
 import { ensureUserExists } from './userService.js';
+import type { ParseResult } from './deterministicParser.js';
 
 // Note: 'fatsecret' and 'alias' values may exist in old DB rows but are no longer
 // produced by the live parse pipeline. The type stays union-permissive for read paths.
@@ -24,6 +25,7 @@ export async function createParseRequest(input: {
   needsClarification: boolean;
   cacheHit: boolean;
   primaryRoute: ParsePrimaryRoute;
+  parseResult?: ParseResult | null;
   authProvider?: string | null;
   email?: string | null;
 }): Promise<void> {
@@ -36,9 +38,9 @@ export async function createParseRequest(input: {
     await pool.query(
       `
       INSERT INTO parse_requests (
-        request_id, user_id, parse_version, raw_text, needs_clarification, cache_hit, primary_route, created_at
+        request_id, user_id, parse_version, raw_text, needs_clarification, cache_hit, primary_route, parse_result_json, created_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,NOW())
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,NOW())
       ON CONFLICT (request_id)
       DO UPDATE SET
         parse_version = EXCLUDED.parse_version,
@@ -46,9 +48,19 @@ export async function createParseRequest(input: {
         needs_clarification = EXCLUDED.needs_clarification,
         cache_hit = EXCLUDED.cache_hit,
         primary_route = EXCLUDED.primary_route,
+        parse_result_json = EXCLUDED.parse_result_json,
         created_at = NOW()
       `,
-      [input.requestId, input.userId, config.parseVersion, input.rawText, input.needsClarification, input.cacheHit, primaryRoute]
+      [
+        input.requestId,
+        input.userId,
+        config.parseVersion,
+        input.rawText,
+        input.needsClarification,
+        input.cacheHit,
+        primaryRoute,
+        input.parseResult ? JSON.stringify(input.parseResult) : null
+      ]
     );
   };
 

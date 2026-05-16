@@ -1189,4 +1189,105 @@ describe('image parse service', () => {
       })
     );
   });
+
+  test('V2 caption ensemble removes thali fragments before nutrition parsing', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi.fn(async () => null);
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: 'dal, green, ba, green chutney',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 420, outputTokens: 8 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'baati, churma, churma powder, al, potato',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 430, outputTokens: 12 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'green, ba, al',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 410, outputTokens: 5 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'dal, green chutney, baati',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 440, outputTokens: 8 }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'fragmented-thali-image'
+    });
+
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(4);
+    expect(generateGeminiMultimodalJson).not.toHaveBeenCalled();
+    expect(parsed.extractedText).toBe('Dal, Green chutney, Baati, Churma powder');
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['Dal', 'Green chutney', 'Baati', 'Churma powder']);
+    const itemNames = parsed.result.items.map((item) => item.name.toLowerCase());
+    ['green', 'ba', 'al', 'potato'].forEach((name) => expect(itemNames).not.toContain(name));
+  });
+
+  test('V2 caption ensemble merges flatbread and chutney duplicates into one clean item each', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi.fn(async () => null);
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: 'thepla, mango, chutney, fenugreek par',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 420, outputTokens: 10 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'methi paratha, meth, vegetable, methi par',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 430, outputTokens: 10 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'methi flatbread, thepla',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 410, outputTokens: 6 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'mango chutney',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 440, outputTokens: 4 }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'flatbread-duplicates-image'
+    });
+
+    expect(generateGeminiMultimodalJson).not.toHaveBeenCalled();
+    expect(parsed.extractedText).toBe('Methi paratha, Mango chutney');
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['Methi paratha', 'Mango chutney']);
+    const itemNames = parsed.result.items.map((item) => item.name.toLowerCase());
+    ['thepla', 'fenugreek paratha', 'methi flatbread', 'meth', 'methi par', 'mango'].forEach((name) =>
+      expect(itemNames).not.toContain(name)
+    );
+  });
 });

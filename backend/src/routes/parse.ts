@@ -252,6 +252,7 @@ router.post('/image', async (req, res, next) => {
       needsClarification,
       cacheHit: false,
       primaryRoute: 'gemini',
+      parseResult: parsedImage.result,
       authProvider: auth.authProvider,
       email: auth.email
     });
@@ -277,6 +278,20 @@ router.post('/image', async (req, res, next) => {
             serverRoute: '/v1/logs/parse/image',
             orchestratorVersion: parsedImage.orchestratorVersion,
             coverage: parsedImage.coverage ?? null,
+            extractedText: parsedImage.extractedText,
+            totals: parsedImage.result.totals,
+            items: parsedImage.result.items.map((item) => ({
+              name: item.name,
+              quantity: item.quantity,
+              unit: item.unit,
+              grams: item.grams,
+              calories: item.calories,
+              protein: item.protein,
+              carbs: item.carbs,
+              fat: item.fat,
+              matchConfidence: item.matchConfidence,
+              needsClarification: item.needsClarification ?? false
+            })),
             serverDebugEvents: debugEvents,
             usageEvents: parsedImage.usageEvents.map((event) => ({
               feature: event.feature,

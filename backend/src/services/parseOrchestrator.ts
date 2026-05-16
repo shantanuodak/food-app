@@ -167,6 +167,7 @@ export async function executePrimaryParse(input: PrimaryParseOrchestratorInput):
     needsClarification: pipeline.needsClarification,
     cacheHit: pipeline.cacheHit,
     primaryRoute: routeForPersistence(pipeline.route),
+    parseResult: pipeline.result,
     authProvider: normalizeAuthProvider(input.auth.authProvider),
     email: input.auth.email
   });
@@ -253,6 +254,7 @@ export async function executePrimaryParseStreaming(input: PrimaryParseStreamingI
     needsClarification: pipeline.needsClarification,
     cacheHit: pipeline.cacheHit,
     primaryRoute: routeForPersistence(pipeline.route),
+    parseResult: pipeline.result,
     authProvider: normalizeAuthProvider(input.auth.authProvider),
     email: input.auth.email
   });
