@@ -60,11 +60,15 @@ router.post('/image-parse', async (req, res, next) => {
       inputKind: 'image',
       imageMeta: {
         mimeType: body.mimeType,
-        bytes: imageBytes
+        bytes: imageBytes,
+        orchestratorVersion: parsed.orchestratorVersion,
+        coverage: parsed.coverage ?? null
       },
       model: parsed.model,
       fallbackUsed: parsed.fallbackUsed,
       lowConfidenceAccepted: parsed.lowConfidenceAccepted,
+      orchestratorVersion: parsed.orchestratorVersion,
+      coverage: parsed.coverage ?? null,
       confidence: parsed.result.confidence,
       extractedText: parsed.extractedText,
       totals: parsed.result.totals,

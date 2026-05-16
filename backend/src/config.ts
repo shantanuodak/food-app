@@ -112,11 +112,15 @@ export const config = {
     process.env.AI_IMAGE_PRIMARY_MODEL ||
     process.env.GEMINI_FLASH_LITE_MODEL ||
     'gemini-2.5-flash-lite',
+  aiImageInventoryModel: process.env.AI_IMAGE_INVENTORY_MODEL || process.env.GEMINI_FLASH_MODEL || 'gemini-2.5-flash',
   aiImageFallbackModel: process.env.AI_IMAGE_FALLBACK_MODEL || 'gemini-2.5-pro',
   aiImageEnableFallback: booleanWithDefault('AI_IMAGE_ENABLE_FALLBACK', true),
+  aiImageOrchestratorVersion: process.env.AI_IMAGE_ORCHESTRATOR_VERSION || 'v2',
   aiImageConfidenceMin: numberWithDefault('AI_IMAGE_CONFIDENCE_MIN', 0.7),
+  aiImageCoverageMin: numberWithDefault('AI_IMAGE_COVERAGE_MIN', 0.75),
   aiImageMaxBytes: integerWithDefault('AI_IMAGE_MAX_BYTES', 6_291_456),
   aiImageTimeoutMs: integerWithDefault('AI_IMAGE_TIMEOUT_MS', 35_000),
+  aiImageFastTimeoutMs: integerWithDefault('AI_IMAGE_FAST_TIMEOUT_MS', 6_000),
   geminiFlashLiteInputUsdPer1M: numberWithDefault('GEMINI_FLASH_LITE_INPUT_USD_PER_1M', 0.10),
   geminiFlashLiteOutputUsdPer1M: numberWithDefault('GEMINI_FLASH_LITE_OUTPUT_USD_PER_1M', 0.40),
   geminiFlashInputUsdPer1M: numberWithDefault('GEMINI_FLASH_INPUT_USD_PER_1M', 0.30),

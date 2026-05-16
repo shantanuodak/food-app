@@ -832,6 +832,7 @@ router.get('/image-parse-attempts', async (req, res, next) => {
       fallback_used: boolean | null;
       client_build: string | null;
       source: string;
+      metadata_json: Record<string, unknown> | null;
       created_at: Date;
     }>(
       `SELECT
@@ -852,6 +853,7 @@ router.get('/image-parse-attempts', async (req, res, next) => {
          ipa.fallback_used,
          ipa.client_build,
          ipa.source,
+         ipa.metadata_json,
          ipa.created_at
        FROM image_parse_attempts ipa
        LEFT JOIN users u ON u.id = ipa.user_id
@@ -879,6 +881,7 @@ router.get('/image-parse-attempts', async (req, res, next) => {
         fallbackUsed: r.fallback_used,
         clientBuild: r.client_build,
         source: r.source,
+        metadata: r.metadata_json ?? {},
         createdAt: r.created_at.toISOString()
       }))
     });

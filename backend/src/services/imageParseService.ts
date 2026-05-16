@@ -8,18 +8,14 @@ import { generateGeminiMultimodalJson, generateGeminiMultimodalText, type Gemini
 import { tryGeminiPrimaryParse } from './aiNormalizerService.js';
 
 type ImageParseUsageEvent = {
-  feature: 'parse_image_primary' | 'parse_image_fallback' | 'parse_image_caption' | 'parse_image_caption_text';
+  feature:
+    | 'parse_image_primary'
+    | 'parse_image_fallback'
+    | 'parse_image_caption'
+    | 'parse_image_caption_text'
+    | 'parse_image_inventory_v2';
   usage: GeminiUsage;
   estimatedCostUsd: number;
-};
-
-export type ImageParseServiceResult = {
-  extractedText: string;
-  result: ParseResult;
-  model: string;
-  fallbackUsed: boolean;
-  lowConfidenceAccepted: boolean;
-  usageEvents: ImageParseUsageEvent[];
 };
 
 export type ImageParseDebugEvent = {
@@ -31,6 +27,75 @@ export type ImageParseDebugEvent = {
   confidence?: number;
   items?: number;
   caption?: string;
+};
+
+type ImageType =
+  | 'nutrition_label'
+  | 'single_food'
+  | 'multi_component_meal'
+  | 'tray_or_thali'
+  | 'drink'
+  | 'menu_or_screenshot'
+  | 'non_food'
+  | 'unclear';
+
+type ImageVisibleComponent = {
+  name: string;
+  category: string;
+  zone: string;
+  portionHint: string;
+  confidence: number;
+  isSmallSide: boolean;
+};
+
+export type ImageParseCoverage = {
+  imageType: ImageType;
+  cuisineHints: string[];
+  visibleComponents: ImageVisibleComponent[];
+  visibleComponentCount: number;
+  parsedItemCount: number;
+  score: number;
+  warnings: string[];
+  partial: boolean;
+};
+
+export type ImageParseServiceResult = {
+  extractedText: string;
+  result: ParseResult;
+  model: string;
+  fallbackUsed: boolean;
+  lowConfidenceAccepted: boolean;
+  usageEvents: ImageParseUsageEvent[];
+  orchestratorVersion: 'v1' | 'v2';
+  coverage?: ImageParseCoverage;
+};
+
+type V2ImageParsePayload = {
+  extractedText: string;
+  confidence: number;
+  assumptions: string[];
+  imageType: ImageType;
+  cuisineHints: string[];
+  visibleComponents: ImageVisibleComponent[];
+  coverage: {
+    visibleComponentCount: number;
+    parsedItemCount: number;
+    score: number;
+    warnings: string[];
+  };
+  items: Array<{
+    name: string;
+    quantity: number;
+    unit: string;
+    grams: number;
+    calories: number;
+    protein: number;
+    carbs: number;
+    fat: number;
+    matchConfidence?: number;
+    foodDescription?: string;
+    explanation?: string;
+  }>;
 };
 
 type ImagePart = {
@@ -551,29 +616,159 @@ function buildImageCaptionFallbackPrompt(contextNote?: string, mode: ImageCaptio
   ].join('\n');
 }
 
-function parseGeminiOutput(payloadText: string): { extractedText: string; result: ParseResult } | null {
-  let parsed: unknown;
-  try {
-    const jsonCandidate = extractJsonCandidate(payloadText);
-    if (!jsonCandidate) {
-      return null;
-    }
-    parsed = JSON.parse(jsonCandidate);
-  } catch {
+function buildImageInventoryV2Prompt(contextNote?: string): string {
+  const note = trimSafe(contextNote);
+  return [
+    'You are Food App image parser V2. Return strict JSON only, no markdown.',
+    'Goal: produce a fast useful food log from one image within one response.',
+    '',
+    'Output schema exactly:',
+    '{"imageType":"nutrition_label|single_food|multi_component_meal|tray_or_thali|drink|menu_or_screenshot|non_food|unclear","cuisineHints":string[],"visibleComponents":[{"name":string,"category":string,"zone":string,"portionHint":string,"confidence":number,"isSmallSide":boolean}],"items":[{"name":string,"quantity":number,"unit":string,"grams":number,"calories":number,"protein":number,"carbs":number,"fat":number,"matchConfidence":number,"foodDescription":string,"explanation":string}],"coverage":{"visibleComponentCount":number,"parsedItemCount":number,"score":number,"warnings":string[]},"extractedText":string,"confidence":number,"assumptions":string[]}',
+    '',
+    'Hard rules:',
+    '- First build a visual inventory of every edible component, then estimate nutrition from that inventory.',
+    '- If food is visible, return at least one positive-calorie item. Do not output zero nutrition for visible food.',
+    '- For multi-component plates, trays, thalis, bowls with sides, bento boxes, lunch trays, takeout meals, and restaurant plates, include each distinct visible component.',
+    '- Include small visible sides separately when they matter: chutney, sauce, dressing, pickle, onion/salad, garnish, lemon, dips, salsa, aioli, dry powders, crunchy toppings.',
+    '- If uncertain, use broad names and conservative portions; mark confidence lower and explain briefly.',
+    '- The image may be rotated; mentally inspect it at 0, 90, 180, and 270 degrees.',
+    '- Ignore plate/tray reflections and inspect each compartment/edge.',
+    '- coverage.score should reflect how completely items cover visibleComponents. 1 means all visible foods are represented. Below 0.75 means partial.',
+    '- Keep explanations short and user-friendly. No chain-of-thought.',
+    '',
+    'Global cuisine coverage guidance:',
+    '- US/Western: burgers, sandwiches, wraps, pizza, fries, salads, eggs, pancakes, waffles, cereal, oatmeal, protein bars, grilled meats, coffee, soda, smoothies.',
+    '- India and Indian subcontinent: rice, roti, chapati, paratha, naan, puri, dal, sabzi, curries, biryani, dosa, idli, vada, sambar, chutney, thali, chaat, paneer, rajma, chole, sweets, lassi.',
+    '- Chinese/East Asian: rice, fried rice, noodles, stir-fry, dumplings, buns, soups, sauced chicken/beef/pork/tofu, vegetables, spring rolls, congee.',
+    '- Italian/Mediterranean: pasta, pizza, risotto, lasagna, bread, cheese, olive oil, salads, sauces, meatballs, grilled fish/meat, antipasti.',
+    '- Also recognize Mexican, Middle Eastern, Japanese, Thai, Vietnamese, Korean, and generic mixed meals when visible.',
+    '',
+    'Use food roles when exact cuisine is unclear:',
+    '- staple carb, protein, sauce/curry, vegetable side, condiment, drink, dessert, packaged/label item.',
+    '',
+    'Quality bar:',
+    '- A tray/thali with dal, breads/rice, sabzi, chutney, onion/salad, pickle/powder must not return only dal or only chutney.',
+    '- If only part of the meal is identifiable, return the identified items and set coverage.score below 0.75 with a warning.',
+    '- For nutrition labels/package photos, prefer visible label facts and one package/serving.',
+    ...(note
+      ? [
+          '',
+          'User-provided photo context:',
+          note,
+          'Use this context only when compatible with the image. Do not invent foods that contradict the image.'
+        ]
+      : [])
+  ].join('\n');
+}
+
+function normalizeImageType(value: unknown): ImageType {
+  const normalized = asText(value).toLowerCase().replace(/[\s-]+/g, '_');
+  const allowed: ImageType[] = [
+    'nutrition_label',
+    'single_food',
+    'multi_component_meal',
+    'tray_or_thali',
+    'drink',
+    'menu_or_screenshot',
+    'non_food',
+    'unclear'
+  ];
+  return allowed.includes(normalized as ImageType) ? (normalized as ImageType) : 'unclear';
+}
+
+function normalizeV2Component(rawComponent: unknown): V2ImageParsePayload['visibleComponents'][number] | null {
+  const record = asRecord(rawComponent);
+  if (!record) {
+    return null;
+  }
+  const name = asText(getFirst(record, ['name', 'food', 'label', 'description', 'component']));
+  if (!name) {
+    return null;
+  }
+  return {
+    name,
+    category: asText(getFirst(record, ['category', 'role', 'foodRole', 'type'])) || 'food',
+    zone: asText(getFirst(record, ['zone', 'location', 'area', 'position'])) || 'visible area',
+    portionHint: asText(getFirst(record, ['portionHint', 'portion', 'amountHint', 'servingHint'])) || 'visible portion',
+    confidence: clampConfidence(getFirst(record, ['confidence', 'matchConfidence']), 0.6),
+    isSmallSide:
+      getFirst(record, ['isSmallSide', 'smallSide', 'condiment']) === true ||
+      ['condiment', 'sauce', 'dip', 'pickle', 'garnish'].some((signal) =>
+        asText(getFirst(record, ['category', 'role', 'foodRole', 'type'])).toLowerCase().includes(signal)
+      )
+  };
+}
+
+function normalizeV2Payload(parsed: unknown): V2ImageParsePayload | null {
+  const record = asRecord(parsed);
+  if (!record) {
     return null;
   }
 
-  const normalizedPayload = normalizeGeminiPayload(parsed);
-  if (!normalizedPayload) {
+  const imageType = normalizeImageType(getFirst(record, ['imageType', 'type', 'mealType', 'photoType']));
+  const rawComponents =
+    getFirst(record, ['visibleComponents', 'components', 'inventory', 'detectedComponents', 'detected_foods']) ?? [];
+  const visibleComponents = Array.isArray(rawComponents)
+    ? rawComponents
+        .map((component) => normalizeV2Component(component))
+        .filter((component): component is V2ImageParsePayload['visibleComponents'][number] => component !== null)
+    : [];
+
+  const confidence = clampConfidence(getFirst(record, ['confidence', 'overallConfidence', 'imageConfidence']), 0.5);
+  const rawItems =
+    getFirst(record, ['items', 'foods', 'foodItems', 'nutritionItems', 'detectedFoods', 'results', 'matches']) ??
+    [];
+  if (!Array.isArray(rawItems)) {
     return null;
   }
+  const items = rawItems
+    .map((item) => normalizeGeminiItem(item, confidence))
+    .filter((item): item is z.input<typeof parseItemSchema> => item !== null);
 
-  const validated = imageParseSchema.safeParse(normalizedPayload);
-  if (!validated.success) {
-    return null;
-  }
+  const rawCoverage = asRecord(getFirst(record, ['coverage', 'coverageScore', 'coverageSummary']));
+  const visibleComponentCount = Math.max(
+    0,
+    Math.round(
+      asNumber(getFirst(rawCoverage ?? {}, ['visibleComponentCount', 'visibleComponents', 'detectedCount'])) ??
+        visibleComponents.length
+    )
+  );
+  const parsedItemCount = Math.max(
+    0,
+    Math.round(asNumber(getFirst(rawCoverage ?? {}, ['parsedItemCount', 'parsedItems', 'itemCount'])) ?? items.length)
+  );
+  const computedCoverage =
+    visibleComponentCount > 0 ? Math.min(1, Math.max(0, parsedItemCount / visibleComponentCount)) : items.length > 0 ? 1 : 0;
+  const coverageScore = clampConfidence(
+    getFirst(rawCoverage ?? {}, ['score', 'coverage', 'coverageScore']) ?? getFirst(record, ['coverageScore', 'score']),
+    computedCoverage
+  );
+  const warnings = [
+    ...stringArray(getFirst(rawCoverage ?? {}, ['warnings', 'notes', 'gaps'])),
+    ...stringArray(getFirst(record, ['warnings', 'coverageWarnings']))
+  ].slice(0, 8);
 
-  const value = validated.data;
+  return {
+    extractedText:
+      asText(getFirst(record, ['extractedText', 'detectedText', 'summary', 'caption'])) ||
+      items.map((item) => item.name).join(', ') ||
+      visibleComponents.map((component) => component.name).join(', '),
+    confidence,
+    assumptions: stringArray(getFirst(record, ['assumptions', 'notes'])),
+    imageType,
+    cuisineHints: stringArray(getFirst(record, ['cuisineHints', 'cuisines', 'cuisine'])),
+    visibleComponents,
+    coverage: {
+      visibleComponentCount,
+      parsedItemCount,
+      score: coverageScore,
+      warnings
+    },
+    items
+  };
+}
+
+function imagePayloadToParseResult(value: z.infer<typeof imageParseSchema>): { extractedText: string; result: ParseResult } | null {
   const normalizedItems: ParsedItem[] = value.items.map((item) => {
     const quantity = Math.max(nonNegative(item.quantity), 0.0001);
     const grams = nonNegative(item.grams);
@@ -628,6 +823,31 @@ function parseGeminiOutput(payloadText: string): { extractedText: string; result
   };
 }
 
+function parseGeminiOutput(payloadText: string): { extractedText: string; result: ParseResult } | null {
+  let parsed: unknown;
+  try {
+    const jsonCandidate = extractJsonCandidate(payloadText);
+    if (!jsonCandidate) {
+      return null;
+    }
+    parsed = JSON.parse(jsonCandidate);
+  } catch {
+    return null;
+  }
+
+  const normalizedPayload = normalizeGeminiPayload(parsed);
+  if (!normalizedPayload) {
+    return null;
+  }
+
+  const validated = imageParseSchema.safeParse(normalizedPayload);
+  if (!validated.success) {
+    return null;
+  }
+
+  return imagePayloadToParseResult(validated.data);
+}
+
 function acceptedLowConfidenceResult(
   candidate: Awaited<ReturnType<typeof runImageModel>>,
   usageEvents: ImageParseUsageEvent[],
@@ -655,7 +875,8 @@ function acceptedLowConfidenceResult(
     model: candidate.usage.model,
     fallbackUsed,
     lowConfidenceAccepted: true,
-    usageEvents
+    usageEvents,
+    orchestratorVersion: 'v1'
   };
 }
 
@@ -718,6 +939,172 @@ async function runImageModel(model: string, image: ImagePart, mode: ImagePromptM
     extractedText: parsed.extractedText,
     result: parsed.result,
     usage: response.usage
+  };
+}
+
+async function runImageInventoryV2(image: ImagePart): Promise<{
+  extractedText: string;
+  result: ParseResult;
+  usage: GeminiUsage;
+  coverage: ImageParseCoverage;
+} | null> {
+  const startedAt = process.hrtime.bigint();
+  const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
+  const response = await generateGeminiMultimodalJson({
+    model,
+    temperature: 0.05,
+    maxOutputTokens: 1100,
+    timeoutMs: config.aiImageFastTimeoutMs,
+    parts: [
+      { text: buildImageInventoryV2Prompt(image.contextNote) },
+      {
+        inlineData: {
+          mimeType: image.mimeType,
+          data: image.dataBase64
+        }
+      }
+    ]
+  });
+
+  if (!response) {
+    image.debugEvents?.push({
+      stage: 'image_inventory_v2',
+      ok: false,
+      model,
+      reason: 'gemini_no_response',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+    });
+    return null;
+  }
+
+  let parsedJson: unknown;
+  try {
+    const jsonCandidate = extractJsonCandidate(response.jsonText);
+    if (!jsonCandidate) {
+      throw new Error('missing_json');
+    }
+    parsedJson = JSON.parse(jsonCandidate);
+  } catch {
+    image.debugEvents?.push({
+      stage: 'image_inventory_v2',
+      ok: false,
+      model: response.usage.model,
+      reason: 'invalid_or_empty_inventory_json',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+    });
+    return null;
+  }
+
+  const normalized = normalizeV2Payload(parsedJson);
+  if (!normalized || normalized.items.length === 0) {
+    image.debugEvents?.push({
+      stage: 'image_inventory_v2',
+      ok: false,
+      model: response.usage.model,
+      reason: normalized?.visibleComponents.length ? 'inventory_without_usable_nutrition' : 'invalid_or_empty_inventory_json',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+      items: normalized?.items.length ?? 0,
+      caption: normalized?.visibleComponents.map((component) => component.name).join(', ').slice(0, 160)
+    });
+    return null;
+  }
+
+  const visibleCount = normalized.coverage.visibleComponentCount || normalized.visibleComponents.length;
+  const parsedCount = normalized.coverage.parsedItemCount || normalized.items.length;
+  const looksPartial =
+    normalized.coverage.score < config.aiImageCoverageMin ||
+    (visibleCount >= 3 && parsedCount < Math.max(2, Math.ceil(visibleCount * 0.6)));
+  const coverageWarnings = normalized.coverage.warnings.length
+    ? normalized.coverage.warnings
+    : looksPartial
+      ? ['Some visible foods may need review.']
+      : [];
+  const coverage: ImageParseCoverage = {
+    imageType: normalized.imageType,
+    cuisineHints: normalized.cuisineHints,
+    visibleComponents: normalized.visibleComponents,
+    visibleComponentCount: visibleCount,
+    parsedItemCount: parsedCount,
+    score: normalized.coverage.score,
+    warnings: coverageWarnings,
+    partial: looksPartial
+  };
+  const adjustedConfidence = looksPartial
+    ? Math.min(normalized.confidence, Math.max(0.5, config.aiImageConfidenceMin - 0.01))
+    : normalized.confidence;
+
+  const validated = imageParseSchema.safeParse({
+    extractedText: normalized.extractedText,
+    confidence: adjustedConfidence,
+    assumptions: [
+      ...normalized.assumptions,
+      ...coverageWarnings,
+      normalized.cuisineHints.length ? `Cuisine hints: ${normalized.cuisineHints.join(', ')}` : ''
+    ].filter(Boolean),
+    items: normalized.items
+  });
+  if (!validated.success) {
+    image.debugEvents?.push({
+      stage: 'image_inventory_v2',
+      ok: false,
+      model: response.usage.model,
+      reason: 'invalid_normalized_inventory_payload',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+    });
+    return null;
+  }
+
+  const converted = imagePayloadToParseResult(validated.data);
+  if (!converted || !resultHasPositiveNutrition(converted.result)) {
+    image.debugEvents?.push({
+      stage: 'image_inventory_v2',
+      ok: false,
+      model: response.usage.model,
+      reason: 'inventory_zero_nutrition',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+    });
+    return null;
+  }
+
+  const result = looksPartial
+    ? {
+        ...converted.result,
+        confidence: adjustedConfidence,
+        items: converted.result.items.map((item) => ({
+          ...item,
+          needsClarification: true,
+          explanation:
+            item.explanation ||
+            'Estimated from the visible photo; please confirm portions because this looks like a partial meal.'
+        }))
+      }
+    : converted.result;
+
+  image.debugEvents?.push({
+    stage: 'image_inventory_v2',
+    ok: true,
+    model: response.usage.model,
+    reason: looksPartial ? 'partial_coverage' : 'complete_or_good_coverage',
+    ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+    confidence: result.confidence,
+    items: result.items.length,
+    caption: [
+      `type=${normalized.imageType}`,
+      `coverage=${round(normalized.coverage.score, 2)}`,
+      `visible=${visibleCount}`,
+      `parsed=${parsedCount}`,
+      normalized.visibleComponents.map((component) => component.name).join(', ')
+    ]
+      .filter(Boolean)
+      .join(' · ')
+      .slice(0, 220)
+  });
+
+  return {
+    extractedText: converted.extractedText,
+    result,
+    usage: response.usage,
+    coverage
   };
 }
 
@@ -848,7 +1235,8 @@ async function recoverWithStructuredRescue(
         model: rescued.usage.model,
         fallbackUsed: true,
         lowConfidenceAccepted: false,
-        usageEvents
+        usageEvents,
+        orchestratorVersion: 'v1'
       };
     }
 
@@ -922,7 +1310,8 @@ async function recoverWithCaptionFallback(
       model: textAttempt.usage.model,
       fallbackUsed: true,
       lowConfidenceAccepted: true,
-      usageEvents
+      usageEvents,
+      orchestratorVersion: 'v1'
     };
   }
 
@@ -1001,6 +1390,40 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
   }
 
   const usageEvents: ImageParseUsageEvent[] = [];
+  const useV2 = config.aiImageOrchestratorVersion.trim().toLowerCase() === 'v2';
+
+  if (useV2) {
+    const inventoryV2 = await runImageInventoryV2(image);
+    if (inventoryV2?.usage) {
+      usageEvents.push({
+        feature: 'parse_image_inventory_v2',
+        usage: inventoryV2.usage,
+        estimatedCostUsd: estimateCostUsd(inventoryV2.usage)
+      });
+    }
+
+    if (inventoryV2 && resultHasPositiveNutrition(inventoryV2.result)) {
+      return {
+        extractedText: inventoryV2.extractedText,
+        result: inventoryV2.result,
+        model: inventoryV2.usage.model,
+        fallbackUsed: false,
+        lowConfidenceAccepted:
+          inventoryV2.result.confidence < config.aiImageConfidenceMin ||
+          inventoryV2.coverage.score < config.aiImageCoverageMin,
+        usageEvents,
+        orchestratorVersion: 'v2',
+        coverage: inventoryV2.coverage
+      };
+    }
+
+    image.debugEvents?.push({
+      stage: 'image_orchestrator_v2',
+      ok: false,
+      reason: 'falling_back_to_v1',
+      ms: 0
+    });
+  }
 
   const primary = await runImageModel(config.aiImagePrimaryModel, image);
   if (primary?.usage) {
@@ -1023,7 +1446,8 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
       model: primary.usage.model,
       fallbackUsed: false,
       lowConfidenceAccepted: false,
-      usageEvents
+      usageEvents,
+      orchestratorVersion: 'v1'
     };
   }
 

@@ -9,7 +9,7 @@ import { config } from '../config.js';
 import { executePrimaryParse, executePrimaryParseStreaming } from '../services/parseOrchestrator.js';
 import { getGeminiCircuitRetryAfterSeconds } from '../services/geminiFlashClient.js';
 import { collectSourcesUsed } from '../services/parseContractService.js';
-import { parseImageWithGemini } from '../services/imageParseService.js';
+import { parseImageWithGemini, type ImageParseDebugEvent } from '../services/imageParseService.js';
 import { checkParseRateLimit } from '../services/parseRateLimiterService.js';
 import { getDietAndAllergies } from '../services/onboardingService.js';
 import { detectDietaryConflicts } from '../services/dietaryConflictService.js';
@@ -33,6 +33,7 @@ const escalateSchema = z.object({
 });
 
 const imageParseSchema = z.object({
+  clientAttemptId: z.string().trim().min(1).max(120).optional(),
   imageBase64: z.string().trim().min(1),
   mimeType: z.string().trim().min(1).max(100),
   contextNote: z
@@ -68,6 +69,19 @@ function roundUsd(value: number): number {
   return Math.round(value * 1000) / 1000;
 }
 
+function imageParseAttemptErrorCode(err: unknown): string {
+  if (err instanceof ApiError) {
+    return err.code;
+  }
+  if (err && typeof err === 'object' && 'code' in err) {
+    const code = (err as { code?: unknown }).code;
+    if (typeof code === 'string' && code.trim()) {
+      return code.trim().slice(0, 120);
+    }
+  }
+  return 'INTERNAL_ERROR';
+}
+
 router.post('/image-attempts', async (req, res, next) => {
   try {
     const auth = res.locals.auth as { userId: string };
@@ -98,12 +112,24 @@ router.post('/image-attempts', async (req, res, next) => {
 
 router.post('/image', async (req, res, next) => {
   const startedAt = process.hrtime.bigint();
+  const debugEvents: ImageParseDebugEvent[] = [];
+  const parseRequestIdForAttempt = res.locals.requestId as string | undefined;
+  const rawClientAttemptId = (req.body as { clientAttemptId?: unknown } | undefined)?.clientAttemptId;
+  let authForAttempt: { userId: string } | null = null;
+  let clientAttemptId =
+    typeof rawClientAttemptId === 'string' && rawClientAttemptId.trim()
+      ? rawClientAttemptId.trim().slice(0, 120)
+      : null;
+  let imageBytesForAttempt: number | null = null;
+  let mimeTypeForAttempt: string | null = null;
+
   try {
     if (!config.aiImageParseEnabled) {
       throw new ApiError(403, 'IMAGE_PARSE_DISABLED', 'Image parse is disabled');
     }
 
     const auth = res.locals.auth as { userId: string; authProvider?: string; email?: string | null };
+    authForAttempt = { userId: auth.userId };
     const rateLimit = checkParseRateLimit(auth.userId);
     if (!rateLimit.allowed) {
       const error = new ApiError(429, 'RATE_LIMITED', 'Too many parse requests. Please retry shortly.');
@@ -112,10 +138,13 @@ router.post('/image', async (req, res, next) => {
     }
 
     const body = imageParseSchema.parse(req.body || {});
+    clientAttemptId = body.clientAttemptId ?? clientAttemptId;
+    mimeTypeForAttempt = body.mimeType;
     if (!supportedImageMimeTypes.has(body.mimeType)) {
       throw new ApiError(400, 'INVALID_INPUT', 'Unsupported image type. Use JPEG, PNG, or HEIC.');
     }
     const imageBytes = Math.floor(Buffer.byteLength(body.imageBase64, 'base64'));
+    imageBytesForAttempt = imageBytes;
     if (!Number.isFinite(imageBytes) || imageBytes <= 0) {
       throw new ApiError(400, 'INVALID_INPUT', 'Image file is empty.');
     }
@@ -133,7 +162,8 @@ router.post('/image', async (req, res, next) => {
     const parsedImage = await parseImageWithGemini({
       mimeType: body.mimeType,
       dataBase64: body.imageBase64,
-      contextNote: body.contextNote
+      contextNote: body.contextNote,
+      debugEvents
     });
 
     let budget = await getBudgetSnapshotForUser({
@@ -194,7 +224,17 @@ router.post('/image', async (req, res, next) => {
       }
     }
 
-    const needsClarification = parsedImage.result.confidence < config.aiImageConfidenceMin;
+    const coverageWarnings = parsedImage.coverage?.warnings ?? [];
+    const needsClarification =
+      parsedImage.result.confidence < config.aiImageConfidenceMin || parsedImage.coverage?.partial === true;
+    const clarificationQuestions = needsClarification
+      ? coverageWarnings.length > 0
+        ? [
+            'I found a useful estimate, but this photo may have a few missed or rough items. Please review the detected foods and portions.',
+            ...coverageWarnings.slice(0, 2)
+          ]
+        : ['Please confirm portion sizes for the foods in this photo.']
+      : [];
     await createParseRequest({
       requestId: parseRequestId,
       userId: auth.userId,
@@ -209,6 +249,38 @@ router.post('/image', async (req, res, next) => {
     const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
     const roundedDurationMs = Math.round(parseDurationMs * 10) / 10;
     const sourcesUsed = collectSourcesUsed(parsedImage.result.items, 'gemini', false);
+
+    if (clientAttemptId) {
+      try {
+        await recordImageParseAttempt({
+          userId: auth.userId,
+          clientAttemptId,
+          parseRequestId,
+          outcome: 'succeeded',
+          backendMs: Math.round(parseDurationMs),
+          imageBytes,
+          mimeType: body.mimeType,
+          visionModel: parsedImage.model,
+          fallbackUsed: parsedImage.fallbackUsed,
+          metadata: {
+            serverOutcome: 'succeeded',
+            serverRoute: '/v1/logs/parse/image',
+            orchestratorVersion: parsedImage.orchestratorVersion,
+            coverage: parsedImage.coverage ?? null,
+            serverDebugEvents: debugEvents,
+            usageEvents: parsedImage.usageEvents.map((event) => ({
+              feature: event.feature,
+              model: event.usage.model,
+              inputTokens: event.usage.inputTokens,
+              outputTokens: event.usage.outputTokens,
+              estimatedCostUsd: event.estimatedCostUsd
+            }))
+          }
+        });
+      } catch (attemptErr) {
+        console.warn('[image_parse_attempt_server_record_failed]', attemptErr);
+      }
+    }
 
     // Image parse bypasses the orchestrator, so run the diet/allergy check inline.
     // Soft-fail: never block a parse on dietary lookup.
@@ -235,6 +307,11 @@ router.post('/image', async (req, res, next) => {
     res.setHeader('x-vision-model', parsedImage.model);
     res.setHeader('x-vision-fallback', parsedImage.fallbackUsed ? 'used' : 'not_used');
     res.setHeader('x-vision-low-confidence-accepted', parsedImage.lowConfidenceAccepted ? 'true' : 'false');
+    res.setHeader('x-image-orchestrator-version', parsedImage.orchestratorVersion);
+    if (parsedImage.coverage) {
+      res.setHeader('x-image-coverage-score', String(parsedImage.coverage.score));
+      res.setHeader('x-image-coverage-partial', parsedImage.coverage.partial ? 'true' : 'false');
+    }
 
     res.status(200).json({
       requestId: parseRequestId,
@@ -254,9 +331,8 @@ router.post('/image', async (req, res, next) => {
         fallbackAllowed: config.aiImageEnableFallback
       },
       needsClarification,
-      clarificationQuestions: needsClarification
-        ? ['Please confirm portion sizes for the foods in this photo.']
-        : [],
+      clarificationQuestions,
+      reasonCodes: parsedImage.coverage?.partial ? ['image_partial_coverage'] : [],
       parseDurationMs: roundedDurationMs,
       loggedAt: loggedAt.toISOString(),
       confidence: parsedImage.result.confidence,
@@ -268,13 +344,38 @@ router.post('/image', async (req, res, next) => {
       extractedText: parsedImage.extractedText,
       imageMeta: {
         mimeType: body.mimeType,
-        bytes: imageBytes
+        bytes: imageBytes,
+        orchestratorVersion: parsedImage.orchestratorVersion,
+        coverage: parsedImage.coverage ?? null
       },
       visionModel: parsedImage.model,
       visionFallbackUsed: parsedImage.fallbackUsed,
       visionLowConfidenceAccepted: parsedImage.lowConfidenceAccepted
     });
   } catch (err) {
+    if (clientAttemptId && authForAttempt?.userId) {
+      const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      try {
+        await recordImageParseAttempt({
+          userId: authForAttempt.userId,
+          clientAttemptId,
+          parseRequestId: parseRequestIdForAttempt ?? null,
+          outcome: 'failed',
+          errorCode: imageParseAttemptErrorCode(err),
+          backendMs: Math.round(parseDurationMs),
+          imageBytes: imageBytesForAttempt,
+          mimeType: mimeTypeForAttempt,
+          metadata: {
+            serverOutcome: 'failed',
+            serverRoute: '/v1/logs/parse/image',
+            serverErrorCode: imageParseAttemptErrorCode(err),
+            serverDebugEvents: debugEvents
+          }
+        });
+      } catch (attemptErr) {
+        console.warn('[image_parse_attempt_server_record_failed]', attemptErr);
+      }
+    }
     if (err && typeof err === 'object' && 'retryAfterSeconds' in err) {
       const retryAfter = (err as { retryAfterSeconds?: unknown }).retryAfterSeconds;
       if (typeof retryAfter === 'number') {

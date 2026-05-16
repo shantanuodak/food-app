@@ -1,6 +1,10 @@
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 
 const baseEnv = { ...process.env };
+
+beforeEach(() => {
+  process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v1';
+});
 
 afterEach(() => {
   vi.resetModules();
@@ -1059,5 +1063,130 @@ describe('image parse service', () => {
     expect(parsed.extractedText).toBe('Dal, Baati');
     expect(parsed.result.items.map((item) => item.name)).toEqual(['Dal', 'Baati']);
     expect(parsed.result.totals.calories).toBe(680);
+  });
+
+  test('V2 inventory parser returns complete multi-cuisine food logs in one fast call', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi.fn(async () => ({
+      jsonText: JSON.stringify({
+        imageType: 'tray_or_thali',
+        cuisineHints: ['indian'],
+        visibleComponents: [
+          { name: 'Dal', category: 'lentil curry', zone: 'left compartment', portionHint: 'large serving', confidence: 0.95, isSmallSide: false },
+          { name: 'Baati', category: 'bread', zone: 'center', portionHint: '2 pieces', confidence: 0.9, isSmallSide: false },
+          { name: 'Potato sabzi', category: 'vegetable side', zone: 'right bowl', portionHint: 'small bowl', confidence: 0.85, isSmallSide: false },
+          { name: 'Green chutney', category: 'condiment', zone: 'top bowl', portionHint: 'small spoonful', confidence: 0.82, isSmallSide: true }
+        ],
+        items: [
+          { name: 'Dal', quantity: 1, unit: 'serving', grams: 260, calories: 260, protein: 14, carbs: 38, fat: 7, matchConfidence: 0.9, foodDescription: 'Dal, 1 serving', explanation: 'Estimated from a large visible serving of dal.' },
+          { name: 'Baati', quantity: 2, unit: 'pieces', grams: 160, calories: 420, protein: 10, carbs: 62, fat: 14, matchConfidence: 0.86, foodDescription: 'Baati, 2 pieces', explanation: 'Estimated from two visible baati breads.' },
+          { name: 'Potato sabzi', quantity: 1, unit: 'small bowl', grams: 100, calories: 150, protein: 3, carbs: 22, fat: 6, matchConfidence: 0.82, foodDescription: 'Potato sabzi, small bowl', explanation: 'Estimated from a small visible serving of potato sabzi.' },
+          { name: 'Green chutney', quantity: 1, unit: 'tablespoon', grams: 15, calories: 15, protein: 0.5, carbs: 2, fat: 0.5, matchConfidence: 0.8, foodDescription: 'Green chutney, 1 tablespoon', explanation: 'Estimated from a small chutney portion.' }
+        ],
+        coverage: { visibleComponentCount: 4, parsedItemCount: 4, score: 1, warnings: [] },
+        extractedText: 'dal, baati, potato sabzi, green chutney',
+        confidence: 0.88,
+        assumptions: []
+      }),
+      usage: {
+        model: 'gemini-2.5-flash',
+        inputTokens: 900,
+        outputTokens: 360
+      }
+    }));
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText: vi.fn(async () => null)
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'thali-v2-image'
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.timeoutMs).toBe(6000);
+    expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.parts[0]?.text).toContain('US/Western');
+    expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.parts[0]?.text).toContain('Chinese/East Asian');
+    expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.parts[0]?.text).toContain('Italian/Mediterranean');
+    expect(parsed.usageEvents[0].feature).toBe('parse_image_inventory_v2');
+    expect(parsed.fallbackUsed).toBe(false);
+    expect(parsed.lowConfidenceAccepted).toBe(false);
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['Dal', 'Baati', 'Potato sabzi', 'Green chutney']);
+    expect(parsed.result.totals.calories).toBe(845);
+  });
+
+  test('V2 inventory parser returns reviewable partial parses instead of failing sparse multi-item meals', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const debugEvents = [];
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson: vi.fn(async () => ({
+        jsonText: JSON.stringify({
+          imageType: 'tray_or_thali',
+          cuisineHints: ['indian'],
+          visibleComponents: [
+            { name: 'Dal', category: 'lentil curry', zone: 'left', portionHint: 'large serving', confidence: 0.9, isSmallSide: false },
+            { name: 'Baati', category: 'bread', zone: 'center', portionHint: '2 pieces', confidence: 0.75, isSmallSide: false },
+            { name: 'Potato sabzi', category: 'vegetable side', zone: 'right', portionHint: 'small bowl', confidence: 0.7, isSmallSide: false },
+            { name: 'Green chutney', category: 'condiment', zone: 'top', portionHint: 'small spoonful', confidence: 0.7, isSmallSide: true },
+            { name: 'Onion', category: 'salad', zone: 'bottom', portionHint: 'small side', confidence: 0.65, isSmallSide: true }
+          ],
+          items: [
+            { name: 'Dal', quantity: 1, unit: 'serving', grams: 260, calories: 260, protein: 14, carbs: 38, fat: 7, matchConfidence: 0.9, foodDescription: 'Dal, 1 serving', explanation: 'Estimated from visible dal.' },
+            { name: 'Green chutney', quantity: 1, unit: 'tablespoon', grams: 15, calories: 15, protein: 0.5, carbs: 2, fat: 0.5, matchConfidence: 0.7, foodDescription: 'Green chutney, 1 tablespoon', explanation: 'Estimated from visible chutney.' }
+          ],
+          coverage: { visibleComponentCount: 5, parsedItemCount: 2, score: 0.4, warnings: ['Visible tray looks partially covered; review missing bread and sides.'] },
+          extractedText: 'dal, green chutney',
+          confidence: 0.82,
+          assumptions: []
+        }),
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 900,
+          outputTokens: 260
+        }
+      })),
+      generateGeminiMultimodalText: vi.fn(async () => null)
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'partial-thali-v2-image',
+      debugEvents
+    });
+
+    expect(parsed.fallbackUsed).toBe(false);
+    expect(parsed.lowConfidenceAccepted).toBe(true);
+    expect(parsed.result.confidence).toBeLessThan(0.7);
+    expect(parsed.result.items.map((item) => item.needsClarification)).toEqual([true, true]);
+    expect(parsed.result.assumptions).toContain('Visible tray looks partially covered; review missing bread and sides.');
+    expect(debugEvents).toContainEqual(
+      expect.objectContaining({
+        stage: 'image_inventory_v2',
+        ok: true,
+        reason: 'partial_coverage'
+      })
+    );
   });
 });

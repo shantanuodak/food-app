@@ -13,6 +13,7 @@
     "eval": "tsx src/scripts/runEval.ts",
     "eval:diff": "tsx src/scripts/evalDiff.ts",
     "eval:golden": "tsx src/scripts/goldenSetEval.ts",
+    "eval:image": "tsx src/scripts/runImageParseEval.ts",
     "preflight:release": "tsx src/scripts/releasePreflight.ts",
     "release:backend": "npm run build && npm test && npm run test:integration && npm run preflight:release",
     "test": "vitest run",

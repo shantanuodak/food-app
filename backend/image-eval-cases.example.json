@@ -1,0 +1,48 @@
+[
+  {
+    "label": "Indian thali - dal baati tray",
+    "file": "/absolute/path/to/dal-baati-tray.jpg",
+    "contextNote": "Indian thali with dal, bati/baati, potato sabzi, green chutney, onions, and dry chutney/powder.",
+    "requiredKeywords": ["dal", "baati", "sabzi", "chutney"],
+    "minItems": 4,
+    "calorieMin": 500,
+    "calorieMax": 1200,
+    "allowPartial": true,
+    "expectNeedsClarification": false,
+    "maxMs": 6000
+  },
+  {
+    "label": "US packaged protein bar",
+    "file": "/absolute/path/to/protein-bar-label.jpg",
+    "contextNote": "Packaged protein bar or nutrition label. Prefer label values when visible.",
+    "requiredKeywords": ["bar"],
+    "minItems": 1,
+    "calorieMin": 120,
+    "calorieMax": 300,
+    "allowPartial": false,
+    "expectNeedsClarification": false,
+    "maxMs": 6000
+  },
+  {
+    "label": "Chinese takeout bowl",
+    "file": "/absolute/path/to/chinese-bowl.jpg",
+    "contextNote": "Chinese or East Asian bowl with rice/noodles, protein, sauce, and vegetables.",
+    "requiredKeywords": ["rice"],
+    "minItems": 3,
+    "calorieMin": 450,
+    "calorieMax": 1100,
+    "allowPartial": true,
+    "maxMs": 6000
+  },
+  {
+    "label": "Italian pasta plate",
+    "file": "/absolute/path/to/pasta-plate.jpg",
+    "contextNote": "Italian pasta plate. Include pasta, sauce, cheese, protein, and visible sides.",
+    "requiredKeywords": ["pasta"],
+    "minItems": 2,
+    "calorieMin": 350,
+    "calorieMax": 1200,
+    "allowPartial": true,
+    "maxMs": 6000
+  }
+]

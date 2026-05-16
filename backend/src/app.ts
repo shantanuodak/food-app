@@ -150,7 +150,8 @@ export function createApp() {
       res.json({
         status: 'ok',
         commit,
-        schemaVersion: schemaVersion ?? 'unknown'
+        schemaVersion: schemaVersion ?? 'unknown',
+        imageOrchestratorVersion: config.aiImageOrchestratorVersion
       });
     } catch {
       // Health must stay cheap and resilient — do not fail this endpoint if DB
@@ -158,7 +159,8 @@ export function createApp() {
       res.json({
         status: 'ok',
         commit,
-        schemaVersion: 'unknown'
+        schemaVersion: 'unknown',
+        imageOrchestratorVersion: config.aiImageOrchestratorVersion
       });
     }
   });

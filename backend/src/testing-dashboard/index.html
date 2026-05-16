@@ -1931,12 +1931,14 @@
                 <th>Backend</th>
                 <th>Bytes</th>
                 <th>Model</th>
+                <th>Coverage</th>
                 <th>Error</th>
+                <th>Stages</th>
                 <th>Parse ID</th>
               </tr>
             </thead>
             <tbody id="image-attempts-tbody">
-              <tr><td colspan="12" class="text-muted" style="padding:20px;text-align:center;">Loading image attempts…</td></tr>
+              <tr><td colspan="14" class="text-muted" style="padding:20px;text-align:center;">Loading image attempts…</td></tr>
             </tbody>
           </table>
         </div>
@@ -3649,12 +3651,12 @@ function renderParses(parses) {
 async function loadImageParseAttempts() {
   const tbody = document.getElementById('image-attempts-tbody');
   if (!tbody) return;
-  tbody.innerHTML = '<tr><td colspan="12" class="text-muted" style="padding:20px;text-align:center;">Loading image attempts…</td></tr>';
+  tbody.innerHTML = '<tr><td colspan="14" class="text-muted" style="padding:20px;text-align:center;">Loading image attempts…</td></tr>';
   try {
     const data = await api('/image-parse-attempts?limit=50');
     renderImageParseAttempts(data.attempts || []);
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="12" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="14" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
 }
 
@@ -3686,11 +3688,13 @@ function renderImageTimingBadge(attempt) {
 function renderImageParseAttempts(attempts) {
   const tbody = document.getElementById('image-attempts-tbody');
   if (!attempts.length) {
-    tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state"><div class="icon">📷</div>No image attempts recorded yet.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="14"><div class="empty-state"><div class="icon">📷</div>No image attempts recorded yet.</div></td></tr>';
     return;
   }
   tbody.innerHTML = attempts.map(a => {
     const outcomeCls = a.outcome === 'succeeded' ? 'badge-green' : 'badge-red';
+    const coverage = renderImageCoverageBadge(a.metadata);
+    const stages = renderImageAttemptStages(a.metadata);
     return `
       <tr>
         <td class="mono text-muted" style="font-size:12px;white-space:nowrap;">${escapeHtml(fmtTime(a.createdAt))}</td>
@@ -3703,10 +3707,68 @@ function renderImageParseAttempts(attempts) {
         <td class="mono">${a.backendMs !== null && a.backendMs !== undefined ? fmt(a.backendMs, 0) + 'ms' : '—'}</td>
         <td class="mono">${a.imageBytes ? fmt(a.imageBytes) : '—'}</td>
         <td class="truncate" title="${escapeHtml(a.visionModel || '')}">${escapeHtml(a.visionModel || '—')}${a.fallbackUsed ? ' · fallback' : ''}</td>
+        <td>${coverage}</td>
         <td class="truncate" title="${escapeHtml(a.errorCode || '')}">${escapeHtml(a.errorCode || '—')}</td>
+        <td>${stages}</td>
         <td class="mono" title="${escapeHtml(a.parseRequestId || a.clientAttemptId || '')}">${escapeHtml((a.parseRequestId || a.clientAttemptId || '—').slice(0, 8))}</td>
       </tr>`;
   }).join('');
+}
+
+function renderImageCoverageBadge(metadata) {
+  const version = metadata?.orchestratorVersion ? String(metadata.orchestratorVersion) : '';
+  const coverage = metadata?.coverage && typeof metadata.coverage === 'object' ? metadata.coverage : null;
+  if (!coverage) {
+    return `<span class="badge badge-muted" title="No V2 coverage metadata recorded">${escapeHtml(version || '—')}</span>`;
+  }
+
+  const score = Number(coverage.score);
+  const scoreLabel = Number.isFinite(score) ? `${Math.round(score * 100)}%` : '—';
+  const partial = coverage.partial === true;
+  const cls = partial
+    ? 'badge-yellow'
+    : Number.isFinite(score) && score >= 0.85
+      ? 'badge-green'
+      : 'badge-muted';
+  const visible = coverage.visibleComponentCount ?? '—';
+  const parsed = coverage.parsedItemCount ?? '—';
+  const warnings = Array.isArray(coverage.warnings) ? coverage.warnings : [];
+  const components = Array.isArray(coverage.visibleComponents)
+    ? coverage.visibleComponents.map(c => {
+        const name = c?.name ? String(c.name) : 'component';
+        const zone = c?.zone ? ` (${c.zone})` : '';
+        const portion = c?.portionHint ? ` · ${c.portionHint}` : '';
+        return `${name}${zone}${portion}`;
+      })
+    : [];
+  const title = [
+    version ? `orchestrator ${version}` : null,
+    `coverage ${scoreLabel}`,
+    `parsed ${parsed}/${visible} visible components`,
+    partial ? 'partial parse: review recommended' : 'coverage looks complete',
+    warnings.length ? `warnings: ${warnings.join(' · ')}` : null,
+    components.length ? `visible: ${components.join(' · ')}` : null
+  ].filter(Boolean).join('\n');
+  return `<span class="badge ${cls}" title="${escapeHtml(title)}">${escapeHtml(`${version || 'v?'} ${scoreLabel}`)}${partial ? ' · partial' : ''}</span>`;
+}
+
+function renderImageAttemptStages(metadata) {
+  const events = Array.isArray(metadata?.serverDebugEvents) ? metadata.serverDebugEvents : [];
+  if (!events.length) {
+    return '<span class="badge badge-muted" title="No server-side image parser stages recorded for this attempt yet">—</span>';
+  }
+  const failed = events.filter(e => e && e.ok === false).length;
+  const succeeded = events.filter(e => e && e.ok === true).length;
+  const title = events.map(e => {
+    const state = e.ok ? 'ok' : 'fail';
+    const model = e.model ? ` · ${e.model}` : '';
+    const reason = e.reason ? ` · ${e.reason}` : '';
+    const ms = e.ms !== undefined && e.ms !== null ? ` · ${fmt(e.ms, 0)}ms` : '';
+    const caption = e.caption ? ` · ${String(e.caption).slice(0, 120)}` : '';
+    return `${e.stage || 'stage'}: ${state}${model}${reason}${ms}${caption}`;
+  }).join('\n');
+  const cls = failed && !succeeded ? 'badge-red' : failed ? 'badge-yellow' : 'badge-green';
+  return `<span class="badge ${cls}" title="${escapeHtml(title)}">${succeeded}/${events.length} ok</span>`;
 }
 
 function renderAiCostBadge(p) {

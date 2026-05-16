@@ -69,7 +69,7 @@ export async function recordImageParseAttempt(input: ImageParseAttemptInput): Pr
       fallback_used = EXCLUDED.fallback_used,
       client_build = EXCLUDED.client_build,
       source = EXCLUDED.source,
-      metadata_json = EXCLUDED.metadata_json,
+      metadata_json = COALESCE(image_parse_attempts.metadata_json, '{}'::jsonb) || COALESCE(EXCLUDED.metadata_json, '{}'::jsonb),
       created_at = NOW()
     `,
     [
