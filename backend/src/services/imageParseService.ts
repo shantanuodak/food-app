@@ -412,8 +412,8 @@ function buildImageCaptionFallbackPrompt(contextNote?: string): string {
   const note = trimSafe(contextNote);
   return [
     'Identify the edible food and drink visible in this image.',
-    'Return only a concise comma-separated food description suitable for a nutrition logger.',
-    'Do not return JSON. Do not use markdown. Do not explain.',
+    'Reply with one plain line of comma-separated food names suitable for a nutrition logger.',
+    'No intro text, no labels, no code blocks, no bullet points, and no explanation.',
     'Good examples:',
     '- masala dosa, sambar, coconut chutney, tomato chutney',
     '- white rice, dal, salad, crunchy garnish',
@@ -703,59 +703,70 @@ async function recoverWithCaptionFallback(
   image: ImagePart,
   usageEvents: ImageParseUsageEvent[]
 ): Promise<ImageParseServiceResult | null> {
-  const captionModel = config.aiImagePrimaryModel;
-  const caption = await runImageCaptionFallback(captionModel, image);
-  if (!caption?.caption.trim()) {
-    return null;
-  }
+  const captionModels = Array.from(
+    new Set(
+      [config.aiImagePrimaryModel, config.aiImageFallbackModel]
+        .map((model) => model.trim())
+        .filter(Boolean)
+    )
+  );
 
-  usageEvents.push({
-    feature: 'parse_image_caption',
-    usage: caption.usage,
-    estimatedCostUsd: estimateCostUsd(caption.usage)
-  });
+  for (const captionModel of captionModels) {
+    const caption = await runImageCaptionFallback(captionModel, image);
+    if (!caption?.caption.trim()) {
+      continue;
+    }
 
-  const textStartedAt = process.hrtime.bigint();
-  const textAttempt = await tryGeminiPrimaryParse(caption.caption, createEmptyParseResult(caption.caption));
-  if (!textAttempt?.result.items.length || !resultHasPositiveNutrition(textAttempt.result)) {
+    usageEvents.push({
+      feature: 'parse_image_caption',
+      usage: caption.usage,
+      estimatedCostUsd: estimateCostUsd(caption.usage)
+    });
+
+    const textStartedAt = process.hrtime.bigint();
+    const textAttempt = await tryGeminiPrimaryParse(caption.caption, createEmptyParseResult(caption.caption));
+    if (!textAttempt?.result.items.length || !resultHasPositiveNutrition(textAttempt.result)) {
+      image.debugEvents?.push({
+        stage: 'image_caption_text',
+        ok: false,
+        reason: textAttempt?.result.items.length ? 'text_parse_non_food_or_zero_nutrition' : 'text_parse_failed',
+        ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
+        caption: caption.caption
+      });
+      continue;
+    }
+
+    usageEvents.push({
+      feature: 'parse_image_caption_text',
+      usage: {
+        model: textAttempt.usage.model,
+        inputTokens: textAttempt.usage.inputTokens,
+        outputTokens: textAttempt.usage.outputTokens
+      },
+      estimatedCostUsd: textAttempt.usage.estimatedCostUsd
+    });
+
+    const result = imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini'));
     image.debugEvents?.push({
       stage: 'image_caption_text',
-      ok: false,
-      reason: textAttempt?.result.items.length ? 'text_parse_non_food_or_zero_nutrition' : 'text_parse_failed',
+      ok: true,
+      model: textAttempt.usage.model,
       ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
+      confidence: result.confidence,
+      items: result.items.length,
       caption: caption.caption
     });
-    return null;
+    return {
+      extractedText: caption.caption,
+      result,
+      model: textAttempt.usage.model,
+      fallbackUsed: true,
+      lowConfidenceAccepted: true,
+      usageEvents
+    };
   }
 
-  usageEvents.push({
-    feature: 'parse_image_caption_text',
-    usage: {
-      model: textAttempt.usage.model,
-      inputTokens: textAttempt.usage.inputTokens,
-      outputTokens: textAttempt.usage.outputTokens
-    },
-    estimatedCostUsd: textAttempt.usage.estimatedCostUsd
-  });
-
-  const result = imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini'));
-  image.debugEvents?.push({
-    stage: 'image_caption_text',
-    ok: true,
-    model: textAttempt.usage.model,
-    ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
-    confidence: result.confidence,
-    items: result.items.length,
-    caption: caption.caption
-  });
-  return {
-    extractedText: caption.caption,
-    result,
-    model: textAttempt.usage.model,
-    fallbackUsed: true,
-    lowConfidenceAccepted: true,
-    usageEvents
-  };
+  return null;
 }
 
 export async function parseImageWithGemini(image: ImagePart): Promise<ImageParseServiceResult> {

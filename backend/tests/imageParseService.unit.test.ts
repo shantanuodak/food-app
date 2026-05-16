@@ -424,7 +424,8 @@ describe('image parse service', () => {
 
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
     expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
-    expect(generateGeminiMultimodalText.mock.calls[0]?.[0]?.parts[0]?.text).toContain('Do not return JSON');
+    expect(generateGeminiMultimodalText.mock.calls[0]?.[0]?.parts[0]?.text).toContain('one plain line of comma-separated food names');
+    expect(generateGeminiMultimodalText.mock.calls[0]?.[0]?.parts[0]?.text).not.toContain('JSON');
     expect(parsed.extractedText).toBe('white rice with dal, salad, and crunchy Indian snack garnish');
     expect(parsed.fallbackUsed).toBe(true);
     expect(parsed.lowConfidenceAccepted).toBe(true);
@@ -522,6 +523,102 @@ describe('image parse service', () => {
     expect(parsed.extractedText).toBe('masala dosa with sambar and three chutneys');
     expect(parsed.result.items[0].name).toBe('Masala dosa with sambar and chutneys');
     expect(debugEvents.some((event) => event.stage === 'image_caption' && event.ok && event.caption === parsed.extractedText)).toBe(true);
+  });
+
+  test('tries fallback model for plain caption recovery when primary caption fails', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-pro';
+
+    const generateGeminiMultimodalJson = vi.fn().mockResolvedValueOnce(null);
+
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        jsonText: 'masala dosa, sambar, coconut chutney, tomato chutney',
+        usage: {
+          model: 'gemini-2.5-pro',
+          inputTokens: 810,
+          outputTokens: 16
+        }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryGeminiPrimaryParse: vi.fn(async () => ({
+        result: {
+          confidence: 0.86,
+          assumptions: [],
+          items: [
+            {
+              name: 'Masala dosa with sambar and chutneys',
+              quantity: 1,
+              amount: 1,
+              unit: 'plate',
+              unitNormalized: 'plate',
+              grams: 520,
+              gramsPerUnit: 520,
+              calories: 720,
+              protein: 18,
+              carbs: 104,
+              fat: 26,
+              matchConfidence: 0.86,
+              nutritionSourceId: 'gemini_estimate',
+              originalNutritionSourceId: 'gemini_estimate',
+              sourceFamily: 'gemini',
+              needsClarification: false,
+              manualOverride: false,
+              foodDescription: 'Masala dosa with sambar and chutneys',
+              explanation: 'Estimated as one restaurant plate of masala dosa with sambar and chutneys.'
+            }
+          ],
+          totals: {
+            calories: 720,
+            protein: 18,
+            carbs: 104,
+            fat: 26
+          }
+        },
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 300,
+          outputTokens: 120,
+          estimatedCostUsd: 0.00042
+        }
+      }))
+    }));
+
+    const debugEvents: Array<{ stage: string; ok: boolean; model?: string; caption?: string }> = [];
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'dosa-image',
+      debugEvents
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
+    expect(generateGeminiMultimodalText.mock.calls[0]?.[0]?.model).toBe('gemini-2.5-flash');
+    expect(generateGeminiMultimodalText.mock.calls[1]?.[0]?.model).toBe('gemini-2.5-pro');
+    expect(parsed.extractedText).toBe('masala dosa, sambar, coconut chutney, tomato chutney');
+    expect(parsed.result.totals.calories).toBe(720);
+    expect(debugEvents).toContainEqual(expect.objectContaining({ stage: 'image_caption', ok: false, model: 'gemini-2.5-flash' }));
+    expect(debugEvents).toContainEqual(
+      expect.objectContaining({
+        stage: 'image_caption',
+        ok: true,
+        model: 'gemini-2.5-pro',
+        caption: parsed.extractedText
+      })
+    );
   });
 
   test('rejects Gemini boilerplate captions instead of saving zero-calorie non-food rows', async () => {
