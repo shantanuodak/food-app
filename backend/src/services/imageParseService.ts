@@ -397,6 +397,7 @@ function estimateCostUsd(usage: GeminiUsage): number {
 }
 
 type ImagePromptMode = 'primary' | 'rescue';
+type ImageCaptionPromptMode = 'concise' | 'inventory';
 
 function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: string): string {
   const note = trimSafe(contextNote);
@@ -454,14 +455,25 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
   ].join('\n');
 }
 
-function buildImageCaptionFallbackPrompt(contextNote?: string): string {
+function buildImageCaptionFallbackPrompt(contextNote?: string, mode: ImageCaptionPromptMode = 'concise'): string {
   const note = trimSafe(contextNote);
+  const inventoryRules =
+    mode === 'inventory'
+      ? [
+          'This is an inventory pass. Do not summarize the meal.',
+          'Mentally divide the image into tray/plate zones: top, bottom, left, right, center, and small bowls/compartments.',
+          'Name each visible food component separately, including small sides and condiments.',
+          'Avoid generic color-only words like "green"; use likely food names such as green chutney, salad, herbs, spinach, or vegetable curry.',
+          'If a tray contains breads plus dal plus sides, include the breads and all side compartments.'
+        ]
+      : [];
   return [
     'Identify the edible food and drink visible in this image.',
     'Inspect the entire image, including all plate/tray compartments and small side bowls.',
     'List every distinct visible edible component, not just the largest or most obvious food.',
     'For thalis/trays, include breads/rice, dal/curry, sabzi, chutney, onion/salad, pickle, and dry chutney/powder when visible.',
     'If the image contains multiple foods, return multiple comma-separated foods.',
+    ...inventoryRules,
     'Reply with one plain line of comma-separated food names suitable for a nutrition logger.',
     'No intro text, no labels, no code blocks, no bullet points, and no explanation.',
     'Good examples:',
@@ -655,16 +667,17 @@ async function runImageModel(model: string, image: ImagePart, mode: ImagePromptM
 
 async function runImageCaptionFallback(
   model: string,
-  image: ImagePart
+  image: ImagePart,
+  mode: ImageCaptionPromptMode = 'concise'
 ): Promise<{ caption: string; usage: GeminiUsage } | null> {
   const startedAt = process.hrtime.bigint();
   const response = await generateGeminiMultimodalText({
     model,
     temperature: 0.1,
-    maxOutputTokens: 80,
+    maxOutputTokens: mode === 'inventory' ? 120 : 80,
     timeoutMs: config.aiImageTimeoutMs,
     parts: [
-      { text: buildImageCaptionFallbackPrompt(image.contextNote) },
+      { text: buildImageCaptionFallbackPrompt(image.contextNote, mode) },
       {
         inlineData: {
           mimeType: image.mimeType,
@@ -713,6 +726,7 @@ async function runImageCaptionFallback(
       stage: 'image_caption',
       ok: true,
       model: response.usage.model,
+      reason: mode === 'inventory' ? 'inventory_caption' : 'concise_caption',
       ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
       caption
     });
@@ -753,12 +767,19 @@ async function recoverWithCaptionFallback(
   image: ImagePart,
   usageEvents: ImageParseUsageEvent[]
 ): Promise<ImageParseServiceResult | null> {
-  const captionModels = Array.from(
-    new Set(
-      [config.aiImagePrimaryModel, config.aiImageFallbackModel]
-        .map((model) => model.trim())
-        .filter(Boolean)
-    )
+  const captionModels = [config.aiImagePrimaryModel, config.aiImageFallbackModel]
+    .map((model) => model.trim())
+    .filter(Boolean);
+  const captionAttempts = Array.from(
+    new Map(
+      [
+        { model: captionModels[0], mode: 'concise' as const },
+        { model: captionModels[0], mode: 'inventory' as const },
+        { model: captionModels[1], mode: 'inventory' as const }
+      ]
+        .filter((attempt): attempt is { model: string; mode: ImageCaptionPromptMode } => Boolean(attempt.model))
+        .map((attempt) => [`${attempt.model}:${attempt.mode}`, attempt])
+    ).values()
   );
 
   const deferredSparseCaptions: Array<{ caption: string; usage: GeminiUsage }> = [];
@@ -807,8 +828,8 @@ async function recoverWithCaptionFallback(
     };
   }
 
-  for (const [index, captionModel] of captionModels.entries()) {
-    const caption = await runImageCaptionFallback(captionModel, image);
+  for (const [index, attempt] of captionAttempts.entries()) {
+    const caption = await runImageCaptionFallback(attempt.model, image, attempt.mode);
     if (!caption?.caption.trim()) {
       continue;
     }
@@ -819,7 +840,7 @@ async function recoverWithCaptionFallback(
       estimatedCostUsd: estimateCostUsd(caption.usage)
     });
 
-    if (index < captionModels.length - 1 && shouldTryStrongerCaptionModel(caption.caption, image.contextNote)) {
+    if (index < captionAttempts.length - 1 && shouldTryStrongerCaptionModel(caption.caption, image.contextNote)) {
       image.debugEvents?.push({
         stage: 'image_caption',
         ok: false,

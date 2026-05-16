@@ -126,7 +126,7 @@ describe('image parse service', () => {
       dataBase64: 'pizza-image'
     });
 
-    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
     expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text).toContain('fallback parser');
     expect(parsed.lowConfidenceAccepted).toBe(true);
@@ -201,7 +201,7 @@ describe('image parse service', () => {
       dataBase64: 'flatbread-image'
     });
 
-    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
     const rescuePrompt = generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text;
     expect(rescuePrompt).toContain('paratha');
     expect(rescuePrompt).toContain('flatbread');
@@ -338,7 +338,7 @@ describe('image parse service', () => {
       dataBase64: 'sandwich-image'
     });
 
-    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
     expect(parsed.fallbackUsed).toBe(true);
     expect(parsed.lowConfidenceAccepted).toBe(false);
@@ -519,7 +519,7 @@ describe('image parse service', () => {
     });
 
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
-    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(3);
     expect(parsed.extractedText).toBe('masala dosa with sambar and three chutneys');
     expect(parsed.result.items[0].name).toBe('Masala dosa with sambar and chutneys');
     expect(debugEvents.some((event) => event.stage === 'image_caption' && event.ok && event.caption === parsed.extractedText)).toBe(true);
@@ -607,7 +607,7 @@ describe('image parse service', () => {
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
     expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
     expect(generateGeminiMultimodalText.mock.calls[0]?.[0]?.model).toBe('gemini-2.5-flash');
-    expect(generateGeminiMultimodalText.mock.calls[1]?.[0]?.model).toBe('gemini-2.5-pro');
+    expect(generateGeminiMultimodalText.mock.calls[1]?.[0]?.model).toBe('gemini-2.5-flash');
     expect(parsed.extractedText).toBe('masala dosa, sambar, coconut chutney, tomato chutney');
     expect(parsed.result.totals.calories).toBe(720);
     expect(debugEvents).toContainEqual(expect.objectContaining({ stage: 'image_caption', ok: false, model: 'gemini-2.5-flash' }));
