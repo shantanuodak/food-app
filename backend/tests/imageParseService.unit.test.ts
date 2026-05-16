@@ -519,7 +519,7 @@ describe('image parse service', () => {
     });
 
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
-    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(3);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
     expect(parsed.extractedText).toBe('masala dosa with sambar and three chutneys');
     expect(parsed.result.items[0].name).toBe('Masala dosa with sambar and chutneys');
     expect(debugEvents.some((event) => event.stage === 'image_caption' && event.ok && event.caption === parsed.extractedText)).toBe(true);

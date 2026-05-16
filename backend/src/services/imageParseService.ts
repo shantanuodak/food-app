@@ -277,7 +277,7 @@ function captionRejectionReason(caption: string): string | null {
 
 function captionFoodSegmentCount(caption: string): number {
   return caption
-    .split(/[,;\n]+|\s+\band\b\s+/i)
+    .split(/[,;\n]+|\s+\band\b\s+|\s+\bwith\b\s+/i)
     .map((segment) => segment.trim())
     .filter((segment) => segment.length >= 2)
     .length;
@@ -808,6 +808,42 @@ function imageSafeResult(result: ParseResult): ParseResult {
   };
 }
 
+async function recoverWithStructuredRescue(
+  image: ImagePart,
+  usageEvents: ImageParseUsageEvent[]
+): Promise<ImageParseServiceResult | null> {
+  const fallbackModel = config.aiImageFallbackModel.trim();
+  if (!fallbackModel) {
+    return null;
+  }
+
+  const rescued = await runImageModel(fallbackModel, image, 'rescue');
+  if (rescued?.usage) {
+    usageEvents.push({
+      feature: 'parse_image_fallback',
+      usage: rescued.usage,
+      estimatedCostUsd: estimateCostUsd(rescued.usage)
+    });
+  }
+
+  const rescuedAccepted =
+    rescued &&
+    rescued.result.items.length > 0 &&
+    rescued.result.confidence >= config.aiImageConfidenceMin;
+  if (rescuedAccepted) {
+    return {
+      extractedText: rescued.extractedText,
+      result: rescued.result,
+      model: rescued.usage.model,
+      fallbackUsed: true,
+      lowConfidenceAccepted: false,
+      usageEvents
+    };
+  }
+
+  return acceptedLowConfidenceResult(rescued, usageEvents, true);
+}
+
 async function recoverWithCaptionFallback(
   image: ImagePart,
   usageEvents: ImageParseUsageEvent[]
@@ -923,6 +959,15 @@ async function recoverWithCaptionFallback(
     }
   }
 
+  // Sparse captions such as "dal" are useful as a last resort for true
+  // single-food photos, but they are dangerous for trays/thalis because they
+  // silently drop visible sides. Give the structured rescue prompt one more
+  // chance to inspect the image before accepting a sparse caption.
+  const structuredRescue = await recoverWithStructuredRescue(image, usageEvents);
+  if (structuredRescue) {
+    return structuredRescue;
+  }
+
   for (const caption of deferredSparseCaptions) {
     const parsed = await parseCaptionText(caption);
     if (parsed) {
@@ -979,68 +1024,9 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     return captionRecovered;
   }
 
-  const fallbackModel = config.aiImageFallbackModel;
-  if (fallbackModel.trim().toLowerCase() == config.aiImagePrimaryModel.trim().toLowerCase()) {
-    if (acceptedPrimary) {
-      return acceptedPrimary;
-    }
-
-    // Render/local envs often configure the same model for primary and
-    // fallback. Still run a second pass with a rescue prompt so an obvious
-    // food photo does not dead-end at "couldn't understand photo" just
-    // because the first response was empty, truncated, or overly cautious.
-    const rescued = await runImageModel(fallbackModel, image, 'rescue');
-    if (rescued?.usage) {
-      usageEvents.push({
-        feature: 'parse_image_fallback',
-        usage: rescued.usage,
-        estimatedCostUsd: estimateCostUsd(rescued.usage)
-      });
-    }
-    const rescuedAccepted =
-      rescued &&
-      rescued.result.items.length > 0 &&
-      rescued.result.confidence >= config.aiImageConfidenceMin;
-    if (rescuedAccepted) {
-      return {
-        extractedText: rescued.extractedText,
-        result: rescued.result,
-        model: rescued.usage.model,
-        fallbackUsed: true,
-        lowConfidenceAccepted: false,
-        usageEvents
-      };
-    }
-    const acceptedRescue = acceptedLowConfidenceResult(rescued, usageEvents, true);
-    if (acceptedRescue) {
-      return acceptedRescue;
-    }
-    throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
+  if (acceptedPrimary) {
+    return acceptedPrimary;
   }
 
-  const fallback = await runImageModel(fallbackModel, image, 'rescue');
-  if (fallback?.usage) {
-    usageEvents.push({
-      feature: 'parse_image_fallback',
-      usage: fallback.usage,
-      estimatedCostUsd: estimateCostUsd(fallback.usage)
-    });
-  }
-
-  if (!fallback || fallback.result.items.length === 0) {
-    const accepted = acceptedLowConfidenceResult(primary, usageEvents, false);
-    if (accepted) {
-      return accepted;
-    }
-    throw new ApiError(502, 'IMAGE_PARSE_FAILED', 'Unable to estimate nutrition from this image. Please try another photo.');
-  }
-
-  return {
-    extractedText: fallback.extractedText,
-    result: fallback.result,
-    model: fallback.usage.model,
-    fallbackUsed: true,
-    lowConfidenceAccepted: fallback.result.confidence < config.aiImageConfidenceMin,
-    usageEvents
-  };
+  throw new ApiError(502, 'IMAGE_PARSE_FAILED', 'Unable to estimate nutrition from this image. Please try another photo.');
 }
