@@ -84,6 +84,7 @@ describe('image parse service', () => {
           outputTokens: 20
         }
       })
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         jsonText: JSON.stringify({
           extractedText: 'margherita pizza',
@@ -122,8 +123,8 @@ describe('image parse service', () => {
       dataBase64: 'pizza-image'
     });
 
-    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
-    expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text).toContain('fallback parser');
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(3);
+    expect(generateGeminiMultimodalJson.mock.calls[2]?.[0]?.parts[0]?.text).toContain('fallback parser');
     expect(parsed.lowConfidenceAccepted).toBe(true);
     expect(parsed.fallbackUsed).toBe(true);
     expect(parsed.result.confidence).toBe(0.5);
@@ -155,6 +156,7 @@ describe('image parse service', () => {
           outputTokens: 20
         }
       })
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         jsonText: JSON.stringify({
           extractedText: 'methi paratha with chutney',
@@ -193,7 +195,7 @@ describe('image parse service', () => {
       dataBase64: 'flatbread-image'
     });
 
-    const rescuePrompt = generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text;
+    const rescuePrompt = generateGeminiMultimodalJson.mock.calls[2]?.[0]?.parts[0]?.text;
     expect(rescuePrompt).toContain('paratha');
     expect(rescuePrompt).toContain('flatbread');
     expect(parsed.lowConfidenceAccepted).toBe(true);
@@ -287,6 +289,7 @@ describe('image parse service', () => {
           outputTokens: 20
         }
       })
+      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         jsonText: JSON.stringify({
           extractedText: 'turkey sandwich',
@@ -325,7 +328,7 @@ describe('image parse service', () => {
       dataBase64: 'sandwich-image'
     });
 
-    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(3);
     expect(parsed.fallbackUsed).toBe(true);
     expect(parsed.lowConfidenceAccepted).toBe(false);
     expect(parsed.result.confidence).toBe(0.91);
@@ -343,7 +346,6 @@ describe('image parse service', () => {
     const generateGeminiMultimodalJson = vi
       .fn()
       .mockResolvedValueOnce(null)
-      .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({
         jsonText: JSON.stringify({
           caption: 'white rice with dal, salad, and crunchy Indian snack garnish'
@@ -360,47 +362,45 @@ describe('image parse service', () => {
     }));
 
     vi.doMock('../src/services/aiNormalizerService.js', () => ({
-      tryCheapAIFallbackDetailed: vi.fn(async () => ({
-        output: {
-          result: {
-            confidence: 0.82,
-            assumptions: [],
-            items: [
-              {
-                name: 'Rice with dal and salad',
-                quantity: 1,
-                amount: 1,
-                unit: 'bowl',
-                unitNormalized: 'bowl',
-                grams: 450,
-                gramsPerUnit: 450,
-                calories: 620,
-                protein: 18,
-                carbs: 102,
-                fat: 16,
-                matchConfidence: 0.82,
-                nutritionSourceId: 'gemini_estimate',
-                originalNutritionSourceId: 'gemini_estimate',
-                sourceFamily: 'gemini',
-                needsClarification: false,
-                manualOverride: false,
-                foodDescription: 'Rice with dal, salad, and garnish',
-                explanation: 'Estimated as one bowl of white rice with dal and a small salad/garnish portion.'
-              }
-            ],
-            totals: {
+      tryGeminiPrimaryParse: vi.fn(async () => ({
+        result: {
+          confidence: 0.82,
+          assumptions: [],
+          items: [
+            {
+              name: 'Rice with dal and salad',
+              quantity: 1,
+              amount: 1,
+              unit: 'bowl',
+              unitNormalized: 'bowl',
+              grams: 450,
+              gramsPerUnit: 450,
               calories: 620,
               protein: 18,
               carbs: 102,
-              fat: 16
+              fat: 16,
+              matchConfidence: 0.82,
+              nutritionSourceId: 'gemini_estimate',
+              originalNutritionSourceId: 'gemini_estimate',
+              sourceFamily: 'gemini',
+              needsClarification: false,
+              manualOverride: false,
+              foodDescription: 'Rice with dal, salad, and garnish',
+              explanation: 'Estimated as one bowl of white rice with dal and a small salad/garnish portion.'
             }
-          },
-          usage: {
-            model: 'gemini-2.5-flash',
-            inputTokens: 310,
-            outputTokens: 120,
-            estimatedCostUsd: 0.00042
+          ],
+          totals: {
+            calories: 620,
+            protein: 18,
+            carbs: 102,
+            fat: 16
           }
+        },
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 310,
+          outputTokens: 120,
+          estimatedCostUsd: 0.00042
         }
       }))
     }));
@@ -411,8 +411,8 @@ describe('image parse service', () => {
       dataBase64: 'rice-dal-image'
     });
 
-    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(3);
-    expect(generateGeminiMultimodalJson.mock.calls[2]?.[0]?.parts[0]?.text).toContain('caption');
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
+    expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text).toContain('caption');
     expect(parsed.extractedText).toBe('white rice with dal, salad, and crunchy Indian snack garnish');
     expect(parsed.fallbackUsed).toBe(true);
     expect(parsed.lowConfidenceAccepted).toBe(true);

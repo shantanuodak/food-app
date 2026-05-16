@@ -5,7 +5,7 @@ import type { ParseResult, ParsedItem } from './deterministicParser.js';
 import { createEmptyParseResult } from './parsePipelineResultUtils.js';
 import { normalizeParseResultContract } from './parseContractService.js';
 import { generateGeminiMultimodalJson, type GeminiUsage } from './geminiFlashClient.js';
-import { tryCheapAIFallbackDetailed } from './aiNormalizerService.js';
+import { tryGeminiPrimaryParse } from './aiNormalizerService.js';
 
 type ImageParseUsageEvent = {
   feature: 'parse_image_primary' | 'parse_image_fallback' | 'parse_image_caption' | 'parse_image_caption_text';
@@ -22,10 +22,22 @@ export type ImageParseServiceResult = {
   usageEvents: ImageParseUsageEvent[];
 };
 
+export type ImageParseDebugEvent = {
+  stage: string;
+  ok: boolean;
+  model?: string;
+  reason?: string;
+  ms: number;
+  confidence?: number;
+  items?: number;
+  caption?: string;
+};
+
 type ImagePart = {
   mimeType: string;
   dataBase64: string;
   contextNote?: string;
+  debugEvents?: ImageParseDebugEvent[];
 };
 
 const parseItemSchema = z.object({
@@ -466,6 +478,8 @@ async function runImageModel(model: string, image: ImagePart, mode: ImagePromptM
   result: ParseResult;
   usage: GeminiUsage;
 } | null> {
+  const startedAt = process.hrtime.bigint();
+  const stage = mode === 'rescue' ? 'image_structured_rescue' : 'image_structured_primary';
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.1,
@@ -483,13 +497,36 @@ async function runImageModel(model: string, image: ImagePart, mode: ImagePromptM
   });
 
   if (!response) {
+    image.debugEvents?.push({
+      stage,
+      ok: false,
+      model,
+      reason: 'gemini_no_response',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+    });
     return null;
   }
 
   const parsed = parseGeminiOutput(response.jsonText);
   if (!parsed) {
+    image.debugEvents?.push({
+      stage,
+      ok: false,
+      model: response.usage.model,
+      reason: 'invalid_or_empty_nutrition_json',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+    });
     return null;
   }
+
+  image.debugEvents?.push({
+    stage,
+    ok: true,
+    model: response.usage.model,
+    ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+    confidence: parsed.result.confidence,
+    items: parsed.result.items.length
+  });
 
   return {
     extractedText: parsed.extractedText,
@@ -502,6 +539,7 @@ async function runImageCaptionFallback(
   model: string,
   image: ImagePart
 ): Promise<{ caption: string; usage: GeminiUsage } | null> {
+  const startedAt = process.hrtime.bigint();
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.1,
@@ -519,6 +557,13 @@ async function runImageCaptionFallback(
   });
 
   if (!response) {
+    image.debugEvents?.push({
+      stage: 'image_caption',
+      ok: false,
+      model,
+      reason: 'gemini_no_response',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+    });
     return null;
   }
 
@@ -528,11 +573,25 @@ async function runImageCaptionFallback(
       return null;
     }
     const parsed = captionSchema.parse(JSON.parse(jsonCandidate) as unknown);
+    image.debugEvents?.push({
+      stage: 'image_caption',
+      ok: true,
+      model: response.usage.model,
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+      caption: parsed.caption
+    });
     return {
       caption: parsed.caption,
       usage: response.usage
     };
   } catch {
+    image.debugEvents?.push({
+      stage: 'image_caption',
+      ok: false,
+      model: response.usage.model,
+      reason: 'invalid_caption_json',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10
+    });
     return null;
   }
 }
@@ -570,26 +629,43 @@ async function recoverWithCaptionFallback(
     estimatedCostUsd: estimateCostUsd(caption.usage)
   });
 
-  const textAttempt = await tryCheapAIFallbackDetailed(caption.caption, createEmptyParseResult(caption.caption));
-  if (!textAttempt.output?.result.items.length) {
+  const textStartedAt = process.hrtime.bigint();
+  const textAttempt = await tryGeminiPrimaryParse(caption.caption, createEmptyParseResult(caption.caption));
+  if (!textAttempt?.result.items.length) {
+    image.debugEvents?.push({
+      stage: 'image_caption_text',
+      ok: false,
+      reason: 'text_parse_failed',
+      ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
+      caption: caption.caption
+    });
     return null;
   }
 
   usageEvents.push({
     feature: 'parse_image_caption_text',
     usage: {
-      model: textAttempt.output.usage.model,
-      inputTokens: textAttempt.output.usage.inputTokens,
-      outputTokens: textAttempt.output.usage.outputTokens
+      model: textAttempt.usage.model,
+      inputTokens: textAttempt.usage.inputTokens,
+      outputTokens: textAttempt.usage.outputTokens
     },
-    estimatedCostUsd: textAttempt.output.usage.estimatedCostUsd
+    estimatedCostUsd: textAttempt.usage.estimatedCostUsd
   });
 
-  const result = imageSafeResult(normalizeParseResultContract(textAttempt.output.result, 'gemini'));
+  const result = imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini'));
+  image.debugEvents?.push({
+    stage: 'image_caption_text',
+    ok: true,
+    model: textAttempt.usage.model,
+    ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
+    confidence: result.confidence,
+    items: result.items.length,
+    caption: caption.caption
+  });
   return {
     extractedText: caption.caption,
     result,
-    model: textAttempt.output.usage.model,
+    model: textAttempt.usage.model,
     fallbackUsed: true,
     lowConfidenceAccepted: true,
     usageEvents
@@ -637,6 +713,11 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
   }
 
+  const captionRecovered = await recoverWithCaptionFallback(image, usageEvents);
+  if (captionRecovered) {
+    return captionRecovered;
+  }
+
   const fallbackModel = config.aiImageFallbackModel;
   if (fallbackModel.trim().toLowerCase() == config.aiImagePrimaryModel.trim().toLowerCase()) {
     if (acceptedPrimary) {
@@ -673,10 +754,6 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     if (acceptedRescue) {
       return acceptedRescue;
     }
-    const captionRecovered = await recoverWithCaptionFallback(image, usageEvents);
-    if (captionRecovered) {
-      return captionRecovered;
-    }
     throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
   }
 
@@ -693,10 +770,6 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     const accepted = acceptedLowConfidenceResult(primary, usageEvents, false);
     if (accepted) {
       return accepted;
-    }
-    const captionRecovered = await recoverWithCaptionFallback(image, usageEvents);
-    if (captionRecovered) {
-      return captionRecovered;
     }
     throw new ApiError(502, 'IMAGE_PARSE_FAILED', 'Unable to estimate nutrition from this image. Please try another photo.');
   }

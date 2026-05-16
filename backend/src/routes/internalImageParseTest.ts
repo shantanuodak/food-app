@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
-import { parseImageWithGemini } from '../services/imageParseService.js';
+import { parseImageWithGemini, type ImageParseDebugEvent } from '../services/imageParseService.js';
 
 const router = Router();
 
@@ -25,6 +25,7 @@ function requireInternalKey(key: string | undefined): void {
 
 router.post('/image-parse', async (req, res, next) => {
   const startedAt = process.hrtime.bigint();
+  const debugEvents: ImageParseDebugEvent[] = [];
   try {
     requireInternalKey(req.header('x-internal-metrics-key'));
     if (!config.internalImageParseTestEnabled) {
@@ -47,7 +48,8 @@ router.post('/image-parse', async (req, res, next) => {
     const parsed = await parseImageWithGemini({
       mimeType: body.mimeType,
       dataBase64: body.imageBase64,
-      contextNote: body.contextNote
+      contextNote: body.contextNote,
+      debugEvents
     });
 
     const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
@@ -68,6 +70,7 @@ router.post('/image-parse', async (req, res, next) => {
       totals: parsed.result.totals,
       items: parsed.result.items,
       assumptions: parsed.result.assumptions,
+      debugEvents,
       usageEvents: parsed.usageEvents.map((event) => ({
         feature: event.feature,
         model: event.usage.model,
@@ -77,6 +80,21 @@ router.post('/image-parse', async (req, res, next) => {
       }))
     });
   } catch (err) {
+    if (err instanceof ApiError) {
+      const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+      res.status(err.statusCode).json({
+        error: {
+          code: err.code,
+          message: err.message,
+          requestId: res.locals.requestId
+        },
+        diagnostics: {
+          parseDurationMs: Math.round(parseDurationMs * 10) / 10,
+          debugEvents
+        }
+      });
+      return;
+    }
     next(err);
   }
 });
