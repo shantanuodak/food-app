@@ -2,11 +2,13 @@ import { z } from 'zod';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import type { ParseResult, ParsedItem } from './deterministicParser.js';
+import { createEmptyParseResult } from './parsePipelineResultUtils.js';
 import { normalizeParseResultContract } from './parseContractService.js';
 import { generateGeminiMultimodalJson, type GeminiUsage } from './geminiFlashClient.js';
+import { tryCheapAIFallbackDetailed } from './aiNormalizerService.js';
 
 type ImageParseUsageEvent = {
-  feature: 'parse_image_primary' | 'parse_image_fallback';
+  feature: 'parse_image_primary' | 'parse_image_fallback' | 'parse_image_caption' | 'parse_image_caption_text';
   usage: GeminiUsage;
   estimatedCostUsd: number;
 };
@@ -45,6 +47,10 @@ const imageParseSchema = z.object({
   confidence: z.number().min(0).max(1),
   assumptions: z.array(z.string()).default([]),
   items: z.array(parseItemSchema).min(1)
+});
+
+const captionSchema = z.object({
+  caption: z.string().trim().min(2).max(500)
 });
 
 function round(value: number, digits = 4): number {
@@ -326,6 +332,27 @@ function buildImageParsePrompt(mode: ImagePromptMode = 'primary', contextNote?: 
   ].join('\n');
 }
 
+function buildImageCaptionFallbackPrompt(contextNote?: string): string {
+  const note = trimSafe(contextNote);
+  return [
+    'Identify the edible food and drink visible in this image.',
+    'Return strict JSON only with this exact shape: {"caption":string}.',
+    'The caption should be a concise comma-separated meal description suitable for a nutrition logger.',
+    'Include likely portions when visible or strongly implied.',
+    'Use broad names if exact recipes are uncertain.',
+    'For Indian meals, recognize common foods such as rice, dal, rajma, chole, dosa, chutney, sambar, curries, sabzi, roti, naan, paratha, thepla, makhana, and snacks.',
+    'Do not return an empty caption if any edible food is visible.',
+    ...(note
+      ? [
+          '',
+          'User-provided photo context:',
+          note,
+          'Use this context only if compatible with the image.'
+        ]
+      : [])
+  ].join('\n');
+}
+
 function parseGeminiOutput(payloadText: string): { extractedText: string; result: ParseResult } | null {
   let parsed: unknown;
   try {
@@ -471,6 +498,104 @@ async function runImageModel(model: string, image: ImagePart, mode: ImagePromptM
   };
 }
 
+async function runImageCaptionFallback(
+  model: string,
+  image: ImagePart
+): Promise<{ caption: string; usage: GeminiUsage } | null> {
+  const response = await generateGeminiMultimodalJson({
+    model,
+    temperature: 0.1,
+    maxOutputTokens: 240,
+    timeoutMs: config.aiImageTimeoutMs,
+    parts: [
+      { text: buildImageCaptionFallbackPrompt(image.contextNote) },
+      {
+        inlineData: {
+          mimeType: image.mimeType,
+          data: image.dataBase64
+        }
+      }
+    ]
+  });
+
+  if (!response) {
+    return null;
+  }
+
+  try {
+    const jsonCandidate = extractJsonCandidate(response.jsonText);
+    if (!jsonCandidate) {
+      return null;
+    }
+    const parsed = captionSchema.parse(JSON.parse(jsonCandidate) as unknown);
+    return {
+      caption: parsed.caption,
+      usage: response.usage
+    };
+  } catch {
+    return null;
+  }
+}
+
+function imageSafeResult(result: ParseResult): ParseResult {
+  return {
+    ...result,
+    items: result.items.map((item) => ({
+      ...item,
+      nutritionSourceId: 'gemini_image_caption_estimate',
+      originalNutritionSourceId: item.originalNutritionSourceId || item.nutritionSourceId || 'gemini_image_caption_estimate',
+      sourceFamily: 'gemini',
+      needsClarification: true,
+      foodDescription: item.foodDescription || item.name,
+      explanation:
+        item.explanation ||
+        `Estimated from the visible photo via a brief meal description: ${item.name}. Please confirm portions if needed.`
+    }))
+  };
+}
+
+async function recoverWithCaptionFallback(
+  image: ImagePart,
+  usageEvents: ImageParseUsageEvent[]
+): Promise<ImageParseServiceResult | null> {
+  const captionModel = config.aiImagePrimaryModel;
+  const caption = await runImageCaptionFallback(captionModel, image);
+  if (!caption?.caption.trim()) {
+    return null;
+  }
+
+  usageEvents.push({
+    feature: 'parse_image_caption',
+    usage: caption.usage,
+    estimatedCostUsd: estimateCostUsd(caption.usage)
+  });
+
+  const textAttempt = await tryCheapAIFallbackDetailed(caption.caption, createEmptyParseResult(caption.caption));
+  if (!textAttempt.output?.result.items.length) {
+    return null;
+  }
+
+  usageEvents.push({
+    feature: 'parse_image_caption_text',
+    usage: {
+      model: textAttempt.output.usage.model,
+      inputTokens: textAttempt.output.usage.inputTokens,
+      outputTokens: textAttempt.output.usage.outputTokens
+    },
+    estimatedCostUsd: textAttempt.output.usage.estimatedCostUsd
+  });
+
+  const result = imageSafeResult(normalizeParseResultContract(textAttempt.output.result, 'gemini'));
+  return {
+    extractedText: caption.caption,
+    result,
+    model: textAttempt.output.usage.model,
+    fallbackUsed: true,
+    lowConfidenceAccepted: true,
+    usageEvents
+  };
+}
+
 export async function parseImageWithGemini(image: ImagePart): Promise<ImageParseServiceResult> {
   if (!config.aiImageParseEnabled) {
     throw new ApiError(403, 'IMAGE_PARSE_DISABLED', 'Image parse is disabled.');
@@ -548,6 +673,10 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     if (acceptedRescue) {
       return acceptedRescue;
     }
+    const captionRecovered = await recoverWithCaptionFallback(image, usageEvents);
+    if (captionRecovered) {
+      return captionRecovered;
+    }
     throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
   }
 
@@ -564,6 +693,10 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     const accepted = acceptedLowConfidenceResult(primary, usageEvents, false);
     if (accepted) {
       return accepted;
+    }
+    const captionRecovered = await recoverWithCaptionFallback(image, usageEvents);
+    if (captionRecovered) {
+      return captionRecovered;
     }
     throw new ApiError(502, 'IMAGE_PARSE_FAILED', 'Unable to estimate nutrition from this image. Please try another photo.');
   }

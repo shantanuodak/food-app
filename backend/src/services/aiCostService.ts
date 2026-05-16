@@ -5,7 +5,14 @@ import { ApiError } from '../utils/errors.js';
 type CostEventInput = {
   userId: string;
   requestId: string;
-  feature: 'parse_fallback' | 'escalation' | 'enrichment' | 'parse_image_primary' | 'parse_image_fallback';
+  feature:
+    | 'parse_fallback'
+    | 'escalation'
+    | 'enrichment'
+    | 'parse_image_primary'
+    | 'parse_image_fallback'
+    | 'parse_image_caption'
+    | 'parse_image_caption_text';
   model: string;
   inputTokens: number;
   outputTokens: number;

@@ -331,4 +331,99 @@ describe('image parse service', () => {
     expect(parsed.result.confidence).toBe(0.91);
     expect(parsed.result.items[0].needsClarification).toBe(false);
   });
+
+  test('recovers failed composed-meal image parses through caption-to-text fallback', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-pro';
+
+    const generateGeminiMultimodalJson = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        jsonText: JSON.stringify({
+          caption: 'white rice with dal, salad, and crunchy Indian snack garnish'
+        }),
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 780,
+          outputTokens: 32
+        }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson
+    }));
+
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallbackDetailed: vi.fn(async () => ({
+        output: {
+          result: {
+            confidence: 0.82,
+            assumptions: [],
+            items: [
+              {
+                name: 'Rice with dal and salad',
+                quantity: 1,
+                amount: 1,
+                unit: 'bowl',
+                unitNormalized: 'bowl',
+                grams: 450,
+                gramsPerUnit: 450,
+                calories: 620,
+                protein: 18,
+                carbs: 102,
+                fat: 16,
+                matchConfidence: 0.82,
+                nutritionSourceId: 'gemini_estimate',
+                originalNutritionSourceId: 'gemini_estimate',
+                sourceFamily: 'gemini',
+                needsClarification: false,
+                manualOverride: false,
+                foodDescription: 'Rice with dal, salad, and garnish',
+                explanation: 'Estimated as one bowl of white rice with dal and a small salad/garnish portion.'
+              }
+            ],
+            totals: {
+              calories: 620,
+              protein: 18,
+              carbs: 102,
+              fat: 16
+            }
+          },
+          usage: {
+            model: 'gemini-2.5-flash',
+            inputTokens: 310,
+            outputTokens: 120,
+            estimatedCostUsd: 0.00042
+          }
+        }
+      }))
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'rice-dal-image'
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(3);
+    expect(generateGeminiMultimodalJson.mock.calls[2]?.[0]?.parts[0]?.text).toContain('caption');
+    expect(parsed.extractedText).toBe('white rice with dal, salad, and crunchy Indian snack garnish');
+    expect(parsed.fallbackUsed).toBe(true);
+    expect(parsed.lowConfidenceAccepted).toBe(true);
+    expect(parsed.result.items).toHaveLength(1);
+    expect(parsed.result.items[0].name).toBe('Rice with dal and salad');
+    expect(parsed.result.items[0].needsClarification).toBe(true);
+    expect(parsed.result.items[0].nutritionSourceId).toBe('gemini_image_caption_estimate');
+    expect(parsed.result.totals.calories).toBe(620);
+    expect(parsed.usageEvents.map((event) => event.feature)).toEqual([
+      'parse_image_caption',
+      'parse_image_caption_text'
+    ]);
+  });
 });
