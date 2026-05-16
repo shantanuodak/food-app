@@ -128,6 +128,7 @@ export const config = {
   aiDailyBudgetUsd: numberWithDefault('AI_DAILY_BUDGET_USD', 0.5),
   aiUserSoftCapUsd: numberWithDefault('AI_USER_SOFT_CAP_USD', 0.1),
   internalMetricsKey: process.env.INTERNAL_METRICS_KEY || '',
+  internalImageParseTestEnabled: booleanWithDefault('INTERNAL_IMAGE_PARSE_TEST_ENABLED', false),
   parseCacheSchemaVersion: process.env.PARSE_CACHE_SCHEMA_VERSION || 'k4',
   parseVersion: process.env.PARSE_VERSION || 'v2',
   parseProviderRouteVersion: process.env.PARSE_PROVIDER_ROUTE_VERSION || 'r2',

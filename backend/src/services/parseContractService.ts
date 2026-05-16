@@ -5,6 +5,7 @@ import type { ParsePipelineRoute } from './parsePipelineService.js';
 export type SourceFamily = 'cache' | 'deterministic' | 'gemini' | 'manual';
 
 const SOURCE_ORDER: SourceFamily[] = ['cache', 'deterministic', 'gemini', 'manual'];
+const UNRESOLVED_PLACEHOLDER_SOURCE_ID = 'unresolved_placeholder';
 
 const UNIT_ALIASES: Record<string, string> = {
   count: 'count',
@@ -97,9 +98,10 @@ function shouldClarifyItem(item: ParsedItem): boolean {
     return true;
   }
 
-  const lowConfidence = (item.matchConfidence || 0) < 0.7;
+  const sourceId = (item.nutritionSourceId || '').trim().toLowerCase();
+  const isUnresolvedPlaceholder = sourceId === UNRESOLVED_PLACEHOLDER_SOURCE_ID;
   const missingSource = !item.nutritionSourceId || !item.nutritionSourceId.trim();
-  return lowConfidence || missingSource;
+  return isUnresolvedPlaceholder || missingSource;
 }
 
 function normalizeItem(item: ParsedItem, route: ParsePipelineRoute): ParsedItem {

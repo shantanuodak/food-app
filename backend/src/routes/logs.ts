@@ -14,6 +14,7 @@ import { ApiError } from '../utils/errors.js';
 import { config } from '../config.js';
 import {
   dayRangeQuerySchema,
+  blocksSaveForClarification,
   hasManualOverride,
   logIdParamSchema,
   normalizeManualOverride,
@@ -119,7 +120,7 @@ router.post('/', async (req, res, next) => {
     const loggedAt = new Date(body.parsedLog.loggedAt);
     await assertLoggedAtNotInFutureForUser(userId, loggedAt);
 
-    const unresolvedItems = body.parsedLog.items.filter((item) => item.needsClarification === true && !hasManualOverride(item));
+    const unresolvedItems = body.parsedLog.items.filter(blocksSaveForClarification);
     if (unresolvedItems.length > 0) {
       throw new ApiError(422, 'NEEDS_CLARIFICATION', 'One or more items require clarification before save.');
     }
@@ -251,9 +252,7 @@ router.patch('/:id', async (req, res, next) => {
       await assertLoggedAtNotInFutureForUser(userId, loggedAt);
     }
 
-    const unresolvedItems = body.parsedLog.items.filter(
-      (item) => item.needsClarification === true && !hasManualOverride(item)
-    );
+    const unresolvedItems = body.parsedLog.items.filter(blocksSaveForClarification);
     if (unresolvedItems.length > 0) {
       throw new ApiError(422, 'NEEDS_CLARIFICATION', 'One or more items require clarification before save.');
     }

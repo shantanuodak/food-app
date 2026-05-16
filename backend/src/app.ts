@@ -11,6 +11,7 @@ import parseRoutes from './routes/parse.js';
 import logsRoutes from './routes/logs.js';
 import rewardsRoutes from './routes/rewards.js';
 import internalMetricsRoutes from './routes/internalMetrics.js';
+import internalImageParseTestRoutes from './routes/internalImageParseTest.js';
 import evalDashboardRoutes from './routes/evalDashboard.js';
 import adminFeatureFlagsRoutes from './routes/adminFeatureFlags.js';
 import healthRoutes from './routes/health.js';
@@ -184,6 +185,7 @@ export function createApp() {
   // older tooling/comments do not drift from the same Supabase-backed data.
   app.use('/v1/feedback', authRequired, feedbackSubmitRoutes);
   app.use('/v1/internal', internalMetricsRoutes);
+  app.use('/v1/internal/test', internalImageParseTestRoutes);
   app.use('/v1/internal/feedback', feedbackAdminRoutes);
   app.use('/v1/internal/dashboard', evalDashboardRoutes);
   app.use('/v1/internal/dashboard/feedback', feedbackAdminRoutes);

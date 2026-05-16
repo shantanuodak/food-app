@@ -144,7 +144,7 @@ function buildFallbackExplanation(item: ParseResult['items'][number], route: Par
 }
 
 export function shouldAcceptCachedResult(result: ParseResult): boolean {
-  return result.items.length > 0 || result.confidence >= config.parseCacheMinConfidence;
+  return result.items.length > 0 && result.confidence >= config.parseCacheMinConfidence;
 }
 
 export function combineParseResults(results: ParseResult[]): ParseResult {

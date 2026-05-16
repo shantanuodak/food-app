@@ -1190,7 +1190,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(parse.body.error.code).toBe('FUTURE_DATE_NOT_ALLOWED');
   });
 
-  test('save blocks unresolved item unless manual override is supplied', async () => {
+  test('save blocks unresolved placeholders but allows low-confidence nutrition rows', async () => {
     const parse = await request(app)
       .post('/v1/logs/parse')
       .set(authHeader)
@@ -1201,13 +1201,54 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
 
     expect(parse.status).toBe(200);
 
-    const unresolvedPayload = {
+    const unresolvedPlaceholderPayload = {
       parseRequestId: parse.body.parseRequestId,
       parseVersion: parse.body.parseVersion,
       parsedLog: {
         rawText: 'custom test item',
         loggedAt: '2026-02-15T13:35:00.000Z',
-        confidence: 0.9,
+        confidence: 0.2,
+        totals: {
+          calories: 0,
+          protein: 0,
+          carbs: 0,
+          fat: 0
+        },
+        items: [
+          {
+            name: 'custom test item',
+            quantity: 1,
+            amount: 1,
+            unit: 'count',
+            unitNormalized: 'count',
+            grams: 0,
+            gramsPerUnit: 0,
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0,
+            nutritionSourceId: 'unresolved_placeholder',
+            matchConfidence: 0,
+            needsClarification: true
+          }
+        ]
+      }
+    };
+
+    const saveBlocked = await request(app)
+      .post('/v1/logs')
+      .set(authHeader)
+      .set('Idempotency-Key', 'e4189d7f-a907-4bd5-93e6-145774f0dd20')
+      .send(unresolvedPlaceholderPayload);
+
+    expect(saveBlocked.status).toBe(422);
+    expect(saveBlocked.body.error.code).toBe('NEEDS_CLARIFICATION');
+
+    const lowConfidencePayload = {
+      ...unresolvedPlaceholderPayload,
+      parsedLog: {
+        ...unresolvedPlaceholderPayload.parsedLog,
+        confidence: 0.4,
         totals: {
           calories: 120,
           protein: 6,
@@ -1227,7 +1268,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
             protein: 6,
             carbs: 10,
             fat: 4,
-            nutritionSourceId: 'manual_test',
+            nutritionSourceId: 'gemini_estimate',
             matchConfidence: 0.4,
             needsClarification: true
           }
@@ -1235,35 +1276,11 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
       }
     };
 
-    const saveBlocked = await request(app)
-      .post('/v1/logs')
-      .set(authHeader)
-      .set('Idempotency-Key', 'e4189d7f-a907-4bd5-93e6-145774f0dd20')
-      .send(unresolvedPayload);
-
-    expect(saveBlocked.status).toBe(422);
-    expect(saveBlocked.body.error.code).toBe('NEEDS_CLARIFICATION');
-
-    const resolvedPayload = {
-      ...unresolvedPayload,
-      parsedLog: {
-        ...unresolvedPayload.parsedLog,
-        items: unresolvedPayload.parsedLog.items.map((item) => ({
-          ...item,
-          manualOverride: {
-            enabled: true,
-            reason: 'User confirmed custom serving.',
-            editedFields: ['quantity', 'calories']
-          }
-        }))
-      }
-    };
-
     const saveAllowed = await request(app)
       .post('/v1/logs')
       .set(authHeader)
       .set('Idempotency-Key', '1f72f012-53c6-49f3-98d8-0880fd592f5e')
-      .send(resolvedPayload);
+      .send(lowConfidencePayload);
 
     expect(saveAllowed.status).toBe(200);
     expect(saveAllowed.body.status).toBe('saved');

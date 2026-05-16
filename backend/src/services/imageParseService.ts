@@ -421,7 +421,11 @@ function acceptedLowConfidenceResult(
     extractedText: candidate.extractedText,
     result: {
       ...candidate.result,
-      confidence
+      confidence,
+      items: candidate.result.items.map((item) => ({
+        ...item,
+        needsClarification: true
+      }))
     },
     model: candidate.usage.model,
     fallbackUsed,

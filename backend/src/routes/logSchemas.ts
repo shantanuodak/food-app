@@ -2,6 +2,7 @@ import { z } from 'zod';
 
 const nonNegative = z.number().finite().min(0);
 const confidenceScore = z.number().finite().min(0).max(1);
+const UNRESOLVED_PLACEHOLDER_SOURCE_ID = 'unresolved_placeholder';
 
 const manualOverrideSchema = z.object({
   enabled: z.boolean(),
@@ -129,6 +130,26 @@ export function hasManualOverride(item: LogItemSchema): boolean {
     return item.manualOverride.enabled;
   }
   return false;
+}
+
+export function isUnresolvedPlaceholderItem(item: LogItemSchema): boolean {
+  const sourceId = item.nutritionSourceId.trim().toLowerCase();
+  const originalSourceId = (item.originalNutritionSourceId || '').trim().toLowerCase();
+  const hasNutrition =
+    item.calories > 0 ||
+    item.protein > 0 ||
+    item.carbs > 0 ||
+    item.fat > 0;
+
+  return (
+    sourceId === UNRESOLVED_PLACEHOLDER_SOURCE_ID ||
+    originalSourceId === UNRESOLVED_PLACEHOLDER_SOURCE_ID ||
+    (item.needsClarification === true && !hasNutrition)
+  );
+}
+
+export function blocksSaveForClarification(item: LogItemSchema): boolean {
+  return item.needsClarification === true && !hasManualOverride(item) && isUnresolvedPlaceholderItem(item);
 }
 
 export function normalizeManualOverride(item: LogItemSchema): { enabled: boolean; reason?: string; editedFields: string[] } | null {

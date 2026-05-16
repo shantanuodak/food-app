@@ -1,7 +1,6 @@
 import type { ParseResult } from './deterministicParser.js';
 import { buildClarificationQuestions } from './clarificationService.js';
 import { hasUnresolvedSignal } from './parsePipelineResultUtils.js';
-import { config } from '../config.js';
 
 export function computeClarificationState(text: string, result: ParseResult): { needsClarification: boolean; clarificationQuestions: string[] } {
   const itemNeedsClarification = result.items.filter((item) => item.needsClarification === true);
@@ -9,8 +8,7 @@ export function computeClarificationState(text: string, result: ParseResult): { 
   const needsClarification =
     itemNeedsClarification.length > 0 ||
     result.items.length === 0 ||
-    result.confidence < config.aiFallbackConfidenceMin ||
-    (unresolved && result.confidence < config.aiFallbackConfidenceMax);
+    unresolved;
 
   if (!needsClarification) {
     return { needsClarification: false, clarificationQuestions: [] };

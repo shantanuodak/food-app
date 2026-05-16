@@ -3,6 +3,7 @@ import { config } from '../config.js';
 import type { ParseResult } from './deterministicParser.js';
 import { generateGeminiJsonWithDiagnostics, type GeminiFailureReason } from './geminiFlashClient.js';
 import { splitFoodTextSegments } from './foodTextSegmentation.js';
+import { sumNutrition } from './nutritionService.js';
 
 export type AICallUsage = {
   model: string;
@@ -55,6 +56,67 @@ export const parseResultSchema = z.object({
     carbs: z.number().nonnegative(),
     fat: z.number().nonnegative()
   })
+});
+
+const relaxedNumber = z.preprocess((value) => {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return value;
+  const normalized = value.replace(/,/g, '').trim();
+  if (!normalized) return undefined;
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : undefined;
+}, z.number().finite().min(0));
+
+const relaxedOptionalNumber = z.preprocess((value) => {
+  if (value === null || value === undefined || value === '') return undefined;
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return value;
+  const normalized = value.replace(/,/g, '').trim();
+  const match = normalized.match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : undefined;
+}, z.number().finite().min(0).optional());
+
+const relaxedConfidence = z.preprocess((value) => {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return value;
+  const match = value.trim().match(/-?\d+(?:\.\d+)?/);
+  return match ? Number(match[0]) : undefined;
+}, z.number().finite().min(0).max(1));
+
+const relaxedItemSchema = z.object({
+  name: z.coerce.string().trim().min(1),
+  quantity: relaxedOptionalNumber,
+  amount: relaxedOptionalNumber,
+  unit: z.coerce.string().trim().optional(),
+  unitNormalized: z.coerce.string().trim().optional(),
+  grams: relaxedOptionalNumber,
+  gramsPerUnit: relaxedOptionalNumber.nullable().optional(),
+  calories: relaxedOptionalNumber,
+  protein: relaxedOptionalNumber,
+  carbs: relaxedOptionalNumber,
+  fat: relaxedOptionalNumber,
+  matchConfidence: relaxedConfidence.optional(),
+  nutritionSourceId: z.coerce.string().trim().optional(),
+  needsClarification: z.boolean().optional(),
+  manualOverride: z.boolean().optional(),
+  sourceFamily: z.enum(['cache', 'deterministic', 'gemini', 'manual']).optional(),
+  originalNutritionSourceId: z.coerce.string().trim().optional(),
+  foodDescription: z.coerce.string().trim().optional(),
+  explanation: z.coerce.string().trim().optional()
+});
+
+const relaxedParseResultSchema = z.object({
+  confidence: relaxedConfidence.optional(),
+  assumptions: z.array(z.coerce.string()).optional(),
+  items: z.array(relaxedItemSchema).default([]),
+  totals: z
+    .object({
+      calories: relaxedNumber.optional(),
+      protein: relaxedNumber.optional(),
+      carbs: relaxedNumber.optional(),
+      fat: relaxedNumber.optional()
+    })
+    .optional()
 });
 
 const GEMINI_FALLBACK_DYNAMIC_RULES_TOKEN = '{{DYNAMIC_RULES}}';
@@ -138,6 +200,98 @@ export function buildGeminiFallbackPrompt(inputText: string, initialResult: Pars
   return renderGeminiFallbackPrompt(buildGeminiFallbackPromptTemplate(), inputText, initialResult);
 }
 
+function roundOneDecimal(value: number): number {
+  return Math.round(value * 10) / 10;
+}
+
+function clamp01(value: number): number {
+  if (!Number.isFinite(value)) return 0;
+  return Math.max(0, Math.min(1, value));
+}
+
+function estimateCaloriesFromMacros(protein: number, carbs: number, fat: number): number {
+  const calories = protein * 4 + carbs * 4 + fat * 9;
+  return calories > 0 ? roundOneDecimal(calories) : 0;
+}
+
+function parseGeminiJsonPayload(jsonText: string): unknown {
+  const trimmed = jsonText.trim();
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    // Gemini normally honors JSON mode, but production has shown occasional
+    // fenced JSON or preamble drift. Repair only by extracting a JSON object.
+  }
+
+  const withoutFence = trimmed
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+  try {
+    return JSON.parse(withoutFence) as unknown;
+  } catch {
+    const start = withoutFence.indexOf('{');
+    const end = withoutFence.lastIndexOf('}');
+    if (start >= 0 && end > start) {
+      return JSON.parse(withoutFence.slice(start, end + 1)) as unknown;
+    }
+    throw new Error('No JSON object found in Gemini response');
+  }
+}
+
+function normalizeGeminiParseResult(candidate: unknown): ParseResult {
+  const relaxed = relaxedParseResultSchema.parse(candidate);
+  const items = relaxed.items
+    .map((item) => {
+      const quantity = item.quantity ?? item.amount ?? 1;
+      const unit = item.unit?.trim() || item.unitNormalized?.trim() || 'serving';
+      const protein = roundOneDecimal(item.protein ?? 0);
+      const carbs = roundOneDecimal(item.carbs ?? 0);
+      const fat = roundOneDecimal(item.fat ?? 0);
+      const calories = roundOneDecimal(item.calories ?? estimateCaloriesFromMacros(protein, carbs, fat));
+      const grams = roundOneDecimal(item.grams ?? 0);
+      const sourceId = item.nutritionSourceId?.trim() || 'gemini_estimate';
+
+      return {
+        name: item.name,
+        quantity,
+        amount: quantity,
+        unit,
+        unitNormalized: item.unitNormalized?.trim() || unit,
+        grams,
+        gramsPerUnit: item.gramsPerUnit ?? (quantity > 0 && grams > 0 ? roundOneDecimal(grams / quantity) : null),
+        calories,
+        protein,
+        carbs,
+        fat,
+        matchConfidence: clamp01(item.matchConfidence ?? relaxed.confidence ?? 0.75),
+        nutritionSourceId: sourceId,
+        originalNutritionSourceId: item.originalNutritionSourceId?.trim() || sourceId,
+        needsClarification: item.needsClarification,
+        manualOverride: item.manualOverride,
+        sourceFamily: item.sourceFamily ?? 'gemini',
+        foodDescription: item.foodDescription?.trim() || item.name,
+        explanation: item.explanation?.trim()
+      };
+    })
+    .filter((item) => item.name.trim().length > 0);
+
+  if (items.length === 0) {
+    throw new Error('Gemini response contained no items');
+  }
+
+  const totals = sumNutrition(items);
+  const confidenceFromItems =
+    items.length > 0 ? items.reduce((sum, item) => sum + item.matchConfidence, 0) / items.length : 0;
+
+  return parseResultSchema.parse({
+    confidence: clamp01(relaxed.confidence ?? confidenceFromItems),
+    assumptions: [],
+    items,
+    totals
+  });
+}
+
 async function tryGeminiFallback(inputText: string, initialResult: ParseResult): Promise<FallbackAttemptResult> {
   if (!config.geminiApiKey) {
     return { output: null };
@@ -167,15 +321,12 @@ async function tryGeminiFallback(inputText: string, initialResult: ParseResult):
   }
 
   try {
-    const candidate = JSON.parse(response.jsonText) as unknown;
-    const validated = parseResultSchema.parse(candidate);
+    const candidate = parseGeminiJsonPayload(response.jsonText);
+    const validated = normalizeGeminiParseResult(candidate);
 
     return {
       output: {
-        result: {
-          ...validated,
-          assumptions: []
-        },
+        result: validated,
         usage: {
           model: response.usage.model,
           inputTokens: response.usage.inputTokens,
