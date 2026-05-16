@@ -221,6 +221,36 @@ function parseCaptionPayload(payloadText: string): string | null {
   return trimmed.slice(0, 500);
 }
 
+function captionRejectionReason(caption: string): string | null {
+  const normalized = caption.trim().toLowerCase();
+  if (!normalized) {
+    return 'empty_caption';
+  }
+
+  const boilerplateSignals = [
+    'here is the json',
+    'json requested',
+    '```',
+    '{"caption"',
+    'output schema',
+    'strict json',
+    'code block'
+  ];
+  if (boilerplateSignals.some((signal) => normalized.includes(signal))) {
+    return 'caption_boilerplate';
+  }
+
+  if (/^\s*[{[]/.test(caption)) {
+    return 'caption_boilerplate';
+  }
+
+  return null;
+}
+
+function resultHasPositiveNutrition(result: ParseResult): boolean {
+  return result.items.some((item) => item.calories > 0 || item.protein > 0 || item.carbs > 0 || item.fat > 0);
+}
+
 function normalizeGeminiItem(rawItem: unknown, topLevelConfidence: number): z.input<typeof parseItemSchema> | null {
   const record = asRecord(rawItem);
   if (!record) {
@@ -613,6 +643,18 @@ async function runImageCaptionFallback(
       });
       return null;
     }
+    const rejected = captionRejectionReason(caption);
+    if (rejected) {
+      image.debugEvents?.push({
+        stage: 'image_caption',
+        ok: false,
+        model: response.usage.model,
+        reason: rejected,
+        ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+        caption: caption.slice(0, 160)
+      });
+      return null;
+    }
     image.debugEvents?.push({
       stage: 'image_caption',
       ok: true,
@@ -671,11 +713,11 @@ async function recoverWithCaptionFallback(
 
   const textStartedAt = process.hrtime.bigint();
   const textAttempt = await tryGeminiPrimaryParse(caption.caption, createEmptyParseResult(caption.caption));
-  if (!textAttempt?.result.items.length) {
+  if (!textAttempt?.result.items.length || !resultHasPositiveNutrition(textAttempt.result)) {
     image.debugEvents?.push({
       stage: 'image_caption_text',
       ok: false,
-      reason: 'text_parse_failed',
+      reason: textAttempt?.result.items.length ? 'text_parse_non_food_or_zero_nutrition' : 'text_parse_failed',
       ms: Math.round((Number(process.hrtime.bigint() - textStartedAt) / 1_000_000) * 10) / 10,
       caption: caption.caption
     });

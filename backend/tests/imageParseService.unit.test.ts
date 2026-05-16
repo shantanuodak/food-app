@@ -508,4 +508,94 @@ describe('image parse service', () => {
     expect(parsed.result.items[0].name).toBe('Masala dosa with sambar and chutneys');
     expect(debugEvents.some((event) => event.stage === 'image_caption' && event.ok && event.caption === parsed.extractedText)).toBe(true);
   });
+
+  test('rejects Gemini boilerplate captions instead of saving zero-calorie non-food rows', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-pro';
+
+    const generateGeminiMultimodalJson = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        jsonText: 'Here is the JSON requested:\n```json',
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 454,
+          outputTokens: 9
+        }
+      })
+      .mockResolvedValueOnce(null);
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson
+    }));
+
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryGeminiPrimaryParse: vi.fn(async () => ({
+        result: {
+          confidence: 0.1,
+          assumptions: [],
+          items: [
+            {
+              name: 'JSON request text',
+              quantity: 1,
+              amount: 1,
+              unit: 'serving',
+              unitNormalized: 'serving',
+              grams: 0,
+              gramsPerUnit: 0,
+              calories: 0,
+              protein: 0,
+              carbs: 0,
+              fat: 0,
+              matchConfidence: 0.1,
+              nutritionSourceId: 'gemini_estimate',
+              originalNutritionSourceId: 'gemini_estimate',
+              sourceFamily: 'gemini',
+              needsClarification: true,
+              manualOverride: false,
+              foodDescription: 'JSON request text',
+              explanation: 'Non-food text.'
+            }
+          ],
+          totals: {
+            calories: 0,
+            protein: 0,
+            carbs: 0,
+            fat: 0
+          }
+        },
+        usage: {
+          model: 'gemini-2.5-flash',
+          inputTokens: 300,
+          outputTokens: 120,
+          estimatedCostUsd: 0.00042
+        }
+      }))
+    }));
+
+    const debugEvents: Array<{ stage: string; ok: boolean; reason?: string }> = [];
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    await expect(
+      parseImageWithGemini({
+        mimeType: 'image/jpeg',
+        dataBase64: 'boilerplate-image',
+        debugEvents
+      })
+    ).rejects.toMatchObject({
+      code: 'IMAGE_PARSE_FAILED'
+    });
+
+    expect(debugEvents).toContainEqual(
+      expect.objectContaining({
+        stage: 'image_caption',
+        ok: false,
+        reason: 'caption_boilerplate'
+      })
+    );
+  });
 });
