@@ -14,13 +14,10 @@ import GoogleSignIn
 @main
 struct Food_AppApp: App {
     @UIApplicationDelegateAdaptor(FoodAppDelegate.self) private var appDelegate
-    @Environment(\.scenePhase) private var scenePhase
-    @StateObject private var appStore = AppStore()
 
     var body: some Scene {
         WindowGroup {
-            ContentView()
-                .environmentObject(appStore)
+            RootBootstrapView()
                 .preferredColorScheme(.light)
                 .onOpenURL { url in
                     if QuickCameraLaunchStore.handle(url: url) {
@@ -30,36 +27,67 @@ struct Food_AppApp: App {
                     _ = GIDSignIn.sharedInstance.handle(url)
 #endif
                 }
-                .task {
-                    FoodBackgroundRefreshService.shared.appStore = appStore
-                    Task(priority: .background) { @MainActor in
-                        // Let the first screen render before doing launch
-                        // maintenance. On real devices these OS calls can
-                        // contend with SwiftUI's first paint and look like a
-                        // frozen app, especially after a fresh install.
-                        try? await Task.sleep(nanoseconds: 800_000_000)
-                        guard !Task.isCancelled else { return }
-                        FoodBackgroundRefreshService.shared.scheduleAppRefresh()
-                        appStore.warmBackend()
-                        await appStore.refreshNotificationAuthState()
-                        await appStore.reconcileNotifications()
-                        await appStore.drainDeferredImageUploads()
-                    }
+        }
+    }
+}
+
+private struct RootBootstrapView: View {
+    @StateObject private var appStore = AppStore()
+
+    var body: some View {
+        RootAppContentView(appStore: appStore)
+    }
+}
+
+private struct RootAppContentView: View {
+    @ObservedObject var appStore: AppStore
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var postLaunchMaintenanceTask: Task<Void, Never>?
+
+    var body: some View {
+        ContentView()
+            .environmentObject(appStore)
+            .task {
+                FoodBackgroundRefreshService.shared.appStore = appStore
+                Task(priority: .background) { @MainActor in
+                    // Let the first screen render before doing launch
+                    // maintenance. The launch path stays UI-first; heavier
+                    // network work is scheduled only after auth restoration.
+                    try? await Task.sleep(nanoseconds: 800_000_000)
+                    guard !Task.isCancelled else { return }
+                    FoodBackgroundRefreshService.shared.scheduleAppRefresh()
+                    await appStore.refreshNotificationAuthState()
+                    schedulePostLaunchMaintenanceIfReady()
                 }
-                // Cold-start case: when auth restoration hasn't finished by
-                // the time `.task` above runs, the drain inside it is a
-                // no-op (`session` is still nil). Run again the moment the
-                // session becomes available so the user doesn't have to
-                // wait until next launch for stuck photos to attach.
-                .onChange(of: appStore.isSessionRestored) { _, restored in
-                    guard restored else { return }
-                    Task { await appStore.drainDeferredImageUploads() }
+            }
+            // Cold-start case: when auth restoration hasn't finished by
+            // the time `.task` above runs, queue expensive network
+            // maintenance once the session is available.
+            .onChange(of: appStore.isSessionRestored) { _, restored in
+                guard restored else { return }
+                schedulePostLaunchMaintenanceIfReady()
+            }
+            .onChange(of: appStore.isOnboardingComplete) { _, _ in
+                schedulePostLaunchMaintenanceIfReady()
+            }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .background {
+                    FoodBackgroundRefreshService.shared.scheduleAppRefresh()
                 }
-                .onChange(of: scenePhase) { _, phase in
-                    if phase == .background {
-                        FoodBackgroundRefreshService.shared.scheduleAppRefresh()
-                    }
-                }
+            }
+    }
+
+    @MainActor
+    private func schedulePostLaunchMaintenanceIfReady() {
+        guard appStore.isSessionRestored, appStore.isOnboardingComplete else { return }
+        guard postLaunchMaintenanceTask == nil else { return }
+
+        postLaunchMaintenanceTask = Task(priority: .background) { @MainActor in
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
+            await appStore.reconcileNotifications()
+            await appStore.drainDeferredImageUploads()
+            postLaunchMaintenanceTask = nil
         }
     }
 }

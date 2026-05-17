@@ -171,6 +171,8 @@ struct VisualQARootView: View {
                     details: VisualQAFixtures.rowDetails,
                     isDeleteDisabled: false,
                     isDeleteConfirmationPresented: .constant(false),
+                    isSaveMealEnabled: true,
+                    onSaveMeal: {},
                     onDeleteTapped: {},
                     onConfirmDelete: {},
                     onCancelDelete: {},
@@ -184,6 +186,8 @@ struct VisualQARootView: View {
                     details: VisualQAFixtures.rowDetails,
                     isDeleteDisabled: false,
                     isDeleteConfirmationPresented: .constant(true),
+                    isSaveMealEnabled: true,
+                    onSaveMeal: {},
                     onDeleteTapped: {},
                     onConfirmDelete: {},
                     onCancelDelete: {},
@@ -636,7 +640,9 @@ private enum VisualQAFixtures {
         manualEditedFields: [],
         manualOriginalSources: [],
         imagePreviewData: foodImage.pngData(),
-        imageRef: nil
+        imageRef: nil,
+        loggedAt: "2026-05-15T18:00:00Z",
+        inputKind: "text"
     )
 
     static let flaggedLog = DayLogEntry(

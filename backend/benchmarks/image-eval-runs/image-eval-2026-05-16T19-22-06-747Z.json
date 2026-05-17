@@ -1,0 +1,266 @@
+{
+  "runAt": "2026-05-16T19:22:06.749Z",
+  "baseUrl": "https://food-app-backend-ifdx.onrender.com",
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "avgMs": 24624
+  },
+  "reports": [
+    {
+      "label": "dal baati thali no context",
+      "file": "/Users/shantanuodak/Downloads/IMG_5910.JPG",
+      "status": 200,
+      "ok": false,
+      "ms": 24624,
+      "model": "gemini-2.5-flash",
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.9,
+      "extractedText": "dal, green chutney, baati, churma, ba, potato sab",
+      "totals": {
+        "calories": 1240,
+        "protein": 33,
+        "carbs": 174,
+        "fat": 56
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [],
+        "visibleComponents": [
+          {
+            "name": "dal",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "green chutney",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": true
+          },
+          {
+            "name": "baati",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "churma",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "ba",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "potato sab",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 6,
+        "parsedItemCount": 6,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "dal",
+          "calories": 180,
+          "grams": 200,
+          "confidence": 0.9,
+          "needsClarification": true
+        },
+        {
+          "name": "green chutney",
+          "calories": 30,
+          "grams": 30,
+          "confidence": 0.9,
+          "needsClarification": true
+        },
+        {
+          "name": "baati",
+          "calories": 350,
+          "grams": 90,
+          "confidence": 0.85,
+          "needsClarification": true
+        },
+        {
+          "name": "churma",
+          "calories": 450,
+          "grams": 100,
+          "confidence": 0.85,
+          "needsClarification": true
+        },
+        {
+          "name": "bread",
+          "calories": 80,
+          "grams": 30,
+          "confidence": 0.4,
+          "needsClarification": true
+        },
+        {
+          "name": "potato sabzi",
+          "calories": 150,
+          "grams": 100,
+          "confidence": 0.9,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": false
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 2,
+        "calorieMin": 400,
+        "calorieMax": 1400,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 20000
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "original_concise_caption",
+          "ms": 1561.3,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "original_inventory_caption",
+          "ms": 1767,
+          "caption": "dal, baati"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "original_staples_caption",
+          "ms": 1777.2,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "original_sides_caption",
+          "ms": 2107.6,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_variant",
+          "ok": true,
+          "reason": "rotated_90",
+          "ms": 950.9,
+          "caption": "562870B -> 251912B"
+        },
+        {
+          "stage": "image_variant",
+          "ok": true,
+          "reason": "rotated_minus_90",
+          "ms": 971.4,
+          "caption": "562870B -> 252103B"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_90_staples_caption",
+          "ms": 1686.2,
+          "caption": "baati,"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_minus_90_inventory_caption",
+          "ms": 1839.6,
+          "caption": "green chutney, potato sab"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_90_inventory_caption",
+          "ms": 1873.6,
+          "caption": "churma, ba"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_90_sides_caption",
+          "ms": 1938.3,
+          "caption": "chur"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_minus_90_staples_caption",
+          "ms": 1945.6,
+          "caption": "green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_minus_90_sides_caption",
+          "ms": 1978.7,
+          "caption": "green chutney,"
+        },
+        {
+          "stage": "image_caption_ensemble_v2",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "merged_caption_inventory",
+          "ms": 0,
+          "items": 6,
+          "caption": "dal, green chutney, baati, churma, ba, potato sab"
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "ms": 18659.4,
+          "confidence": 0.9,
+          "items": 6,
+          "caption": "dal, green chutney, baati, churma, ba, potato sab"
+        }
+      ]
+    }
+  ]
+}

@@ -49,6 +49,7 @@ struct HomeProfileBentoScreen: View {
                         }
                         CalorieHeroTile(data: heroData)
                         LoggingTipsTile()
+                        SavedMealsTile()
                         WidgetSetupTile()
                         HStack(alignment: .top, spacing: 12) {
                             NavigationLink {
@@ -570,13 +571,13 @@ private struct LoggingTipsTile: View {
     private var iconStack: some View {
         ZStack {
             Circle()
-                .fill(Color(red: 1.0, green: 0.878, blue: 0.761))
+                .fill(BentoTokens.brandGradient)
             Image(systemName: "sparkle.magnifyingglass")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(BentoTokens.orange700)
+                .foregroundStyle(.white)
         }
         .frame(width: 42, height: 42)
-        .shadow(color: BentoTokens.orange700.opacity(0.12), radius: 8, y: 4)
+        .shadow(color: BentoTokens.orange700.opacity(0.18), radius: 8, y: 4)
     }
 
     private var clueChips: some View {
@@ -594,6 +595,75 @@ private struct LoggingTipsTile: View {
                     }
             }
         }
+    }
+}
+
+/// Saved meals — management entry for repeat foods. Logging shortcuts stay in
+/// the logging flow; this card is for reviewing and organizing.
+private struct SavedMealsTile: View {
+    var body: some View {
+        BentoTappableTile(
+            background: LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.957, blue: 0.902),
+                    Color(red: 1.0, green: 0.906, blue: 0.812)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            ),
+            border: Color(red: 1.0, green: 0.765, blue: 0.561)
+        ) {
+            SavedMealsScreen()
+        } label: {
+            HStack(alignment: .center, spacing: 14) {
+                ZStack {
+                    Circle()
+                        .fill(BentoTokens.brandGradient)
+                    Image(systemName: "bookmark.fill")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                }
+                .frame(width: 42, height: 42)
+                .shadow(color: BentoTokens.orange700.opacity(0.18), radius: 8, y: 4)
+                .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Saved Meals")
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(BentoTokens.gray900)
+
+                    Text("Keep repeat meals ready without retyping.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(BentoTokens.gray700)
+                        .lineLimit(2)
+
+                    HStack(spacing: 6) {
+                        savedMealChip("Favorites")
+                        savedMealChip("Collections")
+                        savedMealChip("Repeat meals")
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Saved Meals. Keep repeat meals ready without retyping.")
+            .accessibilityHint("Opens saved meals")
+        }
+    }
+
+    private func savedMealChip(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 10, weight: .bold))
+            .foregroundStyle(BentoTokens.orange700)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(Color.white.opacity(0.6), in: Capsule())
+            .overlay {
+                Capsule()
+                    .stroke(Color(red: 1.0, green: 0.765, blue: 0.561).opacity(0.9), lineWidth: 0.75)
+            }
     }
 }
 
@@ -646,13 +716,13 @@ private struct WidgetSetupTile: View {
     private var widgetStack: some View {
         ZStack {
             Circle()
-                .fill(Color(red: 0.894, green: 0.949, blue: 1.0))
+                .fill(BentoTokens.brandGradient)
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(BentoTokens.blue700)
+                .foregroundStyle(.white)
         }
         .frame(width: 42, height: 42)
-        .shadow(color: BentoTokens.blue700.opacity(0.10), radius: 8, y: 4)
+        .shadow(color: BentoTokens.orange700.opacity(0.18), radius: 8, y: 4)
     }
 
     private func resourceChip(_ title: String) -> some View {
@@ -743,12 +813,13 @@ private struct NotificationReminderTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack {
                     Circle()
-                        .fill(Color(red: 0.894, green: 0.949, blue: 1.0))
+                        .fill(BentoTokens.brandGradient)
                     Image(systemName: "bell.badge.fill")
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(Color(red: 0.094, green: 0.459, blue: 0.918))
+                        .foregroundStyle(.white)
                 }
                 .frame(width: 38, height: 38)
+                .shadow(color: BentoTokens.orange700.opacity(0.22), radius: 6, y: 3)
                 .padding(.bottom, 12)
                 .accessibilityHidden(true)
 

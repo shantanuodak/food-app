@@ -1,0 +1,161 @@
+{
+  "runAt": "2026-05-16T19:12:28.545Z",
+  "baseUrl": "https://food-app-backend-ifdx.onrender.com",
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "avgMs": 12159
+  },
+  "reports": [
+    {
+      "label": "dal baati thali no context",
+      "file": "/Users/shantanuodak/Downloads/IMG_5910.JPG",
+      "status": 200,
+      "ok": false,
+      "ms": 12159,
+      "model": "gemini-2.5-flash",
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.7,
+      "extractedText": "dal, green chutney, green",
+      "totals": {
+        "calories": 270,
+        "protein": 20,
+        "carbs": 46,
+        "fat": 1.9
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [],
+        "visibleComponents": [
+          {
+            "name": "dal",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "green chutney",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": true
+          },
+          {
+            "name": "green",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 3,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "dal",
+          "calories": 230,
+          "grams": 200,
+          "confidence": 0.9,
+          "needsClarification": true
+        },
+        {
+          "name": "green chutney",
+          "calories": 25,
+          "grams": 30,
+          "confidence": 0.8,
+          "needsClarification": true
+        },
+        {
+          "name": "green",
+          "calories": 15,
+          "grams": 30,
+          "confidence": 0.5,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "minItems": true,
+        "requiredKeywords": false,
+        "caloriesInRange": false,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [
+        "baati"
+      ],
+      "expected": {
+        "minItems": 2,
+        "calorieMin": 400,
+        "calorieMax": 1400,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 20000
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "staples_caption",
+          "ms": 1436.2,
+          "caption": "dal, green"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "concise_caption",
+          "ms": 1554.6,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "sides_caption",
+          "ms": 1619.1,
+          "caption": "dal,"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "inventory_caption",
+          "ms": 1750.9,
+          "caption": "dal, green chutney,"
+        },
+        {
+          "stage": "image_caption_ensemble_v2",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "merged_caption_inventory",
+          "ms": 0,
+          "items": 3,
+          "caption": "dal, green chutney, green"
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "ms": 9825.7,
+          "confidence": 0.7,
+          "items": 3,
+          "caption": "dal, green chutney, green"
+        }
+      ]
+    }
+  ]
+}

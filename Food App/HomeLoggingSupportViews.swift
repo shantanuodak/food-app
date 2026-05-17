@@ -52,6 +52,8 @@ struct RowCalorieDetails: Identifiable {
     let manualOriginalSources: [String]
     let imagePreviewData: Data?
     let imageRef: String?
+    let loggedAt: String?
+    let inputKind: String?
 }
 
 struct PreparedImagePayload {

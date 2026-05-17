@@ -60,6 +60,14 @@ enum AuthServiceError: LocalizedError {
 }
 
 final class AuthService {
+    private enum RestoreSessionTimeout: Error {
+        case timedOut
+    }
+
+    private enum StartupRecovery {
+        static let sessionRestoreTimeout: TimeInterval = 8
+    }
+
     private let sessionStore: AuthSessionStore
     private let fallbackToken: String?
     private let googleClientID: String?
@@ -121,24 +129,50 @@ final class AuthService {
         }
 
         do {
-            if sessionNeedsRefresh(storedSession) {
-                _ = try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
-            } else {
-                _ = try await restoreSupabaseSession(
-                    accessToken: storedSession.accessToken,
-                    refreshToken: refreshToken,
-                    metadata: storedSession
-                )
+            try await runWithStartupTimeout {
+                if self.sessionNeedsRefresh(storedSession) {
+                    _ = try await self.refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
+                } else {
+                    _ = try await self.restoreSupabaseSession(
+                        accessToken: storedSession.accessToken,
+                        refreshToken: refreshToken,
+                        metadata: storedSession
+                    )
+                }
             }
         } catch {
+            if error is RestoreSessionTimeout {
+                NSLog("[AuthService] Timed out restoring session on launch; continuing with stored token.")
+                return
+            }
             guard isInvalidSessionRecoveryError(error) else { return }
             do {
-                _ = try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
+                try await runWithStartupTimeout {
+                    _ = try await self.refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
+                }
             } catch {
+                if error is RestoreSessionTimeout {
+                    NSLog("[AuthService] Timed out refreshing session on launch; continuing with stored token.")
+                    return
+                }
                 if isInvalidSessionRecoveryError(error) {
                     await clearStoredSession()
                 }
             }
+        }
+    }
+
+    private func runWithStartupTimeout(_ operation: @escaping () async throws -> Void) async throws {
+        try await withThrowingTaskGroup(of: Void.self) { group in
+            group.addTask {
+                try await operation()
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(StartupRecovery.sessionRestoreTimeout * 1_000_000_000))
+                throw RestoreSessionTimeout.timedOut
+            }
+            try await group.next()
+            group.cancelAll()
         }
     }
 

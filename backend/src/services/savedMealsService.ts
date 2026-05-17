@@ -262,6 +262,8 @@ export async function createSavedMeal(input: {
       );
       if (existing.rows[0]) {
         collection = existing.rows[0];
+      } else {
+        throw new ApiError(404, 'SAVED_MEAL_COLLECTION_NOT_FOUND', 'Saved meal collection not found');
       }
     } else if (input.collectionName?.trim()) {
       const created = await client.query<{ id: string; name: string }>(

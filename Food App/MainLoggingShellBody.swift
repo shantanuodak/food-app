@@ -215,12 +215,14 @@ extension MainLoggingShellView {
                     guard !presentMindfulPauseIfNeeded(for: .voice) else { return }
                     handleVoiceModeTapped()
                 }
+                autoPresentHomeTutorialIfNeeded()
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
                 guard ready else { return }
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
                 scheduleSecondaryHomePreloads()
+                autoPresentHomeTutorialIfNeeded()
             }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
@@ -305,6 +307,16 @@ extension MainLoggingShellView {
             .sheet(isPresented: $isDetailsDrawerPresented) {
                 detailsDrawer
             }
+            .sheet(isPresented: $isSaveMealSheetPresented) {
+                if let saveMealDraft {
+                    SaveMealSheet(draft: saveMealDraft) { meal in
+                        saveSuccessMessage = "Saved \(meal.name)"
+                    }
+                    .environmentObject(appStore)
+                    .presentationDetents([.medium, .large])
+                    .presentationDragIndicator(.visible)
+                }
+            }
             .sheet(isPresented: $isImagePickerPresented) {
                 HomeImagePicker(
                     sourceType: imagePickerSourceType,
@@ -386,25 +398,7 @@ extension MainLoggingShellView {
                 cameraDrawerImage = nil
                 cameraDrawerContextNote = ""
             }) {
-                CameraResultDrawerView(
-                    state: cameraDrawerState,
-                    contextNote: $cameraDrawerContextNote,
-                    onLogIt: { editedItems, editedTotals in
-                        handleDrawerLogIt(editedItems: editedItems, editedTotals: editedTotals)
-                    },
-                    onDiscard: {
-                        isCameraAnalysisSheetPresented = false
-                    },
-                    onRetry: {
-                        if let image = cameraDrawerImage {
-                            cameraDrawerState = .analyzing(image)
-                            Task { await parseAndUpdateDrawer(image, contextNote: cameraDrawerContextNote) }
-                        }
-                    }
-                )
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .presentationCornerRadius(24)
+                cameraAnalysisSheetContent
             }
             .overlay(alignment: .bottom) {
                 if isVoiceOverlayPresented {
@@ -491,8 +485,30 @@ extension MainLoggingShellView {
                 cancelVoiceCapture()
             }
         }
-}
+    }
 
+    private var cameraAnalysisSheetContent: some View {
+        CameraResultDrawerView(
+            state: cameraDrawerState,
+            parseResult: parseResult,
+            contextNote: $cameraDrawerContextNote,
+            onLogIt: { editedItems, editedTotals in
+                handleDrawerLogIt(editedItems: editedItems, editedTotals: editedTotals)
+            },
+            onDiscard: {
+                isCameraAnalysisSheetPresented = false
+            },
+            onRetry: {
+                if let image = cameraDrawerImage {
+                    cameraDrawerState = .analyzing(image)
+                    Task { await parseAndUpdateDrawer(image, contextNote: cameraDrawerContextNote) }
+                }
+            }
+        )
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
+        .presentationCornerRadius(24)
+    }
 }
 
 private struct MainLoggingNotificationRoutingModifier: ViewModifier {

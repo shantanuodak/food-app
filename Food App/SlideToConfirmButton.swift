@@ -35,6 +35,7 @@ import UIKit
 /// See `docs/UI_COMPONENTS.md` for the full design spec.
 struct SlideToConfirmButton: View {
     let label: String
+    var isProcessing: Bool = false
     let onConfirm: () -> Void
 
     /// Track height in points. Default 60 pt matches the Onboarding primary
@@ -71,7 +72,7 @@ struct SlideToConfirmButton: View {
 
                 // Label — fades as the thumb travels rightward so the
                 // user's commitment becomes the dominant visual signal.
-                Text(isConfirmed ? "Starting…" : label)
+                Text(isConfirmed || isProcessing ? "Starting..." : label)
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(.white.opacity(1.0 - progress * 0.8))
                     .frame(maxWidth: .infinity)
@@ -102,7 +103,18 @@ struct SlideToConfirmButton: View {
             // Tap-equivalent for VoiceOver users.
             guard isEnabled, !isConfirmed else { return }
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            isConfirmed = true
             onConfirm()
+        }
+        .onChange(of: isProcessing) { _, processing in
+            guard !processing else { return }
+            isConfirmed = false
+            dragStartOffset = nil
+            withAnimation(reduceMotion
+                          ? .linear(duration: 0.12)
+                          : .spring(response: 0.35, dampingFraction: 0.85)) {
+                dragOffset = 0
+            }
         }
     }
 

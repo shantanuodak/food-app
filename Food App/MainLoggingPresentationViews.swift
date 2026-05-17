@@ -37,6 +37,8 @@ struct MainLoggingDetailsDrawer: View {
     let parseResult: ParseLogResponse?
     let totals: NutritionTotals
     let items: [ParsedFoodItem]
+    let isSaveMealEnabled: Bool
+    let onSaveMeal: () -> Void
     let onManualAddBackToText: () -> Void
     let onItemQuantityChange: (Int, Double) -> Void
     let onRecalculate: () -> Void
@@ -48,6 +50,21 @@ struct MainLoggingDetailsDrawer: View {
                     MainLoggingManualAddDrawerContent(onBackToText: onManualAddBackToText)
                         .padding()
                 } else if let parseResult {
+                    HStack {
+                        Button(action: onSaveMeal) {
+                            Label("Save meal", systemImage: "bookmark")
+                                .font(.system(size: 14, weight: .semibold))
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(Color(red: 0.902, green: 0.361, blue: 0.102))
+                        .disabled(!isSaveMealEnabled)
+
+                        Spacer()
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+                    .padding(.bottom, 2)
+
                     LoggingResultDrawerBody(
                         foodName: MainLoggingDrawerDisplayText.foodName(from: parseResult),
                         totals: totals,
@@ -94,6 +111,8 @@ struct MainLoggingRowCalorieDetailsSheet: View {
     let details: RowCalorieDetails
     let isDeleteDisabled: Bool
     @Binding var isDeleteConfirmationPresented: Bool
+    let isSaveMealEnabled: Bool
+    let onSaveMeal: () -> Void
     let onDeleteTapped: () -> Void
     let onConfirmDelete: () -> Void
     let onCancelDelete: () -> Void
@@ -136,6 +155,12 @@ struct MainLoggingRowCalorieDetailsSheet: View {
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(action: onSaveMeal) {
+                        Label("Save meal", systemImage: "bookmark")
+                    }
+                    .disabled(!isSaveMealEnabled)
+                }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L10n.doneButton, action: onDone)
                 }

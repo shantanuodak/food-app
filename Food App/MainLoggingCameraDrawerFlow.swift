@@ -185,7 +185,8 @@ extension MainLoggingShellView {
                 imageData: prepared.uploadData,
                 mimeType: prepared.mimeType,
                 loggedAt: HomeLoggingDateUtils.loggedAtFormatter.string(from: draftLoggedAt ?? draftTimestampForSelectedDate()),
-                contextNote: contextNote
+                contextNote: contextNote,
+                clientAttemptId: clientAttemptId
             )
             let requestMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
             let totalMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)

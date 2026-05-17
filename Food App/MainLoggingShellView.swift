@@ -85,6 +85,8 @@ struct MainLoggingShellView: View {
     @State var lastAutoSavedContentFingerprint: String?
     @State var inputMode: HomeInputMode = .text
     @State var detailsDrawerMode: DetailsDrawerMode = .full
+    @State var isSaveMealSheetPresented = false
+    @State var saveMealDraft: SaveLogRequest?
     @State var selectedRowDetails: RowCalorieDetails?
     @State var rowDetailsPendingDeleteID: UUID?
     @State var isRowDetailsDeleteConfirmationPresented = false
@@ -113,6 +115,7 @@ struct MainLoggingShellView: View {
     @State var isProgressChartsPresented = false
     @State var isLoggingTipsPresented = false
     @State var isHomeTutorialPresented = false
+    @State var hasEvaluatedAutoHomeTutorialPresentation = false
     @State var homeTutorialStep: HomeFirstRunTutorialStep = .composer
     @State var homeTutorialIgnoredEstimatedRowIDs: Set<UUID> = []
     @State var currentFoodLogStreak: Int?
@@ -139,6 +142,7 @@ struct MainLoggingShellView: View {
 
     @State var autoSavedParseIDs: Set<String> = []
     let defaults = UserDefaults.standard
+    let homeTutorialShownKey = "home.first_run_tutorial.shown.v1"
     let autoSaveDelayNs: UInt64 = 1_500_000_000
     let saveAttemptTelemetry = SaveAttemptTelemetry.shared
 

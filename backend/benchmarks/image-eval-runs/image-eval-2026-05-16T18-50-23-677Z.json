@@ -1,0 +1,172 @@
+{
+  "runAt": "2026-05-16T18:50:23.678Z",
+  "baseUrl": "https://food-app-backend-ifdx.onrender.com",
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "avgMs": 39087
+  },
+  "reports": [
+    {
+      "label": "dal baati thali",
+      "file": "/Users/shantanuodak/Downloads/IMG_5910.JPG",
+      "status": 200,
+      "ok": false,
+      "ms": 39087,
+      "model": "gemini-2.5-flash",
+      "orchestratorVersion": "v1",
+      "fallbackUsed": true,
+      "confidence": 0.8,
+      "extractedText": "Indian thali with dal, bati or baati, potato sabzi, green chutney, onions, and dry chutney or powder.",
+      "totals": {
+        "calories": 876,
+        "protein": 32.4,
+        "carbs": 124,
+        "fat": 31
+      },
+      "coverage": null,
+      "items": [
+        {
+          "name": "Dal",
+          "calories": 230,
+          "grams": 240,
+          "confidence": 0.9,
+          "needsClarification": true
+        },
+        {
+          "name": "Baati",
+          "calories": 350,
+          "grams": 100,
+          "confidence": 0.9,
+          "needsClarification": true
+        },
+        {
+          "name": "Potato Sabzi",
+          "calories": 180,
+          "grams": 150,
+          "confidence": 0.85,
+          "needsClarification": true
+        },
+        {
+          "name": "Green Chutney",
+          "calories": 30,
+          "grams": 30,
+          "confidence": 0.8,
+          "needsClarification": true
+        },
+        {
+          "name": "Onions",
+          "calories": 16,
+          "grams": 40,
+          "confidence": 0.9,
+          "needsClarification": true
+        },
+        {
+          "name": "Dry Chutney Powder",
+          "calories": 70,
+          "grams": 15,
+          "confidence": 0.75,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": false
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 4,
+        "calorieMin": 500,
+        "calorieMax": 1400,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 20000
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 12669.8
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "falling_back_to_v1",
+          "ms": 0
+        },
+        {
+          "stage": "image_structured_primary",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "invalid_or_empty_nutrition_json",
+          "ms": 5928.6
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "concise_caption",
+          "ms": 1617.7,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "caption_too_sparse_for_multi_food_context",
+          "ms": 0,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "inventory_caption",
+          "ms": 1767.3,
+          "caption": "dal, green chutney,"
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "caption_too_sparse_for_multi_food_context",
+          "ms": 0,
+          "caption": "dal, green chutney,"
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "gemini_no_response",
+          "ms": 2231.3
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "context",
+          "reason": "using_multi_food_context_after_sparse_caption",
+          "ms": 0,
+          "caption": "Indian thali with dal, bati or baati, potato sabzi, green chutney, onions, and dry chutney or powder."
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "ms": 14369.8,
+          "confidence": 0.8,
+          "items": 6,
+          "caption": "Indian thali with dal, bati or baati, potato sabzi, green chutney, onions, and dry chutney or powder."
+        }
+      ]
+    }
+  ]
+}

@@ -8,6 +8,10 @@ extension MainLoggingShellView {
             parseResult: parseResult,
             totals: displayedTotals,
             items: displayedDrawerItems,
+            isSaveMealEnabled: buildSaveDraftRequest() != nil,
+            onSaveMeal: {
+                presentSaveMealSheet()
+            },
             onManualAddBackToText: {
                 inputMode = .text
                 detailsDrawerMode = .full
@@ -23,6 +27,15 @@ extension MainLoggingShellView {
         )
     }
 
+    func presentSaveMealSheet() {
+        guard let draft = buildSaveDraftRequest() else { return }
+        saveMealDraft = draft
+        isDetailsDrawerPresented = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            isSaveMealSheetPresented = true
+        }
+    }
+
     @ViewBuilder
     func rowCalorieDetailsSheet(_ details: RowCalorieDetails) -> some View {
         let liveDetails = liveRowCalorieDetails(for: details.id, fallback: details)
@@ -30,6 +43,10 @@ extension MainLoggingShellView {
             details: liveDetails,
             isDeleteDisabled: isRowDetailsDeleteDisabled(rowID: liveDetails.id),
             isDeleteConfirmationPresented: $isRowDetailsDeleteConfirmationPresented,
+            isSaveMealEnabled: buildSaveDraftRequest(for: liveDetails) != nil,
+            onSaveMeal: {
+                presentSaveMealSheet(for: liveDetails)
+            },
             onDeleteTapped: {
                 rowDetailsPendingDeleteID = liveDetails.id
                 isRowDetailsDeleteConfirmationPresented = true
@@ -53,6 +70,71 @@ extension MainLoggingShellView {
                     quantity: quantity
                 )
             }
+        )
+    }
+
+    func presentSaveMealSheet(for details: RowCalorieDetails) {
+        guard let draft = buildSaveDraftRequest(for: details) else { return }
+        saveMealDraft = draft
+        selectedRowDetails = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+            isSaveMealSheetPresented = true
+        }
+    }
+
+    func buildSaveDraftRequest(for details: RowCalorieDetails) -> SaveLogRequest? {
+        let sourceItems = details.parsedItems
+        guard !sourceItems.isEmpty else { return nil }
+
+        let saveItems = sourceItems.map { item in
+            SaveParsedFoodItem(
+                name: item.name,
+                quantity: item.amount ?? item.quantity,
+                amount: item.amount ?? item.quantity,
+                unit: item.unitNormalized ?? item.unit,
+                unitNormalized: item.unitNormalized ?? item.unit,
+                grams: item.grams,
+                gramsPerUnit: item.gramsPerUnit,
+                calories: item.calories,
+                protein: item.protein,
+                carbs: item.carbs,
+                fat: item.fat,
+                nutritionSourceId: item.nutritionSourceId,
+                originalNutritionSourceId: item.originalNutritionSourceId,
+                sourceFamily: item.sourceFamily,
+                matchConfidence: item.matchConfidence,
+                needsClarification: false,
+                manualOverride: (item.manualOverride == true)
+                    ? SaveManualOverride(enabled: true, reason: nil, editedFields: [])
+                    : nil
+            )
+        }
+
+        let totals = NutritionTotals(
+            calories: HomeLoggingDisplayText.roundOneDecimal(saveItems.reduce(0) { $0 + $1.calories }),
+            protein: HomeLoggingDisplayText.roundOneDecimal(saveItems.reduce(0) { $0 + $1.protein }),
+            carbs: HomeLoggingDisplayText.roundOneDecimal(saveItems.reduce(0) { $0 + $1.carbs }),
+            fat: HomeLoggingDisplayText.roundOneDecimal(saveItems.reduce(0) { $0 + $1.fat })
+        )
+
+        let loggedAt = details.loggedAt ?? ISO8601DateFormatter().string(from: Date())
+
+        return SaveLogRequest(
+            parseRequestId: "row-details-\(details.id.uuidString.lowercased())",
+            parseVersion: "saved-meal-row-v1",
+            parsedLog: SaveLogBody(
+                rawText: details.rowText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? details.displayName
+                    : details.rowText,
+                loggedAt: loggedAt,
+                inputKind: details.inputKind,
+                imageRef: details.imageRef,
+                confidence: details.primaryConfidence,
+                totals: totals,
+                sourcesUsed: nil,
+                assumptions: nil,
+                items: saveItems
+            )
         )
     }
 
@@ -221,7 +303,9 @@ extension MainLoggingShellView {
             manualEditedFields: overridePreview.editedFields,
             manualOriginalSources: overridePreview.originalSources,
             imagePreviewData: row.imagePreviewData,
-            imageRef: row.imageRef
+            imageRef: row.imageRef,
+            loggedAt: row.serverLoggedAt,
+            inputKind: row.imageRef == nil ? "text" : "image"
         )
     }
 

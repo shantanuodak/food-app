@@ -1,0 +1,217 @@
+{
+  "runAt": "2026-05-16T19:29:34.998Z",
+  "baseUrl": "https://food-app-backend-ifdx.onrender.com",
+  "summary": {
+    "total": 1,
+    "passed": 1,
+    "failed": 0,
+    "avgMs": 4401
+  },
+  "reports": [
+    {
+      "label": "rice dal thali old image",
+      "file": "/Users/shantanuodak/Pictures/Photos Library.photoslibrary/resources/derivatives/A/AB94676C-8482-4E76-963A-CC20EE5A2C07_1_105_c.jpeg",
+      "status": 200,
+      "ok": true,
+      "ms": 4401,
+      "model": "gemini-2.5-flash",
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.72,
+      "extractedText": "white rice, dal, white",
+      "totals": {
+        "calories": 445,
+        "protein": 18.3,
+        "carbs": 82.5,
+        "fat": 6.4
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [],
+        "visibleComponents": [
+          {
+            "name": "white rice",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "dal",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "white",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 2,
+        "score": 0.67,
+        "warnings": [
+          "Some visible foods may need review because the image inventory was assembled from fast caption probes."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "White rice",
+          "calories": 205,
+          "grams": 158,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Dal",
+          "calories": 240,
+          "grams": 240,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 2,
+        "calorieMin": 400,
+        "calorieMax": 1200,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 20000
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "original_staples_caption",
+          "ms": 1696.1,
+          "caption": "white rice, dal"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "original_sides_caption",
+          "ms": 1762.7,
+          "caption": "white"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "original_concise_caption",
+          "ms": 1792.5,
+          "caption": "white rice"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "original_inventory_caption",
+          "ms": 1813.6,
+          "caption": "white rice, dal,"
+        },
+        {
+          "stage": "image_variant",
+          "ok": true,
+          "reason": "rotated_minus_90",
+          "ms": 334.7,
+          "caption": "238302B -> 81322B"
+        },
+        {
+          "stage": "image_variant",
+          "ok": true,
+          "reason": "rotated_90",
+          "ms": 337.3,
+          "caption": "238302B -> 81268B"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_90_sides_caption",
+          "ms": 1509.8,
+          "caption": "dal"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_minus_90_sides_caption",
+          "ms": 1507,
+          "caption": "white rice,"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_minus_90_staples_caption",
+          "ms": 1552.3,
+          "caption": "white rice, dal"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_90_staples_caption",
+          "ms": 1745.4,
+          "caption": "dal, white rice"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_minus_90_inventory_caption",
+          "ms": 1713.3,
+          "caption": "dal, white"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "rotated_90_inventory_caption",
+          "ms": 1865.1,
+          "caption": "dal, white rice,"
+        },
+        {
+          "stage": "image_caption_ensemble_v2",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "merged_caption_inventory",
+          "ms": 0,
+          "items": 3,
+          "caption": "white rice, dal, white"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "common_food_inventory_estimate",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 2,
+          "caption": "white rice, dal, white"
+        }
+      ]
+    }
+  ]
+}

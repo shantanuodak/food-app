@@ -207,6 +207,28 @@ struct ParseImageMeta: Decodable {
     let width: Int?
     let height: Int?
     let bytes: Int
+    let orchestratorVersion: String?
+    let coverage: ParseImageCoverage?
+}
+
+struct ParseImageCoverage: Decodable {
+    let imageType: String
+    let cuisineHints: [String]
+    let visibleComponents: [ParseImageVisibleComponent]
+    let visibleComponentCount: Int
+    let parsedItemCount: Int
+    let score: Double
+    let warnings: [String]
+    let partial: Bool
+}
+
+struct ParseImageVisibleComponent: Decodable {
+    let name: String
+    let category: String
+    let zone: String
+    let portionHint: String
+    let confidence: Double
+    let isSmallSide: Bool
 }
 
 struct ParseCacheDebugInfo: Decodable {
@@ -401,6 +423,56 @@ struct SaveLogResponse: Decodable {
     let logId: String
     let status: String
     let healthSync: HealthSyncResponse?
+}
+
+struct SavedMealsResponse: Decodable {
+    let collections: [SavedMealCollection]
+    let meals: [SavedMeal]
+}
+
+struct SavedMealCollection: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let mealCount: Int
+    let createdAt: String
+    let updatedAt: String
+}
+
+struct SavedMeal: Codable, Identifiable {
+    let id: String
+    let collectionId: String
+    let collectionName: String
+    let name: String
+    let rawText: String
+    let inputKind: String?
+    let totals: NutritionTotals
+    let itemCount: Int
+    let mealPayload: SaveLogBody
+    let createdAt: String
+    let updatedAt: String
+}
+
+struct CreateSavedMealCollectionRequest: Encodable {
+    let name: String
+}
+
+struct CreateSavedMealCollectionResponse: Decodable {
+    let collection: SavedMealCollection
+}
+
+struct CreateSavedMealRequest: Encodable {
+    let name: String
+    let collectionId: String?
+    let collectionName: String?
+    let mealPayload: SaveLogBody
+}
+
+struct CreateSavedMealResponse: Decodable {
+    let meal: SavedMeal
+}
+
+struct LogSavedMealRequest: Encodable {
+    let loggedAt: String
 }
 
 struct DeleteLogResponse: Decodable {

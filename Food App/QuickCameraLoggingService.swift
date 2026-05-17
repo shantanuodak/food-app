@@ -54,7 +54,8 @@ enum QuickCameraLoggingService {
             let response = try await apiClient.parseImageLog(
                 imageData: prepared.uploadData,
                 mimeType: prepared.mimeType,
-                loggedAt: loggedAt
+                loggedAt: loggedAt,
+                clientAttemptId: clientAttemptId
             )
             let requestMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
             let totalMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)

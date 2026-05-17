@@ -15,6 +15,7 @@ backend/.env.*
 dist/
 .codex_build/
 backend/benchmarks/eval-runs/
+artifacts/
 
 # Xcode user/build artifacts
 DerivedData/

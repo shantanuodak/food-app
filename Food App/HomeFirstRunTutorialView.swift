@@ -68,6 +68,19 @@ extension View {
 }
 
 extension MainLoggingShellView {
+    func autoPresentHomeTutorialIfNeeded() {
+        guard !hasEvaluatedAutoHomeTutorialPresentation else { return }
+        hasEvaluatedAutoHomeTutorialPresentation = true
+
+        guard appStore.isOnboardingComplete else { return }
+        guard !defaults.bool(forKey: homeTutorialShownKey) else { return }
+        guard !isHomeTutorialPresented else { return }
+        guard selectedCameraSource == nil, !isQuickCameraCaptureActive, !isVoiceOverlayPresented else { return }
+
+        defaults.set(true, forKey: homeTutorialShownKey)
+        startHomeTutorialDebug()
+    }
+
     var homeTutorialEstimatedFoodSignature: String {
         inputRows
             .filter { !$0.isSaved && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }

@@ -20,6 +20,7 @@ enum CameraDrawerState {
 
 struct CameraResultDrawerView: View {
     let state: CameraDrawerState
+    let parseResult: ParseLogResponse?
     @Binding var contextNote: String
     let onLogIt: ([ParsedFoodItem], NutritionTotals) -> Void
     let onDiscard: () -> Void
@@ -37,6 +38,22 @@ struct CameraResultDrawerView: View {
         "Estimating portions",
         "Calculating nutrition"
     ]
+
+    init(
+        state: CameraDrawerState,
+        parseResult: ParseLogResponse? = nil,
+        contextNote: Binding<String>,
+        onLogIt: @escaping ([ParsedFoodItem], NutritionTotals) -> Void,
+        onDiscard: @escaping () -> Void,
+        onRetry: @escaping () -> Void
+    ) {
+        self.state = state
+        self.parseResult = parseResult
+        self._contextNote = contextNote
+        self.onLogIt = onLogIt
+        self.onDiscard = onDiscard
+        self.onRetry = onRetry
+    }
 
     var body: some View {
         ScrollView {
@@ -209,7 +226,7 @@ struct CameraResultDrawerView: View {
     private func parsedContent(image: UIImage, items: [ParsedFoodItem], totals: NutritionTotals) -> some View {
         let displayItems = displayedPhotoItems(fallback: items)
         let displayTotals = editablePhotoItems.isEmpty ? totals : totalsForItems(displayItems)
-        let needsReview = reviewRecommended(items: displayItems)
+        let needsReview = reviewRecommended(items: displayItems, parseResult: parseResult)
 
         return VStack(alignment: .leading, spacing: 0) {
             // Hero image with re-parse + close icons
@@ -251,7 +268,7 @@ struct CameraResultDrawerView: View {
             .padding(.top, 28)
 
             if needsReview {
-                reviewRecommendedCard(items: displayItems)
+                reviewRecommendedCard(items: displayItems, parseResult: parseResult)
                     .padding(.horizontal, 20)
                     .padding(.top, 16)
             }
@@ -260,7 +277,7 @@ struct CameraResultDrawerView: View {
                 foodName: foodDisplayName(items: displayItems),
                 totals: displayTotals,
                 items: displayItems,
-                thoughtProcess: cameraThoughtProcess(items: displayItems),
+                thoughtProcess: cameraThoughtProcess(items: displayItems, parseResult: parseResult),
                 mode: .photoReview,
                 onItemQuantityChange: { itemOffset, quantity in
                     updatePhotoItemQuantity(itemOffset: itemOffset, quantity: quantity, fallbackItems: items)
@@ -374,16 +391,29 @@ struct CameraResultDrawerView: View {
         editablePhotoItems[itemOffset].updateQuantity(quantity)
     }
 
-    private func reviewRecommended(items: [ParsedFoodItem]) -> Bool {
-        items.contains { item in
+    private func reviewRecommended(items: [ParsedFoodItem], parseResult: ParseLogResponse?) -> Bool {
+        if parseResult?.needsClarification == true {
+            return true
+        }
+        if parseResult?.imageMeta?.coverage?.partial == true {
+            return true
+        }
+        return items.contains { item in
             item.needsClarification == true || item.matchConfidence < 0.7
         }
     }
 
-    private func reviewRecommendedCard(items: [ParsedFoodItem]) -> some View {
-        let question = items.count > 1
-            ? "Food App found visible foods, but portions may need a quick check before logging."
-            : "Food App found \(items.first?.name ?? "this food"), but the portion may need a quick check before logging."
+    private func reviewRecommendedCard(items: [ParsedFoodItem], parseResult: ParseLogResponse?) -> some View {
+        let backendPrompt = parseResult?.clarificationQuestions.first?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let coverage = parseResult?.imageMeta?.coverage
+        let coveragePrompt: String? = {
+            guard let coverage, coverage.partial else { return nil }
+            return "I found \(coverage.parsedItemCount) of about \(coverage.visibleComponentCount) visible foods. Give it a quick look before logging."
+        }()
+        let fallbackPrompt = items.count > 1
+            ? "I found the visible foods, but a quick portion check will make this sharper."
+            : "I found \(items.first?.name ?? "this food"), but the portion may need a quick check before logging."
+        let question = backendPrompt?.isEmpty == false ? backendPrompt! : (coveragePrompt ?? fallbackPrompt)
 
         return HStack(alignment: .top, spacing: 12) {
             Image(systemName: "sparkles")
@@ -437,7 +467,15 @@ struct CameraResultDrawerView: View {
         }
     }
 
-    private func cameraThoughtProcess(items: [ParsedFoodItem]) -> String {
+    private func cameraThoughtProcess(items: [ParsedFoodItem], parseResult: ParseLogResponse?) -> String {
+        if let coverage = parseResult?.imageMeta?.coverage, coverage.partial {
+            let names = items.prefix(3).map(\.name)
+            let preview = names.isEmpty
+                ? "the foods it could identify"
+                : names.joined(separator: ", ")
+            let warning = coverage.warnings.first.map { " \($0)" } ?? ""
+            return "Food App identified \(preview), but this photo may include more visible items than the estimate covers.\(warning) Review the detected foods or add a note if anything is missing."
+        }
         if items.count > 1 {
             let names = items.prefix(3).map(\.name)
             let preview = names.count <= 2

@@ -156,8 +156,15 @@ final class APIClient {
         throw APIClientError.networkFailure("Stream ended without done event")
     }
 
-    func parseImageLog(imageData: Data, mimeType: String, loggedAt: String?, contextNote: String? = nil) async throws -> ParseLogResponse {
+    func parseImageLog(
+        imageData: Data,
+        mimeType: String,
+        loggedAt: String?,
+        contextNote: String? = nil,
+        clientAttemptId: String? = nil
+    ) async throws -> ParseLogResponse {
         struct ImageParseBody: Encodable {
+            let clientAttemptId: String?
             let imageBase64: String
             let mimeType: String
             let contextNote: String?
@@ -165,6 +172,7 @@ final class APIClient {
         }
         let trimmedContextNote = contextNote?.trimmingCharacters(in: .whitespacesAndNewlines)
         let body = ImageParseBody(
+            clientAttemptId: clientAttemptId,
             imageBase64: imageData.base64EncodedString(),
             mimeType: mimeType,
             contextNote: trimmedContextNote?.isEmpty == false ? trimmedContextNote : nil,
@@ -327,6 +335,40 @@ final class APIClient {
             queryItems: [
                 URLQueryItem(name: "tz", value: timezone)
             ],
+            requiresAuth: true
+        )
+    }
+
+    func getSavedMeals() async throws -> SavedMealsResponse {
+        try await request(path: "/v1/saved-meals", method: "GET", requiresAuth: true)
+    }
+
+    @discardableResult
+    func createSavedMealCollection(_ requestBody: CreateSavedMealCollectionRequest) async throws -> CreateSavedMealCollectionResponse {
+        try await request(
+            path: "/v1/saved-meals/collections",
+            method: "POST",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
+    @discardableResult
+    func createSavedMeal(_ requestBody: CreateSavedMealRequest) async throws -> CreateSavedMealResponse {
+        try await request(
+            path: "/v1/saved-meals",
+            method: "POST",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
+    @discardableResult
+    func logSavedMeal(id: String, request requestBody: LogSavedMealRequest) async throws -> SaveLogResponse {
+        try await request(
+            path: "/v1/saved-meals/\(id)/log",
+            method: "POST",
+            body: requestBody,
             requiresAuth: true
         )
     }

@@ -1,0 +1,152 @@
+{
+  "runAt": "2026-05-16T18:53:29.999Z",
+  "baseUrl": "https://food-app-backend-ifdx.onrender.com",
+  "summary": {
+    "total": 1,
+    "passed": 0,
+    "failed": 1,
+    "avgMs": 49554
+  },
+  "reports": [
+    {
+      "label": "dal baati thali no context",
+      "file": "/Users/shantanuodak/Downloads/IMG_5910.JPG",
+      "status": 200,
+      "ok": false,
+      "ms": 49554,
+      "model": "gemini-2.5-flash",
+      "orchestratorVersion": "v1",
+      "fallbackUsed": true,
+      "confidence": 1,
+      "extractedText": "dal, green chutney",
+      "totals": {
+        "calories": 274,
+        "protein": 16,
+        "carbs": 39,
+        "fat": 6
+      },
+      "coverage": null,
+      "items": [
+        {
+          "name": "dal",
+          "calories": 236,
+          "grams": 200,
+          "confidence": 0.9,
+          "needsClarification": true
+        },
+        {
+          "name": "green chutney",
+          "calories": 38,
+          "grams": 30,
+          "confidence": 0.8,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "minItems": true,
+        "requiredKeywords": false,
+        "caloriesInRange": false,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": false
+      },
+      "missingKeywords": [
+        "baati"
+      ],
+      "expected": {
+        "minItems": 2,
+        "calorieMin": 400,
+        "calorieMax": 1400,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 20000
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 12538.9
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "falling_back_to_v1",
+          "ms": 0
+        },
+        {
+          "stage": "image_structured_primary",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "invalid_or_empty_nutrition_json",
+          "ms": 6148.1
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "concise_caption",
+          "ms": 1590.3,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "caption_too_sparse_for_multi_food_context",
+          "ms": 0,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "reason": "inventory_caption",
+          "ms": 1705,
+          "caption": "dal, green chutney,"
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "caption_too_sparse_for_multi_food_context",
+          "ms": 0,
+          "caption": "dal, green chutney,"
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "gemini_no_response",
+          "ms": 2285.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "invalid_or_empty_nutrition_json",
+          "ms": 7240.6
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "gemini_no_response",
+          "ms": 11096.9
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": true,
+          "model": "gemini-2.5-flash",
+          "ms": 6186.9,
+          "confidence": 1,
+          "items": 2,
+          "caption": "dal, green chutney"
+        }
+      ]
+    }
+  ]
+}

@@ -386,7 +386,7 @@ extension OnboardingView {
                 // tap button so the final onboarding submission requires a
                 // small deliberate motion. "Explore app" was removed: the
                 // Ready screen now has a single, intentional commit path.
-                SlideToConfirmButton(label: "Start logging") {
+                SlideToConfirmButton(label: "Start logging", isProcessing: isSubmitting) {
                     finishOnboarding()
                 }
                 .disabled(isSubmitting)
@@ -593,7 +593,7 @@ extension OnboardingView {
             // directly by `readyRouteView`). Mirrors the same single-CTA
             // slide-to-confirm so behaviour is consistent if this branch
             // is ever exercised by future routing changes.
-            SlideToConfirmButton(label: "Start logging") {
+            SlideToConfirmButton(label: "Start logging", isProcessing: isSubmitting) {
                 finishOnboarding()
             }
             .disabled(isSubmitting)
