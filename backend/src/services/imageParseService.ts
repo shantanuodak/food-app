@@ -653,6 +653,9 @@ function buildImageInventoryV2Prompt(contextNote?: string): string {
     '- If uncertain, use broad names and conservative portions; mark confidence lower and explain briefly.',
     '- The image may be rotated; mentally inspect it at 0, 90, 180, and 270 degrees.',
     '- Ignore plate/tray reflections and inspect each compartment/edge.',
+    '- For a packaged product, bottle, can, protein shake, soda, nutrition label, snack bar, or branded drink, return the product as ONE item unless separate edible foods are clearly visible.',
+    '- Do not split flavor words into ingredients. Example: "mixed berry vanilla protein drink" is one protein drink, not protein drink + yogurt + berries.',
+    '- For product/package photos, use the visible product name and label facts when possible. If label facts are not fully readable, estimate one bottle/can/bar/serving.',
     '- coverage.score should reflect how completely items cover visibleComponents. 1 means all visible foods are represented. Below 0.75 means partial.',
     '- Keep explanations short and user-friendly. No chain-of-thought.',
     '',
@@ -785,6 +788,107 @@ function normalizeV2Payload(parsed: unknown): V2ImageParsePayload | null {
       warnings
     },
     items
+  };
+}
+
+function singleProductSignalScore(text: string): number {
+  const normalized = text.toLowerCase();
+  const strongSignals = [
+    'nutrition facts',
+    'nutrition label',
+    'protein drink',
+    'protein shake',
+    'protein bar',
+    'prebiotic soda',
+    'sparkling water',
+    'bottle',
+    'can',
+    'carton',
+    'package',
+    'packaged',
+    'bar',
+    'drink',
+    'shake',
+    'beverage',
+    'soda'
+  ];
+  return strongSignals.reduce((score, signal) => score + (normalized.includes(signal) ? 1 : 0), 0);
+}
+
+function isLikelySinglePackagedProduct(payload: V2ImageParsePayload): boolean {
+  const text = [
+    payload.imageType,
+    payload.extractedText,
+    ...payload.visibleComponents.flatMap((component) => [component.name, component.category, component.portionHint]),
+    ...payload.items.flatMap((item) => [item.name, item.unit, item.foodDescription ?? '', item.explanation ?? ''])
+  ].join(' ');
+  const productSignals = singleProductSignalScore(text);
+  if (payload.imageType === 'nutrition_label' || payload.imageType === 'drink') {
+    return productSignals > 0;
+  }
+  return payload.imageType === 'single_food' && productSignals >= 2;
+}
+
+function singleProductItemScore(item: z.input<typeof parseItemSchema>, index: number, extractedText: string): number {
+  const name = `${item.name} ${item.unit} ${item.foodDescription ?? ''} ${item.explanation ?? ''}`.toLowerCase();
+  const extractedKey = captionSegmentKey(extractedText);
+  const itemKey = captionSegmentKey(item.name);
+  let score = 100 - index;
+
+  if (singleProductSignalScore(name) > 0) score += 60;
+  if (/\b(protein|drink|shake|bar|bottle|can|soda|water|beverage|carton|package|packaged)\b/.test(name)) score += 40;
+  if (/\b(bottle|can|bar|package|serving)\b/.test(String(item.unit).toLowerCase())) score += 20;
+  if (extractedKey && itemKey && (extractedKey.includes(itemKey) || itemKey.includes(extractedKey))) score += 20;
+  if (/\b(berries|berry|yogurt|fruit|flavor|flavoured|flavored)\b/.test(name) && !/\b(drink|shake|bar|bottle|protein)\b/.test(name)) {
+    score -= 45;
+  }
+
+  return score + clampConfidence(item.matchConfidence, 0.5) * 10;
+}
+
+function normalizeSingleProductInventory(payload: V2ImageParsePayload): V2ImageParsePayload {
+  if (payload.items.length <= 1 || !isLikelySinglePackagedProduct(payload)) {
+    return payload;
+  }
+
+  const [best] = [...payload.items].sort(
+    (left, right) =>
+      singleProductItemScore(right, payload.items.indexOf(right), payload.extractedText) -
+      singleProductItemScore(left, payload.items.indexOf(left), payload.extractedText)
+  );
+  const component =
+    payload.visibleComponents[0] ?? {
+      name: best.name,
+      category: payload.imageType === 'drink' ? 'drink' : 'packaged product',
+      zone: 'visible product',
+      portionHint: `${best.quantity} ${best.unit}`,
+      confidence: clampConfidence(best.matchConfidence, payload.confidence),
+      isSmallSide: false
+    };
+
+  return {
+    ...payload,
+    extractedText: best.name,
+    visibleComponents: [
+      {
+        ...component,
+        name: best.name,
+        category: component.category || (payload.imageType === 'drink' ? 'drink' : 'packaged product'),
+        portionHint: component.portionHint || `${best.quantity} ${best.unit}`,
+        isSmallSide: false
+      }
+    ],
+    coverage: {
+      visibleComponentCount: 1,
+      parsedItemCount: 1,
+      score: 1,
+      warnings: []
+    },
+    assumptions: [
+      ...payload.assumptions,
+      'Treated the visible packaged product as one item instead of splitting flavor words into ingredients.'
+    ].slice(0, 8),
+    items: [best]
   };
 }
 
@@ -1123,7 +1227,8 @@ async function runImageInventoryV2(image: ImagePart): Promise<{
     return null;
   }
 
-  const normalized = normalizeV2Payload(parsedJson);
+  const normalizedPayload = normalizeV2Payload(parsedJson);
+  const normalized = normalizedPayload ? normalizeSingleProductInventory(normalizedPayload) : null;
   if (!normalized || normalized.items.length === 0) {
     image.debugEvents?.push({
       stage: 'image_inventory_v2',
@@ -1780,7 +1885,7 @@ async function recoverWithV2CaptionEnsemble(
   const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 3_500), 7_000);
   const captions: Array<{ caption: string; usage: GeminiUsage }> = [];
 
-  const originalModes: ImageCaptionPromptMode[] = ['concise', 'inventory', 'staples', 'sides'];
+  const originalModes: ImageCaptionPromptMode[] = ['inventory', 'sides'];
   captions.push(
     ...(
       await Promise.all(originalModes.map((mode) => runImageCaptionFallback(model, image, mode, timeoutMs)))
@@ -1788,11 +1893,11 @@ async function recoverWithV2CaptionEnsemble(
   );
 
   let mergedCaption = mergeCaptionTexts(captions.map((caption) => caption.caption));
-  if (captionInventoryLooksSparse(mergedCaption)) {
+  if (!mergedCaption) {
     const rotatedVariants = (
       await Promise.all([buildRotatedImageVariant(image, 90), buildRotatedImageVariant(image, -90)])
     ).filter((variant): variant is ImagePart => Boolean(variant));
-    const rotatedModes: ImageCaptionPromptMode[] = ['inventory', 'staples', 'sides'];
+    const rotatedModes: ImageCaptionPromptMode[] = ['inventory'];
     captions.push(
       ...(
         await Promise.all(
@@ -2061,11 +2166,6 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
   const useV2 = config.aiImageOrchestratorVersion.trim().toLowerCase() === 'v2';
 
   if (useV2) {
-    const captionEnsemble = await recoverWithV2CaptionEnsemble(image, usageEvents);
-    if (captionEnsemble && resultHasPositiveNutrition(captionEnsemble.result)) {
-      return captionEnsemble;
-    }
-
     const inventoryV2 = await runImageInventoryV2(image);
     if (inventoryV2?.usage) {
       usageEvents.push({
@@ -2088,6 +2188,18 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
         orchestratorVersion: 'v2',
         coverage: inventoryV2.coverage
       };
+    }
+
+    image.debugEvents?.push({
+      stage: 'image_orchestrator_v2',
+      ok: false,
+      reason: 'inventory_failed_trying_caption_recovery',
+      ms: 0
+    });
+
+    const captionEnsemble = await recoverWithV2CaptionEnsemble(image, usageEvents);
+    if (captionEnsemble && resultHasPositiveNutrition(captionEnsemble.result)) {
+      return captionEnsemble;
     }
 
     image.debugEvents?.push({

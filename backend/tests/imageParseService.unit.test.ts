@@ -1127,6 +1127,63 @@ describe('image parse service', () => {
     expect(parsed.result.totals.calories).toBe(845);
   });
 
+  test('V2 structured inventory runs first and keeps packaged protein drinks as one item', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi.fn(async () => ({
+      jsonText: JSON.stringify({
+        imageType: 'drink',
+        cuisineHints: ['packaged'],
+        visibleComponents: [
+          { name: 'Mixed Berry Vanilla Protein Drink bottle', category: 'drink', zone: 'center', portionHint: '1 bottle', confidence: 0.95, isSmallSide: false }
+        ],
+        items: [
+          { name: 'Mixed Berry Vanilla Protein Drink', quantity: 1, unit: 'bottle', grams: 330, calories: 160, protein: 30, carbs: 5, fat: 3, matchConfidence: 0.95, foodDescription: 'Mixed berry vanilla protein drink, 1 bottle', explanation: 'Visible packaged protein drink bottle.' },
+          { name: 'Mixed Berry Vanilla Greek Yogurt', quantity: 1, unit: 'cup', grams: 245, calories: 185, protein: 20, carbs: 26, fat: 0, matchConfidence: 0.8, foodDescription: 'Mixed berry vanilla Greek yogurt', explanation: 'Mistaken flavor split.' },
+          { name: 'Mixed Berries', quantity: 1, unit: 'cup', grams: 150, calories: 80, protein: 1, carbs: 20, fat: 0.5, matchConfidence: 0.9, foodDescription: 'Mixed berries', explanation: 'Mistaken flavor split.' }
+        ],
+        coverage: { visibleComponentCount: 1, parsedItemCount: 3, score: 1, warnings: [] },
+        extractedText: 'Mixed Berry Vanilla Protein Drink',
+        confidence: 0.93,
+        assumptions: []
+      }),
+      usage: {
+        model: 'gemini-2.5-flash',
+        inputTokens: 760,
+        outputTokens: 260
+      }
+    }));
+    const generateGeminiMultimodalText = vi.fn(async () => {
+      throw new Error('caption fallback should not run for successful structured inventory');
+    });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'protein-drink-image'
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).not.toHaveBeenCalled();
+    expect(parsed.usageEvents.map((event) => event.feature)).toEqual(['parse_image_inventory_v2']);
+    expect(parsed.extractedText).toBe('Mixed Berry Vanilla Protein Drink');
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['Mixed Berry Vanilla Protein Drink']);
+    expect(parsed.result.totals).toEqual({ calories: 160, protein: 30, carbs: 5, fat: 3 });
+  });
+
   test('V2 inventory parser returns reviewable partial parses instead of failing sparse multi-item meals', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
     process.env.AI_IMAGE_PARSE_ENABLED = 'true';
@@ -1232,8 +1289,8 @@ describe('image parse service', () => {
       dataBase64: 'fragmented-thali-image'
     });
 
-    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(4);
-    expect(generateGeminiMultimodalJson).not.toHaveBeenCalled();
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
     expect(parsed.extractedText).toBe('Dal, Green chutney, Baati, Churma powder');
     expect(parsed.result.items.map((item) => item.name)).toEqual(['Dal', 'Green chutney', 'Baati', 'Churma powder']);
     const itemNames = parsed.result.items.map((item) => item.name.toLowerCase());
@@ -1282,7 +1339,8 @@ describe('image parse service', () => {
       dataBase64: 'flatbread-duplicates-image'
     });
 
-    expect(generateGeminiMultimodalJson).not.toHaveBeenCalled();
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
     expect(parsed.extractedText).toBe('Methi paratha, Mango chutney');
     expect(parsed.result.items.map((item) => item.name)).toEqual(['Methi paratha', 'Mango chutney']);
     const itemNames = parsed.result.items.map((item) => item.name.toLowerCase());
