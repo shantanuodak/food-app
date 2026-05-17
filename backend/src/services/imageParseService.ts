@@ -107,8 +107,9 @@ type ImagePart = {
   variantLabel?: string;
 };
 
-const visionMaxEdgePx = 1400;
-const visionJpegQuality = 78;
+const visionMinOptimizeBytes = 1_500_000;
+const visionMaxEdgePx = 1800;
+const visionJpegQuality = 84;
 
 const parseItemSchema = z.object({
   name: z.string().min(1),
@@ -1122,7 +1123,7 @@ async function prepareImageForVision(image: ImagePart): Promise<ImagePart> {
   const startedAt = process.hrtime.bigint();
   try {
     const original = Buffer.from(image.dataBase64, 'base64');
-    if (original.length < 1_024) {
+    if (original.length < visionMinOptimizeBytes) {
       return image;
     }
 
@@ -1237,11 +1238,12 @@ async function runImageInventoryV2(image: ImagePart): Promise<{
 } | null> {
   const startedAt = process.hrtime.bigint();
   const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
+  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 7_500), 8_500);
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.05,
     maxOutputTokens: 1100,
-    timeoutMs: config.aiImageFastTimeoutMs,
+    timeoutMs,
     maxAttempts: 1,
     parts: [
       { text: buildImageInventoryV2Prompt(image.contextNote) },
@@ -2167,6 +2169,26 @@ async function recoverWithV2CaptionEnsemble(
       ms: 0
     });
     return null;
+  }
+
+  const contextCaption = trimSafe(image.contextNote);
+  if (
+    captionFoodSegmentCount(contextCaption) >= 3 &&
+    captionFoodSegmentCount(contextCaption) > captionFoodSegmentCount(mergedCaption)
+  ) {
+    const contextMerged = mergeCaptionTexts([mergedCaption, contextCaption]);
+    if (captionFoodSegmentCount(contextMerged) > captionFoodSegmentCount(mergedCaption)) {
+      mergedCaption = contextMerged;
+      image.debugEvents?.push({
+        stage: 'image_caption_ensemble_v2',
+        ok: true,
+        model: 'context',
+        reason: 'merged_sparse_caption_with_context',
+        ms: 0,
+        items: captionFoodSegmentCount(mergedCaption),
+        caption: mergedCaption.slice(0, 180)
+      });
+    }
   }
 
   image.debugEvents?.push({

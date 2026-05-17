@@ -1116,7 +1116,7 @@ describe('image parse service', () => {
     });
 
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
-    expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.timeoutMs).toBe(6000);
+    expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.timeoutMs).toBe(7500);
     expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.parts[0]?.text).toContain('US/Western');
     expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.parts[0]?.text).toContain('Chinese/East Asian');
     expect(generateGeminiMultimodalJson.mock.calls[0]?.[0]?.parts[0]?.text).toContain('Italian/Mediterranean');
