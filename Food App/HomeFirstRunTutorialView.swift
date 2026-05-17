@@ -1,69 +1,56 @@
 import SwiftUI
 import UIKit
 
-enum HomeFirstRunTutorialStep: Equatable {
-    case composer
-    case firstEstimate
-    case camera
-    case progress
-}
-
-enum HomeFirstRunTutorialTarget: Hashable {
+enum HomeCoachCardTutorialStep: Equatable {
     case composer
     case camera
     case progress
 }
 
-enum HomeFirstRunTutorialLayout {
-    static let coordinateSpaceName = "HomeFirstRunTutorialSpace"
-}
+private struct HomeCoachCardTutorialHostModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    @Binding var step: HomeCoachCardTutorialStep
+    let onFocusComposer: () -> Void
+    let onOpenCamera: () -> Void
+    let onOpenProgress: () -> Void
+    let onFinish: () -> Void
 
-private struct HomeFirstRunTutorialTargetFramePreferenceKey: PreferenceKey {
-    static var defaultValue: [HomeFirstRunTutorialTarget: CGRect] = [:]
-
-    static func reduce(
-        value: inout [HomeFirstRunTutorialTarget: CGRect],
-        nextValue: () -> [HomeFirstRunTutorialTarget: CGRect]
-    ) {
-        value.merge(nextValue(), uniquingKeysWith: { _, new in new })
+    func body(content: Content) -> some View {
+        content.overlay {
+            if isPresented {
+                HomeCoachCardTutorialOverlay(
+                    isPresented: $isPresented,
+                    step: $step,
+                    onFocusComposer: onFocusComposer,
+                    onOpenCamera: onOpenCamera,
+                    onOpenProgress: onOpenProgress,
+                    onFinish: onFinish
+                )
+                .zIndex(200)
+            }
+        }
     }
 }
 
 extension View {
-    func homeTutorialTarget(_ target: HomeFirstRunTutorialTarget) -> some View {
-        background {
-            GeometryReader { proxy in
-                Color.clear.preference(
-                    key: HomeFirstRunTutorialTargetFramePreferenceKey.self,
-                    value: [target: proxy.frame(in: .named(HomeFirstRunTutorialLayout.coordinateSpaceName))]
-                )
-            }
-        }
-    }
-
-    func homeFirstRunTutorialHost(
+    func homeCoachCardTutorialHost(
         isPresented: Binding<Bool>,
-        step: Binding<HomeFirstRunTutorialStep>,
+        step: Binding<HomeCoachCardTutorialStep>,
         onFocusComposer: @escaping () -> Void,
         onOpenCamera: @escaping () -> Void,
         onOpenProgress: @escaping () -> Void,
         onFinish: @escaping () -> Void
     ) -> some View {
-        coordinateSpace(name: HomeFirstRunTutorialLayout.coordinateSpaceName)
-            .overlayPreferenceValue(HomeFirstRunTutorialTargetFramePreferenceKey.self) { targetFrames in
-                if isPresented.wrappedValue {
-                    HomeFirstRunTutorialOverlay(
-                        isPresented: isPresented,
-                        step: step,
-                        targetFrames: targetFrames,
-                        onFocusComposer: onFocusComposer,
-                        onOpenCamera: onOpenCamera,
-                        onOpenProgress: onOpenProgress,
-                        onFinish: onFinish
-                    )
-                    .zIndex(200)
-                }
-            }
+        modifier(
+            HomeCoachCardTutorialHostModifier(
+                isPresented: isPresented,
+                step: step,
+                onFocusComposer: onFocusComposer,
+                onOpenCamera: onOpenCamera,
+                onOpenProgress: onOpenProgress,
+                onFinish: onFinish
+            )
+        )
     }
 }
 
@@ -79,13 +66,6 @@ extension MainLoggingShellView {
 
         UserDefaults.standard.set(true, forKey: homeTutorialShownKey)
         startHomeTutorialDebug()
-    }
-
-    var homeTutorialEstimatedFoodSignature: String {
-        inputRows
-            .filter { !$0.isSaved && !$0.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
-            .map { "\($0.id.uuidString):\($0.calories.map(String.init) ?? "-")" }
-            .joined(separator: "|")
     }
 
     @ViewBuilder
@@ -114,38 +94,10 @@ extension MainLoggingShellView {
     }
 
     func startHomeTutorialDebug() {
-        homeTutorialIgnoredEstimatedRowIDs = Set(
-            inputRows
-                .filter { !$0.isSaved && $0.calories != nil }
-                .map(\.id)
-        )
         homeTutorialStep = .composer
 
         withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
             isHomeTutorialPresented = true
-        }
-
-        inputMode = .text
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            NotificationCenter.default.post(name: .focusComposerInputFromBackgroundTap, object: nil)
-        }
-    }
-
-    func advanceHomeTutorialIfEstimateIsReady() {
-        guard isHomeTutorialPresented, homeTutorialStep == .composer else { return }
-
-        let hasNewEstimatedRow = inputRows.contains { row in
-            !row.isSaved &&
-            !homeTutorialIgnoredEstimatedRowIDs.contains(row.id) &&
-            row.calories != nil &&
-            !row.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-
-        guard hasNewEstimatedRow else { return }
-
-        UIImpactFeedbackGenerator(style: .soft).impactOccurred()
-        withAnimation(.spring(response: 0.38, dampingFraction: 0.86)) {
-            homeTutorialStep = .firstEstimate
         }
     }
 
@@ -154,111 +106,123 @@ extension MainLoggingShellView {
             isHomeTutorialPresented = false
         }
         homeTutorialStep = .composer
-        homeTutorialIgnoredEstimatedRowIDs.removeAll()
     }
 }
 
-struct HomeFirstRunTutorialOverlay: View {
+struct HomeCoachCardTutorialOverlay: View {
     @Binding var isPresented: Bool
-    @Binding var step: HomeFirstRunTutorialStep
-    let targetFrames: [HomeFirstRunTutorialTarget: CGRect]
+    @Binding var step: HomeCoachCardTutorialStep
     let onFocusComposer: () -> Void
     let onOpenCamera: () -> Void
     let onOpenProgress: () -> Void
     let onFinish: () -> Void
 
     var body: some View {
-        GeometryReader { proxy in
-            let frame = targetFrame(in: proxy.size)
+        ZStack {
+            Color.black.opacity(0.20)
+                .ignoresSafeArea()
 
-            ZStack(alignment: .topLeading) {
-                dimLayer(cutoutFrame: frame)
-
-                if let frame {
-                    RoundedRectangle(cornerRadius: cornerRadius(for: step), style: .continuous)
-                        .strokeBorder(Color.white.opacity(0.9), lineWidth: 2)
-                        .background(
-                            RoundedRectangle(cornerRadius: cornerRadius(for: step), style: .continuous)
-                                .fill(Color.white.opacity(0.06))
-                        )
-                        .shadow(color: Color(red: 0.97, green: 0.48, blue: 0.12).opacity(0.28), radius: 18)
-                        .frame(width: frame.width + 14, height: frame.height + 14)
-                        .position(x: frame.midX, y: frame.midY)
-                        .allowsHitTesting(false)
-                }
+            VStack {
+                Spacer()
 
                 coachCard
-                    .frame(width: min(proxy.size.width - 40, 338))
-                    .position(coachPosition(in: proxy.size, targetFrame: frame))
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 26)
             }
-            .ignoresSafeArea()
         }
         .transition(.opacity)
-    }
-
-    @ViewBuilder
-    private func dimLayer(cutoutFrame: CGRect?) -> some View {
-        Rectangle()
-            .fill(Color.black.opacity(0.26))
-            .reverseMask {
-                if let cutoutFrame {
-                    RoundedRectangle(cornerRadius: cornerRadius(for: step), style: .continuous)
-                        .frame(width: cutoutFrame.width + 18, height: cutoutFrame.height + 18)
-                        .position(x: cutoutFrame.midX, y: cutoutFrame.midY)
-                }
-            }
-            .onTapGesture {
-                // Intentionally no-op. The tutorial is explicit so random taps
-                // do not accidentally dismiss it during first-run education.
-            }
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
     }
 
     private var coachCard: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .center, spacing: 8) {
-                Text(stepLabel)
-                    .font(.system(size: 11, weight: .black, design: .rounded))
-                    .tracking(1.8)
-                    .textCase(.uppercase)
-                    .foregroundStyle(Color(red: 0.73, green: 0.31, blue: 0.08))
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(stepLabel)
+                        .font(.system(size: 11, weight: .black, design: .rounded))
+                        .tracking(1.2)
+                        .textCase(.uppercase)
+                        .foregroundStyle(Color(red: 0.83, green: 0.40, blue: 0.11))
 
-                Spacer()
+                    Text(title)
+                        .font(.system(size: 24, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.15, green: 0.12, blue: 0.10))
+                }
+
+                Spacer(minLength: 8)
 
                 Button {
                     onFinish()
                 } label: {
                     Image(systemName: "xmark")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.secondary)
-                        .frame(width: 28, height: 28)
-                        .background(Color.black.opacity(0.045), in: Circle())
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color(red: 0.43, green: 0.38, blue: 0.33))
+                        .frame(width: 32, height: 32)
+                        .background(Color.black.opacity(0.055), in: Circle())
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Close tutorial"))
             }
 
-            Text(title)
-                .font(.system(size: 25, weight: .bold, design: .rounded))
-                .kerning(-0.7)
-                .foregroundStyle(Color(red: 0.12, green: 0.09, blue: 0.07))
-
             Text(message)
-                .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .lineSpacing(2)
-                .foregroundStyle(Color(red: 0.44, green: 0.39, blue: 0.35))
+                .font(.system(size: 15, weight: .medium, design: .rounded))
+                .lineSpacing(3)
+                .foregroundStyle(Color(red: 0.42, green: 0.37, blue: 0.33))
+
+            featurePreview
 
             buttons
 
             stepDots
-                .padding(.top, 2)
         }
-        .padding(18)
-        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 26, style: .continuous)
-                .stroke(Color.white.opacity(0.72), lineWidth: 1)
+        .padding(20)
+        .background(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .fill(Color(red: 0.995, green: 0.989, blue: 0.980))
         )
-        .shadow(color: Color.black.opacity(0.15), radius: 28, y: 16)
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(Color(red: 0.95, green: 0.90, blue: 0.83), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.14), radius: 20, y: 10)
+    }
+
+    private var featurePreview: some View {
+        HStack(spacing: 14) {
+            previewBadge
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(previewTitle)
+                    .font(.system(size: 15, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.18, green: 0.14, blue: 0.12))
+
+                Text(previewMessage)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.53, green: 0.47, blue: 0.42))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .background(previewBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(previewBorderColor, lineWidth: 1)
+        )
+    }
+
+    private var previewBadge: some View {
+        ZStack {
+            Circle()
+                .fill(previewBadgeBackground)
+                .frame(width: 48, height: 48)
+
+            Image(systemName: previewSystemImage)
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(previewIconColor)
+        }
     }
 
     @ViewBuilder
@@ -266,28 +230,28 @@ struct HomeFirstRunTutorialOverlay: View {
         switch step {
         case .composer:
             HStack(spacing: 10) {
-                tutorialButton("Focus input", style: .primary) {
-                    onFocusComposer()
+                tutorialButton("Not now", style: .secondary) {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
+                        step = .camera
+                    }
                 }
 
-                Text("No save button.")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
-        case .firstEstimate:
-            tutorialButton("Show camera", style: .primary) {
-                withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
-                    step = .camera
+                tutorialButton("Try typing", style: .primary) {
+                    onFocusComposer()
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
+                        step = .camera
+                    }
                 }
             }
         case .camera:
             HStack(spacing: 10) {
-                tutorialButton("Later", style: .secondary) {
-                    withAnimation(.spring(response: 0.34, dampingFraction: 0.88)) {
+                tutorialButton("Skip", style: .secondary) {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
                         step = .progress
                     }
                 }
-                tutorialButton("Open camera", style: .primary) {
+
+                tutorialButton("Try camera", style: .primary) {
                     onOpenCamera()
                     onFinish()
                 }
@@ -297,6 +261,7 @@ struct HomeFirstRunTutorialOverlay: View {
                 tutorialButton("Finish", style: .secondary) {
                     onFinish()
                 }
+
                 tutorialButton("Open progress", style: .primary) {
                     onOpenProgress()
                     onFinish()
@@ -307,9 +272,9 @@ struct HomeFirstRunTutorialOverlay: View {
 
     private var stepDots: some View {
         HStack(spacing: 6) {
-            ForEach(HomeFirstRunTutorialStep.allDisplaySteps, id: \.self) { candidate in
+            ForEach(HomeCoachCardTutorialStep.allDisplaySteps, id: \.self) { candidate in
                 Capsule(style: .continuous)
-                    .fill(candidate == step ? Color(red: 0.13, green: 0.09, blue: 0.07) : Color.black.opacity(0.12))
+                    .fill(candidate == step ? Color(red: 0.18, green: 0.14, blue: 0.12) : Color.black.opacity(0.10))
                     .frame(width: candidate == step ? 22 : 7, height: 7)
                     .animation(.easeOut(duration: 0.18), value: step)
             }
@@ -317,70 +282,110 @@ struct HomeFirstRunTutorialOverlay: View {
         .accessibilityHidden(true)
     }
 
-    private func targetFrame(in size: CGSize) -> CGRect? {
-        switch step {
-        case .composer, .firstEstimate:
-            return targetFrames[.composer]
-        case .camera:
-            return targetFrames[.camera]
-        case .progress:
-            return targetFrames[.progress]
-        }
-    }
-
-    private func coachPosition(in size: CGSize, targetFrame: CGRect?) -> CGPoint {
-        guard let targetFrame else {
-            return CGPoint(x: size.width / 2, y: min(size.height - 190, 410))
-        }
-
-        let cardHeight: CGFloat = 210
-        let y: CGFloat
-        if targetFrame.maxY + cardHeight + 28 < size.height {
-            y = targetFrame.maxY + (cardHeight / 2) + 22
-        } else {
-            y = max(152, targetFrame.minY - (cardHeight / 2) - 22)
-        }
-
-        return CGPoint(x: size.width / 2, y: y)
-    }
-
-    private func cornerRadius(for step: HomeFirstRunTutorialStep) -> CGFloat {
-        switch step {
-        case .camera, .progress:
-            return 999
-        case .composer, .firstEstimate:
-            return 22
-        }
-    }
-
     private var stepLabel: String {
         switch step {
-        case .composer: return "Step 1 of 4"
-        case .firstEstimate: return "Step 2 of 4"
-        case .camera: return "Step 3 of 4"
-        case .progress: return "Step 4 of 4"
+        case .composer: return "Step 1 of 3"
+        case .camera: return "Step 2 of 3"
+        case .progress: return "Step 3 of 3"
         }
     }
 
     private var title: String {
         switch step {
-        case .composer: return "Log your first meal"
-        case .firstEstimate: return "That’s the loop"
-        case .camera: return "Photos work too"
-        case .progress: return "Track the pattern"
+        case .composer: return "Start with typing"
+        case .camera: return "Use the camera fast"
+        case .progress: return "Check how the day looks"
         }
     }
 
     private var message: String {
         switch step {
         case .composer:
-            return "Type what you ate. When the app understands it, calories appear on the right automatically."
-        case .firstEstimate:
-            return "No extra button needed. You type, the app reads it, and the estimate shows up in place."
+            return "Type what you ate and keep moving. The home composer is the fastest way to log most meals."
         case .camera:
-            return "Use the camera when typing is slower than snapping a meal. A quick hint can help with tricky photos."
+            return "If a meal is easier to snap than describe, the camera can turn a quick photo into a log."
         case .progress:
-            return "Progress, streaks, and nutrition cards update as you log meals through the day."
+            return "Your calories, macros, and streaks build up through the day, so progress is where the bigger picture lives."
+        }
+    }
+
+    private var previewTitle: String {
+        switch step {
+        case .composer: return "Quick text logging"
+        case .camera: return "Photo-first logging"
+        case .progress: return "Daily progress"
+        }
+    }
+
+    private var previewMessage: String {
+        switch step {
+        case .composer: return "Tap into the input, write naturally, and log without navigating away."
+        case .camera: return "Open the camera when typing feels slower than snapping the meal."
+        case .progress: return "Open charts and insights after a few logs to spot trends and stay consistent."
+        }
+    }
+
+    private var previewSystemImage: String {
+        switch step {
+        case .composer: return "square.and.pencil"
+        case .camera: return "camera.fill"
+        case .progress: return "chart.bar.fill"
+        }
+    }
+
+    private var previewBackground: LinearGradient {
+        switch step {
+        case .composer:
+            return LinearGradient(
+                colors: [
+                    Color(red: 1.0, green: 0.963, blue: 0.918),
+                    Color(red: 0.996, green: 0.985, blue: 0.962)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .camera:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.963, green: 0.969, blue: 1.0),
+                    Color(red: 0.986, green: 0.989, blue: 1.0)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .progress:
+            return LinearGradient(
+                colors: [
+                    Color(red: 0.962, green: 0.985, blue: 0.955),
+                    Color(red: 0.989, green: 0.996, blue: 0.985)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    private var previewBadgeBackground: Color {
+        switch step {
+        case .composer: return Color(red: 0.996, green: 0.864, blue: 0.694)
+        case .camera: return Color(red: 0.835, green: 0.878, blue: 1.0)
+        case .progress: return Color(red: 0.812, green: 0.930, blue: 0.815)
+        }
+    }
+
+    private var previewIconColor: Color {
+        switch step {
+        case .composer: return Color(red: 0.86, green: 0.42, blue: 0.12)
+        case .camera: return Color(red: 0.25, green: 0.37, blue: 0.86)
+        case .progress: return Color(red: 0.18, green: 0.54, blue: 0.28)
+        }
+    }
+
+    private var previewBorderColor: Color {
+        switch step {
+        case .composer: return Color(red: 0.964, green: 0.844, blue: 0.713)
+        case .camera: return Color(red: 0.833, green: 0.879, blue: 0.993)
+        case .progress: return Color(red: 0.818, green: 0.921, blue: 0.821)
         }
     }
 
@@ -398,32 +403,23 @@ struct HomeFirstRunTutorialOverlay: View {
             Text(title)
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .frame(maxWidth: .infinity)
-                .frame(height: 44)
+                .frame(height: 46)
                 .foregroundStyle(style == .primary ? Color.white : Color(red: 0.22, green: 0.18, blue: 0.15))
-                .background(style == .primary ? Color(red: 0.12, green: 0.09, blue: 0.07) : Color.black.opacity(0.06), in: Capsule(style: .continuous))
+                .background(
+                    style == .primary
+                    ? AnyShapeStyle(Color(red: 0.93, green: 0.46, blue: 0.12))
+                    : AnyShapeStyle(Color.black.opacity(0.06)),
+                    in: Capsule(style: .continuous)
+                )
         }
         .buttonStyle(.plain)
     }
 }
 
-private extension HomeFirstRunTutorialStep {
-    static let allDisplaySteps: [HomeFirstRunTutorialStep] = [
+private extension HomeCoachCardTutorialStep {
+    static let allDisplaySteps: [HomeCoachCardTutorialStep] = [
         .composer,
-        .firstEstimate,
         .camera,
         .progress
     ]
-}
-
-private extension View {
-    func reverseMask<Mask: View>(@ViewBuilder _ mask: () -> Mask) -> some View {
-        self.mask {
-            Rectangle()
-                .overlay {
-                    mask()
-                        .blendMode(.destinationOut)
-                }
-                .compositingGroup()
-        }
-    }
 }

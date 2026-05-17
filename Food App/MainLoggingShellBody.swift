@@ -444,7 +444,7 @@ extension MainLoggingShellView {
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
-            .homeFirstRunTutorialHost(
+            .homeCoachCardTutorialHost(
                 isPresented: $isHomeTutorialPresented,
                 step: $homeTutorialStep,
                 onFocusComposer: {
@@ -462,9 +462,6 @@ extension MainLoggingShellView {
             )
             .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
             .animation(.easeInOut(duration: 0.2), value: isKeyboardVisible)
-            .onChange(of: homeTutorialEstimatedFoodSignature) { _, _ in
-                advanceHomeTutorialIfEstimateIsReady()
-            }
             .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { _ in
                 isKeyboardVisible = true
             }

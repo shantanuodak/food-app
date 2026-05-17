@@ -51,18 +51,6 @@ struct FoodLoggingTipsView: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Logging tips")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(FoodLoggingTipsTokens.orangeDeep)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(.white.opacity(0.72), in: Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(FoodLoggingTipsTokens.border, lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.06), radius: 16, y: 8)
-
             VStack(alignment: .leading, spacing: 0) {
                 Text("Give the app ")
                     .font(OnboardingTypography.instrumentSerif(style: .regular, size: 42))

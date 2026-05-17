@@ -500,13 +500,16 @@ struct TypewriterPlaceholder: View {
     let text: String
 
     private let examples = [
-        "Type your food here",
-        "2 eggs and toast",
-        "Greek yogurt with berries",
-        "Chicken salad bowl",
-        "Black coffee",
-        "1 banana",
-        "Oatmeal with honey"
+        "8 oz cold coffee",
+        "2 slices pizza",
+        "Starbucks grande latte",
+        "1 cup poha",
+        "Chipotle chicken bowl",
+        "4 medium eggs",
+        "12 oz Coke Zero",
+        "Homemade dal rice",
+        "150g grilled chicken",
+        "2 tbsp peanut butter"
     ]
 
     @State private var displayedText = ""
@@ -516,6 +519,7 @@ struct TypewriterPlaceholder: View {
         Text(displayedText)
             .font(.system(size: 18))
             .foregroundStyle(Color(.placeholderText))
+            .lineLimit(1)
             .onAppear { startLoop() }
             .onDisappear { animationTask?.cancel() }
     }

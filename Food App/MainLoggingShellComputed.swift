@@ -127,7 +127,6 @@ extension MainLoggingShellView {
                 handleQuantityFastPathUpdate(rowID: rowID)
             }
         )
-        .homeTutorialTarget(.composer)
     }
 
     var noteText: String {

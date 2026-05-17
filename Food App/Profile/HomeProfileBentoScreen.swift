@@ -30,6 +30,7 @@ struct HomeProfileBentoScreen: View {
     @State private var isInitialLoad = true
     @State private var errorMessage: String?
     @State private var isReminderSettingsPresented = false
+    @State private var isManageAccountPresented = false
 
     var body: some View {
         NavigationStack {
@@ -37,7 +38,7 @@ struct HomeProfileBentoScreen: View {
                 AppDrawerHeader(onClose: { dismiss() }) {
                     Text("Profile")
                         .font(.custom("InstrumentSerif-Regular", size: 31))
-                        .foregroundStyle(BentoTokens.brandGradient)
+                        .foregroundStyle(BentoTokens.orange700)
                         .frame(maxWidth: .infinity, alignment: .center)
                 }
 
@@ -74,7 +75,7 @@ struct HomeProfileBentoScreen: View {
                 }
             }
             .scrollIndicators(.hidden)
-            .background(Color.white)
+            .background(BentoTokens.profileCanvas)
             // Cap accessibility text scaling so the dense hero stats grid
             // and ring don't blow out the layout on iPhone SE width.
             // Dynamic Type still scales, just within readable bounds; users
@@ -83,6 +84,14 @@ struct HomeProfileBentoScreen: View {
             .dynamicTypeSize(...DynamicTypeSize.accessibility1)
             .navigationDestination(isPresented: $isReminderSettingsPresented) {
                 NotificationReminderSettingsView()
+            }
+            .sheet(isPresented: $isManageAccountPresented) {
+                NavigationStack {
+                    HomeProfileScreen()
+                }
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(24)
             }
         }
         .environmentObject(draftStore)
@@ -116,8 +125,8 @@ struct HomeProfileBentoScreen: View {
 
             Spacer()
 
-            NavigationLink {
-                HomeProfileScreen()
+            Button {
+                isManageAccountPresented = true
             } label: {
                 HStack(spacing: 4) {
                     Text("Manage Account")
@@ -149,7 +158,7 @@ struct HomeProfileBentoScreen: View {
     private func errorBanner(_ message: String) -> some View {
         HStack(spacing: 8) {
             Image(systemName: "exclamationmark.triangle.fill")
-                .foregroundStyle(.orange)
+                .foregroundStyle(BentoTokens.orange700)
             Text(message)
                 .font(.system(size: 13))
                 .foregroundStyle(BentoTokens.gray900)
@@ -163,7 +172,7 @@ struct HomeProfileBentoScreen: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .fill(Color.orange.opacity(0.1))
+                .fill(BentoTokens.warningSurface)
         )
     }
 
@@ -366,7 +375,7 @@ struct HomeProfileBentoScreen: View {
 
 // MARK: - Tiles
 
-/// Hero card — full-width orange gradient, calorie ring + 2×2 macro stats.
+/// Hero card — full-width warm gradient, calorie ring + 2×2 macro stats.
 private struct CalorieHeroTile: View {
     struct Data {
         let consumed: Double
@@ -433,9 +442,9 @@ private struct CalorieHeroTile: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             ZStack {
-                BentoTokens.brandGradient
+                BentoTokens.heroGradient
                 RadialGradient(
-                    colors: [Color.white.opacity(0.22), .clear],
+                    colors: [Color.white.opacity(0.20), .clear],
                     center: .init(x: 0.85, y: 0.1),
                     startRadius: 4,
                     endRadius: 220
@@ -534,13 +543,13 @@ private struct LoggingTipsTile: View {
         BentoTappableTile(
             background: LinearGradient(
                 colors: [
-                    Color(red: 1.0, green: 0.971, blue: 0.929),
-                    Color(red: 1.0, green: 0.936, blue: 0.866)
+                    BentoTokens.warmCardTop,
+                    BentoTokens.warmCardBottom
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            border: Color(red: 1.0, green: 0.835, blue: 0.675)
+            border: BentoTokens.warmBorder
         ) {
             FoodLoggingTipsView()
         } label: {
@@ -572,13 +581,13 @@ private struct LoggingTipsTile: View {
     private var iconStack: some View {
         ZStack {
             Circle()
-                .fill(BentoTokens.brandGradient)
+                .fill(BentoTokens.warmIconGradient)
             Image(systemName: "sparkle.magnifyingglass")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(.white)
         }
         .frame(width: 42, height: 42)
-        .shadow(color: BentoTokens.orange700.opacity(0.18), radius: 8, y: 4)
+        .shadow(color: BentoTokens.orange700.opacity(0.12), radius: 8, y: 4)
     }
 }
 
@@ -589,26 +598,26 @@ private struct SavedMealsTile: View {
         BentoTappableTile(
             background: LinearGradient(
                 colors: [
-                    Color(red: 1.0, green: 0.957, blue: 0.902),
-                    Color(red: 1.0, green: 0.906, blue: 0.812)
+                    BentoTokens.savedCardTop,
+                    BentoTokens.savedCardBottom
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            border: Color(red: 1.0, green: 0.765, blue: 0.561)
+            border: BentoTokens.savedBorder
         ) {
             SavedMealsScreen()
         } label: {
             HStack(alignment: .center, spacing: 14) {
                 ZStack {
                     Circle()
-                        .fill(BentoTokens.brandGradient)
+                        .fill(BentoTokens.warmIconGradient)
                     Image(systemName: "bookmark.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(.white)
                 }
                 .frame(width: 42, height: 42)
-                .shadow(color: BentoTokens.orange700.opacity(0.18), radius: 8, y: 4)
+                .shadow(color: BentoTokens.orange700.opacity(0.12), radius: 8, y: 4)
                 .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 7) {
@@ -643,10 +652,10 @@ private struct SavedMealsTile: View {
             .foregroundStyle(BentoTokens.orange700)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(Color.white.opacity(0.6), in: Capsule())
+            .background(Color.white.opacity(0.88), in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(Color(red: 1.0, green: 0.765, blue: 0.561).opacity(0.9), lineWidth: 0.75)
+                    .stroke(BentoTokens.savedBorder.opacity(0.85), lineWidth: 0.75)
             }
     }
 }
@@ -657,13 +666,13 @@ private struct WidgetSetupTile: View {
         BentoTappableTile(
             background: LinearGradient(
                 colors: [
-                    Color(red: 0.936, green: 0.969, blue: 1.0),
-                    Color(red: 0.984, green: 0.956, blue: 1.0)
+                    BentoTokens.coolCardTop,
+                    BentoTokens.coolCardBottom
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            border: Color(red: 0.753, green: 0.878, blue: 1.0)
+            border: BentoTokens.coolBorder
         ) {
             WidgetSetupGuideView()
         } label: {
@@ -695,13 +704,13 @@ private struct WidgetSetupTile: View {
     private var widgetStack: some View {
         ZStack {
             Circle()
-                .fill(BentoTokens.brandGradient)
+                .fill(BentoTokens.coolIconGradient)
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(.white)
         }
         .frame(width: 42, height: 42)
-        .shadow(color: BentoTokens.orange700.opacity(0.18), radius: 8, y: 4)
+        .shadow(color: BentoTokens.blue700.opacity(0.14), radius: 8, y: 4)
     }
 }
 
@@ -741,12 +750,12 @@ private struct BadgeTile: View {
         .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
         .bentoTile(
             background: LinearGradient(
-                colors: [Color(red: 1.0, green: 0.969, blue: 0.910),
-                         Color(red: 1.0, green: 0.878, blue: 0.761)],
+                colors: [BentoTokens.warmCardTop,
+                         BentoTokens.savedCardBottom],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            border: Color(red: 1.0, green: 0.839, blue: 0.678)
+            border: BentoTokens.warmBorder
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(days == 1 ? "Badges, 1 day streak, \(badgeTitle)" : "Badges, \(days) day streak, \(badgeTitle)")
@@ -759,13 +768,13 @@ private struct BadgeTile: View {
     private var trophyIcon: some View {
         ZStack {
             Circle()
-                .fill(BentoTokens.brandGradient)
+                .fill(BentoTokens.warmIconGradient)
             Image(systemName: "trophy.fill")
                 .font(.system(size: 19, weight: .bold))
                 .foregroundStyle(.white)
         }
         .frame(width: 38, height: 38)
-        .shadow(color: BentoTokens.orange700.opacity(0.22), radius: 6, y: 3)
+        .shadow(color: BentoTokens.orange700.opacity(0.14), radius: 6, y: 3)
     }
 }
 
@@ -779,13 +788,13 @@ private struct NotificationReminderTile: View {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack {
                     Circle()
-                        .fill(BentoTokens.brandGradient)
+                        .fill(BentoTokens.coolIconGradient)
                     Image(systemName: "bell.badge.fill")
                         .font(.system(size: 18, weight: .bold))
                         .foregroundStyle(.white)
                 }
                 .frame(width: 38, height: 38)
-                .shadow(color: BentoTokens.orange700.opacity(0.22), radius: 6, y: 3)
+                .shadow(color: BentoTokens.blue700.opacity(0.14), radius: 6, y: 3)
                 .padding(.bottom, 12)
                 .accessibilityHidden(true)
 
@@ -797,7 +806,7 @@ private struct NotificationReminderTile: View {
 
                 Text(summary)
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.094, green: 0.459, blue: 0.918))
+                    .foregroundStyle(BentoTokens.blue700)
                     .lineLimit(2)
                     .minimumScaleFactor(0.82)
                     .padding(.top, 6)
@@ -822,13 +831,13 @@ private struct NotificationReminderTile: View {
         .bentoTile(
             background: LinearGradient(
                 colors: [
-                    Color(red: 0.957, green: 0.981, blue: 1.0),
-                    Color(red: 0.894, green: 0.949, blue: 1.0)
+                    BentoTokens.coolCardTop,
+                    Color(red: 0.925, green: 0.959, blue: 0.998)
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            border: Color(red: 0.757, green: 0.871, blue: 0.988)
+            border: BentoTokens.coolBorder
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Notifications and reminders, \(isEnabled ? "on" : "off"), \(summary)")
@@ -849,13 +858,13 @@ private struct DietTile: View {
         BentoTappableTile(
             background: LinearGradient(
                 colors: [
-                    Color(red: 0.941, green: 0.984, blue: 0.953),
-                    Color(red: 0.847, green: 0.941, blue: 0.878)
+                    BentoTokens.greenCardTop,
+                    BentoTokens.greenCardBottom
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             ),
-            border: Color(red: 0.227, green: 0.812, blue: 0.416).opacity(0.22)
+            border: BentoTokens.greenBorder
         ) {
             DietEditorScreen()
         } label: {
@@ -1198,6 +1207,7 @@ private enum BentoTokens {
     // Brand orange
     static let orange500 = Color(red: 1.00, green: 0.624, blue: 0.200)
     static let orange700 = Color(red: 0.902, green: 0.361, blue: 0.102)
+    static let orangeSoft = Color(red: 0.986, green: 0.742, blue: 0.471)
 
     // Macros
     static let protein = Color(red: 0.227, green: 0.659, blue: 0.969)
@@ -1212,6 +1222,8 @@ private enum BentoTokens {
 
     // Surfaces
     static let canvas   = Color(uiColor: .systemGroupedBackground)
+    static let profileCanvas = Color(red: 0.994, green: 0.985, blue: 0.973)
+    static let warningSurface = Color(red: 1.0, green: 0.954, blue: 0.915)
 
     // Grays (mirror HTML --gray-*)
     static let gray100 = Color(red: 0.945, green: 0.953, blue: 0.961)
@@ -1227,6 +1239,40 @@ private enum BentoTokens {
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
+
+    static let heroGradient = LinearGradient(
+        colors: [Color(red: 0.996, green: 0.610, blue: 0.278), Color(red: 0.957, green: 0.490, blue: 0.192)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    static let warmIconGradient = LinearGradient(
+        colors: [orange500, orange700],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    static let coolIconGradient = LinearGradient(
+        colors: [Color(red: 0.420, green: 0.736, blue: 1.0), blue700],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    static let warmCardTop = Color(red: 0.998, green: 0.978, blue: 0.948)
+    static let warmCardBottom = Color(red: 0.992, green: 0.946, blue: 0.892)
+    static let warmBorder = Color(red: 0.963, green: 0.871, blue: 0.765)
+
+    static let savedCardTop = Color(red: 0.999, green: 0.971, blue: 0.938)
+    static let savedCardBottom = Color(red: 0.991, green: 0.938, blue: 0.872)
+    static let savedBorder = Color(red: 0.953, green: 0.828, blue: 0.690)
+
+    static let coolCardTop = Color(red: 0.962, green: 0.981, blue: 1.0)
+    static let coolCardBottom = Color(red: 0.947, green: 0.956, blue: 0.996)
+    static let coolBorder = Color(red: 0.820, green: 0.886, blue: 0.972)
+
+    static let greenCardTop = Color(red: 0.951, green: 0.985, blue: 0.961)
+    static let greenCardBottom = Color(red: 0.922, green: 0.972, blue: 0.939)
+    static let greenBorder = Color(red: 0.782, green: 0.902, blue: 0.824)
 
     /// Vertical orange→deep-orange for chart bars (matches the prototype
     /// trend chart bars which fade darker top-to-bottom).

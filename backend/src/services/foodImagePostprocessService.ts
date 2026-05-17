@@ -16,6 +16,11 @@ type Candidate = {
   index: number;
 };
 
+type CompoundCollapse = {
+  item: ParsedItem;
+  consumedIndexes: Set<number>;
+};
+
 const PRODUCT_WORDS = new Set([
   'bar',
   'bars',
@@ -88,6 +93,14 @@ function words(key: string): Set<string> {
 
 function containsAny(key: string, values: string[]): boolean {
   return values.some((value) => key.includes(value));
+}
+
+function titleCase(value: string): string {
+  return value
+    .split(' ')
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 function contextKey(context?: FoodImagePostprocessContext): string {
@@ -201,6 +214,228 @@ function collapseSingleProductFragments(items: ParsedItem[], context?: FoodImage
   ];
 }
 
+function sumItems(items: ParsedItem[], field: 'grams' | 'calories' | 'protein' | 'carbs' | 'fat'): number {
+  return round(items.reduce((sum, item) => sum + nonNegative(item[field]), 0), 1);
+}
+
+function averageConfidence(items: ParsedItem[]): number {
+  if (items.length === 0) return 0.75;
+  return round(
+    items.reduce((sum, item) => sum + Math.min(1, Math.max(0, item.matchConfidence || 0.75)), 0) / items.length,
+    2
+  );
+}
+
+function appendDetectedDetail(explanation: string | undefined, detail: string): string {
+  const base = explanation?.trim();
+  return base ? `${base} ${detail}` : detail;
+}
+
+function mergeNutritionIntoParent(parent: ParsedItem, additions: ParsedItem[], displayName: string): ParsedItem {
+  const quantity = Math.max(nonNegative(parent.quantity), 0.0001);
+  const grams = round(nonNegative(parent.grams) + sumItems(additions, 'grams'), 1);
+
+  return {
+    ...parent,
+    name: displayName,
+    foodDescription: displayName,
+    grams,
+    gramsPerUnit: grams > 0 ? round(grams / quantity, 4) : parent.gramsPerUnit,
+    calories: round(nonNegative(parent.calories) + sumItems(additions, 'calories'), 1),
+    protein: round(nonNegative(parent.protein) + sumItems(additions, 'protein'), 1),
+    carbs: round(nonNegative(parent.carbs) + sumItems(additions, 'carbs'), 1),
+    fat: round(nonNegative(parent.fat) + sumItems(additions, 'fat'), 1),
+    matchConfidence: averageConfidence([parent, ...additions]),
+    explanation: appendDetectedDetail(
+      parent.explanation,
+      'Merged visible toppings into the main dish instead of logging them as separate foods.'
+    )
+  };
+}
+
+function collapsePizzaFragments(items: ParsedItem[]): CompoundCollapse | null {
+  const candidates = items
+    .map((item, index) => ({ item, index, key: normalizeKey(item.name) }))
+    .filter((candidate) => /\bpizza\b/.test(candidate.key));
+
+  if (candidates.length === 0) return null;
+
+  const parent = candidates.sort((left, right) => {
+    const specificity = (key: string): number => (/\b(small|medium|large|personal|whole|slice)\b/.test(key) ? 1 : 0);
+    return (
+      specificity(right.key) - specificity(left.key) ||
+      nonNegative(right.item.calories) - nonNegative(left.item.calories) ||
+      right.item.matchConfidence - left.item.matchConfidence
+    );
+  })[0];
+
+  const consumedIndexes = new Set<number>([parent.index]);
+  const toppingNames: string[] = [];
+  const toppingPattern =
+    /\b(cheese|mozzarella|olive|olives|jalapeno|jalapenos|pepperoni|corn|mushroom|mushrooms|onion|onions|pepper|peppers|tomato|tomatoes|sauce|basil|pineapple)\b/;
+
+  items.forEach((item, index) => {
+    if (index === parent.index) return;
+    const key = normalizeKey(item.name);
+    if (/\bpizza\b/.test(key) || toppingPattern.test(key)) {
+      consumedIndexes.add(index);
+      if (!/\bpizza\b/.test(key)) toppingNames.push(titleCase(key));
+    }
+  });
+
+  if (consumedIndexes.size <= 1) return null;
+
+  const toppings = Array.from(new Set(toppingNames)).slice(0, 6);
+  return {
+    consumedIndexes,
+    item: {
+      ...parent.item,
+      name: parent.item.name.trim() || 'Pizza',
+      foodDescription: toppings.length ? `${parent.item.name.trim() || 'Pizza'} with ${toppings.join(', ')}` : parent.item.foodDescription,
+      explanation: appendDetectedDetail(
+        parent.item.explanation,
+        toppings.length
+          ? `Detected toppings: ${toppings.join(', ')}.`
+          : 'Merged duplicate pizza detections into one item.'
+      )
+    }
+  };
+}
+
+function bestIndianBowlParent(items: ParsedItem[]): { item: ParsedItem; index: number; displayName: string } | null {
+  const candidates = items
+    .map((item, index) => ({ item, index, key: normalizeKey(item.name) }))
+    .filter((candidate) => /\b(upma|poha|savory bowl|savoury bowl|semolina|rice semolina|cooked semolina)\b/.test(candidate.key));
+
+  if (candidates.length === 0) return null;
+
+  const best = candidates.sort((left, right) => {
+    const rank = (key: string): number => {
+      if (/\bupma\b/.test(key)) return 5;
+      if (/\bpoha\b/.test(key)) return 4;
+      if (/\bsemolina\b/.test(key)) return 3;
+      if (/\bsavory bowl|savoury bowl\b/.test(key)) return 1;
+      return 0;
+    };
+    return rank(right.key) - rank(left.key) || right.item.matchConfidence - left.item.matchConfidence;
+  })[0];
+
+  let displayName = best.item.name.trim() || 'Indian savory bowl';
+  if (/\bupma|semolina\b/.test(best.key)) displayName = 'Upma';
+  if (/\bpoha\b/.test(best.key)) displayName = 'Poha';
+  if (/\bsavory bowl|savoury bowl\b/.test(best.key)) displayName = 'Indian savory bowl';
+
+  return { item: best.item, index: best.index, displayName };
+}
+
+function collapseIndianSavoryBowlFragments(
+  items: ParsedItem[],
+  context?: FoodImagePostprocessContext
+): CompoundCollapse | null {
+  const text = normalizeKey(`${contextKey(context)} ${items.map((item) => item.name).join(' ')}`);
+  if (!containsAny(text, ['upma', 'poha', 'sev', 'semolina', 'savory bowl', 'savoury bowl'])) return null;
+
+  const parent = bestIndianBowlParent(items);
+  if (!parent) return null;
+
+  const consumedIndexes = new Set<number>([parent.index]);
+  const additions: ParsedItem[] = [];
+  let hasSev = false;
+
+  items.forEach((item, index) => {
+    if (index === parent.index) return;
+    const key = normalizeKey(item.name);
+    const isAlias = /\b(upma|poha|savory bowl|savoury bowl|semolina|rice semolina grains|cooked semolina grains|white rice|rice)\b/.test(key);
+    const isSev = /\b(sev|bhujiya|namkeen)\b/.test(key);
+    const isGarnish = /\b(onion|cilantro|coriander|tomato|curry leaves|herb|herbs)\b/.test(key);
+
+    if (isAlias || isSev || isGarnish) {
+      consumedIndexes.add(index);
+      if (isSev) {
+        hasSev = true;
+        additions.push(item);
+      }
+    }
+  });
+
+  if (consumedIndexes.size <= 1) return null;
+
+  const displayName = hasSev ? `${parent.displayName} with sev` : parent.displayName;
+  return {
+    consumedIndexes,
+    item: mergeNutritionIntoParent(parent.item, additions, displayName)
+  };
+}
+
+function collapseWingsPlatterFragments(items: ParsedItem[]): CompoundCollapse | null {
+  const wing = items
+    .map((item, index) => ({ item, index, key: normalizeKey(item.name) }))
+    .find((candidate) => /\b(chicken\s+)?wings?\b/.test(candidate.key) && !/\bplatter\b/.test(candidate.key));
+  if (!wing) return null;
+
+  const consumedIndexes = new Set<number>([wing.index]);
+  items.forEach((item, index) => {
+    if (index === wing.index) return;
+    const key = normalizeKey(item.name);
+    if (/\b(chicken\s+)?wings?\s+platter\b/.test(key)) consumedIndexes.add(index);
+  });
+
+  if (consumedIndexes.size <= 1) return null;
+  return {
+    consumedIndexes,
+    item: {
+      ...wing.item,
+      name: wing.item.name.trim() || 'Chicken wings',
+      explanation: appendDetectedDetail(wing.item.explanation, 'Merged duplicate wings platter detection into the wings item.')
+    }
+  };
+}
+
+function collapseCompoundDishFragments(items: ParsedItem[], context?: FoodImagePostprocessContext): ParsedItem[] {
+  if (items.length <= 1) return items;
+
+  const collapses = [
+    collapsePizzaFragments(items),
+    collapseIndianSavoryBowlFragments(items, context),
+    collapseWingsPlatterFragments(items)
+  ].filter((collapse): collapse is CompoundCollapse => collapse !== null);
+
+  if (collapses.length === 0) return items;
+
+  const consumed = new Set<number>();
+  const replacements = new Map<number, ParsedItem>();
+
+  collapses.forEach((collapse) => {
+    const indexes = [...collapse.consumedIndexes].sort((left, right) => left - right);
+    if (indexes.some((index) => consumed.has(index))) return;
+    indexes.forEach((index) => consumed.add(index));
+    replacements.set(indexes[0], collapse.item);
+  });
+
+  return items.flatMap((item, index) => {
+    const replacement = replacements.get(index);
+    if (replacement) return [replacement];
+    if (consumed.has(index)) return [];
+    return [item];
+  });
+}
+
+function shouldDropGenericContainer(item: ParsedItem, allItems: ParsedItem[]): boolean {
+  if (allItems.length <= 1) return false;
+  const key = normalizeKey(item.name);
+  if (!/\b(plate|platter|tray|bowl|meal)\b/.test(key)) return false;
+  if (/\b(pizza|protein|smoothie|shake|soup|salad)\b/.test(key)) return false;
+
+  const otherNames = normalizeKey(allItems.filter((candidate) => candidate !== item).map((candidate) => candidate.name).join(' '));
+  if (/\b(dinner plate|south indian plate|indian savory bowl|savory bowl|savoury bowl|meal plate|food plate)\b/.test(key)) {
+    return otherNames.length > 0;
+  }
+  if (/\bchicken wings platter\b/.test(key)) {
+    return /\bwings?\b/.test(otherNames);
+  }
+  return false;
+}
+
 function canonicalGroupForItem(item: ParsedItem, allItems: ParsedItem[], context?: FoodImagePostprocessContext): {
   groupKey: string;
   displayName: string | null;
@@ -272,10 +507,13 @@ export function postProcessFoodImageResult(result: ParseResult, context?: FoodIm
   if (result.items.length <= 0) return result;
 
   const productCollapsed = collapseSingleProductFragments(result.items, context);
+  const compoundCollapsed = collapseCompoundDishFragments(productCollapsed, context);
   const selected = new Map<string, Candidate>();
 
-  productCollapsed.forEach((item, index) => {
-    const canonical = canonicalGroupForItem(item, productCollapsed, context);
+  compoundCollapsed.forEach((item, index) => {
+    if (shouldDropGenericContainer(item, compoundCollapsed)) return;
+
+    const canonical = canonicalGroupForItem(item, compoundCollapsed, context);
     if (!canonical.groupKey || canonical.groupKey.length < 3) return;
 
     const candidate: Candidate = {

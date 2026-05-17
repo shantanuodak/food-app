@@ -29,7 +29,6 @@ struct MainLoggingBottomDock: View {
                         ) {
                             NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
                         }
-                        .homeTutorialTarget(.camera)
 
                         bottomDockButton(
                             systemImage: "mic.fill",
@@ -52,14 +51,9 @@ struct MainLoggingBottomDock: View {
                         ) {
                             isProgressChartsPresented = true
                         }
-                        .homeTutorialTarget(.progress)
                     }
                 }
 
-                if isKeyboardVisible {
-                    savedMealsKeyboardChip
-                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
-                }
             }
         }
         .padding(.horizontal, 16)

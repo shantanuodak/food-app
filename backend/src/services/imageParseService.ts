@@ -1862,6 +1862,7 @@ const captionEstimateLibrary: CaptionEstimate[] = [
   { name: 'Medu vada', aliases: ['medu vada', 'vada', 'vadai'], quantity: 2, unit: 'pieces', grams: 140, calories: 300, protein: 8, carbs: 34, fat: 15 },
   { name: 'Sambar', aliases: ['sambar'], quantity: 1, unit: 'bowl', grams: 180, calories: 120, protein: 6, carbs: 18, fat: 3 },
   { name: 'Coconut chutney', aliases: ['coconut chutney'], quantity: 2, unit: 'tbsp', grams: 30, calories: 80, protein: 1, carbs: 4, fat: 7 },
+  { name: 'Small Pizza', aliases: ['small pizza', 'personal pizza', 'whole small pizza'], quantity: 1, unit: 'pizza', grams: 330, calories: 890, protein: 36, carbs: 105, fat: 36 },
   { name: 'Pizza slice', aliases: ['pizza slice', 'pizza'], quantity: 1, unit: 'slice', grams: 110, calories: 290, protein: 12, carbs: 30, fat: 14 },
   { name: 'Burger', aliases: ['burger'], quantity: 1, unit: 'burger', grams: 220, calories: 550, protein: 25, carbs: 45, fat: 30 },
   { name: 'Fries', aliases: ['fries', 'french fries'], quantity: 1, unit: 'serving', grams: 120, calories: 365, protein: 4, carbs: 48, fat: 17 },
@@ -1892,6 +1893,29 @@ function findCaptionEstimate(segment: string): CaptionEstimate | null {
   );
 }
 
+function captionAccessorySegmentsAreSafe(segments: string[], items: ParsedItem[]): boolean {
+  const itemKey = captionSegmentKey(items.map((item) => item.name).join(' '));
+  const unmatched = segments
+    .map((segment) => captionSegmentKey(segment))
+    .filter((key) => key && !findCaptionEstimate(key));
+
+  if (unmatched.length === 0) return true;
+
+  if (/\bpizza\b/.test(itemKey)) {
+    return unmatched.every((key) =>
+      /\b(cheese|mozzarella|olive|olives|jalapeno|jalapenos|pepperoni|corn|mushroom|mushrooms|onion|onions|pepper|peppers|tomato|tomatoes|sauce|basil|pineapple|wooden board)\b/.test(
+        key
+      )
+    );
+  }
+
+  if (/\b(upma|poha)\b/.test(itemKey)) {
+    return unmatched.every((key) => /\b(onion|cilantro|coriander|tomato|curry leaves|semolina|rice|grain|grains)\b/.test(key));
+  }
+
+  return false;
+}
+
 function captionHeuristicResult(caption: string): ParseResult | null {
   const segments = splitCaptionFoodSegments(caption);
   const items: ParsedItem[] = [];
@@ -1920,7 +1944,11 @@ function captionHeuristicResult(caption: string): ParseResult | null {
     });
   }
 
-  if (items.length === 0 || items.length / Math.max(1, segments.length) < 0.5) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  if (items.length / Math.max(1, segments.length) < 0.5 && !captionAccessorySegmentsAreSafe(segments, items)) {
     return null;
   }
 
@@ -2279,19 +2307,28 @@ async function recoverWithV2CaptionEnsemble(
   const heuristic = captionHeuristicResult(mergedCaption);
   if (heuristic) {
     const heuristicCoverage = coverageFromCaptionInventory(mergedCaption, heuristic);
+    const normalizedHeuristic = postProcessFoodImageResult(
+      imageSafeResult(normalizeParseResultContract(heuristic, 'gemini')),
+      {
+        extractedText: mergedCaption,
+        assumptions: heuristic.assumptions,
+        imageType: heuristicCoverage.imageType,
+        visibleComponents: heuristicCoverage.visibleComponents
+      }
+    );
     image.debugEvents?.push({
       stage: 'image_caption_heuristic_v2',
       ok: true,
       model: 'heuristic',
       reason: 'common_food_inventory_estimate',
       ms: 0,
-      confidence: heuristic.confidence,
-      items: heuristic.items.length,
+      confidence: normalizedHeuristic.confidence,
+      items: normalizedHeuristic.items.length,
       caption: mergedCaption.slice(0, 180)
     });
     return {
       extractedText: mergedCaption,
-      result: heuristic,
+      result: normalizedHeuristic,
       model,
       fallbackUsed: true,
       lowConfidenceAccepted: true,

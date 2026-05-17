@@ -118,4 +118,66 @@ describe('food image postprocessing', () => {
     expect(processed.items.map((parsedItem) => parsedItem.name)).not.toContain('Mango');
     expect(processed.items.map((parsedItem) => parsedItem.name)).not.toContain('Potato');
   });
+
+  test('collapses pizza parent and topping fragments into one display item', () => {
+    const processed = postProcessFoodImageResult(
+      result([
+        item({ name: 'Pizza', calories: 266, protein: 11, carbs: 32, fat: 11, matchConfidence: 0.78 }),
+        item({ name: 'Cheese', calories: 113, protein: 7, carbs: 1, fat: 9, matchConfidence: 0.8 }),
+        item({ name: 'Small Pizza', calories: 1064, protein: 44, carbs: 128, fat: 42, matchConfidence: 0.9 }),
+        item({ name: 'Olives', calories: 35, protein: 0.3, carbs: 2, fat: 3, matchConfidence: 0.8 }),
+        item({ name: 'Jalapeno', calories: 4, protein: 0.1, carbs: 1, fat: 0, matchConfidence: 0.8 }),
+        item({ name: 'Corn', calories: 86, protein: 2.5, carbs: 19, fat: 1, matchConfidence: 0.8 })
+      ]),
+      {
+        imageType: 'multi_component_meal',
+        extractedText: 'Pizza, cheese, small pizza, olives, jalapeno, corn'
+      }
+    );
+
+    expect(processed.items.map((parsedItem) => parsedItem.name)).toEqual(['Small Pizza']);
+    expect(processed.items[0].foodDescription).toContain('Cheese');
+    expect(processed.totals.calories).toBe(1064);
+  });
+
+  test('collapses Indian savory bowl aliases and garnish while preserving sev calories', () => {
+    const processed = postProcessFoodImageResult(
+      result([
+        item({ name: 'Upma', calories: 280, protein: 8, carbs: 42, fat: 9, matchConfidence: 0.78 }),
+        item({ name: 'Indian Savory Bowl', calories: 450, protein: 12, carbs: 70, fat: 14, matchConfidence: 0.7 }),
+        item({ name: 'Poha', calories: 250, protein: 6, carbs: 45, fat: 6, matchConfidence: 0.72 }),
+        item({ name: 'Sev', calories: 130, protein: 4, carbs: 12, fat: 8, matchConfidence: 0.8 }),
+        item({ name: 'Onion', calories: 16, protein: 0.4, carbs: 4, fat: 0, matchConfidence: 0.7 }),
+        item({ name: 'Cilantro', calories: 1, protein: 0, carbs: 0.1, fat: 0, matchConfidence: 0.7 }),
+        item({ name: 'Tomato', calories: 11, protein: 0.5, carbs: 2, fat: 0, matchConfidence: 0.7 }),
+        item({ name: 'Curry Leaves', calories: 5, protein: 0.3, carbs: 1, fat: 0, matchConfidence: 0.7 }),
+        item({ name: 'Cooked Semolina Grains', calories: 150, protein: 4, carbs: 30, fat: 1, matchConfidence: 0.7 })
+      ]),
+      {
+        imageType: 'multi_component_meal',
+        extractedText: 'Upma, Indian savory bowl, upma or poha, sev, onion, cilantro, tomato, curry leaves, rice/semolina grains'
+      }
+    );
+
+    expect(processed.items.map((parsedItem) => parsedItem.name)).toEqual(['Upma with sev']);
+    expect(processed.totals.calories).toBe(410);
+  });
+
+  test('drops generic dinner plate containers when real foods are present', () => {
+    const processed = postProcessFoodImageResult(
+      result([
+        item({ name: 'Roasted chicken', calories: 260, protein: 34, carbs: 0, fat: 13, matchConfidence: 0.9 }),
+        item({ name: 'Dinner Plate', calories: 500, protein: 20, carbs: 50, fat: 20, matchConfidence: 0.6 }),
+        item({ name: 'Mashed potatoes', calories: 210, protein: 4, carbs: 35, fat: 8, matchConfidence: 0.85 }),
+        item({ name: 'Beetroot', calories: 60, protein: 1.5, carbs: 12, fat: 0.2, matchConfidence: 0.8 })
+      ]),
+      {
+        imageType: 'multi_component_meal',
+        extractedText: 'Roasted chicken, mashed potatoes, dinner plate, beetroot'
+      }
+    );
+
+    expect(processed.items.map((parsedItem) => parsedItem.name)).toEqual(['Roasted chicken', 'Mashed potatoes', 'Beetroot']);
+    expect(processed.totals.calories).toBe(530);
+  });
 });

@@ -417,53 +417,56 @@ struct HM01LogComposerSection: View {
                 .opacity(row.isFailed ? 1 : 0)
 
             if let calories = row.calories {
-                Button {
-                    onCaloriesTapped(row)
-                } label: {
-                    HStack(spacing: 6) {
-                        // Red exclamation badge when one or more parsed items
-                        // are placeholders. Tap routes to the same drawer as
-                        // the calorie label, where the user can retry the
-                        // unresolved segments.
-                        if showCalories && row.hasUnresolvedItems {
-                            Image(systemName: "exclamationmark.circle.fill")
-                                .font(.system(size: 15, weight: .semibold))
-                                .foregroundStyle(.red)
-                                .accessibilityLabel(
-                                    Text("\(row.unresolvedItemCount) item\(row.unresolvedItemCount == 1 ? "" : "s") couldn't parse")
-                                )
-                        }
-
-                        Group {
-                            if row.isApproximate {
-                                Text("~\(calories) cal")
-                            } else {
-                                RollingNumberText(value: Double(calories), suffix: " cal")
-                            }
-                        }
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .trailing)
-                    .contentShape(Rectangle())
-                }
-                .modifier(InsertShimmerModifier(isActive: row.showCalorieRevealShimmer, onComplete: {
-                    if let index = indexForRowID(row.id) {
-                        rows[index].showCalorieRevealShimmer = false
-                    }
-                }))
-                .modifier(CalorieUpdateShimmerModifier(isActive: row.showCalorieUpdateShimmer, onComplete: {
-                    if let index = indexForRowID(row.id) {
-                        rows[index].showCalorieUpdateShimmer = false
-                    }
-                }))
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Open item details"))
-                .opacity(showCalories ? 1 : 0)
+                calorieButton(for: row, calories: calories, showCalories: showCalories)
             }
         }
         .animation(.easeInOut(duration: 0.15), value: row.parsePhase)
         .animation(.easeInOut(duration: 0.2), value: row.calories)
+    }
+
+    @ViewBuilder
+    private func calorieButton(for row: HomeLogRow, calories: Int, showCalories: Bool) -> some View {
+        let button = Button {
+            onCaloriesTapped(row)
+        } label: {
+            HStack(spacing: 6) {
+                if showCalories && row.hasUnresolvedItems {
+                    Image(systemName: "exclamationmark.circle.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.red)
+                        .accessibilityLabel(
+                            Text("\(row.unresolvedItemCount) item\(row.unresolvedItemCount == 1 ? "" : "s") couldn't parse")
+                        )
+                }
+
+                Group {
+                    if row.isApproximate {
+                        Text("~\(calories) cal")
+                    } else {
+                        RollingNumberText(value: Double(calories), suffix: " cal")
+                    }
+                }
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .contentShape(Rectangle())
+        }
+        .modifier(InsertShimmerModifier(isActive: row.showCalorieRevealShimmer, onComplete: {
+            if let index = indexForRowID(row.id) {
+                rows[index].showCalorieRevealShimmer = false
+            }
+        }))
+        .modifier(CalorieUpdateShimmerModifier(isActive: row.showCalorieUpdateShimmer, onComplete: {
+            if let index = indexForRowID(row.id) {
+                rows[index].showCalorieUpdateShimmer = false
+            }
+        }))
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Open item details"))
+        .opacity(showCalories ? 1 : 0)
+
+        button
     }
 }

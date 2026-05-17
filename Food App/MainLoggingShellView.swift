@@ -121,8 +121,7 @@ struct MainLoggingShellView: View {
     @State var isLoggingTipsPresented = false
     @State var isHomeTutorialPresented = false
     @State var hasEvaluatedAutoHomeTutorialPresentation = false
-    @State var homeTutorialStep: HomeFirstRunTutorialStep = .composer
-    @State var homeTutorialIgnoredEstimatedRowIDs: Set<UUID> = []
+    @State var homeTutorialStep: HomeCoachCardTutorialStep = .composer
     @State var currentFoodLogStreak: Int?
     @State var isLoadingFoodLogStreak = false
     @State var isStreakDrawerPresented = false

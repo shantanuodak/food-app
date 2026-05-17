@@ -233,9 +233,13 @@ struct SavedMealsScreen: View {
             case .sheet(let onClose):
                 NavigationStack {
                     content
-                        .navigationTitle("Saved Meals")
                         .navigationBarTitleDisplayMode(.inline)
                         .toolbar {
+                            ToolbarItem(placement: .principal) {
+                                Text("Saved meals")
+                                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 28))
+                                    .foregroundStyle(SavedMealsTokens.orangeDeep)
+                            }
                             ToolbarItem(placement: .cancellationAction) {
                                 Button("Done", action: onClose)
                             }
