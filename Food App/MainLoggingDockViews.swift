@@ -10,6 +10,7 @@ struct MainLoggingBottomDock: View {
     let isKeyboardVisible: Bool
     @Binding var isSyncInfoPresented: Bool
     @Binding var isProgressChartsPresented: Bool
+    @Binding var isSavedMealsPresented: Bool
 
     var body: some View {
         VStack(spacing: 10) {
@@ -56,20 +57,43 @@ struct MainLoggingBottomDock: View {
                 }
 
                 if isKeyboardVisible {
-                    bottomDockButton(
-                        systemImage: "keyboard.chevron.compact.down",
-                        color: .secondary,
-                        accessibilityLabel: "Dismiss keyboard"
-                    ) {
-                        NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
-                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-                    }
-                    .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                    savedMealsKeyboardChip
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
+    }
+
+    private var savedMealsKeyboardChip: some View {
+        Button {
+            NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
+            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+            isSavedMealsPresented = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 13, weight: .bold))
+                Text("Saved Meals")
+                    .font(.system(size: 14, weight: .semibold))
+            }
+            .foregroundStyle(Color(red: 0.902, green: 0.361, blue: 0.102))
+            .padding(.horizontal, 16)
+            .frame(height: 38)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(Color(red: 1.0, green: 0.941, blue: 0.878))
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(Color(red: 1.0, green: 0.835, blue: 0.675), lineWidth: 1)
+            )
+            .shadow(color: Color(red: 0.376, green: 0.212, blue: 0.078).opacity(0.10), radius: 12, y: 5)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Open saved meals"))
+        .accessibilityHint(Text("Shows your saved meals in a drawer."))
     }
 
     private var syncStatusPill: some View {

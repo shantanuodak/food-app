@@ -11,7 +11,8 @@ extension MainLoggingShellView {
             isLoadingFoodLogStreak: isLoadingFoodLogStreak,
             isKeyboardVisible: isKeyboardVisible,
             isSyncInfoPresented: $isSyncInfoPresented,
-            isProgressChartsPresented: $isProgressChartsPresented
+            isProgressChartsPresented: $isProgressChartsPresented,
+            isSavedMealsPresented: $isSavedMealsPresented
         )
     }
 

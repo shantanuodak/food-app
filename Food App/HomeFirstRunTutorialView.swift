@@ -73,11 +73,11 @@ extension MainLoggingShellView {
         hasEvaluatedAutoHomeTutorialPresentation = true
 
         guard appStore.isOnboardingComplete else { return }
-        guard !defaults.bool(forKey: homeTutorialShownKey) else { return }
+        guard !UserDefaults.standard.bool(forKey: homeTutorialShownKey) else { return }
         guard !isHomeTutorialPresented else { return }
         guard selectedCameraSource == nil, !isQuickCameraCaptureActive, !isVoiceOverlayPresented else { return }
 
-        defaults.set(true, forKey: homeTutorialShownKey)
+        UserDefaults.standard.set(true, forKey: homeTutorialShownKey)
         startHomeTutorialDebug()
     }
 

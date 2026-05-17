@@ -226,14 +226,15 @@ struct SavedMealsScreen: View {
                     .navigationTitle("Saved meals")
                     .navigationBarTitleDisplayMode(.inline)
             case .sheet(let onClose):
-                VStack(spacing: 0) {
-                    AppDrawerHeader(onClose: onClose) {
-                        Text("Saved Meals")
-                            .font(OnboardingTypography.instrumentSerif(style: .regular, size: 31))
-                            .foregroundStyle(SavedMealsTokens.brandGradient)
-                            .frame(maxWidth: .infinity, alignment: .center)
-                    }
+                NavigationStack {
                     content
+                        .navigationTitle("Saved Meals")
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done", action: onClose)
+                            }
+                        }
                 }
             }
         }
@@ -245,7 +246,9 @@ struct SavedMealsScreen: View {
     private var content: some View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: 18) {
-                hero
+                if showsHero {
+                    hero
+                }
                 searchField
 
                 if isLoading {
@@ -269,7 +272,7 @@ struct SavedMealsScreen: View {
                         SavedMealsConfirmationCard(message: confirmationMessage)
                     }
 
-                    if !collections.isEmpty {
+                    if showsCollectionsSection {
                         collectionsSection
                     }
 
@@ -277,10 +280,24 @@ struct SavedMealsScreen: View {
                 }
             }
             .padding(.horizontal, 18)
-            .padding(.top, 18)
+            .padding(.top, showsHero ? 18 : 14)
             .padding(.bottom, 36)
         }
         .background(SavedMealsTokens.screenBackground)
+    }
+
+    private var showsHero: Bool {
+        if case .pushed = presentationStyle {
+            return true
+        }
+        return false
+    }
+
+    private var showsCollectionsSection: Bool {
+        if case .sheet = presentationStyle {
+            return false
+        }
+        return !collections.isEmpty
     }
 
     private var hero: some View {
@@ -321,7 +338,7 @@ struct SavedMealsScreen: View {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(SavedMealsTokens.orangeDeep.opacity(0.82))
-            TextField("Search saved meals", text: $searchText)
+            TextField("Search Saved Meals", text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
         }

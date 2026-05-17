@@ -1818,6 +1818,9 @@ type CaptionEstimate = {
 };
 
 const captionEstimateLibrary: CaptionEstimate[] = [
+  { name: 'Upma', aliases: ['upma', 'semolina upma', 'rava upma'], quantity: 1, unit: 'bowl', grams: 240, calories: 310, protein: 8, carbs: 52, fat: 8 },
+  { name: 'Poha', aliases: ['poha', 'flattened rice'], quantity: 1, unit: 'bowl', grams: 240, calories: 280, protein: 6, carbs: 50, fat: 7 },
+  { name: 'Sev', aliases: ['sev', 'crunchy sev', 'crunchy garnish', 'namkeen topping'], quantity: 1, unit: 'small topping', grams: 25, calories: 140, protein: 4, carbs: 13, fat: 8 },
   { name: 'Green chutney', aliases: ['green chutney', 'mint chutney', 'cilantro chutney'], quantity: 2, unit: 'tbsp', grams: 30, calories: 30, protein: 1, carbs: 4, fat: 1 },
   { name: 'Mango chutney', aliases: ['mango chutney', 'mango pickle', 'mango sauce'], quantity: 2, unit: 'tbsp', grams: 35, calories: 70, protein: 0.3, carbs: 17, fat: 0.2 },
   { name: 'Potato sabzi', aliases: ['potato sabzi', 'aloo sabzi', 'potato sab'], quantity: 1, unit: 'serving', grams: 120, calories: 160, protein: 3, carbs: 25, fat: 6 },
@@ -1833,14 +1836,25 @@ const captionEstimateLibrary: CaptionEstimate[] = [
   { name: 'Chapati', aliases: ['chapati', 'roti'], quantity: 1, unit: 'piece', grams: 45, calories: 120, protein: 3.5, carbs: 20, fat: 3 },
   { name: 'Paratha', aliases: ['paratha'], quantity: 1, unit: 'piece', grams: 80, calories: 250, protein: 6, carbs: 32, fat: 11 },
   { name: 'Dosa', aliases: ['dosa', 'masala dosa'], quantity: 1, unit: 'piece', grams: 180, calories: 300, protein: 6, carbs: 48, fat: 9 },
+  { name: 'Medu vada', aliases: ['medu vada', 'vada', 'vadai'], quantity: 2, unit: 'pieces', grams: 140, calories: 300, protein: 8, carbs: 34, fat: 15 },
   { name: 'Sambar', aliases: ['sambar'], quantity: 1, unit: 'bowl', grams: 180, calories: 120, protein: 6, carbs: 18, fat: 3 },
   { name: 'Coconut chutney', aliases: ['coconut chutney'], quantity: 2, unit: 'tbsp', grams: 30, calories: 80, protein: 1, carbs: 4, fat: 7 },
   { name: 'Pizza slice', aliases: ['pizza slice', 'pizza'], quantity: 1, unit: 'slice', grams: 110, calories: 290, protein: 12, carbs: 30, fat: 14 },
   { name: 'Burger', aliases: ['burger'], quantity: 1, unit: 'burger', grams: 220, calories: 550, protein: 25, carbs: 45, fat: 30 },
   { name: 'Fries', aliases: ['fries', 'french fries'], quantity: 1, unit: 'serving', grams: 120, calories: 365, protein: 4, carbs: 48, fat: 17 },
+  { name: 'Chicken wings', aliases: ['chicken wings', 'buffalo wings', 'wings'], quantity: 4, unit: 'pieces', grams: 180, calories: 430, protein: 34, carbs: 2, fat: 30 },
+  { name: 'Carrots', aliases: ['carrots', 'carrot sticks', 'baby carrots'], quantity: 1, unit: 'serving', grams: 80, calories: 35, protein: 1, carbs: 8, fat: 0.2 },
+  { name: 'Celery', aliases: ['celery', 'celery sticks'], quantity: 1, unit: 'serving', grams: 80, calories: 15, protein: 0.6, carbs: 3, fat: 0.2 },
+  { name: 'Ranch dressing', aliases: ['ranch', 'ranch dressing', 'white dip', 'creamy dip'], quantity: 2, unit: 'tbsp', grams: 30, calories: 130, protein: 1, carbs: 2, fat: 13 },
+  { name: 'Blue cheese dressing', aliases: ['blue cheese', 'blue cheese dressing'], quantity: 2, unit: 'tbsp', grams: 30, calories: 140, protein: 1, carbs: 1, fat: 15 },
   { name: 'Fried rice', aliases: ['fried rice'], quantity: 1, unit: 'serving', grams: 300, calories: 500, protein: 14, carbs: 75, fat: 16 },
   { name: 'Noodles', aliases: ['noodles', 'chow mein'], quantity: 1, unit: 'serving', grams: 300, calories: 450, protein: 12, carbs: 70, fat: 14 },
-  { name: 'Pasta', aliases: ['pasta'], quantity: 1, unit: 'serving', grams: 300, calories: 450, protein: 16, carbs: 70, fat: 12 }
+  { name: 'Pasta', aliases: ['pasta'], quantity: 1, unit: 'serving', grams: 300, calories: 450, protein: 16, carbs: 70, fat: 12 },
+  { name: 'Roasted chicken', aliases: ['roasted chicken', 'grilled chicken', 'chicken leg', 'chicken drumstick'], quantity: 1, unit: 'piece', grams: 140, calories: 260, protein: 32, carbs: 0, fat: 14 },
+  { name: 'Mashed potatoes', aliases: ['mashed potatoes', 'creamy potatoes', 'potato mash'], quantity: 1, unit: 'serving', grams: 180, calories: 210, protein: 4, carbs: 34, fat: 8 },
+  { name: 'Macaroni and cheese', aliases: ['macaroni and cheese', 'mac and cheese', 'macaroni cheese'], quantity: 1, unit: 'serving', grams: 180, calories: 360, protein: 13, carbs: 42, fat: 16 },
+  { name: 'Corn casserole', aliases: ['corn casserole', 'corn gratin', 'corn bake'], quantity: 1, unit: 'serving', grams: 140, calories: 240, protein: 8, carbs: 28, fat: 11 },
+  { name: 'Beetroot', aliases: ['beetroot', 'beets', 'beet salad', 'beetroot side'], quantity: 1, unit: 'side', grams: 80, calories: 60, protein: 1.5, carbs: 13, fat: 0.2 }
 ];
 
 function findCaptionEstimate(segment: string): CaptionEstimate | null {

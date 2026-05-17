@@ -29,10 +29,10 @@ extension MainLoggingShellView {
 
     func presentSaveMealSheet() {
         guard let draft = buildSaveDraftRequest() else { return }
-        saveMealDraft = draft
+        saveMealDraft = nil
         isDetailsDrawerPresented = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            isSaveMealSheetPresented = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            saveMealDraft = SaveMealDraftPresentation(request: draft)
         }
     }
 
@@ -75,10 +75,10 @@ extension MainLoggingShellView {
 
     func presentSaveMealSheet(for details: RowCalorieDetails) {
         guard let draft = buildSaveDraftRequest(for: details) else { return }
-        saveMealDraft = draft
+        saveMealDraft = nil
         selectedRowDetails = nil
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-            isSaveMealSheetPresented = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+            saveMealDraft = SaveMealDraftPresentation(request: draft)
         }
     }
 

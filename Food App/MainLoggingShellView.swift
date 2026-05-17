@@ -3,6 +3,11 @@ import Foundation
 import PhotosUI
 import UIKit
 
+struct SaveMealDraftPresentation: Identifiable {
+    let id = UUID()
+    let request: SaveLogRequest
+}
+
 struct MainLoggingShellView: View {
     @EnvironmentObject var appStore: AppStore
     @Environment(\.colorScheme) var colorScheme
@@ -85,8 +90,7 @@ struct MainLoggingShellView: View {
     @State var lastAutoSavedContentFingerprint: String?
     @State var inputMode: HomeInputMode = .text
     @State var detailsDrawerMode: DetailsDrawerMode = .full
-    @State var isSaveMealSheetPresented = false
-    @State var saveMealDraft: SaveLogRequest?
+    @State var saveMealDraft: SaveMealDraftPresentation?
     @State var selectedRowDetails: RowCalorieDetails?
     @State var rowDetailsPendingDeleteID: UUID?
     @State var isRowDetailsDeleteConfirmationPresented = false
@@ -113,6 +117,7 @@ struct MainLoggingShellView: View {
     @State var isProfilePresented = false
     @State var isNutritionSummaryPresented = false
     @State var isProgressChartsPresented = false
+    @State var isSavedMealsPresented = false
     @State var isLoggingTipsPresented = false
     @State var isHomeTutorialPresented = false
     @State var hasEvaluatedAutoHomeTutorialPresentation = false
@@ -141,10 +146,11 @@ struct MainLoggingShellView: View {
     @State var isCameraAnalysisSheetPresented = false
 
     @State var autoSavedParseIDs: Set<String> = []
-    let defaults = UserDefaults.standard
     let homeTutorialShownKey = "home.first_run_tutorial.shown.v1"
     let autoSaveDelayNs: UInt64 = 1_500_000_000
     let saveAttemptTelemetry = SaveAttemptTelemetry.shared
+
+    var defaults: UserDefaults { .standard }
 
     var activeParseSnapshots: [ParseSnapshot] {
         parseCoordinator.snapshots.values.sorted { lhs, rhs in

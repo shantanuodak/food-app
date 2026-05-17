@@ -48,9 +48,11 @@ struct HomeProfileBentoScreen: View {
                             errorBanner(errorMessage)
                         }
                         CalorieHeroTile(data: heroData)
-                        LoggingTipsTile()
                         SavedMealsTile()
-                        WidgetSetupTile()
+                        HStack(alignment: .top, spacing: 12) {
+                            LoggingTipsTile()
+                            WidgetSetupTile()
+                        }
                         HStack(alignment: .top, spacing: 12) {
                             NavigationLink {
                                 BadgesTrophyCaseView(currentStreakDays: streakDays)
@@ -542,26 +544,25 @@ private struct LoggingTipsTile: View {
         ) {
             FoodLoggingTipsView()
         } label: {
-            HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 iconStack
+                    .padding(.bottom, 12)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Logging tips")
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(BentoTokens.gray900)
+                Text("Logging tips")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(BentoTokens.gray900)
+                    .lineLimit(2)
 
-                    Text("Tiny details make estimates sharper.")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(BentoTokens.gray700)
-                        .lineLimit(2)
-
-                    clueChips
-                }
+                Text("Tiny details make estimates sharper.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(BentoTokens.gray700)
+                    .lineLimit(3)
+                    .padding(.top, 6)
 
                 Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Logging tips. Tiny details make estimates sharper.")
             .accessibilityHint("Opens examples for better food logging.")
@@ -578,23 +579,6 @@ private struct LoggingTipsTile: View {
         }
         .frame(width: 42, height: 42)
         .shadow(color: BentoTokens.orange700.opacity(0.18), radius: 8, y: 4)
-    }
-
-    private var clueChips: some View {
-        HStack(spacing: 6) {
-            ForEach(["Brand", "Amount", "Count"], id: \.self) { clue in
-                Text(clue)
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundStyle(BentoTokens.orange700)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 5)
-                    .background(Color.white.opacity(0.58), in: Capsule())
-                    .overlay {
-                        Capsule()
-                            .stroke(Color(red: 1.0, green: 0.835, blue: 0.675).opacity(0.72), lineWidth: 0.75)
-                    }
-            }
-        }
     }
 }
 
@@ -683,30 +667,25 @@ private struct WidgetSetupTile: View {
         ) {
             WidgetSetupGuideView()
         } label: {
-            HStack(alignment: .center, spacing: 14) {
+            VStack(alignment: .leading, spacing: 0) {
                 widgetStack
+                    .padding(.bottom, 12)
                     .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("Add widgets")
-                        .font(.system(size: 19, weight: .bold))
-                        .foregroundStyle(BentoTokens.gray900)
+                Text("Add widgets")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(BentoTokens.gray900)
+                    .lineLimit(2)
 
-                    Text("Quick shortcuts for camera and voice logging.")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(BentoTokens.gray700)
-                        .lineLimit(2)
-
-                    HStack(spacing: 6) {
-                        resourceChip("Home")
-                        resourceChip("Lock")
-                        resourceChip("Camera")
-                    }
-                }
+                Text("Quick shortcuts for camera and voice logging.")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(BentoTokens.gray700)
+                    .lineLimit(3)
+                    .padding(.top, 6)
 
                 Spacer(minLength: 0)
             }
-            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Add widgets. Quick shortcuts for camera and voice logging.")
             .accessibilityHint("Opens widget setup steps.")
@@ -723,19 +702,6 @@ private struct WidgetSetupTile: View {
         }
         .frame(width: 42, height: 42)
         .shadow(color: BentoTokens.orange700.opacity(0.18), radius: 8, y: 4)
-    }
-
-    private func resourceChip(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(BentoTokens.blue700)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(Color.white.opacity(0.62), in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(Color(red: 0.753, green: 0.878, blue: 1.0).opacity(0.9), lineWidth: 0.75)
-            }
     }
 }
 

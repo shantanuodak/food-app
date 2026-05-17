@@ -76,7 +76,11 @@ extension MainLoggingShellView {
             .scrollDismissesKeyboard(.interactively)
             .onTapGesture {
                 guard !presentMindfulPauseIfNeeded(for: .text) else { return }
-                focusComposerInputFromBackgroundTap()
+                if isKeyboardVisible {
+                    dismissComposerKeyboard()
+                } else {
+                    focusComposerInputFromBackgroundTap()
+                }
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
@@ -107,6 +111,14 @@ extension MainLoggingShellView {
                 nutritionSummarySheet
                     .presentationDetents([.medium])
                     .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isSavedMealsPresented) {
+                SavedMealsScreen(presentationStyle: .sheet(onClose: {
+                    isSavedMealsPresented = false
+                }))
+                .environmentObject(appStore)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $isProgressChartsPresented) {
                 HomeProgressScreen()
@@ -307,15 +319,13 @@ extension MainLoggingShellView {
             .sheet(isPresented: $isDetailsDrawerPresented) {
                 detailsDrawer
             }
-            .sheet(isPresented: $isSaveMealSheetPresented) {
-                if let saveMealDraft {
-                    SaveMealSheet(draft: saveMealDraft) { meal in
-                        saveSuccessMessage = "Saved \(meal.name)"
-                    }
-                    .environmentObject(appStore)
-                    .presentationDetents([.medium, .large])
-                    .presentationDragIndicator(.visible)
+            .sheet(item: $saveMealDraft) { presentation in
+                SaveMealSheet(draft: presentation.request) { meal in
+                    saveSuccessMessage = "Saved \(meal.name)"
                 }
+                .environmentObject(appStore)
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
             }
             .sheet(isPresented: $isImagePickerPresented) {
                 HomeImagePicker(

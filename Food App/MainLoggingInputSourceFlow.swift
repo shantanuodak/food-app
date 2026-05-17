@@ -2,16 +2,19 @@ import SwiftUI
 import UIKit
 
 extension MainLoggingShellView {
-
-    func handleVoiceModeTapped() {
+    func dismissComposerKeyboard() {
         isNoteEditorFocused = false
         activeEditingRowID = nil
+        NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+
+    func handleVoiceModeTapped() {
+        dismissComposerKeyboard()
         voiceHandoffTask?.cancel()
         voiceRevealTask?.cancel()
         voiceOverlayPhase = .listening
         voiceCaptureCancelRequested = false
-        NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
-        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
         Self.voiceHapticGenerator.prepare()
         Self.voiceHapticGenerator.impactOccurred(intensity: 0.58)
 
