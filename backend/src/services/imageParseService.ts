@@ -7,6 +7,7 @@ import { createEmptyParseResult } from './parsePipelineResultUtils.js';
 import { normalizeParseResultContract } from './parseContractService.js';
 import { generateGeminiMultimodalJson, generateGeminiMultimodalText, type GeminiUsage } from './geminiFlashClient.js';
 import { tryGeminiPrimaryParse } from './aiNormalizerService.js';
+import { postProcessFoodImageResult, type FoodImagePostprocessContext } from './foodImagePostprocessService.js';
 
 type ImageParseUsageEvent = {
   feature:
@@ -896,7 +897,10 @@ function normalizeSingleProductInventory(payload: V2ImageParsePayload): V2ImageP
   };
 }
 
-function imagePayloadToParseResult(value: z.infer<typeof imageParseSchema>): { extractedText: string; result: ParseResult } | null {
+function imagePayloadToParseResult(
+  value: z.infer<typeof imageParseSchema>,
+  postprocessContext?: FoodImagePostprocessContext
+): { extractedText: string; result: ParseResult } | null {
   const normalizedItems: ParsedItem[] = value.items.map((item) => {
     const quantity = Math.max(nonNegative(item.quantity), 0.0001);
     const grams = nonNegative(item.grams);
@@ -944,7 +948,14 @@ function imagePayloadToParseResult(value: z.infer<typeof imageParseSchema>): { e
       fat: 0
     }
   };
-  const result = normalizeImageParseResult(normalizeParseResultContract(baseResult, 'gemini'));
+  const result = postProcessFoodImageResult(
+    normalizeImageParseResult(normalizeParseResultContract(baseResult, 'gemini')),
+    {
+      extractedText,
+      assumptions: baseResult.assumptions,
+      ...postprocessContext
+    }
+  );
 
   return {
     extractedText,
@@ -1345,7 +1356,12 @@ async function runImageInventoryV2(image: ImagePart): Promise<{
     return null;
   }
 
-  const converted = imagePayloadToParseResult(validated.data);
+  const converted = imagePayloadToParseResult(validated.data, {
+    imageType: normalized.imageType,
+    visibleComponents: normalized.visibleComponents,
+    extractedText: normalized.extractedText,
+    assumptions: normalized.assumptions
+  });
   if (!converted || !resultHasPositiveNutrition(converted.result)) {
     image.debugEvents?.push({
       stage: 'image_inventory_v2',
@@ -2098,7 +2114,10 @@ async function parseCaptionToImageResult(
     estimatedCostUsd: textAttempt.usage.estimatedCostUsd
   });
 
-  const result = normalizeImageParseResult(imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini')));
+  const result = postProcessFoodImageResult(
+    normalizeImageParseResult(imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini'))),
+    { extractedText: caption, assumptions: textAttempt.result.assumptions }
+  );
   const resolvedCoverage = coverage ?? coverageFromCaptionInventory(caption, result);
   image.debugEvents?.push({
     stage: 'image_caption_text',
@@ -2359,7 +2378,10 @@ async function recoverWithCaptionFallback(
       estimatedCostUsd: textAttempt.usage.estimatedCostUsd
     });
 
-    const result = normalizeImageParseResult(imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini')));
+    const result = postProcessFoodImageResult(
+      normalizeImageParseResult(imageSafeResult(normalizeParseResultContract(textAttempt.result, 'gemini'))),
+      { extractedText: caption.caption, assumptions: textAttempt.result.assumptions }
+    );
     image.debugEvents?.push({
       stage: 'image_caption_text',
       ok: true,

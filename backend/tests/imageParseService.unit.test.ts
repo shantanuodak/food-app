@@ -717,8 +717,8 @@ describe('image parse service', () => {
       'baati',
       'potato sabzi',
       'green chutney',
-      'sliced onion',
-      'dry chutney powder'
+      'Onion',
+      'Churma powder'
     ]);
     expect(debugEvents).toContainEqual(
       expect.objectContaining({
