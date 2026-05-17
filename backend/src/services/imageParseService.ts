@@ -108,9 +108,9 @@ type ImagePart = {
   variantLabel?: string;
 };
 
-const visionMinOptimizeBytes = 1_500_000;
-const visionMaxEdgePx = 1800;
-const visionJpegQuality = 84;
+const visionMinOptimizeBytes = 900_000;
+const visionMaxEdgePx = 1600;
+const visionJpegQuality = 82;
 
 const parseItemSchema = z.object({
   name: z.string().min(1),
@@ -342,6 +342,29 @@ function captionRejectionReason(caption: string): string | null {
 
   if (/^\s*[{[]/.test(caption)) {
     return 'caption_boilerplate';
+  }
+
+  const genericCaptions = new Set([
+    'food',
+    'meal',
+    'dish',
+    'plate',
+    'bowl',
+    'tray',
+    'snack',
+    'snacks',
+    'plate of food',
+    'bowl of food',
+    'indian food',
+    'asian food',
+    'restaurant food',
+    'homemade food',
+    'various foods',
+    'mixed foods',
+    'several foods'
+  ]);
+  if (genericCaptions.has(normalized)) {
+    return 'generic_caption';
   }
 
   return null;
@@ -1249,7 +1272,7 @@ async function runImageInventoryV2(image: ImagePart): Promise<{
 } | null> {
   const startedAt = process.hrtime.bigint();
   const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
-  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 7_500), 8_500);
+  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 3_500), 5_500);
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.05,
@@ -2159,40 +2182,9 @@ async function recoverWithV2CaptionEnsemble(
   usageEvents: ImageParseUsageEvent[]
 ): Promise<ImageParseServiceResult | null> {
   const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
-  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 3_500), 5_000);
-  const captions: Array<{ caption: string; usage: GeminiUsage }> = [];
-
-  const originalModes: ImageCaptionPromptMode[] = ['inventory', 'sides'];
-  captions.push(
-    ...(
-      await Promise.all(originalModes.map((mode) => runImageCaptionFallback(model, image, mode, timeoutMs)))
-    ).filter((caption): caption is { caption: string; usage: GeminiUsage } => Boolean(caption?.caption.trim()))
-  );
-
-  let mergedCaption = mergeCaptionTexts(captions.map((caption) => caption.caption));
-  const shouldTryRotatedSparseCaption =
-    !mergedCaption ||
-    (captionInventoryLooksSparse(mergedCaption) &&
-      !singleProductCaptionResult(mergedCaption) &&
-      productCaptionSignalScore(captionSegmentKey(mergedCaption)) < 80);
-  if (shouldTryRotatedSparseCaption) {
-    const rotatedVariants = (
-      await Promise.all([buildRotatedImageVariant(image, 90), buildRotatedImageVariant(image, -90)])
-    ).filter((variant): variant is ImagePart => Boolean(variant));
-    const rotatedModes: ImageCaptionPromptMode[] = ['inventory', 'staples', 'sides'];
-    captions.push(
-      ...(
-        await Promise.all(
-          rotatedVariants.flatMap((variant) =>
-            rotatedModes.map((mode) => runImageCaptionFallback(model, variant, mode, timeoutMs))
-          )
-        )
-      ).filter((caption): caption is { caption: string; usage: GeminiUsage } => Boolean(caption?.caption.trim()))
-    );
-    mergedCaption = mergeCaptionTexts(captions.map((caption) => caption.caption));
-  }
-
-  for (const caption of captions) {
+  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 2_800), 4_000);
+  const caption = await runImageCaptionFallback(model, image, 'inventory', timeoutMs);
+  if (caption?.caption.trim()) {
     usageEvents.push({
       feature: 'parse_image_caption',
       usage: caption.usage,
@@ -2200,27 +2192,28 @@ async function recoverWithV2CaptionEnsemble(
     });
   }
 
+  let mergedCaption = caption?.caption ? mergeCaptionTexts([caption.caption]) : '';
   if (!mergedCaption) {
     image.debugEvents?.push({
-      stage: 'image_caption_ensemble_v2',
+      stage: 'image_caption_fast_v2',
       ok: false,
       model,
-      reason: 'empty_merged_caption',
+      reason: caption ? 'empty_merged_caption' : 'caption_probe_failed',
       ms: 0
     });
-    return null;
   }
 
   const contextCaption = trimSafe(image.contextNote);
   if (
-    captionFoodSegmentCount(contextCaption) >= 3 &&
-    captionFoodSegmentCount(contextCaption) > captionFoodSegmentCount(mergedCaption)
+    contextCaption &&
+    (captionFoodSegmentCount(contextCaption) >= 3 ||
+      captionFoodSegmentCount(contextCaption) > captionFoodSegmentCount(mergedCaption))
   ) {
     const contextMerged = mergeCaptionTexts([mergedCaption, contextCaption]);
     if (captionFoodSegmentCount(contextMerged) > captionFoodSegmentCount(mergedCaption)) {
       mergedCaption = contextMerged;
       image.debugEvents?.push({
-        stage: 'image_caption_ensemble_v2',
+        stage: 'image_caption_fast_v2',
         ok: true,
         model: 'context',
         reason: 'merged_sparse_caption_with_context',
@@ -2231,11 +2224,28 @@ async function recoverWithV2CaptionEnsemble(
     }
   }
 
+  if (!mergedCaption && contextCaption && captionFoodSegmentCount(contextCaption) >= 2) {
+    mergedCaption = mergeCaptionTexts([contextCaption]);
+    image.debugEvents?.push({
+      stage: 'image_caption_fast_v2',
+      ok: true,
+      model: 'context',
+      reason: 'using_context_after_caption_failure',
+      ms: 0,
+      items: captionFoodSegmentCount(mergedCaption),
+      caption: mergedCaption.slice(0, 180)
+    });
+  }
+
+  if (!mergedCaption) {
+    return null;
+  }
+
   image.debugEvents?.push({
-    stage: 'image_caption_ensemble_v2',
+    stage: 'image_caption_fast_v2',
     ok: true,
     model,
-    reason: 'merged_caption_inventory',
+    reason: 'single_caption_inventory',
     ms: 0,
     items: captionFoodSegmentCount(mergedCaption),
     caption: mergedCaption.slice(0, 180)
@@ -2295,12 +2305,12 @@ async function recoverWithV2CaptionEnsemble(
     stage: 'image_caption_heuristic_v2',
     ok: false,
     model: 'heuristic',
-    reason: 'no_safe_heuristic_match',
+    reason: 'no_safe_heuristic_match_trying_caption_text',
     ms: 0,
     items: captionFoodSegmentCount(mergedCaption),
     caption: mergedCaption.slice(0, 180)
   });
-  return null;
+  return parseCaptionToImageResult(mergedCaption, image, usageEvents, 'v2');
 }
 
 async function recoverWithStructuredRescue(

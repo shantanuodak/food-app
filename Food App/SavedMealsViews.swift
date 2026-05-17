@@ -4,10 +4,14 @@ private enum SavedMealsTokens {
     static let orange = Color(red: 0.902, green: 0.361, blue: 0.102)
     static let orangeDeep = Color(red: 0.725, green: 0.306, blue: 0.071)
     static let orangeSoft = Color(red: 1.0, green: 0.941, blue: 0.878)
+    static let orangeWash = Color(red: 0.992, green: 0.970, blue: 0.947)
     static let ink = Color(red: 0.129, green: 0.145, blue: 0.161)
     static let muted = Color(red: 0.525, green: 0.557, blue: 0.588)
-    static let border = Color(red: 1.0, green: 0.835, blue: 0.675)
-    static let shadow = Color(red: 0.376, green: 0.212, blue: 0.078).opacity(0.13)
+    static let border = Color(red: 0.925, green: 0.855, blue: 0.792)
+    static let hairline = Color(red: 0.902, green: 0.867, blue: 0.827)
+    static let shadow = Color.black.opacity(0.055)
+    static let cardBackground = Color.white.opacity(0.94)
+    static let cardTint = Color(red: 0.989, green: 0.977, blue: 0.962)
 
     static let brandGradient = LinearGradient(
         colors: [Color(red: 1.00, green: 0.62, blue: 0.20), orange],
@@ -17,12 +21,12 @@ private enum SavedMealsTokens {
 
     static let screenBackground = LinearGradient(
         colors: [
-            Color(red: 0.965, green: 0.886, blue: 0.792),
-            Color(red: 1.000, green: 0.976, blue: 0.941),
-            Color(red: 0.957, green: 0.918, blue: 0.875)
+            Color(red: 0.995, green: 0.983, blue: 0.968),
+            Color(red: 0.988, green: 0.972, blue: 0.952),
+            Color(red: 0.982, green: 0.961, blue: 0.936)
         ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
+        startPoint: .top,
+        endPoint: .bottom
     )
 }
 
@@ -209,6 +213,7 @@ struct SavedMealsScreen: View {
     @State private var collections: [SavedMealCollection] = []
     @State private var meals: [SavedMeal] = []
     @State private var searchText = ""
+    @State private var selectedCollectionId: String?
     @State private var isLoading = true
     @State private var loggingMealId: String?
     @State private var errorMessage: String?
@@ -245,7 +250,7 @@ struct SavedMealsScreen: View {
 
     private var content: some View {
         ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 if showsHero {
                     hero
                 }
@@ -294,10 +299,7 @@ struct SavedMealsScreen: View {
     }
 
     private var showsCollectionsSection: Bool {
-        if case .sheet = presentationStyle {
-            return false
-        }
-        return !collections.isEmpty
+        !collections.isEmpty
     }
 
     private var hero: some View {
@@ -337,29 +339,47 @@ struct SavedMealsScreen: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(SavedMealsTokens.orangeDeep.opacity(0.82))
+                .foregroundStyle(SavedMealsTokens.orangeDeep.opacity(0.72))
             TextField("Search Saved Meals", text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
+                .foregroundStyle(SavedMealsTokens.ink)
         }
         .padding(.horizontal, 16)
-        .frame(height: 54)
-        .background(.white.opacity(0.74), in: RoundedRectangle(cornerRadius: 23, style: .continuous))
+        .frame(height: 52)
+        .background(SavedMealsTokens.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 23, style: .continuous)
-                .stroke(SavedMealsTokens.border.opacity(0.70), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(SavedMealsTokens.hairline, lineWidth: 1)
         }
-        .shadow(color: SavedMealsTokens.shadow, radius: 22, y: 12)
+        .shadow(color: SavedMealsTokens.shadow, radius: 14, y: 6)
     }
 
     private var collectionsSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             SavedMealsSectionTitle("Collections")
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 10) {
-                ForEach(collections) { collection in
-                    SavedMealCollectionCard(collection: collection)
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    collectionFilterChip(
+                        title: "All",
+                        count: meals.count,
+                        isSelected: selectedCollectionId == nil
+                    ) {
+                        selectedCollectionId = nil
+                    }
+
+                    ForEach(collections) { collection in
+                        collectionFilterChip(
+                            title: collection.name,
+                            count: collection.mealCount,
+                            isSelected: selectedCollectionId == collection.id
+                        ) {
+                            selectedCollectionId = collection.id
+                        }
+                    }
                 }
+                .padding(.horizontal, 2)
             }
         }
     }
@@ -393,11 +413,13 @@ struct SavedMealsScreen: View {
 
     private var filteredMeals: [SavedMeal] {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        guard !query.isEmpty else { return meals }
         return meals.filter { meal in
-            meal.name.lowercased().contains(query) ||
-            meal.rawText.lowercased().contains(query) ||
-            meal.collectionName.lowercased().contains(query)
+            let matchesCollection = selectedCollectionId == nil || meal.collectionId == selectedCollectionId
+            let matchesQuery = query.isEmpty ||
+                meal.name.lowercased().contains(query) ||
+                meal.rawText.lowercased().contains(query) ||
+                meal.collectionName.lowercased().contains(query)
+            return matchesCollection && matchesQuery
         }
     }
 
@@ -409,6 +431,10 @@ struct SavedMealsScreen: View {
             let response = try await appStore.apiClient.getSavedMeals()
             collections = response.collections
             meals = response.meals
+            if let selectedCollectionId,
+               !response.collections.contains(where: { $0.id == selectedCollectionId }) {
+                self.selectedCollectionId = nil
+            }
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Please try again."
         }
@@ -434,6 +460,42 @@ struct SavedMealsScreen: View {
         }
         loggingMealId = nil
     }
+
+    private func collectionFilterChip(
+        title: String,
+        count: Int,
+        isSelected: Bool,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 8) {
+                Text("\(count)")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(isSelected ? .white : SavedMealsTokens.orangeDeep)
+                    .frame(width: 24, height: 24)
+                    .background(
+                        Circle()
+                            .fill(isSelected ? SavedMealsTokens.orange : SavedMealsTokens.orangeSoft)
+                    )
+
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(isSelected ? SavedMealsTokens.orangeDeep : SavedMealsTokens.ink)
+                    .lineLimit(1)
+            }
+            .padding(.horizontal, 12)
+            .frame(height: 40)
+            .background(
+                Capsule(style: .continuous)
+                    .fill(isSelected ? SavedMealsTokens.orangeWash : SavedMealsTokens.cardBackground)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(isSelected ? SavedMealsTokens.border : SavedMealsTokens.hairline, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
 }
 
 private struct SavedMealRow: View {
@@ -442,31 +504,37 @@ private struct SavedMealRow: View {
     let onLog: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 12) {
                 Text(meal.name)
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(SavedMealsTokens.ink)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
                 Text("\(Int(meal.totals.calories.rounded())) kcal")
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(SavedMealsTokens.orange)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(SavedMealsTokens.orangeDeep)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 6)
+                    .background(SavedMealsTokens.orangeSoft, in: Capsule())
             }
 
             Text(meal.rawText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(SavedMealsTokens.muted)
                 .lineLimit(2)
 
             HStack(spacing: 8) {
-                Label(meal.collectionName, systemImage: "folder")
-                Text("\(meal.itemCount) item\(meal.itemCount == 1 ? "" : "s")")
-                Text("P \(Int(meal.totals.protein.rounded()))g")
-                Text("C \(Int(meal.totals.carbs.rounded()))g")
-                Text("F \(Int(meal.totals.fat.rounded()))g")
+                metadataPill(
+                    "\(meal.collectionName)",
+                    systemImage: "folder.fill"
+                )
+                metadataPill("\(meal.itemCount) item\(meal.itemCount == 1 ? "" : "s")")
+                metadataPill("P \(Int(meal.totals.protein.rounded()))g")
+                metadataPill("C \(Int(meal.totals.carbs.rounded()))g")
+                metadataPill("F \(Int(meal.totals.fat.rounded()))g")
             }
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(SavedMealsTokens.muted)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(action: onLog) {
                 HStack {
@@ -483,12 +551,34 @@ private struct SavedMealRow: View {
             .disabled(isLogging)
         }
         .padding(18)
-        .background(.white.opacity(0.78), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(
+            LinearGradient(
+                colors: [SavedMealsTokens.cardBackground, SavedMealsTokens.cardTint],
+                startPoint: .top,
+                endPoint: .bottom
+            ),
+            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+        )
         .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(SavedMealsTokens.border.opacity(0.72), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(SavedMealsTokens.hairline, lineWidth: 1)
         }
-        .shadow(color: SavedMealsTokens.shadow, radius: 28, y: 16)
+        .shadow(color: SavedMealsTokens.shadow, radius: 14, y: 6)
+    }
+
+    private func metadataPill(_ text: String, systemImage: String? = nil) -> some View {
+        HStack(spacing: 5) {
+            if let systemImage {
+                Image(systemName: systemImage)
+                    .font(.system(size: 10, weight: .bold))
+            }
+            Text(text)
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(SavedMealsTokens.orangeDeep.opacity(0.86))
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(SavedMealsTokens.orangeWash, in: Capsule())
     }
 }
 
@@ -501,53 +591,9 @@ private struct SavedMealsSectionTitle: View {
 
     var body: some View {
         Text(title)
-            .font(.system(size: 22, weight: .bold))
-            .foregroundStyle(SavedMealsTokens.ink.opacity(0.70))
+            .font(.system(size: 18, weight: .bold))
+            .foregroundStyle(SavedMealsTokens.ink.opacity(0.82))
             .padding(.horizontal, 4)
-    }
-}
-
-private struct SavedMealCollectionCard: View {
-    let collection: SavedMealCollection
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 13) {
-            ZStack {
-                Circle()
-                    .fill(SavedMealsTokens.brandGradient)
-                Image(systemName: "folder.fill")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 36, height: 36)
-            .shadow(color: SavedMealsTokens.orange.opacity(0.20), radius: 8, y: 4)
-
-            Text(collection.name)
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(SavedMealsTokens.ink)
-                .lineLimit(1)
-                .minimumScaleFactor(0.84)
-
-            Text("\(collection.mealCount) saved meal\(collection.mealCount == 1 ? "" : "s")")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(SavedMealsTokens.orangeDeep.opacity(0.76))
-                .lineLimit(1)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(16)
-        .background(
-            LinearGradient(
-                colors: [Color.white.opacity(0.82), SavedMealsTokens.orangeSoft.opacity(0.78)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(SavedMealsTokens.border.opacity(0.70), lineWidth: 1)
-        }
-        .shadow(color: SavedMealsTokens.shadow, radius: 22, y: 12)
     }
 }
 
@@ -560,10 +606,10 @@ private struct SavedMealsConfirmationCard: View {
             .foregroundStyle(Color(red: 0.122, green: 0.561, blue: 0.384))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(16)
-            .background(Color(red: 0.914, green: 0.973, blue: 0.933).opacity(0.86), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .background(Color(red: 0.943, green: 0.983, blue: 0.958), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 22, style: .continuous)
-                    .stroke(Color(red: 0.122, green: 0.561, blue: 0.384).opacity(0.16), lineWidth: 1)
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color(red: 0.122, green: 0.561, blue: 0.384).opacity(0.12), lineWidth: 1)
             }
     }
 }
@@ -593,12 +639,12 @@ private struct SavedMealsStatusCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background(.white.opacity(0.74), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(SavedMealsTokens.cardBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(SavedMealsTokens.border.opacity(0.72), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(SavedMealsTokens.hairline, lineWidth: 1)
         }
-        .shadow(color: SavedMealsTokens.shadow, radius: 28, y: 16)
+        .shadow(color: SavedMealsTokens.shadow, radius: 14, y: 6)
     }
 }
 
@@ -613,11 +659,11 @@ private struct SavedMealsLoadingCard: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(20)
-        .background(.white.opacity(0.74), in: RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .background(SavedMealsTokens.cardBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(SavedMealsTokens.border.opacity(0.72), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .stroke(SavedMealsTokens.hairline, lineWidth: 1)
         }
-        .shadow(color: SavedMealsTokens.shadow, radius: 28, y: 16)
+        .shadow(color: SavedMealsTokens.shadow, radius: 14, y: 6)
     }
 }

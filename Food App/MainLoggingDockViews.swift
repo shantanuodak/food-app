@@ -72,14 +72,14 @@ struct MainLoggingBottomDock: View {
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             isSavedMealsPresented = true
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "bookmark.fill")
                     .font(.system(size: 13, weight: .bold))
-                Text("Saved Meals")
+                Text("Saved")
                     .font(.system(size: 14, weight: .semibold))
             }
             .foregroundStyle(Color(red: 0.902, green: 0.361, blue: 0.102))
-            .padding(.horizontal, 16)
+            .padding(.horizontal, 14)
             .frame(height: 38)
             .background(
                 Capsule(style: .continuous)

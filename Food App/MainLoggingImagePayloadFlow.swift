@@ -15,7 +15,7 @@ extension MainLoggingShellView {
         }
     }
 
-    /// High-quality JPEG preparation for vision parsing.
+    /// Fast JPEG preparation for meal-photo vision parsing.
     ///
     /// `nonisolated static` so callers can run it on a background queue
     /// without an actor hop — a 12MP iPhone photo can take 1-2 s of CPU
@@ -23,20 +23,17 @@ extension MainLoggingShellView {
     /// camera result drawer's shimmer presentation) for the full duration
     /// after picking from the photo library.
     ///
-    /// Do not aggressively shrink these images. Package/can labels need
-    /// enough pixels for OCR-like vision behavior, and forcing everything
-    /// near 600 KB caused obvious branded items to become unreadable.
-    ///
-    /// The backend accepts ~6 MB raw images, and Express accepts a 10 MB
-    /// JSON body, so we now target ~5.8 MB. This is intentionally slower:
-    /// the image parser is a core MVP feature and accuracy matters more than
-    /// shaving a second off photo preparation.
+    /// Meal photos should feel close to text logging speed. The backend can
+    /// still optimize larger payloads, but sending ~1.2 MB from the phone
+    /// avoids the 10s+ client/upload tax we saw with 5-6 MB camera images.
+    /// If we later add exact package-label OCR, that should use a separate
+    /// high-detail mode rather than slowing down every normal meal photo.
     /// The loop still runs off the main thread and each encode is scoped by
     /// `autoreleasepool` to avoid retaining large intermediate buffers.
     nonisolated static func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
-        let maxBytes = 5_800_000
-        let dimensionAttempts: [CGFloat] = [4032, 3600, 3024, 2560, 2048, 1920]
-        let qualityAttempts: [CGFloat] = [0.98, 0.95, 0.92, 0.88, 0.84, 0.80]
+        let maxBytes = 1_200_000
+        let dimensionAttempts: [CGFloat] = [1800, 1600, 1440, 1280]
+        let qualityAttempts: [CGFloat] = [0.88, 0.84, 0.80, 0.76, 0.72]
         var smallestData: Data?
 
         for dimension in dimensionAttempts {
