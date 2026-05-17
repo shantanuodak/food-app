@@ -1184,6 +1184,57 @@ describe('image parse service', () => {
     expect(parsed.result.totals).toEqual({ calories: 160, protein: 30, carbs: 5, fat: 3 });
   });
 
+  test('V2 caption recovery treats packaged protein drink flavor fragments as one item', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi.fn(async () => null);
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: 'Mixed Berry Vanilla Protein Drink, Mixed Berry Vanilla',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 420, outputTokens: 10 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'Chobani, Mixed Berry',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 430, outputTokens: 6 }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'protein-drink-caption-image'
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
+    expect(parsed.fallbackUsed).toBe(true);
+    expect(parsed.model).toBe('heuristic');
+    expect(parsed.extractedText).toBe('Chobani Mixed Berry Vanilla Protein Drink');
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['Chobani Mixed Berry Vanilla Protein Drink']);
+    expect(parsed.result.items[0]).toMatchObject({
+      quantity: 1,
+      unit: 'bottle',
+      calories: 170,
+      protein: 25,
+      carbs: 14,
+      fat: 2.5,
+      needsClarification: true
+    });
+  });
+
   test('V2 inventory parser returns reviewable partial parses instead of failing sparse multi-item meals', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
     process.env.AI_IMAGE_PARSE_ENABLED = 'true';

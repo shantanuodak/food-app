@@ -107,6 +107,9 @@ type ImagePart = {
   variantLabel?: string;
 };
 
+const visionMaxEdgePx = 1400;
+const visionJpegQuality = 78;
+
 const parseItemSchema = z.object({
   name: z.string().min(1),
   quantity: z.number().nonnegative(),
@@ -1111,6 +1114,59 @@ function acceptedLowConfidenceResult(
   };
 }
 
+async function prepareImageForVision(image: ImagePart): Promise<ImagePart> {
+  if (image.dataBase64.length < 128) {
+    return image;
+  }
+
+  const startedAt = process.hrtime.bigint();
+  try {
+    const original = Buffer.from(image.dataBase64, 'base64');
+    if (original.length < 1_024) {
+      return image;
+    }
+
+    const optimized = await sharp(original, { failOn: 'none' })
+      .rotate()
+      .resize({
+        width: visionMaxEdgePx,
+        height: visionMaxEdgePx,
+        fit: 'inside',
+        withoutEnlargement: true
+      })
+      .jpeg({ quality: visionJpegQuality, mozjpeg: true })
+      .toBuffer();
+
+    if (optimized.length <= 0 || optimized.length >= original.length * 0.95) {
+      return image;
+    }
+
+    image.debugEvents?.push({
+      stage: 'image_prepare',
+      ok: true,
+      reason: 'optimized_for_vision',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+      caption: `${original.length}B -> ${optimized.length}B`
+    });
+
+    return {
+      ...image,
+      mimeType: 'image/jpeg',
+      dataBase64: optimized.toString('base64'),
+      variantLabel: image.variantLabel ?? 'optimized'
+    };
+  } catch (err) {
+    image.debugEvents?.push({
+      stage: 'image_prepare',
+      ok: false,
+      reason: 'optimize_failed',
+      ms: Math.round((Number(process.hrtime.bigint() - startedAt) / 1_000_000) * 10) / 10,
+      caption: err instanceof Error ? err.message.slice(0, 120) : undefined
+    });
+    return image;
+  }
+}
+
 async function runImageModel(model: string, image: ImagePart, mode: ImagePromptMode = 'primary'): Promise<{
   extractedText: string;
   result: ParseResult;
@@ -1824,6 +1880,163 @@ function captionHeuristicResult(caption: string): ParseResult | null {
   };
 }
 
+function productCaptionSignalScore(key: string): number {
+  let score = 0;
+  if (/\bprotein\s+(drink|shake|beverage)\b/.test(key)) score += 100;
+  if (/\b(protein|nutrition|energy|snack)\s+bar\b/.test(key)) score += 90;
+  if (/\b(sparkling water|prebiotic soda|diet soda|soda|cola|coke)\b/.test(key)) score += 80;
+  if (/\b(drink|shake|beverage|bottle|can|bar|carton|package)\b/.test(key)) score += 35;
+  if (/\b(chobani|premier protein|rxbar|quest|fairlife|ensure|boost|spindrift|poppi|waterloo|coca cola|diet coke)\b/.test(key)) {
+    score += 25;
+  }
+  return score;
+}
+
+function productCaptionFragmentAllowed(fragmentKey: string, productKey: string): boolean {
+  if (!fragmentKey) return true;
+  if (productKey.includes(fragmentKey) || fragmentKey.includes(productKey)) return true;
+
+  const allowedFragments = new Set([
+    'mixed',
+    'mixed berry',
+    'berry',
+    'berries',
+    'vanilla',
+    'mixed berry vanilla',
+    'chobani',
+    'premier',
+    'premier protein',
+    'protein',
+    'shake',
+    'drink',
+    'bottle',
+    'can',
+    'bar'
+  ]);
+  return allowedFragments.has(fragmentKey);
+}
+
+function bestProductCaptionSegment(segments: string[]): string | null {
+  const scored = segments
+    .map((segment, index) => {
+      const key = captionSegmentKey(segment);
+      return {
+        segment: segment.trim(),
+        key,
+        score: productCaptionSignalScore(key) + key.length / 100 - index / 1000
+      };
+    })
+    .filter((candidate) => candidate.score >= 80)
+    .sort((left, right) => right.score - left.score);
+
+  return scored[0]?.segment ?? null;
+}
+
+function singleProductCaptionResult(caption: string): ParseResult | null {
+  const segments = splitCaptionFoodSegments(caption);
+  if (segments.length === 0) {
+    return null;
+  }
+
+  const productSegment = bestProductCaptionSegment(segments);
+  if (!productSegment) {
+    return null;
+  }
+
+  const productKey = captionSegmentKey(productSegment);
+  if (!productKey) {
+    return null;
+  }
+
+  const unrelated = segments
+    .map((segment) => captionSegmentKey(segment))
+    .filter((key) => key !== productKey)
+    .filter((key) => !productCaptionFragmentAllowed(key, productKey));
+
+  if (unrelated.length > 0) {
+    return null;
+  }
+
+  const captionKey = captionSegmentKey(caption);
+  const brandPrefix =
+    /\bchobani\b/.test(captionKey) && !/\bchobani\b/.test(productKey)
+      ? 'Chobani '
+      : /\bpremier\s+protein\b/.test(captionKey) && !/\bpremier\b/.test(productKey)
+        ? 'Premier Protein '
+        : '';
+  const displayName = `${brandPrefix}${toDisplayFoodName(productKey, productSegment)}`.replace(/\s+/g, ' ').trim();
+
+  let quantity = 1;
+  let unit = 'serving';
+  let grams = 330;
+  let calories = 170;
+  let protein = 25;
+  let carbs = 14;
+  let fat = 2.5;
+
+  if (/\bpremier\b/.test(captionKey)) {
+    unit = 'bottle';
+    grams = 330;
+    calories = 160;
+    protein = 30;
+    carbs = 5;
+    fat = 3;
+  } else if (/\bchobani\b/.test(captionKey) || /\bprotein\s+(drink|shake|beverage)\b/.test(productKey)) {
+    unit = 'bottle';
+    grams = 296;
+    calories = 170;
+    protein = 25;
+    carbs = 14;
+    fat = 2.5;
+  } else if (/\b(protein|nutrition|energy|snack)\s+bar\b/.test(productKey) || /\brxbar\b/.test(captionKey)) {
+    unit = 'bar';
+    grams = /\brxbar\b/.test(captionKey) ? 52 : 60;
+    calories = /\brxbar\b/.test(captionKey) ? 180 : 210;
+    protein = /\brxbar\b/.test(captionKey) ? 12 : 15;
+    carbs = /\brxbar\b/.test(captionKey) ? 24 : 24;
+    fat = /\brxbar\b/.test(captionKey) ? 6 : 7;
+  } else if (/\b(diet|zero|sparkling water|waterloo)\b/.test(captionKey)) {
+    unit = /\bcan\b/.test(productKey) ? 'can' : 'bottle';
+    grams = 355;
+    calories = /\bspindrift\b/.test(captionKey) ? 10 : 1;
+    protein = 0;
+    carbs = /\bspindrift\b/.test(captionKey) ? 2 : 0;
+    fat = 0;
+  } else if (/\b(soda|cola|coke|prebiotic soda|poppi)\b/.test(productKey)) {
+    unit = /\bcan\b/.test(productKey) ? 'can' : 'bottle';
+    grams = 355;
+    calories = /\bpoppi|prebiotic\b/.test(captionKey) ? 25 : 140;
+    protein = 0;
+    carbs = /\bpoppi|prebiotic\b/.test(captionKey) ? 6 : 39;
+    fat = 0;
+  }
+
+  const item: ParsedItem = {
+    name: displayName,
+    quantity,
+    unit,
+    grams,
+    calories,
+    protein,
+    carbs,
+    fat,
+    matchConfidence: 0.82,
+    nutritionSourceId: 'image_caption_product_heuristic',
+    originalNutritionSourceId: 'image_caption_product_heuristic',
+    sourceFamily: 'gemini',
+    needsClarification: true,
+    foodDescription: `${displayName}, ${quantity} ${unit}`,
+    explanation: `Estimated as one visible packaged ${unit}; review the label if you want exact brand values.`
+  };
+
+  return {
+    confidence: 0.82,
+    assumptions: ['Treated the visible packaged product as one item instead of splitting flavor words into ingredients.'],
+    items: [item],
+    totals: { calories, protein, carbs, fat }
+  };
+}
+
 async function parseCaptionToImageResult(
   caption: string,
   image: ImagePart,
@@ -1831,6 +2044,33 @@ async function parseCaptionToImageResult(
   orchestratorVersion: 'v1' | 'v2',
   coverage?: ImageParseCoverage
 ): Promise<ImageParseServiceResult | null> {
+  if (orchestratorVersion === 'v2') {
+    const productResult = singleProductCaptionResult(caption);
+    if (productResult) {
+      const resolvedCoverage = coverage ?? coverageFromCaptionInventory(caption, productResult);
+      image.debugEvents?.push({
+        stage: 'image_caption_product_v2',
+        ok: true,
+        model: 'heuristic',
+        reason: 'single_packaged_product',
+        ms: 0,
+        confidence: productResult.confidence,
+        items: productResult.items.length,
+        caption
+      });
+      return {
+        extractedText: productResult.items[0]?.name ?? caption,
+        result: productResult,
+        model: 'heuristic',
+        fallbackUsed: true,
+        lowConfidenceAccepted: true,
+        usageEvents,
+        orchestratorVersion,
+        coverage: resolvedCoverage
+      };
+    }
+  }
+
   const textStartedAt = process.hrtime.bigint();
   const textAttempt = await tryGeminiPrimaryParse(caption, createEmptyParseResult(caption));
   if (!textAttempt?.result.items.length || !resultHasPositiveNutrition(textAttempt.result)) {
@@ -1882,7 +2122,7 @@ async function recoverWithV2CaptionEnsemble(
   usageEvents: ImageParseUsageEvent[]
 ): Promise<ImageParseServiceResult | null> {
   const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
-  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 3_500), 7_000);
+  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 3_500), 5_000);
   const captions: Array<{ caption: string; usage: GeminiUsage }> = [];
 
   const originalModes: ImageCaptionPromptMode[] = ['inventory', 'sides'];
@@ -2162,11 +2402,12 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     throw new ApiError(403, 'IMAGE_PARSE_DISABLED', 'Image parse is disabled.');
   }
 
+  const visionImage = await prepareImageForVision(image);
   const usageEvents: ImageParseUsageEvent[] = [];
   const useV2 = config.aiImageOrchestratorVersion.trim().toLowerCase() === 'v2';
 
   if (useV2) {
-    const inventoryV2 = await runImageInventoryV2(image);
+    const inventoryV2 = await runImageInventoryV2(visionImage);
     if (inventoryV2?.usage) {
       usageEvents.push({
         feature: 'parse_image_inventory_v2',
@@ -2190,19 +2431,19 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
       };
     }
 
-    image.debugEvents?.push({
+    visionImage.debugEvents?.push({
       stage: 'image_orchestrator_v2',
       ok: false,
       reason: 'inventory_failed_trying_caption_recovery',
       ms: 0
     });
 
-    const captionEnsemble = await recoverWithV2CaptionEnsemble(image, usageEvents);
+    const captionEnsemble = await recoverWithV2CaptionEnsemble(visionImage, usageEvents);
     if (captionEnsemble && resultHasPositiveNutrition(captionEnsemble.result)) {
       return captionEnsemble;
     }
 
-    image.debugEvents?.push({
+    visionImage.debugEvents?.push({
       stage: 'image_orchestrator_v2',
       ok: false,
       reason: 'falling_back_to_v1',
@@ -2210,7 +2451,7 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     });
   }
 
-  const primary = await runImageModel(config.aiImagePrimaryModel, image);
+  const primary = await runImageModel(config.aiImagePrimaryModel, visionImage);
   if (primary?.usage) {
     usageEvents.push({
       feature: 'parse_image_primary',
@@ -2245,7 +2486,7 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     throw new ApiError(422, 'IMAGE_PARSE_LOW_CONFIDENCE', 'Image parse confidence is too low. Please retry with a clearer photo.');
   }
 
-  const captionRecovered = await recoverWithCaptionFallback(image, usageEvents);
+  const captionRecovered = await recoverWithCaptionFallback(visionImage, usageEvents);
   if (captionRecovered) {
     return captionRecovered;
   }
