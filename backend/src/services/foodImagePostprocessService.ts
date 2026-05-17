@@ -5,6 +5,7 @@ export type FoodImagePostprocessContext = {
   assumptions?: string[];
   imageType?: string;
   visibleComponents?: Array<{ name: string; category?: string; portionHint?: string }>;
+  mergeAliasDuplicates?: boolean;
 };
 
 type Candidate = {
@@ -206,14 +207,22 @@ function canonicalGroupForItem(item: ParsedItem, allItems: ParsedItem[], context
 } {
   const key = normalizeKey(item.name);
   const contextIsIndianSavory = indianSavoryContext(allItems, context);
+  const mergeAliasDuplicates = context?.mergeAliasDuplicates !== false;
 
-  if (/\b(methi|fenugreek)\s+(paratha|flatbread|thepla)\b/.test(key) || key === 'thepla' || key === 'methi thepla') {
+  if (
+    mergeAliasDuplicates &&
+    (/\b(methi|fenugreek)\s+(paratha|flatbread|thepla)\b/.test(key) || key === 'thepla' || key === 'methi thepla')
+  ) {
     return { groupKey: 'methi_flatbread', displayName: key.includes('thepla') ? 'Thepla' : 'Methi paratha' };
   }
   if (/\b(green|mint|cilantro|coriander)\s+chutney\b/.test(key) || (key === 'green' && contextIsIndianSavory)) {
     return { groupKey: 'green_chutney', displayName: 'Green chutney' };
   }
-  if (/\bmango\s+(chutney|pickle|sauce)\b/.test(key) || (key === 'mango' && contextIsIndianSavory)) {
+  if (
+    /\bmango\s+(chutney|pickle|sauce)\b/.test(key) ||
+    (key === 'mango' && contextIsIndianSavory) ||
+    (key === 'chutney' && /\bmango\s+(chutney|pickle|sauce)\b/.test(contextKey(context)))
+  ) {
     return { groupKey: 'mango_chutney', displayName: 'Mango chutney' };
   }
   if (/\bpotato\s+(sabzi|curry|vegetable|vegetables)\b/.test(key) || (key === 'potato' && contextIsIndianSavory)) {

@@ -13,6 +13,7 @@ import {
   sanitizeResultSources,
   shouldAcceptCachedResult
 } from './parsePipelineResultUtils.js';
+import { postProcessFoodTextResult } from './foodTextPostprocessService.js';
 import type {
   ParseDecisionContext,
   ParseDecisionResult,
@@ -189,7 +190,7 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
     };
   }
 
-  result = sanitizeResultSources(result, route);
+  result = postProcessFoodTextResult(text, sanitizeResultSources(result, route));
   result = ensureItemExplanations(result, route);
   result = normalizeParseResultContract(result, route);
   const sourcesUsed = collectSourcesUsed(result.items, route, cacheHit);
@@ -333,7 +334,7 @@ export async function runSegmentAwareParsePipeline(
 
   // Full cache hit across all segments.
   if (uncachedSegments.length === 0) {
-    const combined = combineParseResults(cacheChecks.map((c) => c.result as ParseResult));
+    const combined = postProcessFoodTextResult(text, combineParseResults(cacheChecks.map((c) => c.result as ParseResult)));
     const clarification = computeClarificationState(text, combined);
     console.info(
       '[segment_pipeline]',
@@ -403,10 +404,9 @@ export async function runSegmentAwareParsePipeline(
       // Don't cache placeholders — we want a future identical input to
       // trigger a fresh Gemini call, not lock in the failure state.
     } else if (!output.cacheHit) {
-      // Cache successful per-segment results so a repeat of the same
-      // food is free next time the user types it.
+      // runPrimaryParsePipeline already caches successful segment results.
+      // Keep this merge list focused on response assembly only.
       freshResults.push(output.result);
-      setParseCache(seg, output.result, cacheScope).catch(() => {});
     } else {
       freshResults.push(output.result);
     }
@@ -428,7 +428,7 @@ export async function runSegmentAwareParsePipeline(
 
   // Merge cached segment results with freshly-parsed ones (incl. placeholders).
   const cachedResults = cacheChecks.filter((c) => c.fromCache).map((c) => c.result as ParseResult);
-  const merged = combineParseResults([...cachedResults, ...freshResults]);
+  const merged = postProcessFoodTextResult(text, combineParseResults([...cachedResults, ...freshResults]));
   const clarification = computeClarificationState(text, merged);
 
   console.info(
@@ -517,7 +517,7 @@ export async function runSegmentAwareParsePipelineStreaming(
 
   const allCached = cacheChecks.every((c) => c.fromCache);
   if (allCached) {
-    const combined = combineParseResults(cacheChecks.map((c) => c.result as ParseResult));
+    const combined = postProcessFoodTextResult(text, combineParseResults(cacheChecks.map((c) => c.result as ParseResult)));
     const clarification = computeClarificationState(text, combined);
     return {
       result: combined,
@@ -533,52 +533,58 @@ export async function runSegmentAwareParsePipelineStreaming(
     };
   }
 
-  // Parse uncached segments
   const uncachedSegments = cacheChecks.filter((c) => !c.fromCache).map((c) => c.seg);
-  const uncachedText = uncachedSegments.join('\n');
+  const perSegmentOutputs = await Promise.all(
+    uncachedSegments.map(async (seg) => {
+      const out = await runPrimaryParsePipeline(seg, options);
+      return { seg, output: out };
+    })
+  );
 
-  const uncachedOutput = await runPrimaryParsePipeline(uncachedText, options);
+  let anyFallbackUsed = false;
+  let firstFallbackModel: string | null = null;
+  let firstFallbackUsage: AICallUsage | null = null;
+  const aggregatedReasonCodes = new Set<string>();
+  let routeForResponse: ParsePipelineRoute = 'gemini';
+  const freshResults: ParseResult[] = [];
 
-  // Emit freshly parsed items
-  for (const item of uncachedOutput.result.items) {
-    if (options?.signal?.aborted) break;
-    onItem(item as unknown as Record<string, unknown>, itemIndex++);
-  }
-
-  // Cache new segments
-  if (uncachedOutput.result.items.length > 0 && !uncachedOutput.cacheHit) {
-    for (const seg of uncachedSegments) {
-      const segItem = uncachedOutput.result.items.find(
-        (item) => item.name.toLowerCase().includes(seg.toLowerCase().replace(/^\d+\s*/, ''))
-      );
-      if (segItem) {
-        const segResult: ParseResult = {
-          confidence: segItem.matchConfidence,
-          assumptions: [],
-          items: [segItem],
-          totals: {
-            calories: segItem.calories,
-            protein: segItem.protein,
-            carbs: segItem.carbs,
-            fat: segItem.fat
-          }
-        };
-        setParseCache(seg, segResult, cacheScope).catch(() => {});
-      }
+  for (const { seg, output } of perSegmentOutputs) {
+    if (output.fallbackUsed) {
+      anyFallbackUsed = true;
+      if (firstFallbackModel === null) firstFallbackModel = output.fallbackModel;
+      if (firstFallbackUsage === null) firstFallbackUsage = output.fallbackUsage;
     }
+    for (const code of output.reasonCodes) {
+      aggregatedReasonCodes.add(code);
+    }
+    if (output.route === 'unresolved' && routeForResponse !== 'unresolved') {
+      routeForResponse = 'unresolved';
+    }
+
+    const segmentResult = output.result.items.length === 0 ? createUnresolvedPlaceholderResult(seg) : output.result;
+    freshResults.push(segmentResult);
+
+    for (const item of segmentResult.items) {
+      if (options?.signal?.aborted) break;
+      onItem(item as unknown as Record<string, unknown>, itemIndex++);
+    }
+
+    // runPrimaryParsePipeline already caches successful segment results.
   }
 
-  // Merge everything
   const cachedResults = cacheChecks.filter((c) => c.fromCache).map((c) => c.result as ParseResult);
-  const merged = combineParseResults([...cachedResults, uncachedOutput.result]);
+  const merged = postProcessFoodTextResult(text, combineParseResults([...cachedResults, ...freshResults]));
   const clarification = computeClarificationState(text, merged);
 
   return {
-    ...uncachedOutput,
     result: merged,
-    route: cachedResults.length > 0 ? 'gemini' : uncachedOutput.route,
+    route: routeForResponse,
     cacheHit: false,
-    sourcesUsed: collectSourcesUsed(merged.items, uncachedOutput.route, false),
+    sourcesUsed: collectSourcesUsed(merged.items, routeForResponse, false),
+    reasonCodes: Array.from(aggregatedReasonCodes),
+    fallbackUsed: anyFallbackUsed,
+    fallbackModel: firstFallbackModel,
+    fallbackUsage: firstFallbackUsage,
     needsClarification: clarification.needsClarification,
     clarificationQuestions: clarification.clarificationQuestions
   };

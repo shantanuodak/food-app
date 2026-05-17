@@ -576,4 +576,87 @@ describe('runSegmentAwareParsePipeline — multi-segment routing', () => {
     expect(output.result.items).toHaveLength(2);
     expect(tryCheapAIFallback).not.toHaveBeenCalled();
   });
+
+  test('streaming path also parses uncached foods per segment instead of rejoining text', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+
+    const getParseCache = vi.fn(async () => null);
+    const setParseCache = vi.fn(async () => {});
+    const tryCheapAIFallback = vi.fn(async (text: string) => {
+      const lower = text.toLowerCase();
+
+      if (text.includes('\n')) {
+        return {
+          result: parseResult({
+            items: [buildItem({ name: 'Naan', quantity: 2, calories: 560 })],
+            totals: { calories: 560, protein: 18, carbs: 96, fat: 12 }
+          }),
+          usage: { model: 'gemini-2.5-flash', inputTokens: 80, outputTokens: 40, estimatedCostUsd: 0.001 }
+        };
+      }
+
+      const matchedName =
+        lower.includes('naan') ? 'Naan' :
+        lower.includes('paneer') || lower.includes('panner') ? 'Butter Paneer Masala' :
+        lower.includes('rice') || lower.includes('rixe') ? 'Rice bowl' :
+        lower.includes('salad') ? 'Onion salad' :
+        lower.includes('butter') ? 'Buttermilk' :
+        'Generic food';
+
+      return {
+        result: parseResult({
+          items: [buildItem({ name: matchedName, calories: 200, protein: 10, carbs: 20, fat: 8 })],
+          totals: { calories: 200, protein: 10, carbs: 20, fat: 8 }
+        }),
+        usage: { model: 'gemini-2.5-flash', inputTokens: 20, outputTokens: 30, estimatedCostUsd: 0.0005 }
+      };
+    });
+
+    vi.doMock('../src/services/parseCacheService.js', () => ({
+      getParseCache,
+      setParseCache,
+      buildParseCacheDebugInfo: (text: string, scope: string) => ({
+        scope,
+        normalizedText: text.trim().toLowerCase(),
+        textHash: `${scope}:${text.trim().toLowerCase()}`
+      })
+    }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryCheapAIFallback,
+      tryCheapAIFallbackDetailed: async (...args: Parameters<typeof tryCheapAIFallback>) => ({
+        output: await tryCheapAIFallback(...args)
+      })
+    }));
+    vi.doMock('../src/services/clarificationService.js', () => ({
+      buildClarificationQuestions: () => []
+    }));
+
+    const emitted: Array<Record<string, unknown>> = [];
+    const { runSegmentAwareParsePipelineStreaming } = await import('../src/services/parsePipelineService.js');
+    const output = await runSegmentAwareParsePipelineStreaming(
+      '2 naan, 1 cup butter panner masala, rixe bowl, onion salad and buttermilk',
+      {
+        cacheScope: 'user:v2:primary',
+        allowFallback: true,
+        featureFlags: { geminiEnabled: true },
+        userId: 'u1',
+        onItem: (streamedItem) => emitted.push(streamedItem)
+      }
+    );
+
+    expect(output.result.items.length).toBeGreaterThanOrEqual(4);
+    expect(emitted).toHaveLength(output.result.items.length);
+
+    const calls = tryCheapAIFallback.mock.calls;
+    expect(calls.length).toBeGreaterThanOrEqual(4);
+    for (const call of calls) {
+      const [callText] = call as [string, ...unknown[]];
+      expect(callText.includes('\n')).toBe(false);
+    }
+
+    const itemNames = output.result.items.map((i) => i.name.toLowerCase());
+    expect(itemNames.some((n) => n.includes('naan'))).toBe(true);
+    expect(itemNames.some((n) => n.includes('paneer'))).toBe(true);
+    expect(itemNames.some((n) => n.includes('rice'))).toBe(true);
+  });
 });
