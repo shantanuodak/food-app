@@ -1644,6 +1644,8 @@ function addCombinedCompoundCandidates(
 
   if (keys.has('mango') && keys.has('chutney')) additions.push('mango chutney');
   if (keys.has('green') && keys.has('chutney')) additions.push('green chutney');
+  if (keys.has('dal') && keys.has('ba')) additions.push('baati');
+  if ((keys.has('dal') || keys.has('ba') || keys.has('baati')) && keys.has('green')) additions.push('green chutney');
   if ((keys.has('potato') || keys.has('aloo')) && (keys.has('sabzi') || keys.has('vegetable') || keys.has('vegetables'))) {
     additions.push('potato sabzi');
   }
@@ -2135,11 +2137,16 @@ async function recoverWithV2CaptionEnsemble(
   );
 
   let mergedCaption = mergeCaptionTexts(captions.map((caption) => caption.caption));
-  if (!mergedCaption) {
+  const shouldTryRotatedSparseCaption =
+    !mergedCaption ||
+    (captionInventoryLooksSparse(mergedCaption) &&
+      !singleProductCaptionResult(mergedCaption) &&
+      productCaptionSignalScore(captionSegmentKey(mergedCaption)) < 80);
+  if (shouldTryRotatedSparseCaption) {
     const rotatedVariants = (
       await Promise.all([buildRotatedImageVariant(image, 90), buildRotatedImageVariant(image, -90)])
     ).filter((variant): variant is ImagePart => Boolean(variant));
-    const rotatedModes: ImageCaptionPromptMode[] = ['inventory'];
+    const rotatedModes: ImageCaptionPromptMode[] = ['inventory', 'staples', 'sides'];
     captions.push(
       ...(
         await Promise.all(
@@ -2201,6 +2208,31 @@ async function recoverWithV2CaptionEnsemble(
     caption: mergedCaption.slice(0, 180)
   });
 
+  const productHeuristic = singleProductCaptionResult(mergedCaption);
+  if (productHeuristic) {
+    const productCoverage = coverageFromCaptionInventory(mergedCaption, productHeuristic);
+    image.debugEvents?.push({
+      stage: 'image_caption_product_v2',
+      ok: true,
+      model: 'heuristic',
+      reason: 'single_packaged_product',
+      ms: 0,
+      confidence: productHeuristic.confidence,
+      items: productHeuristic.items.length,
+      caption: mergedCaption.slice(0, 180)
+    });
+    return {
+      extractedText: productHeuristic.items[0]?.name ?? mergedCaption,
+      result: productHeuristic,
+      model,
+      fallbackUsed: true,
+      lowConfidenceAccepted: true,
+      usageEvents,
+      orchestratorVersion: 'v2',
+      coverage: productCoverage
+    };
+  }
+
   const heuristic = captionHeuristicResult(mergedCaption);
   if (heuristic) {
     const heuristicCoverage = coverageFromCaptionInventory(mergedCaption, heuristic);
@@ -2226,18 +2258,16 @@ async function recoverWithV2CaptionEnsemble(
     };
   }
 
-  const coverage = coverageFromCaptionInventory(mergedCaption, createEmptyParseResult(mergedCaption));
-  const parsed = await parseCaptionToImageResult(mergedCaption, image, usageEvents, 'v2', coverage);
-  if (!parsed) {
-    return null;
-  }
-
-  const finalCoverage = coverageFromCaptionInventory(mergedCaption, parsed.result);
-  return {
-    ...parsed,
-    coverage: finalCoverage,
-    lowConfidenceAccepted: parsed.lowConfidenceAccepted || finalCoverage.partial || finalCoverage.score < config.aiImageCoverageMin
-  };
+  image.debugEvents?.push({
+    stage: 'image_caption_heuristic_v2',
+    ok: false,
+    model: 'heuristic',
+    reason: 'no_safe_heuristic_match',
+    ms: 0,
+    items: captionFoodSegmentCount(mergedCaption),
+    caption: mergedCaption.slice(0, 180)
+  });
+  return null;
 }
 
 async function recoverWithStructuredRescue(
@@ -2468,9 +2498,10 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
     visionImage.debugEvents?.push({
       stage: 'image_orchestrator_v2',
       ok: false,
-      reason: 'falling_back_to_v1',
+      reason: 'v2_failed_without_safe_result',
       ms: 0
     });
+    throw new ApiError(502, 'IMAGE_PARSE_FAILED', 'Unable to estimate nutrition from this image. Please try another photo.');
   }
 
   const primary = await runImageModel(config.aiImagePrimaryModel, visionImage);

@@ -1221,7 +1221,7 @@ describe('image parse service', () => {
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
     expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(2);
     expect(parsed.fallbackUsed).toBe(true);
-    expect(parsed.model).toBe('heuristic');
+    expect(parsed.model).toBe('gemini-2.5-flash');
     expect(parsed.extractedText).toBe('Chobani Mixed Berry Vanilla Protein Drink');
     expect(parsed.result.items.map((item) => item.name)).toEqual(['Chobani Mixed Berry Vanilla Protein Drink']);
     expect(parsed.result.items[0]).toMatchObject({
