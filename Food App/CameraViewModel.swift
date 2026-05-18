@@ -7,6 +7,7 @@ import Combine
 enum CameraState: Equatable {
     case initializing
     case ready
+    case simulatorPreview
     case capturing
     case reviewingPhoto(UIImage)
     case error(String)
@@ -15,6 +16,7 @@ enum CameraState: Equatable {
         switch (lhs, rhs) {
         case (.initializing, .initializing),
              (.ready, .ready),
+             (.simulatorPreview, .simulatorPreview),
              (.capturing, .capturing):
             return true
         case (.reviewingPhoto(let a), .reviewingPhoto(let b)):
@@ -135,7 +137,11 @@ final class CameraViewModel: ObservableObject {
             cameraService.startSession()
             cameraState = .ready
         } catch {
-            cameraState = .error(error.localizedDescription)
+            if case CameraServiceError.cameraUnavailable = error {
+                cameraState = .simulatorPreview
+            } else {
+                cameraState = .error(error.localizedDescription)
+            }
         }
     }
 

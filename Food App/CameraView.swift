@@ -35,7 +35,7 @@ struct CameraView: View {
             case .initializing:
                 cameraLoadingView
 
-            case .ready, .capturing:
+            case .ready, .capturing, .simulatorPreview:
                 cameraPreviewBody
 
             case .reviewingPhoto(let image):
@@ -69,49 +69,77 @@ struct CameraView: View {
     // MARK: - Camera Preview Body
 
     private var cameraPreviewBody: some View {
-        ZStack {
-            // Live preview
-            CameraPreviewView(session: viewModel.cameraService.session)
-                .ignoresSafeArea()
-                .gesture(tapToFocusGesture)
-                .gesture(pinchToZoomGesture)
+        GeometryReader { proxy in
+            let safeInsets = proxy.safeAreaInsets
+            let stageWidth = min(proxy.size.width - 36, 350)
+            let proposedHeight = proxy.size.height - safeInsets.top - safeInsets.bottom - 214
+            let stageHeight = max(420, min(proposedHeight, 590))
 
-            // Focus ring
-            if let point = focusPoint {
-                FocusRingView(position: point)
-                    .id(focusRingID)
-            }
+            ZStack {
+                Color.black.ignoresSafeArea()
 
-            CameraFocusFrameOverlay()
+                VStack(spacing: 0) {
+                    CameraTopBar(onClose: { dismiss() })
+                        .padding(.top, safeInsets.top + 6)
 
-            // Capture flash
-            CaptureFlashOverlay(isVisible: $showCaptureFlash)
+                    Spacer(minLength: 18)
 
-            // Controls overlay
-            VStack {
-                CameraTopBar(
-                    flashMode: viewModel.flashMode,
-                    onClose: { dismiss() },
-                    onFlashToggle: { viewModel.toggleFlash() }
-                )
+                    ZStack {
+                        stagePreviewSurface(width: stageWidth, height: stageHeight)
+                            .clipShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+                            .contentShape(RoundedRectangle(cornerRadius: 34, style: .continuous))
+                            .gesture(tapToFocusGesture(in: CGSize(width: stageWidth, height: stageHeight)))
+                            .gesture(pinchToZoomGesture)
 
-                Spacer()
+                        CameraPreviewStageOverlay(
+                            flashMode: viewModel.flashMode,
+                            onFlashToggle: { viewModel.toggleFlash() },
+                            onFlipCamera: { viewModel.toggleCamera() }
+                        )
+                        .frame(width: stageWidth, height: stageHeight)
 
-                CameraBottomBar(
-                    onFlipCamera: { viewModel.toggleCamera() },
-                    isCapturing: viewModel.cameraState == .capturing,
-                    onCapture: {
-                        showCaptureFlash = true
-                        Task { await viewModel.capturePhoto() }
-                    },
-                    onOpenLibrary: {
-                        if let handler = onOpenPhotoLibrary {
-                            dismiss()
-                            handler()
+                        if let point = focusPoint {
+                            FocusRingView(position: point)
+                                .id(focusRingID)
                         }
                     }
-                )
+                    .frame(width: stageWidth, height: stageHeight)
+                    .shadow(color: Color.black.opacity(0.45), radius: 30, y: 18)
+
+                    Spacer(minLength: 28)
+
+                    CameraBottomBar(
+                        isCapturing: viewModel.cameraState == .capturing,
+                        captureEnabled: viewModel.cameraState != .simulatorPreview,
+                        onCapture: {
+                            guard viewModel.cameraState != .simulatorPreview else { return }
+                            showCaptureFlash = true
+                            Task { await viewModel.capturePhoto() }
+                        },
+                        onOpenLibrary: {
+                            if let handler = onOpenPhotoLibrary {
+                                dismiss()
+                                handler()
+                            }
+                        }
+                    )
+                    .padding(.horizontal, 26)
+                    .padding(.bottom, max(safeInsets.bottom, 12) + 18)
+                }
+
+                CaptureFlashOverlay(isVisible: $showCaptureFlash)
             }
+        }
+    }
+
+    @ViewBuilder
+    private func stagePreviewSurface(width: CGFloat, height: CGFloat) -> some View {
+        if viewModel.cameraState == .simulatorPreview {
+            CameraPreviewMockSurface()
+                .frame(width: width, height: height)
+        } else {
+            CameraPreviewView(session: viewModel.cameraService.session)
+                .frame(width: width, height: height)
         }
     }
 
@@ -166,7 +194,7 @@ struct CameraView: View {
 
     // MARK: - Gestures
 
-    private var tapToFocusGesture: some Gesture {
+    private func tapToFocusGesture(in stageSize: CGSize) -> some Gesture {
         SpatialTapGesture()
             .onEnded { value in
                 let point = value.location
@@ -174,7 +202,7 @@ struct CameraView: View {
                 focusRingID = UUID()
                 viewModel.handleTapToFocus(
                     at: point,
-                    in: UIScreen.main.bounds.size
+                    in: stageSize
                 )
             }
     }

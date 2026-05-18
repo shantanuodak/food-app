@@ -308,18 +308,6 @@ struct SavedMealsScreen: View {
 
     private var hero: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Saved meals")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(SavedMealsTokens.orangeDeep)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(.white.opacity(0.72), in: Capsule())
-                .overlay {
-                    Capsule()
-                        .stroke(SavedMealsTokens.border.opacity(0.72), lineWidth: 1)
-                }
-                .shadow(color: .black.opacity(0.06), radius: 16, y: 8)
-
             VStack(alignment: .leading, spacing: 0) {
                 Text("Keep repeats ")
                     .font(OnboardingTypography.instrumentSerif(style: .regular, size: 42))

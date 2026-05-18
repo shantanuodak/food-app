@@ -2,159 +2,193 @@ import SwiftUI
 import AVFoundation
 
 private enum CameraOverlayTokens {
-    static let focusStroke = Color.white
-    static let focusLineWidth: CGFloat = 6
-    static let focusCornerLength: CGFloat = 30
-    static let focusCornerRadius: CGFloat = 16
+    static let stageCornerRadius: CGFloat = 34
+    static let stageBorder = Color.white.opacity(0.78)
+    static let stageInnerGlow = Color.white.opacity(0.08)
+    static let controlSurface = Color.black.opacity(0.42)
+    static let controlStroke = Color.white.opacity(0.11)
+    static let scanLineCore = Color.white.opacity(0.94)
+    static let scanLineGlow = Color(red: 1.0, green: 0.53, blue: 0.16)
+    static let helperText = Color.white.opacity(0.72)
 }
 
-// MARK: - Camera Top Bar
-
 struct CameraTopBar: View {
-    let flashMode: CameraFlashMode
     let onClose: () -> Void
-    let onFlashToggle: () -> Void
 
     var body: some View {
         HStack {
-            Button(action: onFlashToggle) {
-                Image(systemName: flashMode.icon)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(flashMode == .off ? .white : .yellow)
-                    .frame(width: 44, height: 44)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
+            AppCloseButton(action: onClose, variant: .onImage, visualSize: 44, hitSize: 44)
 
             Spacer()
 
-            AppCloseButton(action: onClose, variant: .onImage, visualSize: 44, hitSize: 44)
+            Text("Food Camera")
+                .font(.system(size: 15, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.76))
+
+            Spacer()
+
+            Color.clear
+                .frame(width: 44, height: 44)
         }
-        .padding(.horizontal, 20)
-        .padding(.top, 20)
+        .padding(.horizontal, 18)
     }
 }
 
-// MARK: - Focus Frame
+struct CameraPreviewStageOverlay: View {
+    let flashMode: CameraFlashMode
+    let onFlashToggle: () -> Void
+    let onFlipCamera: () -> Void
+    @State private var isScanLineAtBottom = false
 
-struct CameraFocusFrameOverlay: View {
     var body: some View {
         GeometryReader { proxy in
-            let width = min(proxy.size.width * 0.78, 300)
-            let height = min(proxy.size.height * 0.56, 430)
+            let size = proxy.size
 
             ZStack {
-                RoundedCornerSegment(corners: [.topLeft])
-                RoundedCornerSegment(corners: [.topRight])
-                RoundedCornerSegment(corners: [.bottomLeft])
-                RoundedCornerSegment(corners: [.bottomRight])
+                RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous)
+                    .stroke(CameraOverlayTokens.stageBorder, lineWidth: 1.5)
+                    .background(
+                        RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        CameraOverlayTokens.stageInnerGlow,
+                                        Color.clear,
+                                        Color.black.opacity(0.16)
+                                    ],
+                                    startPoint: .top,
+                                    endPoint: .bottom
+                                )
+                            )
+                    )
+
+                scanSurfaceShade
+
+                scanningLine(in: size)
+
+                VStack {
+                    topHint
+
+                    Spacer()
+
+                    HStack(spacing: 14) {
+                        CameraStageUtilityButton(
+                            systemImage: flashMode.icon,
+                            accent: flashMode == .off ? Color.white.opacity(0.78) : Color(red: 1.0, green: 0.77, blue: 0.28),
+                            action: onFlashToggle
+                        )
+
+                        CameraStageUtilityButton(
+                            systemImage: "camera.rotate.fill",
+                            accent: Color.white.opacity(0.86),
+                            action: onFlipCamera
+                        )
+                    }
+                    .padding(.bottom, 28)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 18)
             }
-            .frame(width: width, height: height)
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .allowsHitTesting(false)
-            .accessibilityHidden(true)
-        }
-    }
-}
-
-private struct RoundedCornerSegment: View {
-    let corners: UIRectCorner
-
-    var body: some View {
-        ZStack {
-            Path { path in
-                let length = CameraOverlayTokens.focusCornerLength
-                let radius = CameraOverlayTokens.focusCornerRadius
-
-                switch corners {
-                case .topLeft:
-                    path.move(to: CGPoint(x: 0, y: length))
-                    path.addLine(to: CGPoint(x: 0, y: radius))
-                    path.addArc(
-                        center: CGPoint(x: radius, y: radius),
-                        radius: radius,
-                        startAngle: .degrees(180),
-                        endAngle: .degrees(270),
-                        clockwise: false
-                    )
-                    path.addLine(to: CGPoint(x: length, y: 0))
-                case .topRight:
-                    path.move(to: CGPoint(x: 0, y: 0))
-                    path.addLine(to: CGPoint(x: length - radius, y: 0))
-                    path.addArc(
-                        center: CGPoint(x: length - radius, y: radius),
-                        radius: radius,
-                        startAngle: .degrees(270),
-                        endAngle: .degrees(0),
-                        clockwise: false
-                    )
-                    path.addLine(to: CGPoint(x: length, y: length))
-                case .bottomLeft:
-                    path.move(to: CGPoint(x: 0, y: 0))
-                    path.addLine(to: CGPoint(x: 0, y: length - radius))
-                    path.addArc(
-                        center: CGPoint(x: radius, y: length - radius),
-                        radius: radius,
-                        startAngle: .degrees(180),
-                        endAngle: .degrees(90),
-                        clockwise: true
-                    )
-                    path.addLine(to: CGPoint(x: length, y: length))
-                case .bottomRight:
-                    path.move(to: CGPoint(x: 0, y: length))
-                    path.addLine(to: CGPoint(x: length - radius, y: length))
-                    path.addArc(
-                        center: CGPoint(x: length - radius, y: length - radius),
-                        radius: radius,
-                        startAngle: .degrees(90),
-                        endAngle: .degrees(0),
-                        clockwise: true
-                    )
-                    path.addLine(to: CGPoint(x: length, y: 0))
-                default:
-                    break
+            .clipShape(RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous))
+            .onAppear {
+                withAnimation(.easeInOut(duration: 2.1).repeatForever(autoreverses: true)) {
+                    isScanLineAtBottom = true
                 }
             }
-            .stroke(
-                CameraOverlayTokens.focusStroke.opacity(0.98),
-                style: StrokeStyle(
-                    lineWidth: CameraOverlayTokens.focusLineWidth,
-                    lineCap: .round,
-                    lineJoin: .round
-                )
-            )
         }
-        .frame(
-            maxWidth: .infinity,
-            maxHeight: .infinity,
-            alignment: alignment(for: corners)
-        )
-        .frame(
-            width: CameraOverlayTokens.focusCornerLength,
-            height: CameraOverlayTokens.focusCornerLength,
-            alignment: alignment(for: corners)
+        .allowsHitTesting(true)
+    }
+
+    private var scanSurfaceShade: some View {
+        LinearGradient(
+            colors: [
+                Color.black.opacity(0.08),
+                Color.clear,
+                Color.black.opacity(0.22)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
         )
     }
 
-    private func alignment(for corner: UIRectCorner) -> Alignment {
-        switch corner {
-        case .topLeft:
-            return .topLeading
-        case .topRight:
-            return .topTrailing
-        case .bottomLeft:
-            return .bottomLeading
-        case .bottomRight:
-            return .bottomTrailing
-        default:
-            return .center
+    private var topHint: some View {
+        HStack {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Align your meal in frame")
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color.white.opacity(0.96))
+
+                Text("Snap once the food sits inside the scan field.")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundStyle(CameraOverlayTokens.helperText)
+            }
+
+            Spacer(minLength: 12)
+
+            Image(systemName: "viewfinder")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(Color.white.opacity(0.74))
+                .frame(width: 38, height: 38)
+                .background(CameraOverlayTokens.controlSurface, in: Circle())
+                .overlay(Circle().stroke(CameraOverlayTokens.controlStroke, lineWidth: 1))
         }
+    }
+
+    @ViewBuilder
+    private func scanningLine(in size: CGSize) -> some View {
+        let horizontalInset: CGFloat = 34
+        let travelTop = size.height * 0.28
+        let travelBottom = size.height * 0.68
+
+        ZStack {
+            Capsule(style: .continuous)
+                .fill(CameraOverlayTokens.scanLineCore)
+                .frame(width: max(0, size.width - (horizontalInset * 2)), height: 5)
+                .shadow(color: CameraOverlayTokens.scanLineGlow.opacity(0.62), radius: 18, y: 0)
+
+            Capsule(style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.clear,
+                            CameraOverlayTokens.scanLineGlow.opacity(0.28),
+                            Color.clear
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
+                .frame(width: max(0, size.width - (horizontalInset * 2)), height: 34)
+        }
+        .position(
+            x: size.width / 2,
+            y: isScanLineAtBottom ? travelBottom : travelTop
+        )
+        .accessibilityHidden(true)
     }
 }
 
-// MARK: - Capture Button
+private struct CameraStageUtilityButton: View {
+    let systemImage: String
+    let accent: Color
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(accent)
+                .frame(width: 74, height: 74)
+                .background(CameraOverlayTokens.controlSurface, in: Circle())
+                .overlay(Circle().stroke(CameraOverlayTokens.controlStroke, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
 
 struct CameraCaptureButton: View {
     let isCapturing: Bool
+    let isEnabled: Bool
     let onCapture: () -> Void
 
     @GestureState private var isPressed = false
@@ -162,70 +196,134 @@ struct CameraCaptureButton: View {
     var body: some View {
         Button(action: onCapture) {
             ZStack {
-                // Outer ring
                 Circle()
-                    .strokeBorder(.white, lineWidth: 4)
-                    .frame(width: 76, height: 76)
+                    .fill(Color.white.opacity(0.10))
+                    .frame(width: 92, height: 92)
 
-                // Inner filled circle
                 Circle()
-                    .fill(.white)
-                    .frame(width: 64, height: 64)
-                    .scaleEffect(isPressed ? 0.85 : 1.0)
-                    .animation(.easeInOut(duration: 0.1), value: isPressed)
+                    .strokeBorder(Color.white.opacity(0.92), lineWidth: 3)
+                    .frame(width: 86, height: 86)
+
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                Color.white,
+                                Color(red: 0.96, green: 0.96, blue: 0.96)
+                            ],
+                            center: .center,
+                            startRadius: 8,
+                            endRadius: 34
+                        )
+                    )
+                    .frame(width: 70, height: 70)
+                    .scaleEffect(isPressed ? 0.88 : 1.0)
+                    .animation(.easeInOut(duration: 0.10), value: isPressed)
             }
-            .opacity(isCapturing ? 0.5 : 1.0)
+            .opacity((isCapturing || !isEnabled) ? 0.55 : 1.0)
         }
-        .disabled(isCapturing)
+        .disabled(isCapturing || !isEnabled)
         .simultaneousGesture(
             LongPressGesture(minimumDuration: .infinity)
                 .updating($isPressed) { _, state, _ in
                     state = true
                 }
         )
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Capture photo"))
     }
 }
 
-// MARK: - Camera Bottom Bar
-
 struct CameraBottomBar: View {
-    let onFlipCamera: () -> Void
     let isCapturing: Bool
+    let captureEnabled: Bool
     let onCapture: () -> Void
     let onOpenLibrary: () -> Void
 
     var body: some View {
         HStack(alignment: .center) {
-            // Photo library
             Button(action: onOpenLibrary) {
-                Image(systemName: "photo.on.rectangle")
-                    .font(.system(size: 22))
-                    .foregroundStyle(.white)
-                    .frame(width: 50, height: 50)
+                Image(systemName: "photo.stack.fill")
+                    .font(.system(size: 19, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.92))
+                .frame(width: 72, height: 72)
+                .background(Color.white.opacity(0.12), in: Circle())
+                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
             }
+            .buttonStyle(.plain)
 
             Spacer()
 
-            // Capture button
-            CameraCaptureButton(isCapturing: isCapturing, onCapture: onCapture)
+            CameraCaptureButton(isCapturing: isCapturing, isEnabled: captureEnabled, onCapture: onCapture)
 
             Spacer()
 
-            // Flip camera
-            Button(action: onFlipCamera) {
-                Image(systemName: "camera.rotate.fill")
-                    .font(.system(size: 22))
-                    .foregroundStyle(.white)
-                    .frame(width: 50, height: 50)
-                    .background(.ultraThinMaterial, in: Circle())
-            }
+            Color.clear
+                .frame(width: 72, height: 72)
         }
-        .padding(.horizontal, 32)
-        .padding(.bottom, 20)
     }
 }
 
-// MARK: - Review Overlay
+struct CameraPreviewMockSurface: View {
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color(red: 0.09, green: 0.10, blue: 0.12),
+                    Color(red: 0.14, green: 0.15, blue: 0.18),
+                    Color(red: 0.10, green: 0.11, blue: 0.13)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            VStack(spacing: 18) {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color.white.opacity(0.08))
+                    .frame(width: 130, height: 84)
+                    .overlay(
+                        VStack(spacing: 8) {
+                            Image(systemName: "camera.aperture")
+                                .font(.system(size: 26, weight: .regular))
+                                .foregroundStyle(Color.white.opacity(0.86))
+                            Text("Simulator Preview")
+                                .font(.system(size: 13, weight: .semibold, design: .rounded))
+                                .foregroundStyle(Color.white.opacity(0.88))
+                        }
+                    )
+
+                Text("Live camera feed is unavailable in Simulator.\nThis mock surface lets us QA the shell layout.")
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .multilineTextAlignment(.center)
+                    .foregroundStyle(Color.white.opacity(0.60))
+                    .padding(.horizontal, 34)
+            }
+
+            mockPlateShapes
+        }
+    }
+
+    private var mockPlateShapes: some View {
+        ZStack {
+            Circle()
+                .fill(Color.white.opacity(0.05))
+                .frame(width: 170, height: 170)
+                .offset(x: 86, y: -132)
+
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .fill(Color.white.opacity(0.045))
+                .frame(width: 220, height: 120)
+                .rotationEffect(.degrees(-14))
+                .offset(x: -94, y: 118)
+
+            Circle()
+                .fill(Color(red: 1.0, green: 0.54, blue: 0.16).opacity(0.10))
+                .frame(width: 124, height: 124)
+                .offset(x: -112, y: -156)
+        }
+        .blur(radius: 0.2)
+    }
+}
 
 struct CameraReviewOverlay: View {
     let image: UIImage
@@ -234,67 +332,74 @@ struct CameraReviewOverlay: View {
 
     var body: some View {
         ZStack {
-            // Captured image
             Image(uiImage: image)
                 .resizable()
                 .aspectRatio(contentMode: .fill)
                 .ignoresSafeArea()
 
-            // Bottom controls
+            LinearGradient(
+                colors: [Color.black.opacity(0.34), Color.clear, Color.black.opacity(0.60)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea()
+
             VStack {
                 Spacer()
 
-                HStack(spacing: 40) {
+                HStack(spacing: 14) {
                     Button(action: onRetake) {
                         Text("Retake")
-                            .font(.system(size: 17, weight: .medium))
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
                             .foregroundStyle(.white)
-                            .padding(.horizontal, 28)
-                            .padding(.vertical, 14)
-                            .background(.ultraThinMaterial, in: Capsule())
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(Color.white.opacity(0.14), in: Capsule(style: .continuous))
                     }
 
                     Button(action: onUsePhoto) {
                         Text("Use Photo")
-                            .font(.system(size: 17, weight: .semibold))
+                            .font(.system(size: 16, weight: .bold, design: .rounded))
                             .foregroundStyle(.black)
-                            .padding(.horizontal, 28)
-                            .padding(.vertical, 14)
-                            .background(.white, in: Capsule())
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 52)
+                            .background(Color.white, in: Capsule(style: .continuous))
                     }
                 }
-                .padding(.bottom, 50)
+                .padding(.horizontal, 24)
+                .padding(.bottom, 44)
             }
         }
     }
 }
 
-// MARK: - Focus Ring
-
 struct FocusRingView: View {
     let position: CGPoint
-    @State private var scale: CGFloat = 1.5
+    @State private var scale: CGFloat = 1.35
     @State private var opacity: Double = 1.0
 
     var body: some View {
-        Circle()
-            .strokeBorder(Color.yellow, lineWidth: 1.5)
-            .frame(width: 70, height: 70)
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .strokeBorder(Color.white.opacity(0.92), lineWidth: 2)
+            .frame(width: 74, height: 74)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color(red: 1.0, green: 0.56, blue: 0.18).opacity(0.42), lineWidth: 6)
+                    .blur(radius: 10)
+            )
             .scaleEffect(scale)
             .opacity(opacity)
             .position(position)
             .onAppear {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.6)) {
+                withAnimation(.spring(response: 0.28, dampingFraction: 0.62)) {
                     scale = 1.0
                 }
-                withAnimation(.easeOut(duration: 0.8).delay(0.8)) {
+                withAnimation(.easeOut(duration: 0.65).delay(0.75)) {
                     opacity = 0
                 }
             }
     }
 }
-
-// MARK: - Permission Denied View
 
 struct CameraPermissionDeniedView: View {
     let onDismiss: () -> Void
@@ -343,15 +448,13 @@ struct CameraPermissionDeniedView: View {
     }
 }
 
-// MARK: - Capture Flash Overlay
-
 struct CaptureFlashOverlay: View {
     @Binding var isVisible: Bool
 
     var body: some View {
         Color.white
             .ignoresSafeArea()
-            .opacity(isVisible ? 0.6 : 0)
+            .opacity(isVisible ? 0.56 : 0)
             .animation(.easeOut(duration: 0.15), value: isVisible)
             .allowsHitTesting(false)
             .onChange(of: isVisible) { _, newValue in

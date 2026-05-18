@@ -28,15 +28,17 @@ struct CameraResultDrawerView: View {
 
     @State private var shimmerPhase: CGFloat = -1
     @State private var analyzePhaseIndex: Int = 0
+    @State private var analyzeTickCount: Int = 0
     @State private var phaseTimer: Timer?
     @State private var editablePhotoItems: [EditableParsedItem] = []
     @State private var editablePhotoSeedSignature = ""
 
     private let analyzingPhrases = [
-        "Reading the image",
-        "Identifying food items",
-        "Estimating portions",
-        "Calculating nutrition"
+        "Reading the photo...",
+        "Finding every visible food item...",
+        "Estimating portions...",
+        "Adding up calories...",
+        "Taking one more careful look..."
     ]
 
     init(
@@ -109,29 +111,23 @@ struct CameraResultDrawerView: View {
             .padding(.horizontal, 20)
             .padding(.top, 28)
             .onAppear {
+                analyzePhaseIndex = 0
+                analyzeTickCount = 0
+                shimmerPhase = -1
                 withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: false)) {
                     shimmerPhase = 1
                 }
                 phaseTimer?.invalidate()
-                phaseTimer = Timer.scheduledTimer(withTimeInterval: 1.4, repeats: true) { _ in
+                phaseTimer = Timer.scheduledTimer(withTimeInterval: 1.6, repeats: true) { _ in
                     withAnimation(.easeInOut(duration: 0.25)) {
-                        analyzePhaseIndex = (analyzePhaseIndex + 1) % analyzingPhrases.count
+                        analyzeTickCount += 1
+                        analyzePhaseIndex = min(analyzePhaseIndex + 1, analyzingPhrases.count - 1)
                     }
                 }
             }
 
-            // Cycling status line
-            HStack(spacing: 8) {
-                ProgressView()
-                    .scaleEffect(0.8)
-                    .tint(Color(red: 0.380, green: 0.333, blue: 0.961))
-                Text(analyzingPhrases[analyzePhaseIndex])
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.primary)
-                    .animation(.easeInOut(duration: 0.25), value: analyzePhaseIndex)
-                Spacer()
-            }
-            .padding(.horizontal, 20)
+            analyzingStatusCard()
+                .padding(.horizontal, 20)
             .padding(.top, 18)
 
             // Skeleton nutrition cards
@@ -165,6 +161,62 @@ struct CameraResultDrawerView: View {
 
             Spacer().frame(height: 40)
         }
+    }
+
+    @ViewBuilder
+    private func analyzingStatusCard() -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .scaleEffect(0.82)
+                    .tint(Color(red: 0.380, green: 0.333, blue: 0.961))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Analyzing your meal")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                    Text(analyzingPhrases[analyzePhaseIndex])
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .contentTransition(.opacity)
+                        .animation(.easeInOut(duration: 0.25), value: analyzePhaseIndex)
+                }
+
+                Spacer()
+            }
+
+            HStack(spacing: 7) {
+                ForEach(analyzingPhrases.indices, id: \.self) { index in
+                    Capsule()
+                        .fill(index <= analyzePhaseIndex ? Color(red: 0.380, green: 0.333, blue: 0.961) : Color(.systemGray4))
+                        .frame(width: index == analyzePhaseIndex ? 24 : 7, height: 7)
+                        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: analyzePhaseIndex)
+                }
+            }
+
+            Text(analyzeTickCount >= 7 ? "Still working - this photo has a few details to check." : "Checking visible foods, portions, and calories.")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .animation(.easeInOut(duration: 0.25), value: analyzeTickCount >= 7)
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.380, green: 0.333, blue: 0.961).opacity(0.12),
+                            Color(.systemBackground).opacity(0.96)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color(.separator).opacity(0.35), lineWidth: 0.8)
+                )
+        )
     }
 
     @ViewBuilder

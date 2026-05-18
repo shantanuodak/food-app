@@ -54,6 +54,10 @@ struct MainLoggingBottomDock: View {
                     }
                 }
 
+                if isKeyboardVisible {
+                    savedMealsKeyboardChip
+                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                }
             }
         }
         .padding(.horizontal, 16)
