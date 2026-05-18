@@ -1161,9 +1161,7 @@ describe('image parse service', () => {
         outputTokens: 260
       }
     }));
-    const generateGeminiMultimodalText = vi.fn(async () => {
-      throw new Error('caption fallback should not run for successful structured inventory');
-    });
+    const generateGeminiMultimodalText = vi.fn(async () => null);
 
     vi.doMock('../src/services/geminiFlashClient.js', () => ({
       generateGeminiMultimodalJson,
@@ -1177,7 +1175,6 @@ describe('image parse service', () => {
     });
 
     expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
-    expect(generateGeminiMultimodalText).not.toHaveBeenCalled();
     expect(parsed.usageEvents.map((event) => event.feature)).toEqual(['parse_image_inventory_v2']);
     expect(parsed.extractedText).toBe('Mixed Berry Vanilla Protein Drink');
     expect(parsed.result.items.map((item) => item.name)).toEqual(['Mixed Berry Vanilla Protein Drink']);
@@ -1227,6 +1224,282 @@ describe('image parse service', () => {
       fat: 2.5,
       needsClarification: true
     });
+  });
+
+  test('V2 product caption can return before a slow inventory path finishes', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRODUCT_BUDGET_MS = '5000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const debugEvents = [];
+    const generateGeminiMultimodalJson = vi.fn(() => new Promise<null>(() => {}));
+    const generateGeminiMultimodalText = vi.fn().mockResolvedValueOnce({
+      jsonText: 'RXBAR blueberry protein bar, 1 bar',
+      usage: { model: 'gemini-2.5-flash', inputTokens: 420, outputTokens: 10 }
+    });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'rxbar-product-image',
+      debugEvents
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(1);
+    expect(parsed.fallbackUsed).toBe(true);
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['RXBAR Blueberry Protein Bar']);
+    expect(parsed.result.totals.calories).toBe(180);
+    expect(debugEvents).toContainEqual(
+      expect.objectContaining({
+        stage: 'image_orchestrator_v2',
+        ok: true,
+        reason: 'fast_product_caption_return'
+      })
+    );
+  });
+
+  test('V2 sparse thali caption expands with staple and side probes before accepting heuristics', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const debugEvents = [];
+    const generateGeminiMultimodalJson = vi.fn(async () => null);
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: 'Dal, Potato Sab',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 420, outputTokens: 8 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'Baati',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 410, outputTokens: 4 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'Green chutney, Onion, Churma powder',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 415, outputTokens: 9 }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'sparse-thali-caption-image',
+      debugEvents
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(3);
+    expect(parsed.usageEvents.map((event) => event.feature)).toEqual([
+      'parse_image_caption',
+      'parse_image_caption',
+      'parse_image_caption'
+    ]);
+    expect(parsed.result.items.map((item) => item.name)).toEqual(
+      expect.arrayContaining(['Dal', 'Potato sabzi', 'Baati', 'Green chutney', 'Onion', 'Churma powder'])
+    );
+    expect(parsed.result.items).toHaveLength(6);
+    expect(parsed.result.totals.calories).toBeGreaterThan(850);
+    expect(debugEvents).toContainEqual(
+      expect.objectContaining({
+        stage: 'image_caption_fast_v2',
+        ok: true,
+        reason: 'expanded_sparse_known_meal_component_caption'
+      })
+    );
+  });
+
+  test('V2 sparse caption guard is cuisine-agnostic for generic meal components', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const debugEvents = [];
+    const generateGeminiMultimodalJson = vi.fn(async () => null);
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: 'Rice',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 420, outputTokens: 3 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'Roasted chicken, rice',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 410, outputTokens: 6 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'Carrots, ranch dressing',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 415, outputTokens: 6 }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'generic-sparse-caption-image',
+      debugEvents
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(1);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(3);
+    expect(parsed.result.items.map((item) => item.name)).toEqual(
+      expect.arrayContaining(['White rice', 'Roasted chicken', 'Carrots', 'Ranch dressing'])
+    );
+    expect(debugEvents).toContainEqual(
+      expect.objectContaining({
+        stage: 'image_caption_fast_v2',
+        ok: true,
+        reason: 'expanded_sparse_single_component_caption'
+      })
+    );
+  });
+
+  test('V2 sparse single-component thali caption must pass structured rescue before returning', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const debugEvents = [];
+    const generateGeminiMultimodalJson = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        jsonText: JSON.stringify({
+          extractedText: 'dal, baati, potato sabzi, green chutney, onion',
+          confidence: 0.86,
+          assumptions: ['Estimated from all visible tray compartments.'],
+          items: [
+            { name: 'Dal', quantity: 1, unit: 'serving', grams: 240, calories: 240, protein: 14, carbs: 38, fat: 6, matchConfidence: 0.86, foodDescription: 'Dal, 1 serving', explanation: 'Estimated from visible dal.' },
+            { name: 'Baati', quantity: 2, unit: 'pieces', grams: 120, calories: 360, protein: 9, carbs: 58, fat: 12, matchConfidence: 0.82, foodDescription: 'Baati, 2 pieces', explanation: 'Estimated from visible baati.' },
+            { name: 'Potato sabzi', quantity: 1, unit: 'serving', grams: 120, calories: 160, protein: 3, carbs: 25, fat: 6, matchConfidence: 0.78, foodDescription: 'Potato sabzi, 1 serving', explanation: 'Estimated from visible potato sabzi.' },
+            { name: 'Green chutney', quantity: 2, unit: 'tbsp', grams: 30, calories: 30, protein: 1, carbs: 4, fat: 1, matchConfidence: 0.72, foodDescription: 'Green chutney, 2 tbsp', explanation: 'Estimated from visible chutney.' },
+            { name: 'Onion', quantity: 1, unit: 'small side', grams: 40, calories: 16, protein: 0.4, carbs: 3.7, fat: 0, matchConfidence: 0.72, foodDescription: 'Onion, small side', explanation: 'Estimated from visible sliced onion.' }
+          ]
+        }),
+        usage: { model: 'gemini-2.5-flash', inputTokens: 900, outputTokens: 260 }
+      });
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: 'Baati',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 420, outputTokens: 3 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'Baati',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 410, outputTokens: 3 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'Baati',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 415, outputTokens: 3 }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'baati-only-caption-thali-image',
+      debugEvents
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(2);
+    expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.parts[0]?.text).toContain('fallback parser');
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(3);
+    expect(parsed.fallbackUsed).toBe(true);
+    expect(parsed.orchestratorVersion).toBe('v2');
+    expect(parsed.extractedText).toBe('dal, baati, potato sabzi, green chutney, onion');
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['Dal', 'Baati', 'Potato sabzi', 'Green chutney', 'Onion']);
+    expect(debugEvents).toContainEqual(
+      expect.objectContaining({
+        stage: 'image_caption_heuristic_v2',
+        ok: false,
+        reason: 'sparse_single_component_caption_structured_rescue_deferred'
+      })
+    );
+  });
+
+  test('V2 hard rescue uses bounded image timeouts instead of the legacy long timeout', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_RESCUE_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_HARD_RESCUE_BUDGET_MS = '12000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-pro';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const generateGeminiMultimodalJson = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    const generateGeminiMultimodalText = vi.fn(async () => null);
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    await expect(
+      parseImageWithGemini({
+        mimeType: 'image/jpeg',
+        dataBase64: 'failed-hard-rescue-image'
+      })
+    ).rejects.toMatchObject({ code: 'IMAGE_PARSE_FAILED' });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(3);
+    expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.timeoutMs).toBeLessThanOrEqual(6000);
+    expect(generateGeminiMultimodalJson.mock.calls[2]?.[0]?.timeoutMs).toBeLessThanOrEqual(6000);
+    expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.timeoutMs).not.toBe(35000);
   });
 
   test('V2 fast caption recovery uses text nutrition parser for foods outside heuristic inventory', async () => {

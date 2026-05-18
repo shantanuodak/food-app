@@ -27,6 +27,8 @@ type GenerateOptions = {
   prompt: string;
   temperature?: number;
   maxOutputTokens?: number;
+  timeoutMs?: number;
+  maxAttempts?: number;
 };
 
 type MultimodalPart =
@@ -496,7 +498,10 @@ export async function generateGeminiJson(
     options.model,
     [{ text: options.prompt }],
     options.temperature ?? 0.1,
-    options.maxOutputTokens
+    options.maxOutputTokens,
+    options.timeoutMs,
+    undefined,
+    options.maxAttempts
   );
   return result && 'jsonText' in result ? result : null;
 }
@@ -508,7 +513,10 @@ export async function generateGeminiJsonWithDiagnostics(
     options.model,
     [{ text: options.prompt }],
     options.temperature ?? 0.1,
-    options.maxOutputTokens
+    options.maxOutputTokens,
+    options.timeoutMs,
+    undefined,
+    options.maxAttempts
   );
 }
 

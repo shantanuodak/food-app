@@ -24,6 +24,11 @@ type FallbackAttemptResult = {
   failureReason?: AIFallbackFailureReason;
 };
 
+type FallbackRequestOptions = {
+  timeoutMs?: number;
+  maxAttempts?: number;
+};
+
 const parseItemSchema = z.object({
   name: z.string(),
   quantity: z.number().nonnegative(),
@@ -292,7 +297,11 @@ function normalizeGeminiParseResult(candidate: unknown): ParseResult {
   });
 }
 
-async function tryGeminiFallback(inputText: string, initialResult: ParseResult): Promise<FallbackAttemptResult> {
+async function tryGeminiFallback(
+  inputText: string,
+  initialResult: ParseResult,
+  options: FallbackRequestOptions = {}
+): Promise<FallbackAttemptResult> {
   if (!config.geminiApiKey) {
     return { output: null };
   }
@@ -302,7 +311,9 @@ async function tryGeminiFallback(inputText: string, initialResult: ParseResult):
     response = await generateGeminiJsonWithDiagnostics({
       model: config.aiFallbackModelName || config.geminiFlashModel,
       prompt: buildGeminiFallbackPrompt(inputText, initialResult),
-      temperature: 0.1
+      temperature: 0.1,
+      timeoutMs: options.timeoutMs,
+      maxAttempts: options.maxAttempts
     });
   } catch (err) {
     console.warn('Gemini fallback request failed', err);
@@ -341,8 +352,12 @@ async function tryGeminiFallback(inputText: string, initialResult: ParseResult):
   }
 }
 
-export async function tryGeminiPrimaryParse(inputText: string, initialResult: ParseResult): Promise<FallbackOutput | null> {
-  return (await tryGeminiFallback(inputText, initialResult)).output;
+export async function tryGeminiPrimaryParse(
+  inputText: string,
+  initialResult: ParseResult,
+  options: FallbackRequestOptions = {}
+): Promise<FallbackOutput | null> {
+  return (await tryGeminiFallback(inputText, initialResult, options)).output;
 }
 
 export async function tryCheapAIFallbackDetailed(
