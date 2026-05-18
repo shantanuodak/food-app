@@ -1502,6 +1502,69 @@ describe('image parse service', () => {
     expect(generateGeminiMultimodalJson.mock.calls[1]?.[0]?.timeoutMs).not.toBe(35000);
   });
 
+  test('V2 returns a reviewable sparse caption estimate when hard rescue times out', async () => {
+    process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
+    process.env.AI_IMAGE_PARSE_ENABLED = 'true';
+    process.env.AI_IMAGE_ORCHESTRATOR_VERSION = 'v2';
+    process.env.AI_IMAGE_ENABLE_FALLBACK = 'true';
+    process.env.AI_IMAGE_CONFIDENCE_MIN = '0.7';
+    process.env.AI_IMAGE_COVERAGE_MIN = '0.75';
+    process.env.AI_IMAGE_FAST_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_RESCUE_TIMEOUT_MS = '6000';
+    process.env.AI_IMAGE_HARD_RESCUE_BUDGET_MS = '18000';
+    process.env.AI_IMAGE_PRIMARY_MODEL = 'gemini-2.5-flash';
+    process.env.AI_IMAGE_FALLBACK_MODEL = 'gemini-2.5-pro';
+    process.env.AI_IMAGE_INVENTORY_MODEL = 'gemini-2.5-flash';
+
+    const debugEvents = [];
+    const generateGeminiMultimodalJson = vi
+      .fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    const generateGeminiMultimodalText = vi
+      .fn()
+      .mockResolvedValueOnce({
+        jsonText: 'white rice, dal',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 420, outputTokens: 5 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'white rice',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 410, outputTokens: 3 }
+      })
+      .mockResolvedValueOnce({
+        jsonText: 'white rice',
+        usage: { model: 'gemini-2.5-flash', inputTokens: 415, outputTokens: 3 }
+      });
+
+    vi.doMock('../src/services/geminiFlashClient.js', () => ({
+      generateGeminiMultimodalJson,
+      generateGeminiMultimodalText
+    }));
+
+    const { parseImageWithGemini } = await import('../src/services/imageParseService.js');
+    const parsed = await parseImageWithGemini({
+      mimeType: 'image/jpeg',
+      dataBase64: 'sparse-caption-hard-rescue-timeout-image',
+      debugEvents
+    });
+
+    expect(generateGeminiMultimodalJson).toHaveBeenCalledTimes(3);
+    expect(generateGeminiMultimodalText).toHaveBeenCalledTimes(3);
+    expect(parsed.fallbackUsed).toBe(true);
+    expect(parsed.lowConfidenceAccepted).toBe(true);
+    expect(parsed.coverage?.partial).toBe(true);
+    expect(parsed.result.items.map((item) => item.name)).toEqual(['White rice', 'Dal']);
+    expect(parsed.result.items.every((item) => item.needsClarification)).toBe(true);
+    expect(debugEvents).toContainEqual(
+      expect.objectContaining({
+        stage: 'image_orchestrator_v2',
+        ok: true,
+        reason: 'bounded_rescue_failed_using_reviewable_caption'
+      })
+    );
+  });
+
   test('V2 fast caption recovery uses text nutrition parser for foods outside heuristic inventory', async () => {
     process.env.DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:postgres@localhost:5432/food_app_test';
     process.env.AI_IMAGE_PARSE_ENABLED = 'true';

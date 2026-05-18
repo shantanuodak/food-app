@@ -121,6 +121,7 @@ type TrackedAsyncTask<T> = {
 type V2CaptionRecoveryOptions = {
   allowStructuredRescue?: boolean;
   allowCaptionTextParse?: boolean;
+  allowSparsePartial?: boolean;
   captionTimeoutMs?: number;
   probeTimeoutMs?: number;
   captionTextTimeoutMs?: number;
@@ -1949,6 +1950,30 @@ function coverageFromCaptionInventory(caption: string, result: ParseResult): Ima
   };
 }
 
+function partialCoverageFromSparseCaption(
+  caption: string,
+  result: ParseResult,
+  guardReason: string
+): ImageParseCoverage {
+  const base = coverageFromCaptionInventory(caption, result);
+  const visibleComponentCount = Math.max(base.visibleComponentCount, result.items.length + 1, 3);
+  const parsedItemCount = result.items.length;
+  const score = visibleComponentCount > 0 ? round(Math.min(1, parsedItemCount / visibleComponentCount), 2) : 0;
+
+  return {
+    ...base,
+    imageType: 'multi_component_meal',
+    visibleComponentCount,
+    parsedItemCount,
+    score,
+    partial: true,
+    warnings: [
+      'This is a partial photo estimate. Please review the detected foods because the detailed image pass timed out.',
+      guardReason.replace(/_/g, ' ')
+    ]
+  };
+}
+
 type CaptionEstimate = {
   name: string;
   aliases: string[];
@@ -2404,6 +2429,7 @@ async function recoverWithV2CaptionEnsemble(
   const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
   const allowStructuredRescue = options.allowStructuredRescue ?? true;
   const allowCaptionTextParse = options.allowCaptionTextParse ?? true;
+  const allowSparsePartial = options.allowSparsePartial ?? false;
   const timeoutMs = options.captionTimeoutMs ?? Math.min(Math.max(config.aiImageFastTimeoutMs, 2_800), 4_000);
   const captionText = await runTrackedCaptionProbe(model, image, 'inventory', timeoutMs, usageEvents);
 
@@ -2542,7 +2568,52 @@ async function recoverWithV2CaptionEnsemble(
       });
 
       if (!allowStructuredRescue) {
-        return null;
+        if (!allowSparsePartial) {
+          return null;
+        }
+
+        const sparseCoverage = partialCoverageFromSparseCaption(mergedCaption, heuristic, guardReason);
+        const sparseResult = postProcessFoodImageResult(
+          imageSafeResult(normalizeParseResultContract(
+            {
+              ...heuristic,
+              confidence: Math.min(heuristic.confidence, 0.68),
+              assumptions: [
+                ...heuristic.assumptions,
+                'Returned a partial estimate because the fast caption was sparse and the detailed image pass was still needed.'
+              ]
+            },
+            'gemini'
+          )),
+          {
+            extractedText: mergedCaption,
+            assumptions: heuristic.assumptions,
+            imageType: sparseCoverage.imageType,
+            visibleComponents: sparseCoverage.visibleComponents
+          }
+        );
+
+        image.debugEvents?.push({
+          stage: 'image_caption_heuristic_v2',
+          ok: true,
+          model: 'heuristic',
+          reason: `${guardReason}_partial_reviewable_result`,
+          ms: 0,
+          confidence: sparseResult.confidence,
+          items: sparseResult.items.length,
+          caption: mergedCaption.slice(0, 180)
+        });
+
+        return {
+          extractedText: mergedCaption,
+          result: sparseResult,
+          model,
+          fallbackUsed: true,
+          lowConfidenceAccepted: true,
+          usageEvents,
+          orchestratorVersion: 'v2',
+          coverage: sparseCoverage
+        };
       }
 
       const structuredRescue = await recoverWithStructuredRescue(image, usageEvents, {
@@ -2843,6 +2914,13 @@ function isProductCaptionServiceResult(candidate: ImageParseServiceResult | null
     candidate.result.items[0]?.nutritionSourceId === 'image_caption_product_heuristic';
 }
 
+function shouldDeferCaptionResultForRescue(candidate: ImageParseServiceResult | null): boolean {
+  if (!candidate?.coverage?.partial) {
+    return false;
+  }
+  return candidate.result.confidence < config.aiImageConfidenceMin;
+}
+
 function cloneUsageEvents(...groups: ImageParseUsageEvent[][]): ImageParseUsageEvent[] {
   return groups.flatMap((group) => [...group]);
 }
@@ -2894,6 +2972,7 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
       recoverWithV2CaptionEnsemble(visionImage, captionUsageEvents, {
         allowStructuredRescue: false,
         allowCaptionTextParse: true,
+        allowSparsePartial: true,
         captionTimeoutMs: Math.min(Math.max(config.aiImageFastTimeoutMs, 2_800), 4_000),
         probeTimeoutMs: Math.min(Math.max(config.aiImageFastTimeoutMs, 2_200), 3_200),
         captionTextTimeoutMs: Math.min(Math.max(config.aiImageFastTimeoutMs, 2_800), 4_500)
@@ -2967,7 +3046,7 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
         });
       }));
 
-    if (captionEnsemble && resultHasPositiveNutrition(captionEnsemble.result)) {
+    if (captionEnsemble && resultHasPositiveNutrition(captionEnsemble.result) && !shouldDeferCaptionResultForRescue(captionEnsemble)) {
       if (!inventoryV2 || !resultHasPositiveNutrition(inventoryV2.result) || resultImprovesCoverage(captionEnsemble, inventoryV2.coverage)) {
         visionImage.debugEvents?.push({
           stage: 'image_orchestrator_v2',
@@ -3026,6 +3105,23 @@ export async function parseImageWithGemini(image: ImagePart): Promise<ImageParse
         caption: `visible=${inventoryV2.coverage.visibleComponentCount} · coverage=${inventoryV2.coverage.score}`
       });
       return inventoryV2ServiceResult(inventoryV2, cloneUsageEvents(inventoryUsageEvents, captionUsageEvents, rescueUsageEvents));
+    }
+
+    if (captionEnsemble && resultHasPositiveNutrition(captionEnsemble.result)) {
+      visionImage.debugEvents?.push({
+        stage: 'image_orchestrator_v2',
+        ok: true,
+        reason: 'bounded_rescue_failed_using_reviewable_caption',
+        ms: elapsedMs(orchestratorStartedAt),
+        items: captionEnsemble.result.items.length,
+        caption: captionEnsemble.coverage
+          ? `visible=${captionEnsemble.coverage.visibleComponentCount} · coverage=${captionEnsemble.coverage.score}`
+          : undefined
+      });
+      return {
+        ...captionEnsemble,
+        usageEvents: cloneUsageEvents(inventoryUsageEvents, captionUsageEvents, rescueUsageEvents)
+      };
     }
 
     visionImage.debugEvents?.push({

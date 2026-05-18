@@ -81,6 +81,41 @@ describe('food image postprocessing', () => {
     expect(processed.totals.calories).toBe(285);
   });
 
+  test('uses known packaged product facts for obvious RXBAR blueberry photo results', () => {
+    const processed = postProcessFoodImageResult(
+      result([
+        item({
+          name: 'RXBAR Blueberry Protein Bar',
+          unit: 'bar',
+          grams: 52,
+          calories: 210,
+          protein: 12,
+          carbs: 23,
+          fat: 9,
+          matchConfidence: 0.98
+        })
+      ]),
+      {
+        imageType: 'nutrition_label',
+        extractedText: 'RXBAR Blueberry Protein Bar, calories 180, protein 12g'
+      }
+    );
+
+    expect(processed.items).toHaveLength(1);
+    expect(processed.items[0]).toMatchObject({
+      name: 'RXBAR Blueberry Protein Bar',
+      quantity: 1,
+      unit: 'bar',
+      grams: 52,
+      calories: 180,
+      protein: 12,
+      carbs: 24,
+      fat: 6,
+      needsClarification: false
+    });
+    expect(processed.totals).toEqual({ calories: 180, protein: 12, carbs: 24, fat: 6 });
+  });
+
   test('merges flatbread alias duplicates into one clean item', () => {
     const processed = postProcessFoodImageResult(
       result([
