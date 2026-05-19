@@ -155,6 +155,7 @@ final class CameraViewModel: ObservableObject {
         guard cameraState == .ready else { return }
 
         cameraState = .capturing
+        hapticFeedback.prepare()
         hapticFeedback.impactOccurred()
 
         do {
@@ -168,11 +169,13 @@ final class CameraViewModel: ObservableObject {
 
     func acceptPhoto() {
         guard let image = capturedImage else { return }
+        AppHaptics.mediumImpact()
         onImageCaptured?(image)
         onDismiss?()
     }
 
     func retakePhoto() {
+        AppHaptics.lightImpact()
         capturedImage = nil
         cameraState = .ready
         cameraService.startSession()
@@ -183,15 +186,18 @@ final class CameraViewModel: ObservableObject {
     func toggleFlash() {
         flashMode = flashMode.next
         cameraService.setFlashMode(flashMode.avFlashMode)
+        AppHaptics.selection()
     }
 
     func toggleCamera() {
         cameraFacing = cameraFacing.toggled
         do {
             try cameraService.switchCamera()
+            AppHaptics.lightImpact()
         } catch {
             // Switching failed, revert
             cameraFacing = cameraFacing.toggled
+            AppHaptics.rigidImpact(intensity: 0.45)
         }
     }
 
@@ -208,5 +214,6 @@ final class CameraViewModel: ObservableObject {
 
     func handleTapToFocus(at point: CGPoint, in bounds: CGSize) {
         cameraService.setFocusPoint(point, in: bounds)
+        AppHaptics.lightImpact(intensity: 0.7)
     }
 }

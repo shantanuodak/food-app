@@ -20,7 +20,8 @@ extension MainLoggingShellView {
         } else if title == "Food logged" {
             parseInfoMessage = nil
             parseError = nil
-            saveSuccessMessage = body
+            saveSuccessMessage = nil
+            presentCelebration(title: "Logged", subtitle: body, style: .logged)
         } else {
             parseError = nil
             saveSuccessMessage = nil

@@ -25,6 +25,11 @@ extension ProgressSectionView {
             }
         }
         .pickerStyle(.segmented)
+        .onChange(of: selectedRange) { _, newValue in
+            guard newValue != lastHapticRange else { return }
+            lastHapticRange = newValue
+            AppHaptics.selection()
+        }
     }
 
     var caloriesHeroCard: some View {
@@ -153,7 +158,8 @@ extension ProgressSectionView {
                                             proxy: proxy,
                                             geometry: geometry,
                                             sourceDates: aggregateForRange(caloriePoints).map(\.date),
-                                            selectedDate: &selectedCalorieDate
+                                            selectedDate: &selectedCalorieDate,
+                                            hapticID: "progress.calories"
                                         )
                                     }
                             )
@@ -397,7 +403,8 @@ extension ProgressSectionView {
                                             proxy: proxy,
                                             geometry: geometry,
                                             sourceDates: weightDisplayPoints.map(\.date),
-                                            selectedDate: &selectedWeightDate
+                                            selectedDate: &selectedWeightDate,
+                                            hapticID: "progress.weight"
                                         )
                                     }
                             )
@@ -539,7 +546,8 @@ extension ProgressSectionView {
                                             proxy: proxy,
                                             geometry: geometry,
                                             sourceDates: displayed.map(\.date),
-                                            selectedDate: &selectedStepsDate
+                                            selectedDate: &selectedStepsDate,
+                                            hapticID: "progress.steps"
                                         )
                                     }
                             )

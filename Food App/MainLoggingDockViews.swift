@@ -66,6 +66,7 @@ struct MainLoggingBottomDock: View {
 
     private var savedMealsKeyboardChip: some View {
         Button {
+            AppHaptics.lightImpact()
             NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
             UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
             isSavedMealsPresented = true
@@ -96,6 +97,7 @@ struct MainLoggingBottomDock: View {
 
     private var syncStatusPill: some View {
         Button {
+            AppHaptics.lightImpact()
             isSyncInfoPresented = true
         } label: {
             HStack(spacing: 8) {
@@ -123,6 +125,7 @@ struct MainLoggingBottomDock: View {
 
     private var streakDockIndicator: some View {
         Button {
+            AppHaptics.lightImpact()
             NotificationCenter.default.post(name: .openStreaksFromNotification, object: nil)
         } label: {
             ZStack(alignment: .bottomTrailing) {
@@ -224,7 +227,10 @@ struct MainLoggingBottomDock: View {
         accessibilityLabel: String,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        Button(action: {
+            AppHaptics.lightImpact()
+            action()
+        }) {
             ZStack {
                 dockIconLens(color: color)
 
@@ -292,6 +298,7 @@ struct MainLoggingTopHeaderStrip: View {
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             Button {
+                AppHaptics.lightImpact()
                 isProfilePresented = true
             } label: {
                 HomeGreetingChip(firstName: firstName)
@@ -302,6 +309,7 @@ struct MainLoggingTopHeaderStrip: View {
             Spacer(minLength: 0)
 
             Button {
+                AppHaptics.selection()
                 isCalendarPresented = true
             } label: {
                 Text(dateTitle)

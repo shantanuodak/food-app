@@ -158,6 +158,13 @@ extension MainLoggingShellView {
                 .presentationBackground(.clear)
             }
             .padding()
+            .overlay(alignment: .top) {
+                if let activeCelebration {
+                    FoodAppCelebrationOverlay(celebration: activeCelebration)
+                        .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                        .zIndex(60)
+                }
+            }
             .onChange(of: rowTextSignature) { _, _ in
                 if suppressDebouncedParseOnce {
                     suppressDebouncedParseOnce = false
@@ -264,6 +271,8 @@ extension MainLoggingShellView {
                 dateChangeDraftTasks.removeAll()
                 voiceHandoffTask?.cancel()
                 voiceRevealTask?.cancel()
+                celebrationDismissTask?.cancel()
+                activeCelebration = nil
                 clearParseSchedulerState()
                 parseCoordinator.clearAll()
             }
@@ -308,6 +317,9 @@ extension MainLoggingShellView {
                 appStore.preloadProfileDashboard(force: true)
                 appStore.preloadProgressCharts(force: true, includeHealthSamples: false)
             }
+            .onReceive(NotificationCenter.default.publisher(for: .savedMealDidLog)) { notification in
+                handleSavedMealDidLog(notification)
+            }
             .onReceive(NotificationCenter.default.publisher(for: .openBadgesFromStreakDrawer)) { notification in
                 let days = notification.userInfo?["currentStreakDays"] as? Int
                 badgesTrophyCaseStreakDays = days ?? currentFoodLogStreak ?? 0
@@ -321,7 +333,8 @@ extension MainLoggingShellView {
             }
             .sheet(item: $saveMealDraft) { presentation in
                 SaveMealSheet(draft: presentation.request) { meal in
-                    saveSuccessMessage = "Saved \(meal.name)"
+                    saveSuccessMessage = nil
+                    presentCelebration(title: "Saved", subtitle: meal.name, style: .saved)
                 }
                 .environmentObject(appStore)
                 .presentationDetents([.medium, .large])

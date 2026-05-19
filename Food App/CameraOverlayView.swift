@@ -348,7 +348,10 @@ struct CameraReviewOverlay: View {
                 Spacer()
 
                 HStack(spacing: 14) {
-                    Button(action: onRetake) {
+                    Button(action: {
+                        AppHaptics.lightImpact()
+                        onRetake()
+                    }) {
                         Text("Retake")
                             .font(.system(size: 16, weight: .semibold, design: .rounded))
                             .foregroundStyle(.white)
@@ -357,7 +360,10 @@ struct CameraReviewOverlay: View {
                             .background(Color.white.opacity(0.14), in: Capsule(style: .continuous))
                     }
 
-                    Button(action: onUsePhoto) {
+                    Button(action: {
+                        AppHaptics.mediumImpact()
+                        onUsePhoto()
+                    }) {
                         Text("Use Photo")
                             .font(.system(size: 16, weight: .bold, design: .rounded))
                             .foregroundStyle(.black)
@@ -424,6 +430,7 @@ struct CameraPermissionDeniedView: View {
                     .padding(.horizontal, 40)
 
                 Button {
+                    AppHaptics.lightImpact()
                     if let url = URL(string: UIApplication.openSettingsURLString) {
                         UIApplication.shared.open(url)
                     }
@@ -437,7 +444,10 @@ struct CameraPermissionDeniedView: View {
                 }
                 .padding(.top, 8)
 
-                Button(action: onDismiss) {
+                Button(action: {
+                    AppHaptics.lightImpact()
+                    onDismiss()
+                }) {
                     Text("Go Back")
                         .font(.system(size: 15))
                         .foregroundStyle(.gray)

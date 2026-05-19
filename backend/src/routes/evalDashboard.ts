@@ -35,6 +35,14 @@ import {
   updateBenchmarkCase,
   updateBenchmarkCaseMfp
 } from '../services/accuracyBenchmarkService.js';
+import {
+  runFatSecretModelLab,
+  type FatSecretModelLabRunResult
+} from '../services/fatSecretModelLabService.js';
+import {
+  runModelComparison,
+  type ModelComparisonRunResult
+} from '../services/modelComparisonService.js';
 import { getSaveHealthReport } from '../services/saveHealthService.js';
 import { pool } from '../db.js';
 import { splitFoodTextSegments } from '../services/foodTextSegmentation.js';
@@ -113,6 +121,32 @@ const promptLabTestSchema = z.object({
       message: 'A prompt template is required'
     });
   }
+});
+
+const fatSecretModelLabCaseSchema = z.object({
+  kind: z.enum(['text', 'image']).optional().default('text'),
+  label: z.string().trim().max(160).optional().nullable().transform((v) => v || null),
+  inputText: z.string().trim().max(500).optional().nullable().transform((v) => v || null),
+  fatSecretQuery: z.string().trim().max(500).optional().nullable().transform((v) => v || null),
+  servingHint: z.string().trim().max(240).optional().nullable().transform((v) => v || null),
+  imageBase64: z.string().trim().optional().nullable().transform((v) => v || null),
+  mimeType: z.string().trim().max(100).optional().nullable().transform((v) => v || null),
+  contextNote: z.string().trim().max(240).optional().nullable().transform((v) => v || null)
+});
+
+const fatSecretModelLabRunSchema = z.object({
+  cases: z.array(fatSecretModelLabCaseSchema).max(100).optional(),
+  maxCases: z.number().int().min(1).max(100).optional().default(25),
+  targetScore: z.number().min(0).max(100).optional().default(85),
+  runLabel: z.string().trim().max(120).optional().nullable().transform((v) => v || null)
+});
+
+const modelComparisonRunSchema = z.object({
+  truthMode: z.enum(['strict', 'expanded', 'all']).optional().default('expanded'),
+  category: z.string().trim().min(1).max(60).optional().nullable().transform((v) => v || null),
+  maxCases: z.number().int().min(1).max(100).optional().default(25),
+  targetScore: z.number().min(0).max(100).optional().default(85),
+  runLabel: z.string().trim().max(120).optional().nullable().transform((v) => v || null)
 });
 
 function promptHash(prompt: string): string {
@@ -337,6 +371,46 @@ const evalStatus: EvalRunStatus = {
   casesDone: 0
 };
 
+type FatSecretModelLabStatus = {
+  state: 'idle' | 'running' | 'complete' | 'error';
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+  totalCases: number;
+  casesDone: number;
+  result: FatSecretModelLabRunResult | null;
+};
+
+const fatSecretModelLabStatus: FatSecretModelLabStatus = {
+  state: 'idle',
+  startedAt: null,
+  finishedAt: null,
+  error: null,
+  totalCases: 0,
+  casesDone: 0,
+  result: null
+};
+
+type ModelComparisonStatus = {
+  state: 'idle' | 'running' | 'complete' | 'error';
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+  totalCases: number;
+  casesDone: number;
+  result: ModelComparisonRunResult | null;
+};
+
+const modelComparisonStatus: ModelComparisonStatus = {
+  state: 'idle',
+  startedAt: null,
+  finishedAt: null,
+  error: null,
+  totalCases: 0,
+  casesDone: 0,
+  result: null
+};
+
 router.post('/evals/run', async (req, res, next) => {
   try {
     requireInternalKey(req.header('x-internal-metrics-key'));
@@ -401,6 +475,163 @@ router.get('/evals/status', async (req, res, next) => {
   try {
     requireInternalKey(req.header('x-internal-metrics-key'));
     res.json(evalStatus);
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// FatSecret model lab
+// Dashboard-only experiment runner. This does not change the app parser route
+// or write benchmark rows; it compares current Gemini text/image output against
+// FatSecret serving nutrition so we can prove a grounding strategy first.
+// ---------------------------------------------------------------------------
+
+const supportedModelLabImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/heic']);
+
+function validateFatSecretModelLabCases(cases: z.infer<typeof fatSecretModelLabCaseSchema>[] | undefined): void {
+  if (!cases?.length) return;
+  const imageCases = cases.filter((entry) => entry.kind === 'image');
+  if (imageCases.length > 25) {
+    throw new ApiError(400, 'INVALID_INPUT', 'Image model lab runs are capped at 25 cases.');
+  }
+  for (const entry of cases) {
+    if (entry.kind === 'text') {
+      if (!entry.inputText && !entry.fatSecretQuery) {
+        throw new ApiError(400, 'INVALID_INPUT', 'Each text case needs input text or a FatSecret query.');
+      }
+      continue;
+    }
+    if (!entry.imageBase64 || !entry.mimeType || !entry.fatSecretQuery) {
+      throw new ApiError(400, 'INVALID_INPUT', 'Each image case needs image data, MIME type, and a FatSecret query.');
+    }
+    if (!supportedModelLabImageMimeTypes.has(entry.mimeType)) {
+      throw new ApiError(400, 'INVALID_INPUT', 'Unsupported image type. Use JPEG, PNG, or HEIC.');
+    }
+    const imageBytes = Math.floor(Buffer.byteLength(entry.imageBase64, 'base64'));
+    if (!Number.isFinite(imageBytes) || imageBytes <= 0) {
+      throw new ApiError(400, 'INVALID_INPUT', 'Image file is empty.');
+    }
+    if (imageBytes > Math.max(1_024, config.aiImageMaxBytes)) {
+      throw new ApiError(400, 'INVALID_INPUT', `Image exceeds max size (${config.aiImageMaxBytes} bytes).`);
+    }
+  }
+}
+
+router.post('/fatsecret-model-lab/runs', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+
+    if (fatSecretModelLabStatus.state === 'running') {
+      res.status(409).json({
+        error: { code: 'MODEL_LAB_ALREADY_RUNNING', message: 'A FatSecret model lab run is already in progress' },
+        status: fatSecretModelLabStatus
+      });
+      return;
+    }
+
+    const options = fatSecretModelLabRunSchema.parse(req.body ?? {});
+    validateFatSecretModelLabCases(options.cases);
+    const totalCases = Math.min(options.cases?.length || options.maxCases, options.maxCases);
+
+    fatSecretModelLabStatus.state = 'running';
+    fatSecretModelLabStatus.startedAt = new Date().toISOString();
+    fatSecretModelLabStatus.finishedAt = null;
+    fatSecretModelLabStatus.error = null;
+    fatSecretModelLabStatus.totalCases = totalCases;
+    fatSecretModelLabStatus.casesDone = 0;
+    fatSecretModelLabStatus.result = null;
+
+    (async () => {
+      try {
+        const result = await runFatSecretModelLab({
+          ...options,
+          onProgress: (casesDone, totalCases) => {
+            fatSecretModelLabStatus.casesDone = casesDone;
+            fatSecretModelLabStatus.totalCases = totalCases;
+          }
+        });
+        fatSecretModelLabStatus.state = 'complete';
+        fatSecretModelLabStatus.finishedAt = new Date().toISOString();
+        fatSecretModelLabStatus.casesDone = result.caseCount;
+        fatSecretModelLabStatus.totalCases = result.caseCount;
+        fatSecretModelLabStatus.result = result;
+      } catch (err) {
+        fatSecretModelLabStatus.state = 'error';
+        fatSecretModelLabStatus.finishedAt = new Date().toISOString();
+        fatSecretModelLabStatus.error = err instanceof Error ? err.message : String(err);
+        console.error('[fatsecret_model_lab_failed]', err);
+      }
+    })();
+
+    res.status(202).json({ started: true, status: fatSecretModelLabStatus });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/fatsecret-model-lab/status', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    res.json(fatSecretModelLabStatus);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/model-comparison/runs', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+
+    if (modelComparisonStatus.state === 'running') {
+      res.status(409).json({
+        error: { code: 'MODEL_COMPARISON_ALREADY_RUNNING', message: 'A model comparison run is already in progress' },
+        status: modelComparisonStatus
+      });
+      return;
+    }
+
+    const options = modelComparisonRunSchema.parse(req.body ?? {});
+    modelComparisonStatus.state = 'running';
+    modelComparisonStatus.startedAt = new Date().toISOString();
+    modelComparisonStatus.finishedAt = null;
+    modelComparisonStatus.error = null;
+    modelComparisonStatus.totalCases = options.maxCases;
+    modelComparisonStatus.casesDone = 0;
+    modelComparisonStatus.result = null;
+
+    (async () => {
+      try {
+        const result = await runModelComparison({
+          ...options,
+          onProgress: (casesDone, totalCases) => {
+            modelComparisonStatus.casesDone = casesDone;
+            modelComparisonStatus.totalCases = totalCases;
+          }
+        });
+        modelComparisonStatus.state = 'complete';
+        modelComparisonStatus.finishedAt = new Date().toISOString();
+        modelComparisonStatus.casesDone = result.selectedCases;
+        modelComparisonStatus.totalCases = result.selectedCases;
+        modelComparisonStatus.result = result;
+      } catch (err) {
+        modelComparisonStatus.state = 'error';
+        modelComparisonStatus.finishedAt = new Date().toISOString();
+        modelComparisonStatus.error = err instanceof Error ? err.message : String(err);
+        console.error('[model_comparison_failed]', err);
+      }
+    })();
+
+    res.status(202).json({ started: true, status: modelComparisonStatus });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get('/model-comparison/status', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    res.json(modelComparisonStatus);
   } catch (err) {
     next(err);
   }

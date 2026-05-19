@@ -43,6 +43,8 @@ struct MainLoggingShellView: View {
     @State var isSubmittingRestoredPendingSaves = false
     @State var saveError: String?
     @State var saveSuccessMessage: String?
+    @State var activeCelebration: FoodAppCelebration?
+    @State var celebrationDismissTask: Task<Void, Never>?
     @State var pendingSaveRequest: SaveLogRequest?
     @State var pendingSaveFingerprint: String?
     @State var pendingSaveIdempotencyKey: UUID?
@@ -194,6 +196,264 @@ struct MainLoggingShellView: View {
         )
     }
 
+}
+
+enum FoodAppCelebrationStyle {
+    case saved
+    case logged
+    case synced
+
+    var icon: String {
+        switch self {
+        case .saved:
+            return "checkmark"
+        case .logged:
+            return "fork.knife"
+        case .synced:
+            return "arrow.triangle.2.circlepath"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .saved:
+            return Color(red: 0.902, green: 0.361, blue: 0.102)
+        case .logged:
+            return Color(red: 0.845, green: 0.318, blue: 0.082)
+        case .synced:
+            return Color(red: 0.165, green: 0.557, blue: 0.384)
+        }
+    }
+}
+
+struct FoodAppCelebration: Identifiable {
+    let id = UUID()
+    let title: String
+    let subtitle: String?
+    let style: FoodAppCelebrationStyle
+}
+
+struct FoodAppCelebrationOverlay: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    let celebration: FoodAppCelebration
+
+    @State private var messageVisible = false
+    @State private var confettiDropped = false
+
+    var body: some View {
+        ZStack {
+            if !reduceMotion {
+                confettiLayer
+            }
+
+            messageCard
+                .padding(.horizontal, 30)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+        .allowsHitTesting(false)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityLabel)
+        .onAppear {
+            if reduceMotion {
+                withAnimation(.easeOut(duration: 0.18)) {
+                    messageVisible = true
+                }
+            } else {
+                withAnimation(.spring(response: 0.44, dampingFraction: 0.72)) {
+                    messageVisible = true
+                }
+                confettiDropped = true
+            }
+        }
+    }
+
+    private var messageCard: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(
+                        RadialGradient(
+                            colors: [
+                                celebration.style.tint.opacity(0.30),
+                                Color(red: 1.0, green: 0.73, blue: 0.32).opacity(0.15),
+                                .clear
+                            ],
+                            center: .center,
+                            startRadius: 8,
+                            endRadius: 72
+                        )
+                    )
+                    .frame(width: 150, height: 150)
+                    .blur(radius: 4)
+
+                Circle()
+                    .fill(.white.opacity(0.94))
+                    .frame(width: 76, height: 76)
+                    .shadow(color: celebration.style.tint.opacity(0.24), radius: 22, y: 10)
+
+                Circle()
+                    .fill(celebration.style.tint)
+                    .frame(width: 54, height: 54)
+
+                Image(systemName: celebration.style.icon)
+                    .font(.system(size: 23, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+            .frame(height: 112)
+
+            Text(celebration.title)
+                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 72))
+                .foregroundStyle(Color(red: 0.129, green: 0.145, blue: 0.161))
+                .minimumScaleFactor(0.82)
+                .shadow(color: .white.opacity(0.95), radius: 12, y: 2)
+                .shadow(color: celebration.style.tint.opacity(0.18), radius: 18, y: 10)
+
+            if let subtitle = celebration.subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Color(red: 0.525, green: 0.557, blue: 0.588))
+                    .lineLimit(2)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 9)
+                    .background(.white.opacity(0.72), in: Capsule())
+                    .shadow(color: Color.black.opacity(0.04), radius: 10, y: 4)
+            }
+        }
+        .frame(maxWidth: 340)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(
+            RadialGradient(
+                colors: [
+                    Color.white.opacity(0.78),
+                    Color.white.opacity(0.32),
+                    .clear
+                ],
+                center: .center,
+                startRadius: 30,
+                endRadius: 210
+            )
+            .blur(radius: 2)
+        )
+        .scaleEffect(messageVisible ? 1 : 0.88)
+        .opacity(messageVisible ? 1 : 0)
+    }
+
+    private var confettiLayer: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .top) {
+                ForEach(0..<54, id: \.self) { index in
+                    confettiPiece(index)
+                        .frame(width: confettiWidth(index), height: confettiHeight(index))
+                        .rotationEffect(.degrees(confettiDropped ? Double((index * 41) % 220 - 110) : Double((index * 13) % 44)))
+                        .offset(
+                            x: confettiX(index, width: proxy.size.width),
+                            y: confettiDropped ? confettiY(index) : -140
+                        )
+                        .opacity(confettiDropped ? 1 : 0)
+                        .animation(
+                            .interpolatingSpring(stiffness: 58, damping: 8)
+                                .delay(Double(index % 12) * 0.024),
+                            value: confettiDropped
+                        )
+                }
+            }
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+        }
+        .ignoresSafeArea()
+    }
+
+    private var accessibilityLabel: Text {
+        if let subtitle = celebration.subtitle, !subtitle.isEmpty {
+            return Text("\(celebration.title). \(subtitle)")
+        }
+        return Text(celebration.title)
+    }
+
+    private func confettiX(_ index: Int, width: CGFloat) -> CGFloat {
+        let usableWidth = max(width + 96, 1)
+        let raw = CGFloat((index * 53 + 29) % Int(usableWidth))
+        return raw - width / 2 - 48
+    }
+
+    private func confettiY(_ index: Int) -> CGFloat {
+        CGFloat(120 + (index * 47) % 620)
+    }
+
+    private func confettiColor(_ index: Int) -> Color {
+        let palette: [Color] = [
+            celebration.style.tint,
+            Color(red: 1.0, green: 0.645, blue: 0.196),
+            Color(red: 0.984, green: 0.251, blue: 0.431),
+            Color(red: 0.439, green: 0.392, blue: 0.941),
+            Color(red: 0.114, green: 0.722, blue: 0.533),
+            Color(red: 0.192, green: 0.600, blue: 0.980),
+            Color(red: 0.976, green: 0.800, blue: 0.376)
+        ]
+        return palette[index % palette.count]
+    }
+
+    private func confettiWidth(_ index: Int) -> CGFloat {
+        CGFloat(5 + (index % 4) * 3)
+    }
+
+    private func confettiHeight(_ index: Int) -> CGFloat {
+        index % 5 == 0 ? confettiWidth(index) : CGFloat(10 + (index % 4) * 5)
+    }
+
+    @ViewBuilder
+    private func confettiPiece(_ index: Int) -> some View {
+        if index % 5 == 0 {
+            Circle()
+                .fill(confettiColor(index))
+        } else if index % 7 == 0 {
+            Capsule(style: .continuous)
+                .fill(confettiColor(index))
+        } else {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .fill(confettiColor(index))
+        }
+    }
+}
+
+extension MainLoggingShellView {
+    @MainActor
+    func presentCelebration(title: String, subtitle: String? = nil, style: FoodAppCelebrationStyle = .saved) {
+        celebrationDismissTask?.cancel()
+        let trimmedSubtitle = subtitle?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let celebration = FoodAppCelebration(
+            title: title,
+            subtitle: trimmedSubtitle?.isEmpty == true ? nil : trimmedSubtitle,
+            style: style
+        )
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+            activeCelebration = celebration
+        }
+
+        celebrationDismissTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 1_850_000_000)
+            guard !Task.isCancelled, activeCelebration?.id == celebration.id else { return }
+            withAnimation(.easeInOut(duration: 0.18)) {
+                activeCelebration = nil
+            }
+        }
+    }
+
+    func celebrationSubtitle(from rawText: String) -> String? {
+        let trimmed = rawText
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        if trimmed.count <= 34 {
+            return trimmed
+        }
+        let prefix = trimmed.prefix(31)
+        return "\(prefix)…"
+    }
 }
 
 #Preview {

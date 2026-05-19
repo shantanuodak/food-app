@@ -49,6 +49,48 @@ extension MainLoggingShellView {
         refreshDayLogs()
     }
 
+    func handleSavedMealDidLog(_ notification: Notification) {
+        guard let meal = notification.userInfo?["meal"] as? SavedMeal,
+              let logId = notification.userInfo?["logId"] as? String,
+              let loggedAt = notification.userInfo?["loggedAt"] as? String else {
+            refreshNutritionStateForVisibleDay()
+            return
+        }
+
+        let savedDay = (notification.userInfo?["savedDay"] as? String) ??
+            HomeLoggingDateUtils.summaryDayString(fromLoggedAt: loggedAt)
+        let optimisticEntry = HomeLoggingRowFactory.makeDayLogEntry(from: meal, logId: logId, loggedAt: loggedAt)
+        invalidateDayCache(for: savedDay)
+
+        if savedDay == summaryDateString {
+            let existingLogs = dayLogs?.logs ?? []
+            let mergedLogs = [optimisticEntry] + existingLogs.filter { $0.id != logId }
+            let response = DayLogsResponse(
+                date: savedDay,
+                timezone: TimeZone.current.identifier,
+                logs: mergedLogs
+            )
+            applyVisibleDayLogs(response)
+        } else if let parsedDate = HomeLoggingDateUtils.summaryRequestFormatter.date(from: savedDay) {
+            selectedSummaryDate = parsedDate
+        }
+
+        isSavedMealsPresented = false
+        isProfilePresented = false
+        saveSuccessMessage = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+            presentCelebration(title: "Logged", subtitle: meal.name, style: .logged)
+        }
+
+        Task { @MainActor in
+            await refreshDayAfterMutation(savedDay, postNutritionNotification: false)
+            appStore.recordTodayLogState(hasLogs: true)
+            refreshCurrentStreak(shouldDetectBadgeUnlock: true)
+            appStore.preloadProfileDashboard(force: true)
+            appStore.preloadProgressCharts(force: true, includeHealthSamples: false)
+        }
+    }
+
     func handleServerBackedRowCleared(_ row: HomeLogRow) {
         guard let deleteContext = serverBackedDeleteContext(for: row) else { return }
         let serverLogId = deleteContext.serverLogId

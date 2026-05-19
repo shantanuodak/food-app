@@ -719,7 +719,6 @@ extension MainLoggingShellView {
             return savedDay
         }
 
-        let prefix = isRetry ? L10n.retrySucceededPrefix : L10n.savedSuccessfullyPrefix
         let timeToLogMs = flowStartedAt.map { elapsedMs(since: $0) }
         if intent == .auto {
             saveSuccessMessage = nil
@@ -728,18 +727,21 @@ extension MainLoggingShellView {
             saveSuccessMessage = nil
         } else {
             if let timeToLogMs {
-                saveSuccessMessage = L10n.saveSuccessWithTTL(prefix: prefix, logID: response.logId, day: savedDay, ttlSeconds: timeToLogMs / 1000)
                 lastTimeToLogMs = timeToLogMs
-            } else {
-                saveSuccessMessage = L10n.saveSuccessWithoutTTL(prefix: prefix, logID: response.logId, day: savedDay)
             }
+            saveSuccessMessage = nil
+            presentCelebration(
+                title: isRetry ? "Synced" : "Saved",
+                subtitle: celebrationSubtitle(from: effectiveRequest.parsedLog.rawText),
+                style: isRetry ? .synced : .saved
+            )
         }
 
         let syncedToHealth = await syncSavedLogToAppleHealthIfEnabled(effectiveRequest, response: response)
         if syncedToHealth {
             if intent == .auto {
                 saveSuccessMessage = nil
-            } else if let current = saveSuccessMessage, !current.isEmpty {
+            } else if intent == .dateChangeBackground, let current = saveSuccessMessage, !current.isEmpty {
                 saveSuccessMessage = "\(current) • Synced to Apple Health"
             }
         }

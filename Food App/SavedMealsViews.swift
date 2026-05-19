@@ -67,6 +67,7 @@ struct SaveMealSheet: View {
                 Section("Save to") {
                     ForEach(collections) { collection in
                         Button {
+                            AppHaptics.selection()
                             selectedCollectionId = collection.id
                             isCreatingCollection = false
                         } label: {
@@ -88,6 +89,7 @@ struct SaveMealSheet: View {
                     }
 
                     Button {
+                        AppHaptics.lightImpact()
                         isCreatingCollection = true
                         selectedCollectionId = nil
                     } label: {
@@ -112,10 +114,14 @@ struct SaveMealSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel") { dismiss() }
+                    Button("Cancel") {
+                        AppHaptics.lightImpact()
+                        dismiss()
+                    }
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button {
+                        AppHaptics.mediumImpact()
                         Task { await saveMeal() }
                     } label: {
                         if isSaving {
@@ -169,9 +175,11 @@ struct SaveMealSheet: View {
                     mealPayload: draft.parsedLog
                 )
             )
+            AppHaptics.success()
             onSaved(response.meal)
             dismiss()
         } catch {
+            AppHaptics.error()
             errorMessage = userFacingError(error, fallback: "Couldn’t save this meal.")
         }
         isSaving = false
@@ -216,7 +224,10 @@ struct SavedMealsScreen: View {
     @State private var selectedCollectionId: String?
     @State private var isLoading = true
     @State private var loggingMealId: String?
+    @State private var deletingMealId: String?
+    @State private var mealPendingDeletion: SavedMeal?
     @State private var errorMessage: String?
+    @State private var actionErrorMessage: String?
     @State private var confirmationMessage: String?
 
     init(presentationStyle: PresentationStyle = .pushed) {
@@ -241,7 +252,10 @@ struct SavedMealsScreen: View {
                                     .foregroundStyle(SavedMealsTokens.orangeDeep)
                             }
                             ToolbarItem(placement: .cancellationAction) {
-                                Button("Done", action: onClose)
+                                Button("Done") {
+                                    AppHaptics.lightImpact()
+                                    onClose()
+                                }
                             }
                         }
                 }
@@ -250,6 +264,29 @@ struct SavedMealsScreen: View {
         .background(SavedMealsTokens.screenBackground.ignoresSafeArea())
         .task { await loadSavedMeals() }
         .refreshable { await loadSavedMeals() }
+        .confirmationDialog(
+            "Delete saved meal?",
+            isPresented: Binding(
+                get: { mealPendingDeletion != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        mealPendingDeletion = nil
+                    }
+                }
+            ),
+            presenting: mealPendingDeletion
+        ) { meal in
+            Button("Delete saved meal", role: .destructive) {
+                AppHaptics.warning()
+                Task { await deleteMeal(meal) }
+            }
+            Button("Cancel", role: .cancel) {
+                AppHaptics.lightImpact()
+                mealPendingDeletion = nil
+            }
+        } message: { meal in
+            Text("This removes \(meal.name) from Saved Meals. Past food logs stay in your history.")
+        }
     }
 
     private var content: some View {
@@ -277,6 +314,10 @@ struct SavedMealsScreen: View {
                         tint: SavedMealsTokens.orange
                     )
                 } else {
+                    if let actionErrorMessage {
+                        SavedMealsActionErrorCard(message: actionErrorMessage)
+                    }
+
                     if let confirmationMessage {
                         SavedMealsConfirmationCard(message: confirmationMessage)
                     }
@@ -393,8 +434,12 @@ struct SavedMealsScreen: View {
                         SavedMealRow(
                             meal: meal,
                             isLogging: loggingMealId == meal.id,
+                            isDeleting: deletingMealId == meal.id,
                             onLog: {
                                 Task { await logMeal(meal) }
+                            },
+                            onDeleteRequest: {
+                                mealPendingDeletion = meal
                             }
                         )
                     }
@@ -419,6 +464,7 @@ struct SavedMealsScreen: View {
     private func loadSavedMeals() async {
         isLoading = true
         errorMessage = nil
+        actionErrorMessage = nil
         do {
             let response = try await appStore.apiClient.getSavedMeals()
             collections = response.collections
@@ -437,20 +483,85 @@ struct SavedMealsScreen: View {
     private func logMeal(_ meal: SavedMeal) async {
         guard loggingMealId == nil else { return }
         loggingMealId = meal.id
-        errorMessage = nil
+        actionErrorMessage = nil
         confirmationMessage = nil
         do {
             let loggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: Date())
-            _ = try await appStore.apiClient.logSavedMeal(
+            let response = try await appStore.apiClient.logSavedMeal(
                 id: meal.id,
                 request: LogSavedMealRequest(loggedAt: loggedAt)
             )
+            AppHaptics.success()
             confirmationMessage = "Logged \(meal.name)"
-            await appStore.refreshProfileDashboardSnapshot()
+            NotificationCenter.default.post(
+                name: .savedMealDidLog,
+                object: nil,
+                userInfo: [
+                    "meal": meal,
+                    "logId": response.logId,
+                    "loggedAt": loggedAt,
+                    "savedDay": HomeLoggingDateUtils.summaryDayString(fromLoggedAt: loggedAt)
+                ]
+            )
+            closeSheetAfterSuccessfulLog()
+            Task {
+                await appStore.refreshProfileDashboardSnapshot()
+            }
         } catch {
-            errorMessage = (error as? LocalizedError)?.errorDescription ?? "Couldn’t log this meal."
+            AppHaptics.error()
+            actionErrorMessage = savedMealActionError(error, fallback: "Couldn’t log this meal.")
         }
         loggingMealId = nil
+    }
+
+    @MainActor
+    private func deleteMeal(_ meal: SavedMeal) async {
+        guard deletingMealId == nil, loggingMealId != meal.id else { return }
+        deletingMealId = meal.id
+        mealPendingDeletion = nil
+        actionErrorMessage = nil
+        confirmationMessage = nil
+        do {
+            _ = try await appStore.apiClient.deleteSavedMeal(id: meal.id)
+            removeDeletedMealFromLocalState(meal)
+            AppHaptics.success()
+            confirmationMessage = "Deleted \(meal.name)"
+        } catch {
+            AppHaptics.error()
+            actionErrorMessage = savedMealActionError(error, fallback: "Couldn’t delete this saved meal.")
+        }
+        deletingMealId = nil
+    }
+
+    private func savedMealActionError(_ error: Error, fallback: String) -> String {
+        let message = (error as? LocalizedError)?.errorDescription ?? fallback
+        if message.localizedCaseInsensitiveContains("endpoint not found") {
+            return "This saved meal action is not available on the current backend yet. Please try again after the backend deploy finishes."
+        }
+        return message
+    }
+
+    private func removeDeletedMealFromLocalState(_ meal: SavedMeal) {
+        meals.removeAll { $0.id == meal.id }
+        collections = collections.map { collection in
+            guard collection.id == meal.collectionId else { return collection }
+            return SavedMealCollection(
+                id: collection.id,
+                name: collection.name,
+                mealCount: max(collection.mealCount - 1, 0),
+                createdAt: collection.createdAt,
+                updatedAt: collection.updatedAt
+            )
+        }
+        if let selectedCollectionId,
+           !meals.contains(where: { $0.collectionId == selectedCollectionId }) {
+            self.selectedCollectionId = nil
+        }
+    }
+
+    private func closeSheetAfterSuccessfulLog() {
+        guard case .sheet(let onClose) = presentationStyle else { return }
+        onClose()
     }
 
     private func collectionFilterChip(
@@ -459,7 +570,12 @@ struct SavedMealsScreen: View {
         isSelected: Bool,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: action) {
+        Button(action: {
+            if !isSelected {
+                AppHaptics.selection()
+            }
+            action()
+        }) {
             HStack(spacing: 8) {
                 Text("\(count)")
                     .font(.system(size: 12, weight: .bold))
@@ -493,7 +609,9 @@ struct SavedMealsScreen: View {
 private struct SavedMealRow: View {
     let meal: SavedMeal
     let isLogging: Bool
+    let isDeleting: Bool
     let onLog: () -> Void
+    let onDeleteRequest: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -509,6 +627,23 @@ private struct SavedMealRow: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
                     .background(SavedMealsTokens.orangeSoft, in: Capsule())
+
+                Menu {
+                    Button(role: .destructive, action: onDeleteRequest) {
+                        Label("Delete saved meal", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(SavedMealsTokens.muted)
+                        .frame(width: 34, height: 34)
+                        .background(.white.opacity(0.72), in: Circle())
+                        .overlay {
+                            Circle()
+                                .stroke(SavedMealsTokens.hairline, lineWidth: 1)
+                        }
+                }
+                .disabled(isLogging || isDeleting)
             }
 
             Text(meal.rawText)
@@ -528,19 +663,22 @@ private struct SavedMealRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button(action: onLog) {
+            Button(action: {
+                AppHaptics.mediumImpact()
+                onLog()
+            }) {
                 HStack {
-                    if isLogging {
+                    if isLogging || isDeleting {
                         ProgressView()
                     }
-                    Text(isLogging ? "Logging…" : "Log meal")
+                    Text(isDeleting ? "Deleting…" : (isLogging ? "Logging…" : "Log meal"))
                         .fontWeight(.semibold)
                 }
                 .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
             .tint(SavedMealsTokens.orange)
-            .disabled(isLogging)
+            .disabled(isLogging || isDeleting)
         }
         .padding(18)
         .background(
@@ -602,6 +740,23 @@ private struct SavedMealsConfirmationCard: View {
             .overlay {
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(Color(red: 0.122, green: 0.561, blue: 0.384).opacity(0.12), lineWidth: 1)
+            }
+    }
+}
+
+private struct SavedMealsActionErrorCard: View {
+    let message: String
+
+    var body: some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .font(.system(size: 15, weight: .bold))
+            .foregroundStyle(Color(red: 0.82, green: 0.18, blue: 0.16))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(16)
+            .background(Color(red: 1.0, green: 0.945, blue: 0.925), in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(Color(red: 0.82, green: 0.18, blue: 0.16).opacity(0.12), lineWidth: 1)
             }
     }
 }

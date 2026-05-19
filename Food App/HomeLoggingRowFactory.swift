@@ -85,6 +85,38 @@ enum HomeLoggingRowFactory {
         )
     }
 
+    nonisolated static func makeDayLogEntry(from meal: SavedMeal, logId: String, loggedAt: String) -> DayLogEntry {
+        let payload = meal.mealPayload
+        return DayLogEntry(
+            id: logId,
+            loggedAt: loggedAt,
+            rawText: payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? meal.name : payload.rawText,
+            inputKind: "text",
+            imageRef: payload.imageRef,
+            confidence: payload.confidence,
+            totals: payload.totals,
+            items: payload.items.enumerated().map { offset, item in
+                DayLogItem(
+                    id: "\(logId)-\(offset)",
+                    foodName: item.name,
+                    quantity: item.quantity,
+                    amount: item.amount ?? item.quantity,
+                    unit: item.unit,
+                    unitNormalized: item.unitNormalized,
+                    grams: item.grams,
+                    calories: item.calories,
+                    protein: item.protein,
+                    carbs: item.carbs,
+                    fat: item.fat,
+                    nutritionSourceId: item.nutritionSourceId,
+                    sourceFamily: item.sourceFamily,
+                    matchConfidence: item.matchConfidence
+                )
+            },
+            dietaryFlags: nil
+        )
+    }
+
     nonisolated static func parsedFoodItem(from item: SaveParsedFoodItem) -> ParsedFoodItem {
         ParsedFoodItem(
             name: item.name,

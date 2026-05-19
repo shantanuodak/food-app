@@ -84,6 +84,7 @@ struct HM01LogComposerSection: View {
                                 Button {
                                     guard !row.isDeleting else { return }
                                     if let index = indexForRowID(row.id) {
+                                        AppHaptics.lightImpact()
                                         rows[index].isSaved = false
                                         rows[index].savedAt = nil
                                         guard onInputTapped() else { return }
@@ -427,6 +428,7 @@ struct HM01LogComposerSection: View {
     @ViewBuilder
     private func calorieButton(for row: HomeLogRow, calories: Int, showCalories: Bool) -> some View {
         let button = Button {
+            AppHaptics.lightImpact()
             onCaloriesTapped(row)
         } label: {
             HStack(spacing: 6) {

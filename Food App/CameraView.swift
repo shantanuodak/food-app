@@ -79,7 +79,10 @@ struct CameraView: View {
                 Color.black.ignoresSafeArea()
 
                 VStack(spacing: 0) {
-                    CameraTopBar(onClose: { dismiss() })
+                    CameraTopBar(onClose: {
+                        AppHaptics.lightImpact()
+                        dismiss()
+                    })
                         .padding(.top, safeInsets.top + 6)
 
                     Spacer(minLength: 18)
@@ -117,6 +120,7 @@ struct CameraView: View {
                             Task { await viewModel.capturePhoto() }
                         },
                         onOpenLibrary: {
+                            AppHaptics.lightImpact()
                             if let handler = onOpenPhotoLibrary {
                                 dismiss()
                                 handler()
@@ -173,6 +177,7 @@ struct CameraView: View {
             }
 
             Button {
+                AppHaptics.lightImpact()
                 Task { await viewModel.initialize() }
             } label: {
                 Text("Retry")
@@ -184,7 +189,10 @@ struct CameraView: View {
             }
             .padding(.top, 8)
 
-            Button { dismiss() } label: {
+            Button {
+                AppHaptics.lightImpact()
+                dismiss()
+            } label: {
                 Text("Close")
                     .font(.system(size: 15))
                     .foregroundStyle(.gray)

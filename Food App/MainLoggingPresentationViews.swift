@@ -237,12 +237,7 @@ struct MainLoggingHomeStatusStrip: View {
 
     @ViewBuilder
     private var statusText: some View {
-        if let saveSuccessMessage {
-            Text(saveSuccessMessage)
-                .font(.system(size: 14))
-                .foregroundStyle(.green)
-                .lineLimit(1)
-        } else if let parseError {
+        if let parseError {
             if Self.isConnectivityParseError(parseError) {
                 Text(L10n.parseConnectivityIssueLabel)
                     .font(.system(size: 14, weight: .semibold))

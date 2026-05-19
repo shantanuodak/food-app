@@ -373,6 +373,15 @@ final class APIClient {
         )
     }
 
+    @discardableResult
+    func deleteSavedMeal(id: String) async throws -> DeleteSavedMealResponse {
+        try await request(
+            path: "/v1/saved-meals/\(id)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+    }
+
     func getAdminFeatureFlags() async throws -> AdminFeatureFlagsResponse {
         try await request(path: "/v1/admin/feature-flags", method: "GET", requiresAuth: true)
     }

@@ -68,6 +68,11 @@ export type SavedMeal = {
   updatedAt: string;
 };
 
+export type DeleteSavedMealResult = {
+  id: string;
+  status: 'deleted';
+};
+
 type AuthContext = {
   authProvider?: string | null;
   userEmail?: string | null;
@@ -345,6 +350,32 @@ export async function createSavedMeal(input: {
   } finally {
     client.release();
   }
+}
+
+export async function deleteSavedMeal(
+  userId: string,
+  savedMealId: string
+): Promise<DeleteSavedMealResult> {
+  const result = await pool.query<{ id: string; collection_id: string }>(
+    `
+    DELETE FROM saved_meals
+    WHERE id = $1 AND user_id = $2
+    RETURNING id, collection_id
+    `,
+    [savedMealId, userId]
+  );
+
+  const row = result.rows[0];
+  if (!row) {
+    throw new ApiError(404, 'SAVED_MEAL_NOT_FOUND', 'Saved meal not found');
+  }
+
+  await pool.query(`UPDATE saved_meal_collections SET updated_at = NOW() WHERE id = $1 AND user_id = $2`, [
+    row.collection_id,
+    userId
+  ]);
+
+  return { id: row.id, status: 'deleted' };
 }
 
 export async function logSavedMeal(input: {

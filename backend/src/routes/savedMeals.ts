@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   createSavedMeal,
   createSavedMealCollection,
+  deleteSavedMeal,
   listSavedMeals,
   logSavedMeal
 } from '../services/savedMealsService.js';
@@ -130,6 +131,17 @@ router.post('/:id/log', async (req, res, next) => {
       loggedAt: body.loggedAt
     });
     res.status(201).json(saved);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const auth = authContext(res);
+    const params = savedMealIdParamSchema.parse(req.params);
+    const deleted = await deleteSavedMeal(auth.userId, params.id);
+    res.json(deleted);
   } catch (error) {
     next(error);
   }

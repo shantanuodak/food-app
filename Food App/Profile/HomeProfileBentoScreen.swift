@@ -541,15 +541,8 @@ private struct CalorieHeroTile: View {
 private struct LoggingTipsTile: View {
     var body: some View {
         BentoTappableTile(
-            background: LinearGradient(
-                colors: [
-                    BentoTokens.warmCardTop,
-                    BentoTokens.warmCardBottom
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            border: BentoTokens.warmBorder
+            background: BentoTokens.whiteTileBackground,
+            border: BentoTokens.whiteTileBorder
         ) {
             FoodLoggingTipsView()
         } label: {
@@ -596,15 +589,8 @@ private struct LoggingTipsTile: View {
 private struct SavedMealsTile: View {
     var body: some View {
         BentoTappableTile(
-            background: LinearGradient(
-                colors: [
-                    BentoTokens.savedCardTop,
-                    BentoTokens.savedCardBottom
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            border: BentoTokens.savedBorder
+            background: BentoTokens.whiteTileBackground,
+            border: BentoTokens.whiteTileBorder
         ) {
             SavedMealsScreen()
         } label: {
@@ -652,10 +638,10 @@ private struct SavedMealsTile: View {
             .foregroundStyle(BentoTokens.orange700)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
-            .background(Color.white.opacity(0.88), in: Capsule())
+            .background(BentoTokens.savedMealChipBackground, in: Capsule())
             .overlay {
                 Capsule()
-                    .stroke(BentoTokens.savedBorder.opacity(0.85), lineWidth: 0.75)
+                    .stroke(BentoTokens.savedMealChipBorder, lineWidth: 0.75)
             }
     }
 }
@@ -664,15 +650,8 @@ private struct SavedMealsTile: View {
 private struct WidgetSetupTile: View {
     var body: some View {
         BentoTappableTile(
-            background: LinearGradient(
-                colors: [
-                    BentoTokens.coolCardTop,
-                    BentoTokens.coolCardBottom
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            border: BentoTokens.coolBorder
+            background: BentoTokens.whiteTileBackground,
+            border: BentoTokens.whiteTileBorder
         ) {
             WidgetSetupGuideView()
         } label: {
@@ -749,13 +728,8 @@ private struct BadgeTile: View {
         }
         .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
         .bentoTile(
-            background: LinearGradient(
-                colors: [BentoTokens.warmCardTop,
-                         BentoTokens.savedCardBottom],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            border: BentoTokens.warmBorder
+            background: BentoTokens.whiteTileBackground,
+            border: BentoTokens.whiteTileBorder
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(days == 1 ? "Badges, 1 day streak, \(badgeTitle)" : "Badges, \(days) day streak, \(badgeTitle)")
@@ -829,15 +803,8 @@ private struct NotificationReminderTile: View {
             .accessibilityHidden(true)
         }
         .bentoTile(
-            background: LinearGradient(
-                colors: [
-                    BentoTokens.coolCardTop,
-                    Color(red: 0.925, green: 0.959, blue: 0.998)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            border: BentoTokens.coolBorder
+            background: BentoTokens.whiteTileBackground,
+            border: BentoTokens.whiteTileBorder
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("Notifications and reminders, \(isEnabled ? "on" : "off"), \(summary)")
@@ -856,15 +823,8 @@ private struct DietTile: View {
 
     var body: some View {
         BentoTappableTile(
-            background: LinearGradient(
-                colors: [
-                    BentoTokens.greenCardTop,
-                    BentoTokens.greenCardBottom
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            border: BentoTokens.greenBorder
+            background: BentoTokens.whiteTileBackground,
+            border: BentoTokens.whiteTileBorder
         ) {
             DietEditorScreen()
         } label: {
@@ -1224,6 +1184,10 @@ private enum BentoTokens {
     static let canvas   = Color(uiColor: .systemGroupedBackground)
     static let profileCanvas = Color(red: 0.994, green: 0.985, blue: 0.973)
     static let warningSurface = Color(red: 1.0, green: 0.954, blue: 0.915)
+    static let whiteTileBackground = Color.white
+    static let whiteTileBorder = Color(red: 0.918, green: 0.902, blue: 0.878)
+    static let savedMealChipBackground = Color(red: 1.0, green: 0.974, blue: 0.946)
+    static let savedMealChipBorder = Color(red: 0.949, green: 0.816, blue: 0.667)
 
     // Grays (mirror HTML --gray-*)
     static let gray100 = Color(red: 0.945, green: 0.953, blue: 0.961)

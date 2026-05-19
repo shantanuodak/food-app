@@ -1,0 +1,537 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Profile Drawer Redesign Mockup</title>
+  <style>
+    @font-face {
+      font-family: "Instrument Serif";
+      src: url("Food App/Fonts/InstrumentSerif-Regular.ttf") format("truetype");
+      font-weight: 400;
+      font-style: normal;
+      font-display: swap;
+    }
+
+    :root {
+      --outside: #d7d3cd;
+      --sheet: #fffdf9;
+      --paper: #fffaf3;
+      --card: rgba(255, 255, 255, 0.82);
+      --card-strong: #ffffff;
+      --ink: #242528;
+      --muted: #77736d;
+      --faint: #aaa39a;
+      --orange: #d7631f;
+      --orange-soft: #fff2e8;
+      --orange-line: rgba(215, 99, 31, 0.16);
+      --line: rgba(47, 39, 31, 0.09);
+      --shadow: 0 18px 44px rgba(55, 38, 22, 0.08);
+      --soft-shadow: 0 8px 24px rgba(55, 38, 22, 0.055);
+      --system: ui-rounded, "SF Pro Rounded", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --serif: "Instrument Serif", Georgia, serif;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, #d4d0ca, #ece7df);
+      font-family: var(--system);
+      color: var(--ink);
+      padding: 22px;
+    }
+
+    .phone {
+      width: 430px;
+      height: 932px;
+      max-width: 100%;
+      background: #0b0b0c;
+      border-radius: 48px;
+      padding: 7px;
+      box-shadow: 0 26px 70px rgba(29, 24, 20, 0.26);
+    }
+
+    .screen {
+      position: relative;
+      height: 100%;
+      overflow: hidden;
+      border-radius: 42px;
+      background: var(--outside);
+    }
+
+    .home-blur {
+      position: absolute;
+      inset: 0;
+      background:
+        radial-gradient(circle at 28% 18%, rgba(230, 117, 45, .10), transparent 34%),
+        linear-gradient(180deg, rgba(245, 242, 237, .74), rgba(223, 218, 211, .72));
+    }
+
+    .sheet {
+      position: absolute;
+      inset: 0;
+      overflow: hidden;
+      border-radius: 42px;
+      background:
+        linear-gradient(180deg, #fffefa 0%, var(--sheet) 32%, var(--paper) 100%);
+      box-shadow: 0 -20px 70px rgba(33, 24, 17, 0.18);
+    }
+
+    .scroll {
+      height: 100%;
+      overflow: auto;
+      padding: 0 22px 32px;
+      scrollbar-width: none;
+    }
+    .scroll::-webkit-scrollbar { display: none; }
+
+    .grabber {
+      width: 40px;
+      height: 5px;
+      border-radius: 99px;
+      background: rgba(31, 31, 31, 0.18);
+      margin: 9px auto 0;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: grid;
+      grid-template-columns: 50px 1fr 50px;
+      align-items: center;
+      height: 84px;
+      margin: 0 -22px;
+      padding: 0 22px;
+      background: linear-gradient(180deg, rgba(255, 253, 249, 0.96), rgba(255, 253, 249, 0.78) 76%, rgba(255,253,249,0));
+      backdrop-filter: blur(18px);
+    }
+
+    h1 {
+      margin: 0;
+      text-align: center;
+      font-family: var(--serif);
+      font-weight: 400;
+      font-size: 42px;
+      line-height: 1;
+      color: var(--orange);
+      letter-spacing: -0.035em;
+    }
+
+    .close {
+      justify-self: end;
+      width: 46px;
+      height: 46px;
+      border-radius: 50%;
+      border: 1px solid var(--line);
+      background: rgba(255,255,255,.72);
+      color: #232323;
+      font-size: 28px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      box-shadow: var(--soft-shadow);
+    }
+
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin: 2px 0 16px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 25px;
+      letter-spacing: -0.045em;
+      line-height: 1;
+    }
+
+    .manage {
+      min-height: 36px;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 0 12px 0 14px;
+      border-radius: 999px;
+      color: var(--orange);
+      background: rgba(255, 242, 232, .72);
+      border: 1px solid var(--orange-line);
+      font-size: 13px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .progress-card {
+      border-radius: 30px;
+      padding: 18px;
+      background:
+        radial-gradient(circle at 86% 14%, rgba(255,255,255,.30), transparent 24%),
+        linear-gradient(135deg, #ff9c45 0%, #ff822f 44%, #f36a25 100%);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      box-shadow: 0 18px 42px rgba(224, 91, 24, 0.22);
+      color: white;
+    }
+
+    .progress-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 16px;
+    }
+
+    .label {
+      font-size: 12px;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      color: var(--muted);
+      font-weight: 850;
+    }
+
+    .progress-card .label {
+      color: rgba(255,255,255,.82);
+    }
+
+    .edit {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,.28);
+      background: rgba(255,255,255,.18);
+      color: white;
+      display: grid;
+      place-items: center;
+    }
+    .edit svg { width: 17px; height: 17px; }
+
+    .progress-body {
+      display: grid;
+      grid-template-columns: 128px 1fr;
+      gap: 18px;
+      align-items: center;
+    }
+
+    .ring {
+      width: 126px;
+      height: 126px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: conic-gradient(#ffffff 0 184deg, rgba(255,255,255,.24) 184deg 360deg);
+      position: relative;
+    }
+    .ring:before {
+      content: "";
+      position: absolute;
+      width: 104px;
+      height: 104px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #ff9b43, #ff7629);
+    }
+    .ring-text { position: relative; text-align: center; }
+    .ring-text strong {
+      display: block;
+      font-size: 30px;
+      letter-spacing: -0.06em;
+      line-height: 1;
+    }
+    .ring-text span {
+      display: block;
+      margin-top: 6px;
+      font-size: 12px;
+      color: rgba(255,255,255,.78);
+      font-weight: 800;
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px 16px;
+    }
+    .metric small {
+      display: block;
+      color: rgba(255,255,255,.76);
+      font-size: 11px;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 850;
+      margin-bottom: 5px;
+    }
+    .metric strong {
+      font-size: 22px;
+      line-height: 1;
+      letter-spacing: -0.045em;
+    }
+    .metric span {
+      color: rgba(255,255,255,.68);
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .drawer-title {
+      margin: 26px 0 12px;
+      font-family: var(--serif);
+      font-size: 29px;
+      line-height: 1;
+      color: var(--orange);
+      font-weight: 400;
+      letter-spacing: -0.04em;
+    }
+
+    .card {
+      position: relative;
+      border-radius: 26px;
+      background: var(--card);
+      border: 1px solid var(--line);
+      box-shadow: var(--soft-shadow);
+      overflow: hidden;
+    }
+
+    .primary-action {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 17px 46px 17px 17px;
+      min-height: 102px;
+      background: rgba(255,255,255,.74);
+    }
+
+    .chevron:after {
+      content: "›";
+      position: absolute;
+      right: 18px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: rgba(36,37,40,.28);
+      font-size: 34px;
+      line-height: 1;
+    }
+
+    .icon {
+      width: 48px;
+      height: 48px;
+      flex: 0 0 auto;
+      border-radius: 16px;
+      display: grid;
+      place-items: center;
+      color: var(--orange);
+      background: var(--orange-soft);
+      border: 1px solid var(--orange-line);
+    }
+    .icon svg { width: 23px; height: 23px; stroke-width: 2.35; }
+
+    .card h3 {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 740;
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+    }
+    .card p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 560;
+      line-height: 1.28;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 10px;
+    }
+    .chip {
+      padding: 5px 9px;
+      border-radius: 999px;
+      background: #fff8f1;
+      color: var(--orange);
+      border: 1px solid var(--orange-line);
+      font-size: 11px;
+      font-weight: 650;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 13px;
+      margin-top: 13px;
+    }
+
+    .tile {
+      min-height: 162px;
+      padding: 16px;
+    }
+    .tile .icon { margin-bottom: 18px; }
+    .tile h3 { font-size: 19px; font-weight: 720; }
+
+    .badge-number {
+      margin-top: 10px;
+      font-size: 34px;
+      line-height: .95;
+      font-weight: 760;
+      letter-spacing: -0.07em;
+      color: var(--orange);
+    }
+
+    .reminder-list {
+      display: grid;
+      gap: 7px;
+      margin-top: 11px;
+    }
+    .reminder-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 7px 9px;
+      border-radius: 13px;
+      background: rgba(255,255,255,.72);
+      border: 1px solid rgba(47,39,31,.055);
+      font-size: 12px;
+      font-weight: 620;
+      color: var(--muted);
+    }
+    .reminder-row strong { color: var(--orange); font-weight: 720; }
+
+    .quiet-row {
+      margin-top: 13px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 15px 16px;
+    }
+    .quiet-row h3 { font-size: 17px; }
+    .quiet-row p { font-size: 13px; }
+
+    .toggle {
+      width: 50px;
+      height: 30px;
+      border-radius: 999px;
+      background: #35c96c;
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .toggle:after {
+      content: "";
+      position: absolute;
+      right: 3px;
+      top: 3px;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: white;
+      box-shadow: 0 3px 8px rgba(0,0,0,.16);
+    }
+
+    .foot-space { height: 28px; }
+  </style>
+</head>
+<body>
+  <main class="phone">
+    <section class="screen">
+      <div class="home-blur"></div>
+      <section class="sheet">
+        <div class="scroll">
+          <div class="grabber"></div>
+          <header class="topbar">
+            <div></div>
+            <h1>Profile</h1>
+            <button class="close" aria-label="Close">×</button>
+          </header>
+
+          <div class="section-head">
+            <h2>Your Profile</h2>
+            <div class="manage">Manage Account ›</div>
+          </div>
+
+          <section class="progress-card">
+            <div class="progress-top">
+              <div class="label">Today’s progress</div>
+              <button class="edit" aria-label="Edit target">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5Z"/></svg>
+              </button>
+            </div>
+            <div class="progress-body">
+              <div class="ring">
+                <div class="ring-text">
+                  <strong>1,032</strong>
+                  <span>of 2,028 kcal</span>
+                </div>
+              </div>
+              <div class="metrics">
+                <div class="metric"><small>Protein</small><strong>45</strong> <span>/ 152g</span></div>
+                <div class="metric"><small>Carbs</small><strong>178</strong> <span>/ 202g</span></div>
+                <div class="metric"><small>Fat</small><strong>18</strong> <span>/ 68g</span></div>
+                <div class="metric"><small>Logs</small><strong>3</strong></div>
+              </div>
+            </div>
+          </section>
+
+          <div class="drawer-title">Shortcuts</div>
+
+          <section class="card primary-action chevron">
+            <div class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 4.5A2.5 2.5 0 0 1 8.5 2h7A2.5 2.5 0 0 1 18 4.5V22l-6-3.5L6 22V4.5Z"/></svg>
+            </div>
+            <div>
+              <h3>Saved Meals</h3>
+              <p>Keep repeat meals ready without retyping.</p>
+              <div class="chips">
+                <span class="chip">Favorites</span>
+                <span class="chip">Collections</span>
+                <span class="chip">Repeat meals</span>
+              </div>
+            </div>
+          </section>
+
+          <div class="grid">
+            <section class="card tile chevron">
+              <div class="icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="10" cy="10" r="6"/><path d="M14.5 14.5 21 21"/><path d="M10 7v6"/><path d="M7 10h6"/></svg>
+              </div>
+              <h3>Logging tips</h3>
+              <p>Tiny details make estimates sharper.</p>
+            </section>
+
+            <section class="card tile chevron">
+              <div class="icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><rect x="4" y="5" width="11" height="15" rx="3"/><path d="M8 9h5M8 13h5"/><path d="M15 9h3a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-3"/></svg>
+              </div>
+              <h3>Add widgets</h3>
+              <p>Quick camera and voice shortcuts.</p>
+            </section>
+
+            <section class="card tile chevron">
+              <div class="icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 21h8"/><path d="M12 17v4"/><path d="M7 4h10v4a5 5 0 0 1-10 0V4Z"/><path d="M7 7H4a3 3 0 0 0 3 3"/><path d="M17 7h3a3 3 0 0 1-3 3"/></svg>
+              </div>
+              <h3>Badges</h3>
+              <div class="badge-number">24</div>
+              <p>day streak</p>
+            </section>
+
+            <section class="card tile chevron">
+              <div class="icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg>
+              </div>
+              <h3>Reminders</h3>
+              <div class="reminder-list">
+                <div class="reminder-row"><span>Breakfast</span><strong>8:00</strong></div>
+                <div class="reminder-row"><span>Lunch</span><strong>12:30</strong></div>
+                <div class="reminder-row"><span>Dinner</span><strong>7:30</strong></div>
+              </div>
+            </section>
+          </div>
+
+          <div class="foot-space"></div>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

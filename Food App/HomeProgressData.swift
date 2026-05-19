@@ -557,7 +557,8 @@ extension ProgressSectionView {
         proxy: ChartProxy,
         geometry: GeometryProxy,
         sourceDates: [Date],
-        selectedDate: inout Date?
+        selectedDate: inout Date?,
+        hapticID: String? = nil
     ) {
         guard let plotFrame = proxy.plotFrame else { return }
         let plotRect = geometry[plotFrame]
@@ -566,6 +567,12 @@ extension ProgressSectionView {
         guard let hoveredDate: Date = proxy.value(atX: xPosition) else { return }
         guard let closest = sourceDates.min(by: { abs($0.timeIntervalSince(hoveredDate)) < abs($1.timeIntervalSince(hoveredDate)) }) else {
             return
+        }
+        if selectedDate != closest, let hapticID {
+            AppHaptics.throttledSelectionTick(
+                id: hapticID,
+                value: Self.apiDayFormatter.string(from: closest)
+            )
         }
         selectedDate = closest
     }

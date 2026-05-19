@@ -87,7 +87,8 @@
     }
     header .logo span { color: var(--muted); font-weight: 400; }
 
-    nav { display: flex; gap: 2px; flex: 1; }
+    nav { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+    nav::-webkit-scrollbar { display: none; }
     nav button {
       background: none;
       border: none;
@@ -98,6 +99,7 @@
       font-size: 13px;
       font-weight: 500;
       transition: all 0.15s;
+      flex: 0 0 auto;
     }
     nav button:hover { color: var(--text); background: var(--surface2); }
     nav button.active { color: var(--text); background: var(--surface2); }
@@ -131,6 +133,11 @@
       .grid-3 { grid-template-columns: repeat(2, 1fr); }
       .qa-hero, .qa-finding-grid { grid-template-columns: 1fr; }
       .qa-shot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 1300px) {
+      header { gap: 16px; }
+      header .logo span { display: none; }
+      nav button { padding-inline: 10px; }
     }
     @media (max-width: 600px) {
       .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
@@ -730,6 +737,478 @@
     .truncate { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .truth-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
     @media (max-width: 900px) { .truth-grid { grid-template-columns: 1fr; } }
+
+    /* ---- Nutrition dashboard ergonomics ---- */
+    .dashboard-workbench {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+      gap: 18px;
+    }
+    .dashboard-workbench > * {
+      min-width: 0;
+    }
+    .page-hero {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 4px 0 2px;
+      min-width: 0;
+      max-width: 100%;
+    }
+    .page-eyebrow {
+      color: var(--accent2);
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .page-hero h2 {
+      margin: 0;
+      font-size: 26px;
+      line-height: 1.05;
+    }
+    .page-hero p {
+      color: var(--muted);
+      max-width: 760px;
+      margin: 9px 0 0;
+      font-size: 13px;
+    }
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 220px;
+      max-width: 100%;
+    }
+    .hero-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 14px;
+    }
+    .score-overview {
+      margin-bottom: 0;
+    }
+    .score-overview .stat-card {
+      min-height: 106px;
+    }
+    .dashboard-split {
+      display: grid;
+      grid-template-columns: minmax(0, 0.82fr) minmax(300px, 0.52fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+    .control-panel {
+      min-height: 100%;
+    }
+    .control-panel h3,
+    .table-section-title h3 {
+      margin-bottom: 4px;
+    }
+    .control-panel .eval-controls {
+      margin-bottom: 0;
+    }
+    .compact-copy {
+      color: var(--muted);
+      font-size: 12px;
+      margin: 0;
+    }
+    .insight-strip {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .insight-pill {
+      min-height: 74px;
+      padding: 12px 13px;
+      border: 1px solid rgba(99,102,241,0.18);
+      border-radius: 14px;
+      background: rgba(20,23,34,0.74);
+    }
+    .insight-pill .label {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 0.10em;
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .insight-pill .value {
+      color: #f5f7ff;
+      font-family: var(--font-mono);
+      font-size: 18px;
+      font-weight: 800;
+    }
+    .insight-pill .sub {
+      color: var(--muted);
+      font-size: 11px;
+      margin-top: 3px;
+    }
+    .benchmark-plain-language {
+      display: grid;
+      grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
+      gap: 14px;
+      align-items: stretch;
+    }
+    .benchmark-answer {
+      border: 1px solid rgba(34,197,94,0.22);
+      border-radius: 16px;
+      padding: 18px;
+      background: linear-gradient(135deg, rgba(34,197,94,0.12), rgba(15,17,23,0.82) 54%);
+    }
+    .benchmark-answer .eyebrow,
+    .benchmark-mini-panel .eyebrow {
+      color: #8ff0b7;
+      font-size: 10px;
+      font-weight: 900;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .benchmark-answer-title {
+      color: #f5f7ff;
+      font-size: 20px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      line-height: 1.2;
+      margin-bottom: 8px;
+    }
+    .benchmark-answer-copy {
+      color: #b9c0de;
+      max-width: 760px;
+      font-size: 13px;
+      line-height: 1.55;
+    }
+    .benchmark-explain-list {
+      display: grid;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .benchmark-explain-item {
+      display: grid;
+      grid-template-columns: 28px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      color: #dfe4f6;
+      font-size: 13px;
+    }
+    .benchmark-explain-item span:first-child {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      background: rgba(34,197,94,0.16);
+      border: 1px solid rgba(34,197,94,0.24);
+      color: #9af6c0;
+      font-family: var(--font-mono);
+      font-weight: 800;
+      font-size: 12px;
+    }
+    .benchmark-mini-panel {
+      border: 1px solid rgba(129,140,248,0.20);
+      border-radius: 16px;
+      padding: 18px;
+      background: rgba(20,23,34,0.76);
+    }
+    .benchmark-mini-panel h3 {
+      color: #f5f7ff;
+      font-size: 16px;
+      letter-spacing: -0.01em;
+      text-transform: none;
+      margin-bottom: 10px;
+    }
+    .benchmark-scoreboard {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .benchmark-score-card {
+      min-height: 128px;
+      border: 1px solid rgba(99,102,241,0.18);
+      border-radius: 16px;
+      padding: 16px;
+      background: rgba(20,23,34,0.76);
+    }
+    .benchmark-score-card.primary {
+      border-color: rgba(34,197,94,0.26);
+      background: linear-gradient(180deg, rgba(34,197,94,0.12), rgba(20,23,34,0.80));
+    }
+    .benchmark-score-card .label {
+      color: #939abd;
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 10px;
+    }
+    .benchmark-score-card .value {
+      color: #f5f7ff;
+      font-family: var(--font-mono);
+      font-size: 30px;
+      font-weight: 900;
+      line-height: 1;
+    }
+    .benchmark-score-card .sub,
+    .benchmark-score-card .note {
+      color: var(--muted);
+      font-size: 12px;
+      margin-top: 7px;
+    }
+    .benchmark-score-card .note {
+      line-height: 1.45;
+    }
+    .benchmark-delta {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 3px 8px;
+      margin-top: 10px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .benchmark-delta.up { background: rgba(34,197,94,0.14); color: #86efac; }
+    .benchmark-delta.down { background: rgba(239,68,68,0.14); color: #fca5a5; }
+    .benchmark-delta.flat { background: rgba(129,140,248,0.14); color: #c4c9ff; }
+    .benchmark-legend-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+    .benchmark-legend-card {
+      border: 1px solid rgba(99,102,241,0.18);
+      border-radius: 14px;
+      padding: 14px;
+      background: rgba(15,17,23,0.54);
+    }
+    .benchmark-legend-card strong {
+      display: block;
+      color: #f5f7ff;
+      font-size: 13px;
+      margin-bottom: 5px;
+    }
+    .benchmark-legend-card p {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.45;
+      margin: 0;
+    }
+    .benchmark-controls-grid {
+      grid-template-columns: minmax(0, 0.78fr) minmax(0, 1fr);
+    }
+    .benchmark-run-strip {
+      display: grid;
+      gap: 14px;
+    }
+    .benchmark-segments {
+      width: fit-content;
+      max-width: 100%;
+    }
+    .benchmark-segments button {
+      min-width: 126px;
+    }
+    .benchmark-subpanel {
+      display: none;
+      gap: 16px;
+      min-width: 0;
+    }
+    .benchmark-subpanel.active {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .benchmark-subpanel > *,
+    #tab-benchmarks .card,
+    #tab-benchmarks .section,
+    #tab-benchmarks .table-wrap,
+    #tab-benchmarks .lab-grid > * {
+      min-width: 0;
+      max-width: 100%;
+    }
+    #tab-benchmarks .eval-control {
+      min-width: 0;
+      max-width: 100%;
+    }
+    #tab-benchmarks .eval-control select,
+    #tab-benchmarks .eval-control input,
+    #tab-benchmarks .dashboard-input {
+      width: 100%;
+      max-width: 100%;
+      min-width: 0;
+    }
+    .benchmark-progress-note {
+      border-color: rgba(99,102,241,0.22);
+      background: linear-gradient(135deg, rgba(99,102,241,0.14), rgba(15,17,23,0.82) 54%);
+    }
+    .benchmark-progress-note .eyebrow {
+      color: #c7d2fe;
+    }
+    .benchmark-progress-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    .benchmark-run-table tr.is-empty-run {
+      opacity: 0.58;
+    }
+    .benchmark-run-table tr.is-empty-run td {
+      background: rgba(239,68,68,0.03);
+    }
+    .run-scope-badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      border-radius: 999px;
+      padding: 3px 9px;
+      background: rgba(129,140,248,0.12);
+      color: #c9ceff;
+      font-size: 11px;
+      font-weight: 800;
+    }
+    .section-toolbar {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 12px;
+    }
+    .table-density-wrap {
+      max-height: 760px;
+      overflow: auto;
+    }
+    .table-density-wrap thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .benchmark-editor-panel {
+      border-color: rgba(129,140,248,0.36);
+      background: rgba(15,17,23,0.60);
+    }
+    .nutrition-table-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .nutrition-table-actions .btn {
+      min-height: 34px;
+      padding: 7px 10px;
+    }
+    .run-detail-grid {
+      display: grid;
+      grid-template-columns: 0.82fr 1.18fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+    .run-focus-list {
+      display: grid;
+      gap: 8px;
+    }
+    .run-focus-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 10px 12px;
+      border: 1px solid rgba(99,102,241,0.18);
+      border-radius: 12px;
+      background: rgba(20,23,34,0.72);
+    }
+    .run-focus-item strong {
+      display: block;
+      color: #f3f4fb;
+      font-size: 13px;
+      margin-bottom: 2px;
+    }
+    .run-focus-meta {
+      color: var(--muted);
+      font-size: 11px;
+      font-family: var(--font-mono);
+    }
+    .comparison-summary-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .comparison-result-layout {
+      display: grid;
+      grid-template-columns: minmax(0, 0.58fr) minmax(0, 1fr);
+      gap: 14px;
+      align-items: start;
+    }
+    .comparison-reasons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 10px;
+    }
+    .comparison-weak-list {
+      display: grid;
+      gap: 8px;
+    }
+    .lab-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(320px, 0.72fr);
+      gap: 14px;
+    }
+    @media (max-width: 1050px) {
+      .dashboard-split,
+      .benchmark-plain-language,
+      .run-detail-grid,
+      .comparison-result-layout,
+      .benchmark-segments,
+      .lab-grid {
+        grid-template-columns: 1fr;
+      }
+      .comparison-summary-grid,
+      .benchmark-scoreboard,
+      .benchmark-legend-grid,
+      .insight-strip {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+    }
+    @media (max-width: 640px) {
+      .page-hero {
+        flex-direction: column;
+      }
+      .hero-actions {
+        width: 100%;
+        justify-content: flex-start;
+      }
+      .hero-actions .btn,
+      .comparison-summary-grid,
+      .benchmark-segments,
+      .insight-strip {
+        width: 100%;
+      }
+      .benchmark-segments {
+        display: flex;
+      }
+      .benchmark-segments button {
+        flex: 1;
+        min-width: 0;
+        padding-inline: 10px;
+      }
+      #tab-benchmarks .eval-control {
+        flex: 1 1 100%;
+        min-width: 0 !important;
+      }
+      .comparison-summary-grid,
+      .benchmark-scoreboard,
+      .benchmark-legend-grid,
+      .insight-strip {
+        grid-template-columns: 1fr;
+      }
+    }
 
     /* ---- Global premium dashboard refresh ---- */
     body {
@@ -1416,83 +1895,283 @@
 
     <!-- ==================== BENCHMARKS ==================== -->
     <div id="tab-benchmarks" class="tab-panel">
-      <div class="section">
-        <div class="row-actions">
-          <h2 style="margin:0">Accuracy Benchmarks</h2>
-          <button class="btn btn-ghost" onclick="loadAccuracyBenchmarks()">↻ Refresh</button>
-        </div>
-        <p class="text-muted" style="font-size:13px; margin-bottom:16px;">
-          Reference nutrition is the truth. Food App and MyFitnessPal are both scored against the same reviewed cases.
-        </p>
-
-        <div class="grid-4" id="benchmark-stat-cards">
-          <div class="stat-card"><div class="stat-label">Active Cases</div><div class="stat-value" id="bench-active">—</div></div>
-          <div class="stat-card"><div class="stat-label">Reviewed Cases</div><div class="stat-value" id="bench-reviewed">—</div></div>
-          <div class="stat-card"><div class="stat-label">Food App Score</div><div class="stat-value" id="bench-food-score">—</div><div class="stat-sub" id="bench-food-score-sub">latest run</div></div>
-          <div class="stat-card"><div class="stat-label">MFP Score</div><div class="stat-value" id="bench-mfp-score">—</div><div class="stat-sub" id="bench-mfp-score-sub">manual comparison</div></div>
-        </div>
-
-        <div class="card section">
-          <div class="row-actions" style="justify-content:space-between; align-items:flex-start;">
-            <div>
-              <h3 style="margin-bottom:4px;">Benchmark workflow</h3>
-              <p class="text-muted" style="font-size:13px; margin:0;">Add reviewed cases, choose what to run, then watch the score cards update.</p>
+      <div class="dashboard-workbench">
+        <div class="page-hero">
+          <div>
+            <div class="page-eyebrow">Nutrition accuracy</div>
+            <h2>Accuracy Benchmarks</h2>
+            <p>One simple scorecard for parser accuracy. Reference nutrition is the truth; Food App and MyFitnessPal are compared against it.</p>
+            <div class="hero-meta" id="benchmark-health-line">
+              <span class="badge badge-muted">Loading benchmark state</span>
             </div>
-            <span id="benchmark-run-msg" style="display:none; color:var(--muted); font-size:13px;">
+          </div>
+          <div class="hero-actions">
+            <button class="btn btn-ghost" onclick="loadAccuracyBenchmarks()">Refresh</button>
+            <button class="btn btn-primary" onclick="openBenchmarkEditor()">Add case</button>
+          </div>
+        </div>
+
+        <div class="segment-control benchmark-segments" id="benchmark-segments" role="tablist" aria-label="Benchmark views">
+          <button class="active" type="button" data-section="summary" onclick="showBenchmarkSection('summary')">Summary</button>
+          <button type="button" data-section="run-progress" onclick="showBenchmarkSection('run-progress')">Run Progress</button>
+          <button type="button" data-section="results" onclick="showBenchmarkSection('results')">Results</button>
+        </div>
+
+        <div class="benchmark-subpanel active" id="benchmark-panel-summary" data-section="summary">
+        <div class="benchmark-plain-language">
+          <div class="benchmark-answer" id="benchmark-explainer">
+            <div class="eyebrow">Plain English</div>
+            <div class="benchmark-answer-title">Loading the latest meaningful run…</div>
+            <p class="benchmark-answer-copy">Scores will explain whether the model was rerun, how many cases were included, and why the number moved.</p>
+          </div>
+          <div class="benchmark-mini-panel">
+            <div class="eyebrow">Score rules</div>
+            <h3>What the numbers mean</h3>
+            <div class="benchmark-legend-grid">
+              <div class="benchmark-legend-card"><strong>Reference</strong><p>The source of truth for calories and macros.</p></div>
+              <div class="benchmark-legend-card"><strong>Food App</strong><p>Our parser result for the same food text.</p></div>
+              <div class="benchmark-legend-card"><strong>MFP</strong><p>A comparison point, not the truth source.</p></div>
+              <div class="benchmark-legend-card"><strong>Fresh</strong><p>Runs Gemini/Food App again, so scores can move.</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="benchmark-scoreboard" id="benchmark-stat-cards">
+          <div class="benchmark-score-card primary">
+            <div class="label">Food App latest</div>
+            <div class="value" id="bench-food-score">—</div>
+            <div class="sub" id="bench-food-score-sub">latest meaningful run</div>
+            <div id="bench-food-score-delta"></div>
+          </div>
+          <div class="benchmark-score-card">
+            <div class="label">MyFitnessPal</div>
+            <div class="value" id="bench-mfp-score">—</div>
+            <div class="sub" id="bench-mfp-score-sub">comparison score</div>
+          </div>
+          <div class="benchmark-score-card">
+            <div class="label">Case bank</div>
+            <div class="value" id="bench-reviewed">—</div>
+            <div class="sub">reviewed reference foods</div>
+            <div class="note"><span id="bench-active">—</span> active cases</div>
+          </div>
+          <div class="benchmark-score-card">
+            <div class="label">Latest scope</div>
+            <div class="value" id="bench-scope">—</div>
+            <div class="sub" id="bench-scope-sub">cases tested</div>
+            <div class="note" id="bench-cache-note">mode unknown</div>
+          </div>
+        </div>
+
+        <div id="benchmark-case-insights" class="insight-strip">
+          <div class="insight-pill"><div class="label">Case mix</div><div class="value">—</div><div class="sub">categories loaded</div></div>
+          <div class="insight-pill"><div class="label">Review state</div><div class="value">—</div><div class="sub">reviewed cases</div></div>
+          <div class="insight-pill"><div class="label">MFP coverage</div><div class="value">—</div><div class="sub">manual comparisons</div></div>
+          <div class="insight-pill"><div class="label">Run focus</div><div class="value">—</div><div class="sub">latest weak rows</div></div>
+        </div>
+        </div>
+
+        <div class="benchmark-subpanel" id="benchmark-panel-run-progress" data-section="run-progress">
+        <div class="benchmark-run-strip">
+          <div class="card control-panel">
+            <div class="section-toolbar">
+              <div>
+                <h3>Run benchmark</h3>
+                <p class="compact-copy">Use all reviewed cases unless you intentionally want a smaller slice.</p>
+              </div>
+              <span id="benchmark-run-msg" style="display:none; color:var(--muted); font-size:13px;">
+                <span class="spinner"></span>&nbsp;Running…
+              </span>
+            </div>
+            <div class="eval-controls">
+              <div class="eval-control">
+                <label for="benchmark-run-cache-mode">Run cache</label>
+                <select id="benchmark-run-cache-mode">
+                  <option value="cached">Cached - reuse parser outputs</option>
+                  <option value="fresh">Fresh - rerun model</option>
+                </select>
+              </div>
+              <div class="eval-control">
+                <label for="benchmark-run-max">Max cases</label>
+                <input id="benchmark-run-max" type="number" min="1" max="100" value="100" />
+              </div>
+              <div class="eval-control" style="align-self:end;">
+                <button class="btn btn-primary" id="benchmark-run-btn" onclick="runAccuracyBenchmark()">Run benchmark</button>
+              </div>
+            </div>
+            <p class="compact-copy" style="margin-top:10px;">Max cases is a cap. A 50-case run is not “50 new foods”; it is a 50-row slice of reviewed cases. Category filters in Results apply when set.</p>
+          </div>
+        </div>
+
+        <div class="benchmark-answer benchmark-progress-note">
+          <div class="eyebrow">Grounding experiment</div>
+          <div class="benchmark-answer-title">FatSecret is tested inside the benchmark, not as a separate dashboard area.</div>
+          <p class="benchmark-answer-copy">This compares Gemini-only results with a Gemini plus FatSecret strategy against the same reviewed reference truth, so the decision to use FatSecret is based on the benchmark score.</p>
+          <div class="benchmark-progress-actions">
+            <button class="btn btn-ghost" onclick="refreshFatSecretModelLabStatus()">Refresh grounding</button>
+            <button class="btn btn-primary" id="model-comparison-run-btn" onclick="runModelComparison()">Run comparison</button>
+            <span id="fatsecret-lab-running-msg" style="display:none; color:var(--muted); font-size:13px;">
               <span class="spinner"></span>&nbsp;Running…
             </span>
           </div>
-          <div class="grid-3" style="margin-bottom:16px;">
-            <div class="stat-card">
-              <div class="stat-label">1 · Add cases</div>
-              <div style="font-weight:700;">Create reference truth</div>
-              <div class="stat-sub">USDA, official brand, restaurant, or curated</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">2 · Run benchmark</div>
-              <div style="font-weight:700;">Send reviewed cases to Food App</div>
-              <div class="stat-sub">Fresh can spend Gemini money</div>
-            </div>
-            <div class="stat-card">
-              <div class="stat-label">3 · Review score</div>
-              <div style="font-weight:700;">Compare against reference</div>
-              <div class="stat-sub">Weak rows show what to fix next</div>
+        </div>
+
+        <div class="grid-4 score-overview" id="fatsecret-lab-stat-cards">
+          <div class="stat-card"><div class="stat-label">Grounded Score</div><div class="stat-value" id="fatsecret-lab-score">—</div><div class="stat-sub" id="fatsecret-lab-score-sub">target 85</div></div>
+          <div class="stat-card"><div class="stat-label">Pass Rate</div><div class="stat-value" id="fatsecret-lab-pass">—</div><div class="stat-sub" id="fatsecret-lab-pass-sub">cases over target</div></div>
+          <div class="stat-card"><div class="stat-label">Cases</div><div class="stat-value" id="fatsecret-lab-cases">—</div><div class="stat-sub" id="fatsecret-lab-cases-sub">scored / errors</div></div>
+          <div class="stat-card"><div class="stat-label">Gemini Cost</div><div class="stat-value" id="fatsecret-lab-cost">—</div><div class="stat-sub" id="fatsecret-lab-cost-sub">estimated</div></div>
+        </div>
+
+        <div class="card section">
+          <div class="section-toolbar">
+            <div>
+              <h3>Truth-backed comparison</h3>
+              <p class="compact-copy">Gemini-only vs gated Gemini plus FatSecret.</p>
             </div>
           </div>
           <div class="eval-controls">
             <div class="eval-control">
-              <label for="benchmark-run-cache-mode">Run cache</label>
-              <select id="benchmark-run-cache-mode">
-                <option value="cached">cached</option>
-                <option value="fresh">fresh</option>
+              <label for="model-comparison-truth-mode">Truth mode</label>
+              <select id="model-comparison-truth-mode">
+                <option value="expanded">expanded</option>
+                <option value="strict">strict</option>
+                <option value="all">all reviewed</option>
               </select>
             </div>
             <div class="eval-control">
-              <label for="benchmark-run-max">Max cases</label>
-              <input id="benchmark-run-max" type="number" min="1" max="100" value="25" />
+              <label for="model-comparison-max">Max cases</label>
+              <input id="model-comparison-max" type="number" min="1" max="100" value="25" />
             </div>
-            <div class="eval-control" style="align-self:end;">
-              <button class="btn btn-ghost" onclick="openBenchmarkEditor()">Add case</button>
+            <div class="eval-control">
+              <label for="model-comparison-target">Target</label>
+              <input id="model-comparison-target" type="number" min="0" max="100" step="1" value="85" />
             </div>
-            <div class="eval-control" style="align-self:end;">
-              <button class="btn btn-primary" id="benchmark-run-btn" onclick="runAccuracyBenchmark()">Run benchmark</button>
+            <div class="eval-control">
+              <label for="model-comparison-category">Category</label>
+              <select id="model-comparison-category">
+                <option value="">All</option>
+                <option value="simple">simple</option>
+                <option value="restaurant">restaurant</option>
+                <option value="branded">branded</option>
+                <option value="homemade">homemade</option>
+                <option value="indian">indian</option>
+                <option value="international">international</option>
+                <option value="typo">typo</option>
+                <option value="portion">portion</option>
+                <option value="ambiguous">ambiguous</option>
+              </select>
+            </div>
+          </div>
+          <div id="model-comparison-status" class="text-muted" style="font-size:13px;">No comparison run loaded.</div>
+          <div id="model-comparison-detail" style="margin-top:12px;"></div>
+        </div>
+
+        <div class="lab-grid">
+          <div class="card section">
+            <div class="section-toolbar">
+              <div>
+                <h3>Text batch</h3>
+                <p class="compact-copy">Run starter or custom food lines.</p>
+              </div>
+            </div>
+            <div class="eval-controls">
+              <div class="eval-control">
+                <label for="fatsecret-lab-source">Source</label>
+                <select id="fatsecret-lab-source">
+                  <option value="starter">Starter set</option>
+                  <option value="custom">Custom lines</option>
+                </select>
+              </div>
+              <div class="eval-control">
+                <label for="fatsecret-lab-max">Max cases</label>
+                <input id="fatsecret-lab-max" type="number" min="1" max="100" value="25" />
+              </div>
+              <div class="eval-control">
+                <label for="fatsecret-lab-target">Target</label>
+                <input id="fatsecret-lab-target" type="number" min="0" max="100" step="1" value="85" />
+              </div>
+              <div class="eval-control" style="align-self:end;">
+                <button class="btn btn-primary" id="fatsecret-lab-run-text-btn" onclick="runFatSecretTextBatch()">Run text batch</button>
+              </div>
+            </div>
+            <div class="eval-control">
+              <label for="fatsecret-lab-text-input">Custom cases</label>
+              <textarea id="fatsecret-lab-text-input" class="dashboard-input" rows="9" placeholder="food input | optional FatSecret query | optional serving hint"></textarea>
+            </div>
+          </div>
+
+          <div class="card section">
+            <div class="section-toolbar">
+              <div>
+                <h3>Image case</h3>
+                <p class="compact-copy">Compare one uploaded image against a FatSecret reference.</p>
+              </div>
+            </div>
+            <div class="eval-controls">
+              <div class="eval-control" style="flex:1; min-width:220px;">
+                <label for="fatsecret-lab-image-file">Image</label>
+                <input id="fatsecret-lab-image-file" type="file" accept="image/jpeg,image/png,image/heic" />
+              </div>
+              <div class="eval-control" style="flex:1; min-width:220px;">
+                <label for="fatsecret-lab-image-query">FatSecret query</label>
+                <input id="fatsecret-lab-image-query" type="text" maxlength="500" placeholder="chicken tikka masala 1 cup" />
+              </div>
+              <div class="eval-control">
+                <label for="fatsecret-lab-image-serving">Serving hint</label>
+                <input id="fatsecret-lab-image-serving" type="text" maxlength="240" placeholder="1 cup" />
+              </div>
+              <div class="eval-control">
+                <label for="fatsecret-lab-image-target">Target</label>
+                <input id="fatsecret-lab-image-target" type="number" min="0" max="100" step="1" value="85" />
+              </div>
+            </div>
+            <div class="eval-control">
+              <label for="fatsecret-lab-image-context">Context note</label>
+              <textarea id="fatsecret-lab-image-context" class="dashboard-input" rows="4" maxlength="240" placeholder="Optional cuisine, portion, or label context"></textarea>
+            </div>
+            <div class="row-actions" style="margin-top:12px;">
+              <button class="btn btn-primary" id="fatsecret-lab-run-image-btn" onclick="runFatSecretImageCase()">Run image case</button>
             </div>
           </div>
         </div>
 
+        <div id="fatsecret-lab-status" class="card section text-muted" style="font-size:13px;">No grounding run loaded.</div>
+
         <div class="card section">
           <div class="row-actions" style="justify-content:space-between; margin-bottom:0;">
-            <div>
-              <h3 style="margin-bottom:4px;">1 · Benchmark cases</h3>
-              <p class="text-muted" style="font-size:13px; margin:0;">These are the reviewed reference foods that scoring uses.</p>
-            </div>
-            <button class="btn btn-primary" onclick="openBenchmarkEditor()">Add case</button>
+            <h3 style="margin:0">Grounding case results</h3>
+            <span id="fatsecret-lab-weak-count" class="text-muted mono">—</span>
           </div>
-          <div id="benchmark-mfp-msg" class="text-muted" style="display:none; font-size:12px; margin-top:10px;"></div>
+          <div class="table-wrap" style="margin-top:12px;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Case</th>
+                  <th>FatSecret</th>
+                  <th>Gemini</th>
+                  <th>Score</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="fatsecret-lab-results-tbody">
+                <tr><td colspan="5" class="text-muted" style="padding:24px; text-align:center;">Run a text batch or image case.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        </div>
 
-          <div class="eval-controls" style="margin-top:12px;">
+        <div class="benchmark-subpanel" id="benchmark-panel-results" data-section="results">
+        <div class="card control-panel">
+          <div class="section-toolbar">
+            <div>
+              <h3>Cases filter</h3>
+              <p class="compact-copy">Filter the case bank and the reviewed foods used for category-scoped benchmark runs.</p>
+            </div>
+          </div>
+          <div class="eval-controls">
             <div class="eval-control">
-              <label for="benchmark-filter-category">Category / cuisine</label>
+              <label for="benchmark-filter-category">Category</label>
               <select id="benchmark-filter-category" onchange="loadAccuracyBenchmarkCases()">
                 <option value="">All</option>
                 <option value="simple">simple</option>
@@ -1507,7 +2186,7 @@
               </select>
             </div>
             <div class="eval-control">
-              <label for="benchmark-filter-status">Review queue</label>
+              <label for="benchmark-filter-status">Status</label>
               <select id="benchmark-filter-status" onchange="loadAccuracyBenchmarkCases()">
                 <option value="">All</option>
                 <option value="draft">draft</option>
@@ -1516,15 +2195,26 @@
               </select>
             </div>
             <div class="eval-control">
-              <label for="benchmark-filter-active">Active state</label>
+              <label for="benchmark-filter-active">Active</label>
               <select id="benchmark-filter-active" onchange="loadAccuracyBenchmarkCases()">
                 <option value="">All</option>
                 <option value="true">Active only</option>
               </select>
             </div>
           </div>
+        </div>
 
-          <div id="benchmark-editor" class="card" style="display:none; margin-top:16px; background:rgba(15,17,23,0.52);">
+        <div class="card section">
+          <div class="section-toolbar">
+            <div>
+              <h3>Benchmark cases</h3>
+              <p class="compact-copy">Reviewed reference foods used by scoring.</p>
+            </div>
+            <button class="btn btn-primary" onclick="openBenchmarkEditor()">Add case</button>
+          </div>
+          <div id="benchmark-mfp-msg" class="text-muted" style="display:none; font-size:12px; margin-top:10px;"></div>
+
+          <div id="benchmark-editor" class="benchmark-editor-panel card" style="display:none; margin-top:16px;">
             <div class="row-actions" style="justify-content:space-between;">
               <h3 style="margin:0" id="benchmark-editor-title">Add Benchmark Case</h3>
               <button class="btn btn-ghost" onclick="closeBenchmarkEditor()">Close</button>
@@ -1629,7 +2319,7 @@
             </div>
           </div>
 
-        <div class="table-wrap" style="margin-top:12px;">
+        <div class="table-wrap table-density-wrap" style="margin-top:12px;">
           <table>
             <thead>
               <tr>
@@ -1649,16 +2339,16 @@
         </div>
         </div>
 
-        <div class="card section" style="margin-top:18px;">
-          <div class="row-actions" style="justify-content:space-between;">
+        <div class="card section">
+          <div class="section-toolbar">
             <div>
-              <h3 style="margin-bottom:4px;">Run history</h3>
-              <p class="text-muted" style="font-size:13px; margin:0;">Past benchmark runs are kept here. The latest run is summarized at the top.</p>
+              <h3>Run history</h3>
+              <p class="compact-copy">Past benchmark runs and detailed case scores.</p>
             </div>
           </div>
 
           <div class="table-wrap" style="margin-top:12px;">
-          <table>
+          <table class="benchmark-run-table">
             <thead>
               <tr>
                 <th>Run</th>
@@ -1677,8 +2367,8 @@
           <div id="benchmark-run-detail" style="margin-top:16px;"></div>
         </div>
 
-        <details class="card section" style="margin-top:18px;">
-          <summary style="cursor:pointer; font-weight:800; color:var(--accent2);">Public Snapshot</summary>
+        <details class="card section">
+          <summary style="cursor:pointer; font-weight:800; color:var(--accent2);">Public snapshot</summary>
           <div class="row-actions">
             <button class="btn btn-ghost" onclick="loadBenchmarkPublicSnapshot()">↻ Refresh</button>
             <button class="btn btn-primary" onclick="publishBenchmarkSnapshot()">Publish selected run</button>
@@ -1706,6 +2396,7 @@
           </div>
           <div id="benchmark-public-snapshot-current" class="text-muted" style="font-size:13px; margin-top:12px;">No public snapshot loaded.</div>
         </details>
+        </div>
 
       </div>
     </div>
@@ -2299,6 +2990,7 @@ async function api(path, opts = {}) {
 /* ====================================================================== */
 let currentTab = 'overview';
 let advancedSection = 'saved-logs';
+let benchmarkSection = 'summary';
 let promptLabLoaded = false;
 let promptLabRuntimeRefreshToken = 0;
 let promptLabRuntimeRefreshTimer = null;
@@ -2309,6 +3001,9 @@ let roadmapDragId = null;
 let roadmapReorderSaving = false;
 let accuracyBenchmarkCases = [];
 let accuracyBenchmarkRuns = [];
+let accuracyBenchmarkSummary = null;
+let fatSecretModelLabLastResult = null;
+let modelComparisonLastResult = null;
 let notificationTemplates = [];
 function switchTab(name, btn) {
   document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
@@ -2329,11 +3024,32 @@ function switchTab(name, btn) {
     }
   }
   if (name === 'roadmap') loadRoadmap();
-  if (name === 'benchmarks') loadAccuracyBenchmarks();
+  if (name === 'benchmarks') {
+    loadAccuracyBenchmarks();
+    showBenchmarkSection(benchmarkSection);
+  }
   if (name === 'feedback') loadFeedback();
   if (name === 'notifications') loadNotificationTemplates();
   if (name === 'advanced') {
     showAdvancedSection(advancedSection);
+  }
+}
+
+function showBenchmarkSection(name) {
+  benchmarkSection = name || 'summary';
+  document.querySelectorAll('#benchmark-segments button').forEach(button => {
+    button.classList.toggle('active', button.dataset.section === benchmarkSection);
+  });
+  document.querySelectorAll('#tab-benchmarks .benchmark-subpanel').forEach(panel => {
+    panel.classList.toggle('active', panel.dataset.section === benchmarkSection);
+  });
+  if (benchmarkSection === 'run-progress') {
+    refreshFatSecretModelLabStatus();
+    refreshModelComparisonStatus();
+  }
+  if (benchmarkSection === 'results') {
+    loadAccuracyBenchmarkCases();
+    loadAccuracyBenchmarkRuns();
   }
 }
 
@@ -2748,6 +3464,367 @@ function renderEvalResult(result) {
 }
 
 /* ====================================================================== */
+/* FATSECRET MODEL LAB */
+/* ====================================================================== */
+function setModelComparisonRunning(isRunning) {
+  const btn = document.getElementById('model-comparison-run-btn');
+  if (btn) btn.disabled = isRunning;
+}
+
+async function runModelComparison() {
+  const truthMode = document.getElementById('model-comparison-truth-mode').value;
+  const maxCases = Math.max(1, Math.min(100, Number(document.getElementById('model-comparison-max').value || 25)));
+  const targetScore = Math.max(0, Math.min(100, Number(document.getElementById('model-comparison-target').value || 85)));
+  const category = document.getElementById('model-comparison-category').value || null;
+  if (!confirm(`Run Gemini-only vs Gemini plus FatSecret on up to ${maxCases} reviewed benchmark cases? This can spend Gemini and FatSecret quota.`)) return;
+
+  const statusEl = document.getElementById('model-comparison-status');
+  setModelComparisonRunning(true);
+  statusEl.innerHTML = '<span class="spinner"></span>&nbsp;Starting comparison…';
+  try {
+    const start = await api('/model-comparison/runs', {
+      method: 'POST',
+      body: JSON.stringify({ truthMode, maxCases, targetScore, category, runLabel: `${truthMode} comparison` })
+    });
+    const totalCases = start.status?.totalCases || maxCases;
+    statusEl.innerHTML = `<span class="spinner"></span>&nbsp;Running 0/${fmt(totalCases)} cases…`;
+    const result = await pollModelComparisonStatus();
+    modelComparisonLastResult = result;
+    renderModelComparisonResult(result);
+  } catch (e) {
+    statusEl.innerHTML = `<span class="text-red">${escapeHtml(e.message)}</span>`;
+    await refreshModelComparisonStatus();
+  } finally {
+    setModelComparisonRunning(false);
+  }
+}
+
+async function pollModelComparisonStatus() {
+  const maxWaitMs = 20 * 60 * 1000;
+  const started = Date.now();
+  while (Date.now() - started < maxWaitMs) {
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const status = await api('/model-comparison/status');
+    renderModelComparisonStatus(status);
+    if (status.state === 'complete') return status.result;
+    if (status.state === 'error') throw new Error(status.error || 'Model comparison failed');
+  }
+  throw new Error('Timed out waiting for model comparison.');
+}
+
+async function refreshModelComparisonStatus() {
+  try {
+    const status = await api('/model-comparison/status');
+    renderModelComparisonStatus(status);
+  } catch (e) {
+    const el = document.getElementById('model-comparison-status');
+    if (el) el.innerHTML = `<span class="text-red">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function renderModelComparisonStatus(status) {
+  const el = document.getElementById('model-comparison-status');
+  if (!el) return;
+  if (status.state === 'running') {
+    el.innerHTML = `<span class="spinner"></span>&nbsp;Running ${fmt(status.casesDone)}/${fmt(status.totalCases)} cases…`;
+    return;
+  }
+  if (status.state === 'error') {
+    el.innerHTML = `<span class="text-red">${escapeHtml(status.error || 'Comparison failed')}</span>`;
+    return;
+  }
+  if (status.state === 'complete' && status.result) {
+    modelComparisonLastResult = status.result;
+    renderModelComparisonResult(status.result);
+    return;
+  }
+  el.textContent = 'No comparison run loaded.';
+}
+
+function renderModelComparisonResult(result) {
+  if (!result) return;
+  const el = document.getElementById('model-comparison-status');
+  const detail = document.getElementById('model-comparison-detail');
+  el.innerHTML = `
+    <span class="badge ${result.delta >= 0 ? 'badge-green' : 'badge-yellow'}">Delta ${result.delta >= 0 ? '+' : ''}${escapeHtml(fmt(result.delta, 1))}</span>
+    <span class="text-muted">Gemini ${escapeHtml(fmt(result.geminiOnlyScore, 1))} vs Gemini+FatSecret ${escapeHtml(fmt(result.geminiFatSecretScore, 1))} · ${escapeHtml(fmt(result.selectedCases))}/${escapeHtml(fmt(result.availableReviewedCases))} cases · ${escapeHtml(result.truthMode)} truth</span>
+  `;
+  const rows = [...(result.results || [])]
+    .sort((a, b) => Math.min(a.geminiFatSecret.score.overall, a.geminiOnly.score.overall) - Math.min(b.geminiFatSecret.score.overall, b.geminiOnly.score.overall))
+    .slice(0, 35)
+    .map(row => `
+    <tr>
+      <td>
+        <div>${escapeHtml(row.inputText)}</div>
+        <div class="text-muted" style="font-size:11px">${escapeHtml(row.category)} · ${escapeHtml(row.truth.sourceType)}</div>
+      </td>
+      <td class="mono">${escapeHtml(fmt(row.truth.calories, 1))} cal<div class="text-muted" style="font-size:11px">${escapeHtml(row.truth.sourceLabel)}</div></td>
+      <td>${fatSecretLabScoreBadge(row.geminiOnly.score.overall)}<div class="mono text-muted" style="font-size:11px">${escapeHtml(fmt(row.geminiOnly.totals.calories, 1))} cal</div></td>
+      <td>${fatSecretLabScoreBadge(row.geminiFatSecret.score.overall)}<div class="mono text-muted" style="font-size:11px">${escapeHtml(fmt(row.geminiFatSecret.totals.calories, 1))} cal · ${escapeHtml(row.geminiFatSecret.source)}</div></td>
+      <td><span class="badge ${row.winner === 'gemini_fatsecret' ? 'badge-green' : row.winner === 'gemini_only' ? 'badge-yellow' : 'badge-muted'}">${escapeHtml(row.winner)}</span><div class="text-muted" style="font-size:11px">Delta ${row.delta >= 0 ? '+' : ''}${escapeHtml(fmt(row.delta, 1))}</div></td>
+    </tr>
+  `).join('');
+  const sourceCounts = countBy(result.results || [], row => row.geminiFatSecret?.source);
+  const sourceHtml = Object.entries(sourceCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([source, count]) => `<span class="badge badge-muted">${escapeHtml(source.replace('gemini_fatsecret_', '').replaceAll('_', ' '))}: ${escapeHtml(fmt(count))}</span>`)
+    .join('');
+  const weakHtml = (result.weakCases || []).slice(0, 10).map(row => `
+    <div class="run-focus-item">
+      <div>
+        <strong>${escapeHtml(row.inputText)}</strong>
+        <div class="run-focus-meta">${escapeHtml(row.category)} · Gemini ${escapeHtml(fmt(row.geminiOnlyScore, 1))} · FatSecret ${escapeHtml(fmt(row.geminiFatSecretScore, 1))}</div>
+      </div>
+      <span class="badge ${row.delta > 0 ? 'badge-green' : row.delta < 0 ? 'badge-yellow' : 'badge-muted'}">${row.delta >= 0 ? '+' : ''}${escapeHtml(fmt(row.delta, 1))}</span>
+    </div>
+  `).join('');
+  detail.innerHTML = `
+    <div class="comparison-summary-grid">
+      <div class="stat-card"><div class="stat-label">Gemini</div><div class="stat-value">${escapeHtml(fmt(result.geminiOnlyScore, 1))}</div><div class="stat-sub">${escapeHtml(fmt(result.geminiOnlyPassCount))} over target</div></div>
+      <div class="stat-card"><div class="stat-label">Gemini + FatSecret</div><div class="stat-value">${escapeHtml(fmt(result.geminiFatSecretScore, 1))}</div><div class="stat-sub">${escapeHtml(fmt(result.geminiFatSecretPassCount))} over target</div></div>
+      <div class="stat-card"><div class="stat-label">FatSecret Wins</div><div class="stat-value">${escapeHtml(fmt(result.winnerCounts.gemini_fatsecret))}</div><div class="stat-sub">${escapeHtml(fmt(result.winnerCounts.tie))} ties</div></div>
+      <div class="stat-card"><div class="stat-label">Gemini Wins</div><div class="stat-value">${escapeHtml(fmt(result.winnerCounts.gemini_only))}</div><div class="stat-sub">guardrail check</div></div>
+      <div class="stat-card"><div class="stat-label">Excluded Truth</div><div class="stat-value">${escapeHtml(fmt(result.excludedCases))}</div><div class="stat-sub">not in mode</div></div>
+    </div>
+    <div class="comparison-result-layout">
+      <div class="card" style="padding:16px;">
+        <div class="section-toolbar" style="margin-bottom:10px;">
+          <div>
+            <h3>Weak cases</h3>
+            <p class="compact-copy">Rows below target in either strategy.</p>
+          </div>
+        </div>
+        <div class="comparison-weak-list">${weakHtml || '<div class="text-muted">No weak comparison rows.</div>'}</div>
+        <div class="comparison-reasons">${sourceHtml}</div>
+      </div>
+      <div class="table-wrap table-density-wrap">
+        <table>
+          <thead><tr><th>Case</th><th>Truth</th><th>Gemini</th><th>Gemini + FatSecret</th><th>Winner</th></tr></thead>
+          <tbody>${rows || '<tr><td colspan="5" class="text-muted" style="padding:16px">No comparison rows.</td></tr>'}</tbody>
+        </table>
+      </div>
+    </div>
+  `;
+}
+
+function fatSecretLabScoreBadge(score) {
+  if (score === null || score === undefined) return '<span class="badge badge-muted">—</span>';
+  const n = Number(score);
+  const cls = n >= 90 ? 'badge-green' : n >= 85 ? 'badge-blue' : n >= 65 ? 'badge-yellow' : 'badge-red';
+  return `<span class="badge ${cls}">${escapeHtml(fmt(n, 1))}</span>`;
+}
+
+function parseFatSecretLabTextCases() {
+  const raw = document.getElementById('fatsecret-lab-text-input').value || '';
+  return raw
+    .split('\n')
+    .map(line => line.trim())
+    .filter(Boolean)
+    .map(line => {
+      const parts = line.split('|').map(part => part.trim());
+      const inputText = parts[0] || '';
+      return {
+        kind: 'text',
+        inputText,
+        fatSecretQuery: parts[1] || inputText,
+        servingHint: parts[2] || inputText
+      };
+    });
+}
+
+function setFatSecretLabRunning(isRunning) {
+  const textBtn = document.getElementById('fatsecret-lab-run-text-btn');
+  const imageBtn = document.getElementById('fatsecret-lab-run-image-btn');
+  const msg = document.getElementById('fatsecret-lab-running-msg');
+  if (textBtn) textBtn.disabled = isRunning;
+  if (imageBtn) imageBtn.disabled = isRunning;
+  if (msg) msg.style.display = isRunning ? 'inline-flex' : 'none';
+}
+
+async function runFatSecretTextBatch() {
+  const source = document.getElementById('fatsecret-lab-source').value;
+  const maxCases = Math.max(1, Math.min(100, Number(document.getElementById('fatsecret-lab-max').value || 25)));
+  const targetScore = Math.max(0, Math.min(100, Number(document.getElementById('fatsecret-lab-target').value || 85)));
+  const cases = source === 'custom' ? parseFatSecretLabTextCases() : undefined;
+  if (source === 'custom' && (!cases || !cases.length)) {
+    alert('Add at least one custom text case.');
+    return;
+  }
+  const caseCount = source === 'custom' ? Math.min(cases.length, maxCases) : maxCases;
+  if (!confirm(`Run ${caseCount} FatSecret/Gemini text case${caseCount === 1 ? '' : 's'}? This can spend Gemini and FatSecret quota.`)) return;
+  await startFatSecretModelLabRun({
+    cases,
+    maxCases,
+    targetScore,
+    runLabel: `${source} text batch`
+  });
+}
+
+async function runFatSecretImageCase() {
+  const fileInput = document.getElementById('fatsecret-lab-image-file');
+  const file = fileInput?.files?.[0];
+  const fatSecretQuery = document.getElementById('fatsecret-lab-image-query').value.trim();
+  const servingHint = document.getElementById('fatsecret-lab-image-serving').value.trim() || fatSecretQuery;
+  const contextNote = document.getElementById('fatsecret-lab-image-context').value.trim() || null;
+  const targetScore = Math.max(0, Math.min(100, Number(document.getElementById('fatsecret-lab-image-target').value || 85)));
+  if (!file) {
+    alert('Choose an image file.');
+    return;
+  }
+  if (!fatSecretQuery) {
+    alert('Add a FatSecret query for the image reference.');
+    return;
+  }
+  if (!confirm('Run this image through Gemini and compare it with FatSecret? This can spend Gemini and FatSecret quota.')) return;
+  const imageBase64 = await readFileBase64(file);
+  const mimeType = file.type || (file.name.toLowerCase().endsWith('.heic') ? 'image/heic' : 'image/jpeg');
+  await startFatSecretModelLabRun({
+    cases: [{
+      kind: 'image',
+      label: file.name,
+      fatSecretQuery,
+      servingHint,
+      contextNote,
+      imageBase64,
+      mimeType
+    }],
+    maxCases: 1,
+    targetScore,
+    runLabel: `image ${fatSecretQuery}`
+  });
+}
+
+function readFileBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const value = String(reader.result || '');
+      resolve(value.includes(',') ? value.split(',').pop() : value);
+    };
+    reader.onerror = () => reject(reader.error || new Error('Could not read image file.'));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function startFatSecretModelLabRun(payload) {
+  setFatSecretLabRunning(true);
+  const msg = document.getElementById('fatsecret-lab-running-msg');
+  const status = document.getElementById('fatsecret-lab-status');
+  if (msg) msg.innerHTML = '<span class="spinner"></span>&nbsp;Starting FatSecret model lab…';
+  if (status) status.textContent = 'Starting run…';
+  try {
+    const start = await api('/fatsecret-model-lab/runs', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+    const totalCases = start.status?.totalCases || payload.maxCases || 1;
+    if (msg) msg.innerHTML = `<span class="spinner"></span>&nbsp;Running ${totalCases} case${totalCases === 1 ? '' : 's'}…`;
+    const result = await pollFatSecretModelLabStatus(msg);
+    fatSecretModelLabLastResult = result;
+    renderFatSecretModelLabResult(result);
+  } catch (e) {
+    alert('FatSecret model lab failed: ' + e.message);
+    await refreshFatSecretModelLabStatus();
+  } finally {
+    setFatSecretLabRunning(false);
+  }
+}
+
+async function pollFatSecretModelLabStatus(msg) {
+  const maxWaitMs = 20 * 60 * 1000;
+  const started = Date.now();
+  while (Date.now() - started < maxWaitMs) {
+    await new Promise(resolve => setTimeout(resolve, 3000));
+    const status = await api('/fatsecret-model-lab/status');
+    renderFatSecretModelLabStatus(status);
+    if (msg && status.state === 'running') {
+      msg.innerHTML = `<span class="spinner"></span>&nbsp;Running ${status.casesDone}/${status.totalCases} cases…`;
+    }
+    if (status.state === 'complete') return status.result;
+    if (status.state === 'error') throw new Error(status.error || 'Model lab run failed');
+  }
+  throw new Error('Timed out waiting for model lab run.');
+}
+
+async function refreshFatSecretModelLabStatus() {
+  try {
+    const status = await api('/fatsecret-model-lab/status');
+    renderFatSecretModelLabStatus(status);
+  } catch (e) {
+    const el = document.getElementById('fatsecret-lab-status');
+    if (el) el.innerHTML = `<span class="text-red">${escapeHtml(e.message)}</span>`;
+  }
+}
+
+function renderFatSecretModelLabStatus(status) {
+  const el = document.getElementById('fatsecret-lab-status');
+  if (!el) return;
+  if (status.state === 'running') {
+    el.innerHTML = `<span class="spinner"></span>&nbsp;Running ${fmt(status.casesDone)}/${fmt(status.totalCases)} cases`;
+    return;
+  }
+  if (status.state === 'error') {
+    el.innerHTML = `<span class="text-red">${escapeHtml(status.error || 'Run failed')}</span>`;
+    return;
+  }
+  if (status.state === 'complete' && status.result) {
+    fatSecretModelLabLastResult = status.result;
+    renderFatSecretModelLabResult(status.result);
+    return;
+  }
+  el.textContent = 'No model lab run loaded.';
+}
+
+function renderFatSecretModelLabResult(result) {
+  if (!result) return;
+  document.getElementById('fatsecret-lab-score').textContent = fmt(result.overallScore, 1);
+  document.getElementById('fatsecret-lab-score').className = 'stat-value ' + passrateClass(result.overallScore / 100);
+  document.getElementById('fatsecret-lab-score-sub').textContent = `${result.meetsTarget ? 'met' : 'below'} target ${fmt(result.targetScore, 0)}`;
+  document.getElementById('fatsecret-lab-pass').textContent = fmtPct(result.passRate);
+  document.getElementById('fatsecret-lab-pass-sub').textContent = `${result.passCount}/${result.caseCount} over target`;
+  document.getElementById('fatsecret-lab-cases').textContent = fmt(result.caseCount);
+  document.getElementById('fatsecret-lab-cases-sub').textContent = `${result.scoredCases} scored · ${result.errorCount} error${result.errorCount === 1 ? '' : 's'}`;
+  document.getElementById('fatsecret-lab-cost').textContent = fmtUsdShort(result.estimatedCostUsd);
+  document.getElementById('fatsecret-lab-cost-sub').textContent = fmtTime(result.finishedAt);
+  document.getElementById('fatsecret-lab-status').innerHTML =
+    `${result.meetsTarget ? '<span class="badge badge-green">Target met</span>' : '<span class="badge badge-yellow">Needs tuning</span>'} ` +
+    `<span class="text-muted">Score ${escapeHtml(fmt(result.overallScore, 1))} across ${escapeHtml(fmt(result.caseCount))} cases.</span>`;
+  document.getElementById('fatsecret-lab-weak-count').textContent =
+    `${result.weakCases.length} weak case${result.weakCases.length === 1 ? '' : 's'}`;
+
+  const tbody = document.getElementById('fatsecret-lab-results-tbody');
+  if (!result.results?.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="text-muted" style="padding:24px;text-align:center;">No case results.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = result.results.map(row => {
+    const ref = row.reference
+      ? `${fmt(row.reference.calories, 1)} cal<div class="text-muted" style="font-size:11px">P ${fmt(row.reference.protein, 1)} · C ${fmt(row.reference.carbs, 1)} · F ${fmt(row.reference.fat, 1)}</div><div class="text-muted" style="font-size:11px">${escapeHtml(row.reference.servingDescription)}</div>`
+      : '<span class="badge badge-red">No reference</span>';
+    const gemini = row.gemini
+      ? `${fmt(row.gemini.totals.calories, 1)} cal<div class="text-muted" style="font-size:11px">P ${fmt(row.gemini.totals.protein, 1)} · C ${fmt(row.gemini.totals.carbs, 1)} · F ${fmt(row.gemini.totals.fat, 1)}</div><div class="text-muted" style="font-size:11px">${escapeHtml(row.gemini.model || 'Gemini')}</div>`
+      : '<span class="badge badge-red">No Gemini</span>';
+    const itemNames = row.gemini?.items?.slice(0, 3).map(item => item.name).join(', ') || '';
+    const note = row.error
+      ? `<span class="text-red">${escapeHtml(row.error)}</span>`
+      : `<span class="text-muted">${escapeHtml(itemNames || row.reference?.reference || '')}</span>`;
+    return `
+      <tr>
+        <td>
+          <div>${escapeHtml(row.label)}</div>
+          <div class="text-muted" style="font-size:11px">${escapeHtml(row.kind)} · ${escapeHtml(row.fatSecretQuery)}</div>
+        </td>
+        <td class="mono">${ref}</td>
+        <td class="mono">${gemini}</td>
+        <td>${fatSecretLabScoreBadge(row.scores.overall)}<div class="text-muted" style="font-size:11px">Cal ${fmt(row.scores.calories, 1)} · P ${fmt(row.scores.protein, 1)} · C ${fmt(row.scores.carbs, 1)} · F ${fmt(row.scores.fat, 1)}</div></td>
+        <td>${note}<div class="text-muted" style="font-size:11px">${fmtDuration(row.durationMs)}</div></td>
+      </tr>
+    `;
+  }).join('');
+}
+
+/* ====================================================================== */
 /* ACCURACY BENCHMARKS */
 /* ====================================================================== */
 function scoreBadge(score) {
@@ -2760,6 +3837,216 @@ function scoreBadge(score) {
 function benchmarkStatusBadge(status) {
   const cls = status === 'reviewed' ? 'badge-green' : status === 'archived' ? 'badge-muted' : 'badge-yellow';
   return `<span class="badge ${cls}">${escapeHtml(status || 'draft')}</span>`;
+}
+
+function resultLabelBadge(label) {
+  const cls = label === 'strong'
+    ? 'badge-green'
+    : label === 'reasonable'
+      ? 'badge-blue'
+      : label === 'needs_review'
+        ? 'badge-yellow'
+        : label === 'failed'
+          ? 'badge-red'
+          : 'badge-muted';
+  return `<span class="badge ${cls}">${escapeHtml(label || '—')}</span>`;
+}
+
+function compactScoreLabel(score) {
+  if (score === null || score === undefined) return 'No score';
+  const n = Number(score);
+  if (!Number.isFinite(n)) return 'No score';
+  if (n >= 90) return 'Strong';
+  if (n >= 85) return 'Target met';
+  if (n >= 75) return 'Near target';
+  if (n >= 50) return 'Needs work';
+  return 'Failing';
+}
+
+function countBy(items, keyFn) {
+  return items.reduce((acc, item) => {
+    const key = keyFn(item) || 'unknown';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+}
+
+function meaningfulBenchmarkRuns() {
+  return (accuracyBenchmarkRuns || []).filter(run => Number(run.caseCount || 0) > 0);
+}
+
+function latestMeaningfulBenchmarkRun() {
+  return meaningfulBenchmarkRuns()[0] || null;
+}
+
+function previousMeaningfulBenchmarkRun(currentRun) {
+  return meaningfulBenchmarkRuns().find(run => !currentRun || run.id !== currentRun.id) || null;
+}
+
+function scoreTone(score) {
+  const n = Number(score);
+  if (!Number.isFinite(n)) return 'badge-muted';
+  if (n >= 85) return 'badge-green';
+  if (n >= 75) return 'badge-yellow';
+  return 'badge-red';
+}
+
+function runScopeText(run, reviewedCount) {
+  if (!run) return 'No run yet';
+  const count = Number(run.caseCount || 0);
+  if (!reviewedCount) return `${fmt(count)} cases`;
+  return `${fmt(count)}/${fmt(reviewedCount)}`;
+}
+
+function categorySummaryFromRun(run) {
+  const scores = run?.categoryScores || {};
+  const entries = Object.entries(scores)
+    .sort((a, b) => (b[1]?.count || 0) - (a[1]?.count || 0));
+  if (!entries.length) return 'No categories scored';
+  return entries
+    .slice(0, 3)
+    .map(([category, value]) => `${category} ${fmt(value.count || 0)}`)
+    .join(' · ');
+}
+
+function weakestCategorySummary(run) {
+  const scores = run?.categoryScores || {};
+  const entries = Object.entries(scores)
+    .filter(([, value]) => Number.isFinite(Number(value?.foodAppScore)))
+    .sort((a, b) => Number(a[1].foodAppScore) - Number(b[1].foodAppScore));
+  if (!entries.length) return 'No weak category yet';
+  return entries
+    .slice(0, 2)
+    .map(([category, value]) => `${category} ${fmt(value.foodAppScore, 1)}`)
+    .join(' · ');
+}
+
+function benchmarkDeltaHtml(currentRun, previousRun) {
+  const target = document.getElementById('bench-food-score-delta');
+  if (!target) return;
+  if (!currentRun || !previousRun || !Number.isFinite(Number(currentRun.foodAppScore)) || !Number.isFinite(Number(previousRun.foodAppScore))) {
+    target.innerHTML = '';
+    return;
+  }
+  const delta = Number(currentRun.foodAppScore) - Number(previousRun.foodAppScore);
+  const cls = delta > 0.05 ? 'up' : delta < -0.05 ? 'down' : 'flat';
+  const sign = delta > 0 ? '+' : '';
+  target.innerHTML = `<span class="benchmark-delta ${cls}">${escapeHtml(sign + fmt(delta, 1))} vs previous run</span>`;
+}
+
+function renderBenchmarkHealthLine(latestRun) {
+  const el = document.getElementById('benchmark-health-line');
+  if (!el) return;
+  if (!latestRun) {
+    el.innerHTML = '<span class="badge badge-muted">No benchmark run yet</span>';
+    return;
+  }
+  el.innerHTML = `
+    <span class="badge ${scoreTone(latestRun.foodAppScore)}">${escapeHtml(compactScoreLabel(latestRun.foodAppScore))}</span>
+    <span class="badge badge-muted">${escapeHtml(fmt(latestRun.caseCount))} cases tested</span>
+    <span class="badge badge-muted">${escapeHtml(fmtTime(latestRun.runAt))}</span>
+    <span class="badge badge-blue">${escapeHtml(latestRun.cacheMode)}</span>
+  `;
+}
+
+function renderBenchmarkExplainer(latest, previous, reviewedCount) {
+  const el = document.getElementById('benchmark-explainer');
+  if (!el) return;
+  if (!latest) {
+    el.innerHTML = `
+      <div class="eyebrow">Plain English</div>
+      <div class="benchmark-answer-title">No benchmark run yet.</div>
+      <p class="benchmark-answer-copy">Add reviewed reference cases, then run a cached or fresh benchmark.</p>
+    `;
+    return;
+  }
+  const isFresh = latest.cacheMode === 'fresh';
+  const caseCount = Number(latest.caseCount || 0);
+  const isPartial = reviewedCount > 0 && caseCount < reviewedCount;
+  const previousText = previous
+    ? `The previous meaningful run was ${fmt(previous.foodAppScore, 1)} across ${fmt(previous.caseCount)} cases.`
+    : 'There is no previous meaningful run to compare against yet.';
+  const scopeText = isPartial
+    ? `This was a ${fmt(caseCount)}-case slice of ${fmt(reviewedCount)} reviewed cases, so it is not directly comparable to a full-bank run.`
+    : `This covered the full reviewed case bank loaded in the dashboard.`;
+  const modeText = isFresh
+    ? 'Fresh means the model was asked again, so saved cases and MFP values stayed fixed but Food App outputs could move.'
+    : 'Cached means the dashboard reused stored parser outputs where available, so this is better for stable comparison.';
+  el.innerHTML = `
+    <div class="eyebrow">Plain English</div>
+    <div class="benchmark-answer-title">The latest meaningful score is ${escapeHtml(fmt(latest.foodAppScore, 1))}.</div>
+    <p class="benchmark-answer-copy">${escapeHtml(modeText)} ${escapeHtml(scopeText)} ${escapeHtml(previousText)}</p>
+    <div class="benchmark-explain-list">
+      <div class="benchmark-explain-item"><span>1</span><div><strong>Reference values do not change.</strong> They are the truth source used for scoring.</div></div>
+      <div class="benchmark-explain-item"><span>2</span><div><strong>Fresh runs can change.</strong> Gemini/Food App generates new nutrition estimates.</div></div>
+      <div class="benchmark-explain-item"><span>3</span><div><strong>Case mix matters.</strong> A smaller run can be harder if it includes more Indian, homemade, or international foods.</div></div>
+    </div>
+  `;
+}
+
+function renderBenchmarkCaseInsights() {
+  const el = document.getElementById('benchmark-case-insights');
+  if (!el) return;
+  const cases = accuracyBenchmarkCases || [];
+  const runs = accuracyBenchmarkRuns || [];
+  const categoryCounts = countBy(cases, item => item.category);
+  const statusCounts = countBy(cases, item => item.status);
+  const reviewed = statusCounts.reviewed || 0;
+  const mfpCount = cases.filter(item => item.mfpCalories !== null && item.mfpCalories !== undefined).length;
+  const latest = latestMeaningfulBenchmarkRun();
+  const topCategories = Object.entries(categoryCounts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+    .map(([category, count]) => `${category} ${count}`)
+    .join(' · ') || 'No cases loaded';
+  el.innerHTML = `
+    <div class="insight-pill">
+      <div class="label">Case bank</div>
+      <div class="value">${escapeHtml(fmt(cases.length))}</div>
+      <div class="sub">${escapeHtml(topCategories)}</div>
+    </div>
+    <div class="insight-pill">
+      <div class="label">Latest scope</div>
+      <div class="value">${escapeHtml(latest ? runScopeText(latest, reviewed) : '—')}</div>
+      <div class="sub">${escapeHtml(latest ? categorySummaryFromRun(latest) : 'No run loaded')}</div>
+    </div>
+    <div class="insight-pill">
+      <div class="label">MFP coverage</div>
+      <div class="value">${escapeHtml(cases.length ? fmtPct(mfpCount / cases.length) : '—')}</div>
+      <div class="sub">${escapeHtml(fmt(mfpCount))}/${escapeHtml(fmt(cases.length))} comparisons saved</div>
+    </div>
+    <div class="insight-pill">
+      <div class="label">Weakest area</div>
+      <div class="value">${escapeHtml(latest ? weakestCategorySummary(latest).split(' ')[0] : '—')}</div>
+      <div class="sub">${escapeHtml(latest ? weakestCategorySummary(latest) : 'No weak rows yet')}</div>
+    </div>
+  `;
+}
+
+function renderBenchmarkOverview() {
+  const cases = accuracyBenchmarkCases || [];
+  const statusCounts = countBy(cases, item => item.status);
+  const activeCount = accuracyBenchmarkSummary?.activeCases ?? cases.filter(item => item.isActive).length;
+  const reviewedCount = accuracyBenchmarkSummary?.reviewedCases ?? (statusCounts.reviewed || 0);
+  const latest = latestMeaningfulBenchmarkRun();
+  const previous = previousMeaningfulBenchmarkRun(latest);
+  document.getElementById('bench-active').textContent = fmt(activeCount);
+  document.getElementById('bench-reviewed').textContent = fmt(reviewedCount);
+  document.getElementById('bench-food-score').textContent = latest ? fmt(latest.foodAppScore, 1) : '—';
+  document.getElementById('bench-food-score-sub').textContent = latest ? `${fmt(latest.caseCount)} cases · ${fmtTime(latest.runAt)}` : 'latest meaningful run';
+  document.getElementById('bench-mfp-score').textContent = latest?.mfpScore === null || latest?.mfpScore === undefined ? '—' : fmt(latest.mfpScore, 1);
+  document.getElementById('bench-mfp-score-sub').textContent = latest ? 'same reference cases' : 'comparison score';
+  document.getElementById('bench-scope').textContent = latest ? runScopeText(latest, reviewedCount) : '—';
+  document.getElementById('bench-scope-sub').textContent = latest ? 'reviewed cases tested' : 'cases tested';
+  document.getElementById('bench-cache-note').textContent = latest
+    ? latest.cacheMode === 'fresh'
+      ? 'Fresh reran the model'
+      : 'Cached reused parser output'
+    : 'mode unknown';
+  benchmarkDeltaHtml(latest, previous);
+  renderBenchmarkHealthLine(latest);
+  renderBenchmarkExplainer(latest, previous, reviewedCount);
+  renderBenchmarkCaseInsights();
 }
 
 function numberOrNull(id) {
@@ -2775,6 +4062,7 @@ function requiredNumber(id, fallback = 0) {
 }
 
 function openBenchmarkEditor() {
+  showBenchmarkSection('results');
   resetBenchmarkForm();
   document.getElementById('benchmark-editor-title').textContent = 'Add Benchmark Case';
   document.getElementById('benchmark-editor').style.display = 'block';
@@ -2792,19 +4080,8 @@ async function loadAccuracyBenchmarks() {
 async function loadAccuracyBenchmarkSummary() {
   try {
     const data = await api('/accuracy-benchmarks/summary');
-    document.getElementById('bench-active').textContent = fmt(data.activeCases);
-    document.getElementById('bench-reviewed').textContent = fmt(data.reviewedCases);
-    if (data.latestRun) {
-      document.getElementById('bench-food-score').textContent = fmt(data.latestRun.foodAppScore, 1);
-      document.getElementById('bench-food-score-sub').textContent = fmtTime(data.latestRun.runAt);
-      document.getElementById('bench-mfp-score').textContent = data.latestRun.mfpScore === null ? '—' : fmt(data.latestRun.mfpScore, 1);
-      document.getElementById('bench-mfp-score-sub').textContent = `${data.latestRun.caseCount} case${data.latestRun.caseCount === 1 ? '' : 's'}`;
-    } else {
-      document.getElementById('bench-food-score').textContent = '—';
-      document.getElementById('bench-food-score-sub').textContent = 'latest run';
-      document.getElementById('bench-mfp-score').textContent = '—';
-      document.getElementById('bench-mfp-score-sub').textContent = 'manual comparison';
-    }
+    accuracyBenchmarkSummary = data;
+    renderBenchmarkOverview();
   } catch (e) {
     console.error('Accuracy benchmark summary failed', e);
   }
@@ -2826,6 +4103,7 @@ async function loadAccuracyBenchmarkCases() {
     const data = await api(url);
     accuracyBenchmarkCases = Array.isArray(data.cases) ? data.cases : [];
     renderAccuracyBenchmarkCases();
+    renderBenchmarkOverview();
   } catch (e) {
     tbody.innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${escapeHtml(e.message)}</td></tr>`;
   }
@@ -2834,7 +4112,8 @@ async function loadAccuracyBenchmarkCases() {
 function renderAccuracyBenchmarkCases() {
   const tbody = document.getElementById('benchmark-cases-tbody');
   if (!accuracyBenchmarkCases.length) {
-    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">📏</div>No benchmark cases yet.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state">No benchmark cases loaded.</div></td></tr>';
+    renderBenchmarkOverview();
     return;
   }
   const trashSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg>';
@@ -2860,10 +4139,12 @@ function renderAccuracyBenchmarkCases() {
         <td>${mfp}</td>
         <td>${benchmarkStatusBadge(item.status)}${item.isActive ? '' : '<div class="badge badge-muted" style="margin-top:4px">inactive</div>'}</td>
         <td>
-          <button class="btn btn-ghost" onclick="editBenchmarkCase('${item.id}')">Edit</button>
-          <button class="btn btn-ghost" onclick="openMfpLookup('${item.id}')">Lookup MFP</button>
-          ${item.mfpCalories === null || item.mfpCalories === undefined ? '' : `<button class="btn btn-ghost" onclick="clearBenchmarkCaseMfp('${item.id}')">Clear MFP</button>`}
-          <button class="btn btn-danger btn-icon" title="Archive case" aria-label="Archive benchmark case" onclick="archiveBenchmarkCase('${item.id}')">${trashSvg}</button>
+          <div class="nutrition-table-actions">
+            <button class="btn btn-ghost" onclick="editBenchmarkCase('${item.id}')">Edit</button>
+            <button class="btn btn-ghost" onclick="openMfpLookup('${item.id}')">MFP</button>
+            ${item.mfpCalories === null || item.mfpCalories === undefined ? '' : `<button class="btn btn-ghost" onclick="clearBenchmarkCaseMfp('${item.id}')">Clear</button>`}
+            <button class="btn btn-danger btn-icon" title="Archive case" aria-label="Archive benchmark case" onclick="archiveBenchmarkCase('${item.id}')">${trashSvg}</button>
+          </div>
         </td>
       </tr>
     `;
@@ -2897,6 +4178,7 @@ function resetBenchmarkForm() {
 function editBenchmarkCase(id) {
   const item = accuracyBenchmarkCases.find(row => row.id === id);
   if (!item) return;
+  showBenchmarkSection('results');
   document.getElementById('benchmark-editor-title').textContent = 'Edit Benchmark Case';
   document.getElementById('benchmark-editor').style.display = 'block';
   document.getElementById('benchmark-id').value = item.id;
@@ -3024,20 +4306,24 @@ async function loadAccuracyBenchmarkRuns() {
   try {
     const data = await api('/accuracy-benchmarks/runs?limit=10');
     accuracyBenchmarkRuns = Array.isArray(data.runs) ? data.runs : [];
+    renderBenchmarkOverview();
     renderBenchmarkSnapshotRunOptions();
     if (!accuracyBenchmarkRuns.length) {
-      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state"><div class="icon">📊</div>No benchmark runs yet.</div></td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6"><div class="empty-state">No benchmark runs yet.</div></td></tr>';
       document.getElementById('benchmark-run-detail').innerHTML = '';
       return;
     }
     const trashSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M6 7l1 14h10l1-14"/><path d="M9 7V4h6v3"/></svg>';
     tbody.innerHTML = accuracyBenchmarkRuns.map(run => `
-      <tr>
+      <tr class="${Number(run.caseCount || 0) === 0 ? 'is-empty-run' : ''}">
         <td>
           <div class="mono">${escapeHtml(fmtTime(run.runAt))}</div>
           <div class="text-muted" style="font-size:11px">${escapeHtml(run.runLabel || run.id)}</div>
         </td>
-        <td class="mono">${escapeHtml(fmt(run.caseCount))}</td>
+        <td class="mono">
+          ${escapeHtml(fmt(run.caseCount))}
+          ${Number(run.caseCount || 0) === 0 ? '<div class="badge badge-red" style="margin-top:4px;">empty run</div>' : ''}
+        </td>
         <td>${scoreBadge(run.foodAppScore)}</td>
         <td>${scoreBadge(run.mfpScore)}</td>
         <td><span class="badge badge-muted">${escapeHtml(run.cacheMode)}</span></td>
@@ -3056,11 +4342,16 @@ function renderBenchmarkSnapshotRunOptions() {
   const select = document.getElementById('benchmark-snapshot-run');
   if (!select) return;
   const previous = select.value;
-  select.innerHTML = accuracyBenchmarkRuns.map(run => {
+  const publishableRuns = meaningfulBenchmarkRuns();
+  if (!publishableRuns.length) {
+    select.innerHTML = '<option value="">No scored runs yet</option>';
+    return;
+  }
+  select.innerHTML = publishableRuns.map(run => {
     const label = `${fmtTime(run.runAt)} · Food ${fmt(run.foodAppScore, 1)} · MFP ${run.mfpScore === null ? '—' : fmt(run.mfpScore, 1)} · ${run.caseCount} cases`;
     return `<option value="${escapeHtml(run.id)}">${escapeHtml(label)}</option>`;
   }).join('');
-  if (previous) select.value = previous;
+  if (previous && publishableRuns.some(run => run.id === previous)) select.value = previous;
 }
 
 async function runAccuracyBenchmark() {
@@ -3069,13 +4360,15 @@ async function runAccuracyBenchmark() {
   const cacheMode = document.getElementById('benchmark-run-cache-mode').value;
   const category = document.getElementById('benchmark-filter-category').value || null;
   const maxCases = Math.max(1, Math.min(100, Number(document.getElementById('benchmark-run-max').value || 25)));
-  if (cacheMode === 'fresh' && !confirm('Fresh benchmark runs can spend Gemini money for cache misses. Continue?')) return;
+  const reviewedCount = accuracyBenchmarkSummary?.reviewedCases ?? accuracyBenchmarkCases.filter(item => item.status === 'reviewed' && item.isActive).length;
+  if (!category && reviewedCount && maxCases < reviewedCount && !confirm(`This will run ${maxCases} of ${reviewedCount} reviewed cases. That is a partial slice, not ${maxCases} new items. Continue?`)) return;
+  if (cacheMode === 'fresh' && !confirm('Fresh benchmark runs ask the model again and can spend Gemini money for cache misses. Continue?')) return;
   btn.disabled = true;
   msg.style.display = 'inline-flex';
   try {
     const data = await api('/accuracy-benchmarks/runs', {
       method: 'POST',
-      body: JSON.stringify({ cacheMode, category, maxCases, runLabel: `${category || 'all'} ${cacheMode}` })
+      body: JSON.stringify({ cacheMode, category, maxCases, runLabel: `${category || 'all'} ${cacheMode} · max ${maxCases}` })
     });
     await loadAccuracyBenchmarks();
     renderAccuracyBenchmarkRunDetail(data, 'benchmark-run-detail');
@@ -3115,6 +4408,31 @@ function renderAccuracyBenchmarkRunDetail(data, targetId = 'benchmark-run-detail
   if (!panel) return;
   const run = data.run;
   const results = data.results || [];
+  const labelCounts = countBy(results, result => result.resultLabel);
+  const weakRows = results
+    .filter(result => result.error || Number(result.foodAppOverallScore) < 85)
+    .sort((a, b) => (Number(a.foodAppOverallScore) || 0) - (Number(b.foodAppOverallScore) || 0))
+    .slice(0, 8);
+  const reviewedCount = accuracyBenchmarkSummary?.reviewedCases ?? accuracyBenchmarkCases.filter(item => item.status === 'reviewed' && item.isActive).length;
+  const runIsPartial = reviewedCount > 0 && Number(run.caseCount || 0) < reviewedCount;
+  const modeCopy = run.cacheMode === 'fresh'
+    ? 'Fresh run: Food App was asked again, so results can change even when the same reference cases are used.'
+    : 'Cached run: Food App reused stored parser outputs where possible, so this is better for stable comparisons.';
+  const scopeCopy = runIsPartial
+    ? `${fmt(run.caseCount)} of ${fmt(reviewedCount)} reviewed cases were tested. Treat this as a slice, not a full-bank score.`
+    : `${fmt(run.caseCount)} reviewed cases were tested.`;
+  const weakHtml = weakRows.map(result => {
+    const item = result.case || {};
+    return `
+      <div class="run-focus-item">
+        <div>
+          <strong>${escapeHtml(item.inputText || result.caseId)}</strong>
+          <div class="run-focus-meta">${escapeHtml(item.category || 'unknown')} · ref ${escapeHtml(fmt(item.referenceCalories, 1))} cal · app ${escapeHtml(fmt(result.foodAppCalories, 1))} cal</div>
+        </div>
+        ${scoreBadge(result.foodAppOverallScore)}
+      </div>
+    `;
+  }).join('');
   const rows = results.map(result => {
     const item = result.case || {};
     return `
@@ -3128,25 +4446,46 @@ function renderAccuracyBenchmarkRunDetail(data, targetId = 'benchmark-run-detail
         <td class="mono">${escapeHtml(fmt(item.mfpCalories, 1))}<div class="text-muted" style="font-size:11px">P ${escapeHtml(fmt(item.mfpProtein, 1))} · C ${escapeHtml(fmt(item.mfpCarbs, 1))} · F ${escapeHtml(fmt(item.mfpFat, 1))}</div></td>
         <td>${scoreBadge(result.foodAppOverallScore)}</td>
         <td>${scoreBadge(result.mfpOverallScore)}</td>
-        <td>${benchmarkStatusBadge(result.resultLabel)}</td>
+        <td>${resultLabelBadge(result.resultLabel)}</td>
       </tr>
     `;
   }).join('');
   panel.innerHTML = `
-    <div class="eval-summary">
-      <div>
-        <div class="pass-rate-big ${passrateClass((run.foodAppScore || 0) / 100)}">${escapeHtml(fmt(run.foodAppScore, 1))}</div>
-        <div class="text-muted" style="font-size:13px;">Food App score</div>
-      </div>
-      <div style="flex:1;">
-        <div class="row-actions" style="margin-bottom:8px;">
+    <div class="run-detail-grid">
+      <div class="benchmark-answer" style="margin-bottom:0;">
+        <div class="eyebrow">Selected run</div>
+        <div class="benchmark-answer-title">${escapeHtml(fmt(run.foodAppScore, 1))} Food App score · ${escapeHtml(run.mfpScore === null ? 'no MFP score' : `${fmt(run.mfpScore, 1)} MFP`)}</div>
+        <p class="benchmark-answer-copy">${escapeHtml(modeCopy)} ${escapeHtml(scopeCopy)}</p>
+        <div class="comparison-reasons">
           <span class="badge badge-muted">${escapeHtml(run.cacheMode)}</span>
           <span class="badge badge-blue">${escapeHtml(fmt(run.caseCount))} cases</span>
           <span class="badge badge-muted">${escapeHtml(fmtTime(run.runAt))}</span>
-          <span>MyFitnessPal ${scoreBadge(run.mfpScore)}</span>
         </div>
-        <div class="text-muted" style="font-size:12px;">Both systems are scored against the same stored reference calories and macros.</div>
       </div>
+      <div class="eval-summary" style="margin-bottom:0;">
+        <div>
+          <div class="pass-rate-big ${passrateClass((run.foodAppScore || 0) / 100)}">${escapeHtml(fmt(run.foodAppScore, 1))}</div>
+          <div class="text-muted" style="font-size:13px;">Food App score</div>
+        </div>
+        <div style="flex:1;">
+          <div class="text-muted" style="font-size:13px; margin-bottom:8px;">Result labels</div>
+          <div class="comparison-reasons">
+            <span class="badge badge-green">${escapeHtml(fmt(labelCounts.strong || 0))} strong</span>
+            <span class="badge badge-blue">${escapeHtml(fmt(labelCounts.reasonable || 0))} reasonable</span>
+            <span class="badge badge-yellow">${escapeHtml(fmt(labelCounts.needs_review || 0))} review</span>
+            <span class="badge badge-red">${escapeHtml(fmt(labelCounts.failed || 0))} failed</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="card" style="padding:16px; margin-bottom:14px;">
+        <div class="section-toolbar" style="margin-bottom:10px;">
+          <div>
+            <h3>Needs attention</h3>
+            <p class="compact-copy">Lowest Food App rows in this run. These are the foods that pull the score down.</p>
+          </div>
+        </div>
+        <div class="run-focus-list">${weakHtml || '<div class="text-muted">No weak rows in this run.</div>'}</div>
     </div>
     <h3 style="margin: 0 0 10px;">Selected run inputs and scores</h3>
     <div class="table-wrap">

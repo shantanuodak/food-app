@@ -50,6 +50,7 @@ struct ProgressSectionView: View {
     @State var selectedWeightDate: Date?
     @State var selectedStepsDate: Date?
     @State var preferredUnits: UnitsOption = .imperial
+    @State var lastHapticRange: ProgressRange = .week
 
     var body: some View {
         ScrollView {

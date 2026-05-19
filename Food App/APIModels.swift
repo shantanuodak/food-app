@@ -475,6 +475,11 @@ struct LogSavedMealRequest: Encodable {
     let loggedAt: String
 }
 
+struct DeleteSavedMealResponse: Decodable {
+    let id: String
+    let status: String
+}
+
 struct DeleteLogResponse: Decodable {
     let logId: String
     let status: String
