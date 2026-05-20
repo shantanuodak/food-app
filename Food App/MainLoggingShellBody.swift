@@ -386,8 +386,23 @@ extension MainLoggingShellView {
                         // Lane hint nil for now; parseAndUpdateDrawer updates it
                         // once iOS Vision pipeline picks a lane (~500-800ms).
                         cameraDrawerState = .analyzing(image, nil)
-                        isCameraAnalysisSheetPresented = true
+
+                        // V3.1 hotfix (2026-05-20): the parse work is fully
+                        // async, so kick it off immediately — it runs in
+                        // parallel with the fullScreenCover dismissal
+                        // animation, which means the result lands closer to
+                        // when the user actually sees the analyzing sheet.
                         Task { await parseAndUpdateDrawer(image) }
+
+                        // Defer the sheet presentation until after the cover
+                        // finishes dismissing. iOS doesn't reliably overlap
+                        // "dismiss a fullScreenCover" with "present a sheet"
+                        // — without this delay the sheet races the cover
+                        // animation and the user perceives it as lag/stutter.
+                        // 0.35s matches the system cover dismiss duration.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            isCameraAnalysisSheetPresented = true
+                        }
                     },
                     onOpenPhotoLibrary: {
                         // After camera dismisses, open photo library

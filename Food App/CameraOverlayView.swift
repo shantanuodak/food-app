@@ -331,49 +331,65 @@ struct CameraReviewOverlay: View {
     let onUsePhoto: () -> Void
 
     var body: some View {
-        ZStack {
-            Image(uiImage: image)
-                .resizable()
-                .aspectRatio(contentMode: .fill)
+        // V3.1 hotfix (2026-05-20): the previous layout used a bare ZStack with
+        // .aspectRatio(.fill) + .ignoresSafeArea() on the image, which on iOS
+        // 18 lets the image's intrinsic width propagate to siblings and
+        // overflows the HStack (the "Use Photo" capsule was getting clipped
+        // off the right edge of the device). Wrapping in GeometryReader and
+        // explicitly framing everything to the reader's width keeps the
+        // image full-bleed while constraining the button row to the device.
+        GeometryReader { proxy in
+            ZStack {
+                Image(uiImage: image)
+                    .resizable()
+                    .aspectRatio(contentMode: .fill)
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                    .ignoresSafeArea()
+
+                LinearGradient(
+                    colors: [Color.black.opacity(0.34), Color.clear, Color.black.opacity(0.60)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
                 .ignoresSafeArea()
 
-            LinearGradient(
-                colors: [Color.black.opacity(0.34), Color.clear, Color.black.opacity(0.60)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+                VStack {
+                    Spacer()
 
-            VStack {
-                Spacer()
+                    HStack(spacing: 14) {
+                        Button(action: {
+                            AppHaptics.lightImpact()
+                            onRetake()
+                        }) {
+                            Text("Retake")
+                                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .background(Color.white.opacity(0.14), in: Capsule(style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
 
-                HStack(spacing: 14) {
-                    Button(action: {
-                        AppHaptics.lightImpact()
-                        onRetake()
-                    }) {
-                        Text("Retake")
-                            .font(.system(size: 16, weight: .semibold, design: .rounded))
-                            .foregroundStyle(.white)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(Color.white.opacity(0.14), in: Capsule(style: .continuous))
+                        Button(action: {
+                            AppHaptics.mediumImpact()
+                            onUsePhoto()
+                        }) {
+                            Text("Use Photo")
+                                .font(.system(size: 16, weight: .bold, design: .rounded))
+                                .foregroundStyle(.black)
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 52)
+                                .background(Color.white, in: Capsule(style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .frame(maxWidth: .infinity)
                     }
-
-                    Button(action: {
-                        AppHaptics.mediumImpact()
-                        onUsePhoto()
-                    }) {
-                        Text("Use Photo")
-                            .font(.system(size: 16, weight: .bold, design: .rounded))
-                            .foregroundStyle(.black)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 52)
-                            .background(Color.white, in: Capsule(style: .continuous))
-                    }
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 44)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 44)
+                .frame(width: proxy.size.width, height: proxy.size.height)
             }
         }
     }
