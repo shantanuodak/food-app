@@ -182,8 +182,22 @@ final class CameraViewModel: ObservableObject {
     func acceptPhoto() {
         guard let image = capturedImage else { return }
         AppHaptics.mediumImpact()
+        // V3.1 hotfix v3 (2026-05-20): do NOT call onDismiss() here. The
+        // host (MainLoggingShellBody) presents the analysis sheet NESTED
+        // inside the camera fullScreenCover so it can slide up over the
+        // captured-photo review without waiting on a cover dismiss. If we
+        // dismiss the cover here, SwiftUI tears the nested sheet down with
+        // the cover before iOS can finish animating it up — the user ends
+        // up staring at the (slowly-dismissing) camera review for several
+        // seconds while the cover + AVCaptureSession teardown plays out,
+        // and the drawer only appears after both finish.
+        //
+        // The host dismisses the cover from the sheet's onDismiss / from
+        // handleDrawerLogIt / from onDiscard once the user is done with the
+        // analysis drawer. The "X" button on CameraTopBar still calls the
+        // Environment dismiss() directly for users who want to back out
+        // before tapping Use Photo.
         onImageCaptured?(image)
-        onDismiss?()
     }
 
     func retakePhoto() {
