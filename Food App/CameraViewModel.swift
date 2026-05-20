@@ -179,6 +179,34 @@ final class CameraViewModel: ObservableObject {
         }
     }
 
+#if targetEnvironment(simulator)
+    /// V3.1 hotfix v3 (2026-05-20): simulator-only fake capture so we can
+    /// exercise the camera → review → drawer transition without needing a
+    /// real device + TestFlight upload. Loads a bundled food photo (which
+    /// the backend parses end-to-end like any real capture) and jumps to
+    /// the same `.reviewingPhoto(image)` state the real camera lands in.
+    /// Triggered from CameraView's capture button when cameraState is
+    /// `.simulatorPreview`.
+    func captureSimulatedPhoto() {
+        guard cameraState == .simulatorPreview else { return }
+        // Try the canned food demo asset first, then fall back to the
+        // onboarding food photos so the simulator path always finds an
+        // image to capture even if assets get renamed.
+        let candidates = ["food_photo_demo", "IntroFood1", "IntroFood2"]
+        let image = candidates
+            .lazy
+            .compactMap { UIImage(named: $0) }
+            .first
+        guard let image else {
+            cameraState = .error("Simulator capture failed: no bundled test image found.")
+            return
+        }
+        AppHaptics.mediumImpact()
+        capturedImage = image
+        cameraState = .reviewingPhoto(image)
+    }
+#endif
+
     func acceptPhoto() {
         guard let image = capturedImage else { return }
         AppHaptics.mediumImpact()

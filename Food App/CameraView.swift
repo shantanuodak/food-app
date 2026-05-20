@@ -130,11 +130,23 @@ struct CameraView: View {
 
                     CameraBottomBar(
                         isCapturing: viewModel.cameraState == .capturing,
-                        captureEnabled: viewModel.cameraState != .simulatorPreview,
+                        // V3.1 hotfix v3 (2026-05-20): enable the capture
+                        // button in simulator mode too so the camera-to-
+                        // drawer transition is testable without a real
+                        // device + TestFlight round-trip. The simulator
+                        // path uses a bundled food photo (handled in
+                        // CameraViewModel.captureSimulatedPhoto) so the
+                        // backend parse still runs end-to-end.
+                        captureEnabled: true,
                         onCapture: {
-                            guard viewModel.cameraState != .simulatorPreview else { return }
                             showCaptureFlash = true
-                            Task { await viewModel.capturePhoto() }
+                            if viewModel.cameraState == .simulatorPreview {
+#if targetEnvironment(simulator)
+                                viewModel.captureSimulatedPhoto()
+#endif
+                            } else {
+                                Task { await viewModel.capturePhoto() }
+                            }
                         },
                         onOpenLibrary: {
                             AppHaptics.lightImpact()
