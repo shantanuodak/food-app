@@ -373,88 +373,79 @@ extension MainLoggingShellView {
             }
             .fullScreenCover(isPresented: $isCustomCameraPresented, onDismiss: {
                 isQuickCameraCaptureActive = false
+                // Always reset drawer state on cover dismissal — the
+                // overlay below lives inside the cover, so when the cover
+                // goes away the drawer state needs to follow.
+                cameraDrawerState = .idle
+                cameraDrawerImage = nil
+                cameraDrawerContextNote = ""
+                isCameraAnalysisSheetPresentedOverCover = false
             }) {
-                // V3.1 hotfix v2 (2026-05-20): the drawer sheet is now nested
-                // INSIDE the camera fullScreenCover instead of sitting next to
-                // it on MainLoggingShellBody. Previous architecture had cover
-                // + sheet as sibling modals on the same parent view; iOS
-                // serializes those, so "Use Photo" forced a wait for the
-                // cover dismiss animation + AVCaptureSession teardown before
-                // the sheet could begin presenting (4-5s user-perceived lag
-                // on real devices). Nesting lets the sheet slide up OVER the
-                // cover the moment "Use Photo" is tapped — the camera review
-                // screen stays in place behind the sheet and only dismisses
-                // when the drawer dismisses (handled in the sheet's onDismiss
-                // below). Net effect: drawer appears in ~0.35s sheet-up
-                // animation, not several seconds of frozen camera review.
-                CameraView(
-                    onImageCaptured: { image in
-                        // V3.1 hotfix v5 (2026-05-20): set UI state + flip
-                        // the sheet flag FIRST, then schedule heavy work.
-                        // This ensures SwiftUI sees the binding change
-                        // before any background tasks get a chance to
-                        // contend for the main actor. Combined with the
-                        // session stop in CameraViewModel.capturePhoto
-                        // (which kills the live barcode metadata firehose
-                        // that was scheduling MainActor tasks every frame),
-                        // the sheet should now animate up immediately.
-                        inputMode = .text
-                        selectedCameraSource = nil
-                        if isQuickCameraCaptureActive {
-                            isQuickCameraCaptureActive = false
-                        }
-                        cameraDrawerImage = image
-                        // V3.1 hotfix v4 (2026-05-20): pass nil as the
-                        // image so the drawer pops up instantly with a
-                        // gray placeholder. The captured photo from a real
-                        // iPhone is 12-48MP HEIC; SwiftUI's first decode
-                        // happens on the main thread the moment we hand it
-                        // to Image(uiImage:), and that decode is what was
-                        // making the drawer appear seconds late on device.
-                        // We then prepare a small display thumbnail on a
-                        // detached task and re-set the state with the
-                        // populated image (~100-300ms later, well before
-                        // the parse result lands).
-                        cameraDrawerState = .analyzing(nil, nil)
-                        // Present the drawer sheet immediately. Because
-                        // it's nested in the cover, iOS animates it up
-                        // over the camera (no cover-dismiss
-                        // serialization). The cover stays alive underneath
-                        // and only dismisses when the sheet dismisses. Use
-                        // the OverCover flag so the sibling sheet (used by
-                        // the photo-library path) doesn't also try to
-                        // fire.
-                        isCameraAnalysisSheetPresentedOverCover = true
-                        // Heavy work scheduled AFTER the sheet flag flips.
-                        Task { await parseAndUpdateDrawer(image) }
-                        Task.detached(priority: .userInitiated) {
-                            let thumbnail = await image.byPreparingThumbnail(ofSize: CGSize(width: 1024, height: 1024))
-                            await MainActor.run {
-                                if case .analyzing(_, let hint) = cameraDrawerState {
-                                    cameraDrawerState = .analyzing(thumbnail ?? image, hint)
+                // V3.1 hotfix v6 (2026-05-20): the analysis drawer is now
+                // an inline ZStack overlay inside the camera fullScreenCover
+                // — NOT a .sheet anymore. Real-device runs of v2-v5 surfaced
+                // this console warning on every "Use Photo" tap:
+                //
+                //   "Attempt to present <PresentationHostingController> on
+                //   <PresentationHostingController> whose view is not in
+                //   the window hierarchy."
+                //
+                // iOS refuses to present a sheet from a hosting controller
+                // whose view it doesn't yet consider in the window
+                // hierarchy. The cover content is in that state briefly
+                // after the binding flips, and iOS queues the sheet for a
+                // retry that lands seconds later — which is exactly the
+                // perceived lag. The simulator's hierarchy check is
+                // looser, so the bug only manifested on device. Inline
+                // ZStack overlay has no hosting controller and no window
+                // hierarchy check; it animates in via a SwiftUI transition
+                // with no modal machinery in the way.
+                ZStack {
+                    CameraView(
+                        onImageCaptured: { image in
+                            inputMode = .text
+                            selectedCameraSource = nil
+                            if isQuickCameraCaptureActive {
+                                isQuickCameraCaptureActive = false
+                            }
+                            cameraDrawerImage = image
+                            // Pass nil image so the drawer renders with a
+                            // gray placeholder while a thumbnail is being
+                            // prepared off the main thread (12-48MP HEIC
+                            // decode would otherwise block this render
+                            // pass for hundreds of ms on real devices).
+                            cameraDrawerState = .analyzing(nil, nil)
+                            // Flip the overlay flag — triggers the ZStack
+                            // transition below.
+                            withAnimation(.easeOut(duration: 0.28)) {
+                                isCameraAnalysisSheetPresentedOverCover = true
+                            }
+                            // Heavy work scheduled AFTER the overlay flag.
+                            Task { await parseAndUpdateDrawer(image) }
+                            Task.detached(priority: .userInitiated) {
+                                let thumbnail = await image.byPreparingThumbnail(ofSize: CGSize(width: 1024, height: 1024))
+                                await MainActor.run {
+                                    if case .analyzing(_, let hint) = cameraDrawerState {
+                                        cameraDrawerState = .analyzing(thumbnail ?? image, hint)
+                                    }
                                 }
                             }
+                        },
+                        onOpenPhotoLibrary: {
+                            // After camera dismisses, open photo library
+                            isCustomCameraPresented = false
+                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                                handleCameraSourceSelection(.photo)
+                            }
                         }
-                    },
-                    onOpenPhotoLibrary: {
-                        // After camera dismisses, open photo library
-                        isCustomCameraPresented = false
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-                            handleCameraSourceSelection(.photo)
-                        }
+                    )
+                    .ignoresSafeArea()
+
+                    if isCameraAnalysisSheetPresentedOverCover {
+                        cameraAnalysisOverlayContent
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                            .zIndex(10)
                     }
-                )
-                .ignoresSafeArea()
-                .sheet(isPresented: $isCameraAnalysisSheetPresentedOverCover, onDismiss: {
-                    cameraDrawerState = .idle
-                    cameraDrawerImage = nil
-                    cameraDrawerContextNote = ""
-                    // Dismiss the camera cover from beneath the (now-gone)
-                    // sheet so the user lands back on the home screen instead
-                    // of the camera review they came from.
-                    isCustomCameraPresented = false
-                }) {
-                    cameraAnalysisSheetContent
                 }
             }
             .modifier(QuickCameraPromptDialogModifier(
@@ -575,7 +566,59 @@ extension MainLoggingShellView {
         }
     }
 
+    /// Sheet-flavored content used by the photo-library path. Has presentation
+    /// modifiers so iOS gives it sheet chrome (drag indicator, detents,
+    /// rounded corners).
     private var cameraAnalysisSheetContent: some View {
+        cameraAnalysisDrawerView
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(24)
+    }
+
+    /// V3.1 hotfix v6 (2026-05-20): inline-overlay-flavored content used by
+    /// the camera-capture path inside the fullScreenCover. No presentation
+    /// modifiers (would do nothing in a ZStack) — we paint the sheet-like
+    /// chrome manually: background fill, rounded top corners, drag-handle
+    /// strip, top safe-area inset so the user still sees a sliver of the
+    /// camera review above the drawer. Visually matches the .sheet styling
+    /// the user was getting before, but without iOS modal presentation.
+    @ViewBuilder
+    private var cameraAnalysisOverlayContent: some View {
+        GeometryReader { proxy in
+            VStack(spacing: 0) {
+                // Top inset so the camera review is visible behind a
+                // sliver, matching how .presentationDetents([.large]) looks.
+                Color.clear.frame(height: max(proxy.safeAreaInsets.top + 8, 56))
+
+                VStack(spacing: 0) {
+                    Capsule()
+                        .fill(Color.secondary.opacity(0.4))
+                        .frame(width: 36, height: 5)
+                        .padding(.top, 6)
+                        .padding(.bottom, 4)
+
+                    cameraAnalysisDrawerView
+                }
+                .frame(maxWidth: .infinity)
+                .background(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 24,
+                        bottomLeadingRadius: 0,
+                        bottomTrailingRadius: 0,
+                        topTrailingRadius: 24,
+                        style: .continuous
+                    )
+                    .fill(Color(.systemBackground))
+                )
+                .ignoresSafeArea(edges: .bottom)
+            }
+        }
+    }
+
+    /// Shared body for both presentation styles. Kept identical so the
+    /// .sheet path and the inline-overlay path render the same UI.
+    private var cameraAnalysisDrawerView: some View {
         CameraResultDrawerView(
             state: cameraDrawerState,
             parseResult: parseResult,
@@ -584,14 +627,14 @@ extension MainLoggingShellView {
                 handleDrawerLogIt(editedItems: editedItems, editedTotals: editedTotals)
             },
             onDiscard: {
-                // V3.1 hotfix v2 (2026-05-20): there are two possible
-                // presenters depending on entry point. Dismiss both — only
-                // one is actually true at a time, the other is a no-op.
-                //   - Camera capture: cover is up, dismissing the cover
-                //     tears down the nested analysis sheet in one animation
-                //     (no flash of the camera review).
-                //   - Photo library: sibling sheet on home view, dismissed
-                //     by flipping isCameraAnalysisSheetPresented.
+                // Two possible presenters depending on entry point — set
+                // whichever is currently true to false. Setting both is
+                // safe; the inactive one is a no-op.
+                //   - Camera capture: inline overlay inside the cover.
+                //     Dismissing isCustomCameraPresented tears down both
+                //     the cover and the overlay (the cover's onDismiss
+                //     resets the overlay flag).
+                //   - Photo library: sibling sheet on home view.
                 isCustomCameraPresented = false
                 isCameraAnalysisSheetPresented = false
             },
@@ -602,9 +645,6 @@ extension MainLoggingShellView {
                 }
             }
         )
-        .presentationDetents([.large])
-        .presentationDragIndicator(.visible)
-        .presentationCornerRadius(24)
     }
 }
 
