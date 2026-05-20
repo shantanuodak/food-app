@@ -123,8 +123,42 @@ final class CameraService: NSObject, ObservableObject {
             }
 
             photoOutput.maxPhotoQualityPrioritization = .quality
+
+            // V3.1 Phase 1: continuous AF/AE so the camera is always trying to be
+            // sharp before the user taps shutter, and enable macro auto-engage on
+            // iPhone 13 Pro+ (triple camera) / 11/12 Pro (dual wide) so close-up
+            // food + barcode shots focus correctly without the user fiddling.
+            // setFocusPoint() still overrides this temporarily on tap.
+            try? configureContinuousFocusAndMacro(on: device)
         }
         #endif
+    }
+
+    /// Set continuous AF/AE on the active device and enable subject-area-change
+    /// monitoring so the camera refocuses when the user moves the framing.
+    /// Best-effort; failures are non-fatal.
+    ///
+    /// Macro auto-engage works without explicit code here because:
+    ///   1. We select `.builtInTripleCamera` (or `.builtInDualWideCamera`)
+    ///      in `bestDevice(for:)` when available.
+    ///   2. Multi-camera virtual devices default to `.auto` constituent
+    ///      switching, which engages the ultra-wide for macro distances
+    ///      automatically on iPhone 13 Pro+.
+    private func configureContinuousFocusAndMacro(on device: AVCaptureDevice) throws {
+        try device.lockForConfiguration()
+        defer { device.unlockForConfiguration() }
+
+        if device.isFocusModeSupported(.continuousAutoFocus) {
+            device.focusMode = .continuousAutoFocus
+        }
+        if device.isExposureModeSupported(.continuousAutoExposure) {
+            device.exposureMode = .continuousAutoExposure
+        }
+        // Re-engage AF when the framed scene changes substantially. Without
+        // this the camera locks focus on the first thing it sees and doesn't
+        // refocus when the user moves to a new subject (e.g., away from the
+        // table to a barcode on a can).
+        device.isSubjectAreaChangeMonitoringEnabled = true
     }
 
     func startSession() {
@@ -216,9 +250,19 @@ final class CameraService: NSObject, ObservableObject {
     // MARK: - Private Helpers
 
     private func bestDevice(for position: AVCaptureDevice.Position) -> AVCaptureDevice? {
-        // Prefer wide-angle camera
-        if let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) {
-            return device
+        // Prefer multi-camera virtual devices so iOS can auto-switch lenses
+        // (especially to the ultra-wide for macro on iPhone 13 Pro+).
+        //   builtInTripleCamera   — iPhone Pro models (wide + ultra-wide + tele)
+        //   builtInDualWideCamera — non-Pro recent iPhones (wide + ultra-wide)
+        //   builtInWideAngleCamera — fallback for older iPhones / front camera
+        if let triple = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: position) {
+            return triple
+        }
+        if let dualWide = AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: position) {
+            return dualWide
+        }
+        if let wide = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) {
+            return wide
         }
         return AVCaptureDevice.default(for: .video)
     }
