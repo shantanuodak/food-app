@@ -583,14 +583,25 @@ extension MainLoggingShellView {
     /// strip, top safe-area inset so the user still sees a sliver of the
     /// camera review above the drawer. Visually matches the .sheet styling
     /// the user was getting before, but without iOS modal presentation.
+    ///
+    /// v6.1 fix (2026-05-20): drawer card now claims full remaining height
+    /// (maxHeight: .infinity) so it reaches the bottom of the screen and
+    /// the inner ScrollView gets the room it needs. Previous version sized
+    /// to fit the content, which made the drawer look "half open".
     @ViewBuilder
     private var cameraAnalysisOverlayContent: some View {
         GeometryReader { proxy in
+            let topInset = max(proxy.safeAreaInsets.top + 8, 56)
             VStack(spacing: 0) {
-                // Top inset so the camera review is visible behind a
-                // sliver, matching how .presentationDetents([.large]) looks.
-                Color.clear.frame(height: max(proxy.safeAreaInsets.top + 8, 56))
+                // Top inset — the camera review behind this strip stays
+                // visible, matching how .presentationDetents([.large])
+                // used to look. Tappable to dismiss? Not yet — keep it
+                // simple, the X button inside the drawer handles dismiss.
+                Spacer().frame(height: topInset)
 
+                // The drawer card itself. Fills all remaining vertical
+                // space down to the screen bottom (we ignore the bottom
+                // safe area so the card extends edge-to-edge).
                 VStack(spacing: 0) {
                     Capsule()
                         .fill(Color.secondary.opacity(0.4))
@@ -599,8 +610,9 @@ extension MainLoggingShellView {
                         .padding(.bottom, 4)
 
                     cameraAnalysisDrawerView
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
-                .frame(maxWidth: .infinity)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(
                     UnevenRoundedRectangle(
                         topLeadingRadius: 24,
@@ -610,8 +622,8 @@ extension MainLoggingShellView {
                         style: .continuous
                     )
                     .fill(Color(.systemBackground))
+                    .ignoresSafeArea(edges: .bottom)
                 )
-                .ignoresSafeArea(edges: .bottom)
             }
         }
     }
