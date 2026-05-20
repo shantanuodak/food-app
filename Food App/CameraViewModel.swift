@@ -174,6 +174,14 @@ final class CameraViewModel: ObservableObject {
             let image = try await cameraService.capturePhoto()
             capturedImage = image
             cameraState = .reviewingPhoto(image)
+            // V3.1 hotfix v5 (2026-05-20): stop the AVCaptureSession the
+            // moment we enter review state. Otherwise the session keeps
+            // pulling video frames + firing barcode metadata callbacks
+            // that dispatch onto MainActor — that contention was delaying
+            // the analysis sheet's slide-up animation by seconds on real
+            // devices. If the user taps Retake, retakePhoto() restarts
+            // the session.
+            cameraService.stopSession()
         } catch {
             cameraState = .error(error.localizedDescription)
         }

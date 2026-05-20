@@ -389,6 +389,15 @@ extension MainLoggingShellView {
                 // animation, not several seconds of frozen camera review.
                 CameraView(
                     onImageCaptured: { image in
+                        // V3.1 hotfix v5 (2026-05-20): set UI state + flip
+                        // the sheet flag FIRST, then schedule heavy work.
+                        // This ensures SwiftUI sees the binding change
+                        // before any background tasks get a chance to
+                        // contend for the main actor. Combined with the
+                        // session stop in CameraViewModel.capturePhoto
+                        // (which kills the live barcode metadata firehose
+                        // that was scheduling MainActor tasks every frame),
+                        // the sheet should now animate up immediately.
                         inputMode = .text
                         selectedCameraSource = nil
                         if isQuickCameraCaptureActive {
@@ -407,24 +416,6 @@ extension MainLoggingShellView {
                         // populated image (~100-300ms later, well before
                         // the parse result lands).
                         cameraDrawerState = .analyzing(nil, nil)
-                        // Kick off parse immediately — runs in parallel
-                        // with the sheet-up animation, so the result lands
-                        // closer to when the user actually sees the
-                        // analyzing UI.
-                        Task { await parseAndUpdateDrawer(image) }
-                        // Prepare a small display thumbnail off the main
-                        // thread, then swap it into the drawer state. If
-                        // the drawer has already moved past .analyzing
-                        // (e.g., parse came back early via cache), we skip
-                        // the swap.
-                        Task.detached(priority: .userInitiated) {
-                            let thumbnail = await image.byPreparingThumbnail(ofSize: CGSize(width: 1024, height: 1024))
-                            await MainActor.run {
-                                if case .analyzing(_, let hint) = cameraDrawerState {
-                                    cameraDrawerState = .analyzing(thumbnail ?? image, hint)
-                                }
-                            }
-                        }
                         // Present the drawer sheet immediately. Because
                         // it's nested in the cover, iOS animates it up
                         // over the camera (no cover-dismiss
@@ -434,6 +425,16 @@ extension MainLoggingShellView {
                         // the photo-library path) doesn't also try to
                         // fire.
                         isCameraAnalysisSheetPresentedOverCover = true
+                        // Heavy work scheduled AFTER the sheet flag flips.
+                        Task { await parseAndUpdateDrawer(image) }
+                        Task.detached(priority: .userInitiated) {
+                            let thumbnail = await image.byPreparingThumbnail(ofSize: CGSize(width: 1024, height: 1024))
+                            await MainActor.run {
+                                if case .analyzing(_, let hint) = cameraDrawerState {
+                                    cameraDrawerState = .analyzing(thumbnail ?? image, hint)
+                                }
+                            }
+                        }
                     },
                     onOpenPhotoLibrary: {
                         // After camera dismisses, open photo library
