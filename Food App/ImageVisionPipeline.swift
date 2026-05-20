@@ -25,13 +25,16 @@ struct ImageVisionResult {
 enum ImageVisionPipeline {
     static func analyze(_ image: UIImage, timeoutMs: Int = 800) async -> ImageVisionResult {
         let start = Date()
-        let normalized = image.fixedOrientation()
-        guard let cgImage = normalized.cgImage else {
+        // V3 hotfix (2026-05-20): pass orientation to Vision via the API parameter
+        // instead of redrawing via fixedOrientation(). UIImage.draw(in:) crashes on
+        // background threads for certain image backings on iOS 17+.
+        guard let cgImage = image.cgImage else {
             return ImageVisionResult(barcode: nil, labelPanel: nil, ocrText: "", elapsedMs: 0)
         }
+        let orientation = cgImagePropertyOrientation(from: image.imageOrientation)
 
-        async let barcodeTask = detectBarcode(cgImage, timeoutMs: timeoutMs)
-        async let ocrTask = recognizeText(cgImage, timeoutMs: timeoutMs)
+        async let barcodeTask = detectBarcode(cgImage, orientation: orientation, timeoutMs: timeoutMs)
+        async let ocrTask = recognizeText(cgImage, orientation: orientation, timeoutMs: timeoutMs)
 
         let (barcode, ocrText) = await (barcodeTask, ocrTask)
         let labelPanel = detectLabelPanel(from: ocrText)
@@ -46,12 +49,12 @@ enum ImageVisionPipeline {
         return ImageVisionResult(barcode: barcode, labelPanel: labelPanel, ocrText: ocrText, elapsedMs: elapsed)
     }
 
-    private static func detectBarcode(_ cgImage: CGImage, timeoutMs: Int) async -> BarcodeHit? {
+    private static func detectBarcode(_ cgImage: CGImage, orientation: CGImagePropertyOrientation, timeoutMs: Int) async -> BarcodeHit? {
         await raceTimeout(timeoutMs: timeoutMs) {
             await Task.detached(priority: .userInitiated) {
                 let request = VNDetectBarcodesRequest()
                 request.symbologies = [.ean13, .ean8, .upce, .code128]
-                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+                let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
                 do {
                     try handler.perform([request])
                 } catch {
@@ -73,14 +76,14 @@ enum ImageVisionPipeline {
         }
     }
 
-    private static func recognizeText(_ cgImage: CGImage, timeoutMs: Int) async -> String {
+    private static func recognizeText(_ cgImage: CGImage, orientation: CGImagePropertyOrientation, timeoutMs: Int) async -> String {
         await raceTimeout(timeoutMs: timeoutMs) {
             await Task.detached(priority: .userInitiated) {
                 let request = VNRecognizeTextRequest()
                 request.recognitionLevel = .accurate
                 request.usesLanguageCorrection = false
                 request.recognitionLanguages = ["en-US"]
-                let handler = VNImageRequestHandler(cgImage: cgImage, options: [:])
+                let handler = VNImageRequestHandler(cgImage: cgImage, orientation: orientation, options: [:])
                 do {
                     try handler.perform([request])
                 } catch {
@@ -126,6 +129,22 @@ enum ImageVisionPipeline {
             return nil
         }
         return Int(text[valueRange])
+    }
+
+    /// Map UIImage.Orientation to CGImagePropertyOrientation so Vision rotates
+    /// the image correctly without us redrawing it.
+    private static func cgImagePropertyOrientation(from ui: UIImage.Orientation) -> CGImagePropertyOrientation {
+        switch ui {
+        case .up: return .up
+        case .down: return .down
+        case .left: return .left
+        case .right: return .right
+        case .upMirrored: return .upMirrored
+        case .downMirrored: return .downMirrored
+        case .leftMirrored: return .leftMirrored
+        case .rightMirrored: return .rightMirrored
+        @unknown default: return .up
+        }
     }
 
     nonisolated private static func symbologyName(_ symbology: VNBarcodeSymbology) -> String {

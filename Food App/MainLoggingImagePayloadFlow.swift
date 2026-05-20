@@ -31,7 +31,11 @@ extension MainLoggingShellView {
     /// The loop still runs off the main thread and each encode is scoped by
     /// `autoreleasepool` to avoid retaining large intermediate buffers.
     nonisolated static func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
-        let normalized = image.fixedOrientation()
+        // V3 hotfix (2026-05-20): fixedOrientation() removed from background path.
+        // UIImage.draw(in:) + UIGraphicsImageRenderer.image{} crash on background
+        // threads in iOS 17+ under strict main-actor checking for certain image
+        // backings (HEIC, photo library). jpegData() handles imageOrientation
+        // automatically, so we pass the raw image through.
         let maxBytes = 1_200_000
         let dimensionAttempts: [CGFloat] = [1440, 1280, 1024]
         let qualityAttempts: [CGFloat] = [0.84, 0.80, 0.76, 0.72]
@@ -39,7 +43,7 @@ extension MainLoggingShellView {
 
         for dimension in dimensionAttempts {
             let result: PreparedImagePayload? = autoreleasepool {
-                let resized = resizeImageIfNeeded(normalized, maxDimension: dimension)
+                let resized = resizeImageIfNeeded(image, maxDimension: dimension)
                 for quality in qualityAttempts {
                     let inner: PreparedImagePayload? = autoreleasepool {
                         guard let data = resized.jpegData(compressionQuality: quality) else {
