@@ -172,7 +172,12 @@ struct MainLoggingRowCalorieDetailsSheet: View {
         } message: {
             Text("This removes the food from your log, updates your calories, and deletes the database row when it has already synced.")
         }
-        .presentationDetents([.fraction(0.62), .large])
+        // V3.1 hotfix v6.2 (2026-05-20): always open fully (.large) instead
+        // of the prior 62%-by-default + large-drag-up combo. User feedback
+        // was that the half-height initial position made the drawer feel
+        // like it wasn't fully opening, especially after the camera-capture
+        // drawer was changed to also open fully.
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
 
