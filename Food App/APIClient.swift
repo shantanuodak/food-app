@@ -89,6 +89,13 @@ final class APIClient {
         try await request(path: "/v1/onboarding", method: "GET", requiresAuth: true)
     }
 
+    /// V3.1 Phase 5: check whether the just-authenticated user has previously
+    /// completed onboarding. Called in the sign-up flow right after OAuth so
+    /// we can short-circuit to "welcome back" if the user already exists.
+    func fetchOnboardingStatus() async throws -> OnboardingStatusResponse {
+        try await request(path: "/v1/onboarding/status", method: "GET", requiresAuth: true)
+    }
+
     func parseLog(_ requestBody: ParseLogRequest) async throws -> ParseLogResponse {
         try await request(path: "/v1/logs/parse", method: "POST", body: requestBody, requiresAuth: true)
     }

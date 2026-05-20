@@ -148,6 +148,41 @@ export async function getOnboardingProvenance(userId: string): Promise<Onboardin
   };
 }
 
+/// V3.1 Phase 5: lightweight check used during sign-up to detect when a
+/// user re-authenticates with the same Apple/Google identity they used
+/// before. iOS calls this right after OAuth succeeds and BEFORE the user
+/// commits any new onboarding data. If hasCompletedOnboarding is true,
+/// iOS offers the user a choice between continuing with their existing
+/// account or applying the freshly-entered onboarding fields to their
+/// existing profile. food_logs are never touched in either path.
+export async function getOnboardingStatus(userId: string): Promise<{
+  hasCompletedOnboarding: boolean;
+  mealCount: number;
+  createdAt: string | null;
+}> {
+  const profileResult = await pool.query<{ created_at: Date }>(
+    'SELECT created_at FROM onboarding_profiles WHERE user_id = $1 LIMIT 1',
+    [userId]
+  );
+  const profileRow = profileResult.rows[0];
+  const hasCompletedOnboarding = profileRow != null;
+  const createdAt = profileRow ? profileRow.created_at.toISOString() : null;
+
+  const mealResult = await pool.query<{ n: string }>(
+    'SELECT COUNT(*)::int AS n FROM food_logs WHERE user_id = $1',
+    [userId]
+  );
+  // pg returns COUNT as string; coerce safely.
+  const rawN = mealResult.rows[0]?.n;
+  const mealCount = typeof rawN === 'number' ? rawN : Number(rawN ?? 0);
+
+  return {
+    hasCompletedOnboarding,
+    mealCount: Number.isFinite(mealCount) ? mealCount : 0,
+    createdAt
+  };
+}
+
 export async function getOnboardingProfile(userId: string): Promise<OnboardingProfile | null> {
   const result = await pool.query<{
     goal: 'lose' | 'maintain' | 'gain';

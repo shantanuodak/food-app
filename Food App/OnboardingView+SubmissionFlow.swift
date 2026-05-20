@@ -9,9 +9,43 @@ extension OnboardingView {
         isAccountLoading = true
         setScreenState(.account, state: .loading)
 
+        // V3.1 Phase 5: capture sign-up vs sign-in intent so we know whether
+        // to surface the existing-account-detected screen. In the "already
+        // have an account" flow the user *expects* to land on their existing
+        // account — no need for the confirmation step.
+        let isSigningUp = !isExistingAccountSignIn
+
         Task {
             do {
                 _ = try await appStore.authService.signIn(with: provider)
+
+                // V3.1 Phase 5: after OAuth lands a session, check whether
+                // this identity already has a completed profile in our DB.
+                // If yes AND the user came through the sign-up flow, show
+                // the ExistingAccountDetectedView so they can pick:
+                //   - continue with existing (skip rest of onboarding)
+                //   - update profile (continues onboarding, overwrites)
+                //   - cancel
+                // Failures of this check are non-fatal — fall through to the
+                // normal "next screen" path. Worst case: existing user gets
+                // the standard onboarding flow which UPSERTs their profile.
+                if isSigningUp {
+                    do {
+                        let status = try await appStore.apiClient.fetchOnboardingStatus()
+                        if status.hasCompletedOnboarding {
+                            await MainActor.run {
+                                isAccountLoading = false
+                                setScreenState(.account, state: .default)
+                                existingAccountStatus = status
+                            }
+                            return
+                        }
+                    } catch {
+                        // Swallow — let the user continue. Logging only.
+                        NSLog("[OnboardingView] fetchOnboardingStatus failed; treating as new user: %@", String(describing: error))
+                    }
+                }
+
                 await MainActor.run {
                     isAccountLoading = false
                     setScreenState(.account, state: .default)

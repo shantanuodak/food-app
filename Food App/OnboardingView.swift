@@ -18,6 +18,10 @@ struct OnboardingView: View {
     @State var baselineStep: BaselineScreenStep = .sex
     @State var accountScreenAppeared = false
     @State var isExistingAccountSignIn = false
+    /// V3.1 Phase 5: non-nil when OAuth succeeded during SIGN-UP and the
+    /// server reported the user has previously onboarded. Drives the
+    /// ExistingAccountDetectedView sheet.
+    @State var existingAccountStatus: OnboardingStatusResponse?
     @State var screenStates: [OnboardingRoute: OnboardingScreenState] = {
         OnboardingRoute.allCases.reduce(into: [OnboardingRoute: OnboardingScreenState]()) { result, route in
             result[route] = OnboardingScreenState()
@@ -160,6 +164,37 @@ struct OnboardingView: View {
                 }
             }
             .toolbarBackground(.hidden, for: .navigationBar)
+        }
+        // V3.1 Phase 5: shown when sign-up OAuth succeeds but the server says
+        // the user already onboarded before (i.e., they tapped "Get started"
+        // when they should have tapped "Sign in"). Three explicit options
+        // prevent silent overwrites and duplicate accounts.
+        .fullScreenCover(
+            isPresented: Binding(
+                get: { existingAccountStatus != nil },
+                set: { newValue in
+                    if !newValue { existingAccountStatus = nil }
+                }
+            )
+        ) {
+            if let status = existingAccountStatus {
+                ExistingAccountDetectedView(
+                    status: status,
+                    displayName: nil,
+                    onContinueWithExisting: {
+                        existingAccountStatus = nil
+                        appStore.markOnboardingComplete()
+                        flow.showHome()
+                    },
+                    onUpdateProfile: {
+                        existingAccountStatus = nil
+                        flow.moveNextOnboarding()
+                    },
+                    onCancel: {
+                        existingAccountStatus = nil
+                    }
+                )
+            }
         }
         .onAppear {
             appStore.refreshHealthAuthorizationState()

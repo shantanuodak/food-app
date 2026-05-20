@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { ApiError } from '../utils/errors.js';
-import { getOnboardingProfile, getOnboardingProvenance, upsertOnboarding } from '../services/onboardingService.js';
+import { getOnboardingProfile, getOnboardingProvenance, getOnboardingStatus, upsertOnboarding } from '../services/onboardingService.js';
 
 const router = Router();
 
@@ -43,6 +43,20 @@ router.get('/', async (req, res, next) => {
       throw new ApiError(404, 'ONBOARDING_NOT_FOUND', 'Onboarding profile not found');
     }
     res.status(200).json(profile);
+  } catch (err) {
+    next(err);
+  }
+});
+
+/// V3.1 Phase 5: lightweight "has this user onboarded before" check called
+/// during sign-up right after OAuth completes. Distinct from GET / which
+/// returns the full profile (404 on miss) — this endpoint always returns
+/// 200 with a boolean flag plus a few stats for the UI message.
+router.get('/status', async (req, res, next) => {
+  try {
+    const auth = res.locals.auth as { userId: string };
+    const status = await getOnboardingStatus(auth.userId);
+    res.status(200).json(status);
   } catch (err) {
     next(err);
   }

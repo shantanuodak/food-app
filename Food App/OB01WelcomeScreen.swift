@@ -44,7 +44,13 @@ struct OB01WelcomeScreen: View {
 
                 Spacer(minLength: 24)
 
-                VStack(spacing: 24) {
+                // V3.1 Phase 5: previously the "Sign in" link was a tiny
+                // plain-text button below the green CTA. Users who already
+                // had an account were missing it and accidentally starting
+                // the sign-up flow. Now both CTAs are clearly button-shaped
+                // and equally tappable; "Get started" stays primary
+                // (filled), "Sign in" is a clear outlined secondary.
+                VStack(spacing: 14) {
                     Button(action: onGetStarted) {
                         Text(L10n.onboardingSplashStartButton)
                             .font(.system(size: 16, weight: .bold))
@@ -58,12 +64,21 @@ struct OB01WelcomeScreen: View {
                     .accessibilityHint(Text(L10n.onboardingSplashStartHint))
 
                     Button(action: onExistingAccount) {
-                        Text(L10n.onboardingSplashExistingAccountButton)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(secondaryTextColor)
-                            .frame(maxWidth: .infinity)
+                        HStack(spacing: 6) {
+                            Text("Already have an account?")
+                                .font(.system(size: 14, weight: .regular))
+                                .foregroundStyle(secondaryTextColor.opacity(0.78))
+                            Text(L10n.onboardingSplashExistingAccountButton)
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(secondaryTextColor)
+                                .underline()
+                        }
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 48)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Sign in to an existing account"))
                 }
                 .padding(.horizontal, 16)
                 .padding(.bottom, 26)

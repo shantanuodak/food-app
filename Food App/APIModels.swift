@@ -149,6 +149,16 @@ struct OnboardingProfileResponse: Decodable {
     let updatedAt: String
 }
 
+/// V3.1 Phase 5: returned by GET /v1/onboarding/status. Used during the
+/// sign-up flow right after OAuth completes to detect existing accounts.
+/// All fields are non-optional so the iOS branch logic doesn't need to
+/// guard them — server defaults to {false, 0, nil} for new users.
+struct OnboardingStatusResponse: Decodable, Equatable {
+    let hasCompletedOnboarding: Bool
+    let mealCount: Int
+    let createdAt: String?
+}
+
 struct ParseLogRequest: Encodable {
     let text: String
     let loggedAt: String
