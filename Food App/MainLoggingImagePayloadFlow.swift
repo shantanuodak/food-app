@@ -36,14 +36,19 @@ extension MainLoggingShellView {
         // threads in iOS 17+ under strict main-actor checking for certain image
         // backings (HEIC, photo library). jpegData() handles imageOrientation
         // automatically, so we pass the raw image through.
+        //
+        // If we need to resize, first rehydrate through JPEG so later drawing
+        // works on a plain decoded backing instead of the original PhotoKit/HEIC
+        // image object that triggered the crash.
         let maxBytes = 1_200_000
         let dimensionAttempts: [CGFloat] = [1440, 1280, 1024]
         let qualityAttempts: [CGFloat] = [0.84, 0.80, 0.76, 0.72]
         var smallestData: Data?
+        let resizeSafeImage = backgroundResizeSafeImage(from: image)
 
         for dimension in dimensionAttempts {
             let result: PreparedImagePayload? = autoreleasepool {
-                let resized = resizeImageIfNeeded(image, maxDimension: dimension)
+                let resized = resizeImageIfNeeded(resizeSafeImage, maxDimension: dimension)
                 for quality in qualityAttempts {
                     let inner: PreparedImagePayload? = autoreleasepool {
                         guard let data = resized.jpegData(compressionQuality: quality) else {
@@ -72,6 +77,14 @@ extension MainLoggingShellView {
             return PreparedImagePayload(uploadData: smallestData, previewData: smallestData, mimeType: "image/jpeg")
         }
         return nil
+    }
+
+    nonisolated static func backgroundResizeSafeImage(from image: UIImage) -> UIImage {
+        guard let data = image.jpegData(compressionQuality: 1.0),
+              let decoded = UIImage(data: data, scale: image.scale) else {
+            return image
+        }
+        return decoded
     }
 
     nonisolated static func resizeImageIfNeeded(_ image: UIImage, maxDimension: CGFloat) -> UIImage {

@@ -16,7 +16,7 @@
  *   medium                  -> 1024
  *   high                    -> 4096
  *   auto | default | ""     -> undefined  (omit thinkingConfig; model decides)
- *   "<int>"                 -> parsed integer
+ *   "<int>"                 -> parsed integer (including -1 for dynamic)
  */
 export function resolveThinkingBudget(level: string | undefined): number | undefined {
   if (!level) return undefined;
@@ -27,5 +27,7 @@ export function resolveThinkingBudget(level: string | undefined): number | undef
   if (normalized === 'medium') return 1024;
   if (normalized === 'high') return 4096;
   const parsed = Number.parseInt(normalized, 10);
-  return Number.isFinite(parsed) ? Math.max(0, parsed) : undefined;
+  if (!Number.isFinite(parsed)) return undefined;
+  if (parsed === -1) return -1;
+  return Math.max(0, parsed);
 }
