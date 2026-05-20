@@ -1,0 +1,5067 @@
+{
+  "runAt": "2026-05-20T00:57:57.587Z",
+  "baseUrl": "http://localhost:8080",
+  "summary": {
+    "total": 31,
+    "passed": 31,
+    "failed": 0,
+    "avgMs": 6449
+  },
+  "reports": [
+    {
+      "label": "branded_diet_coke",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/nutrition-label.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 410,
+      "model": "nutrition_database",
+      "parseLaneUsed": "barcode",
+      "parseLaneSource": "open_food_facts",
+      "parseLaneLatencyMs": 370,
+      "cuisineUsed": null,
+      "cuisineSource": null,
+      "cuisineConfidence": null,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": false,
+      "confidence": 0.92,
+      "extractedText": "Coke Diet Coke Soft Drink",
+      "totals": {
+        "calories": 0,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 0
+      },
+      "coverage": null,
+      "items": [
+        {
+          "name": "Coke Diet Coke Soft Drink",
+          "calories": 0,
+          "grams": 1,
+          "confidence": 0.92,
+          "needsClarification": false
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 0,
+        "calorieMax": 5,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 2000,
+        "expectedLane": "barcode",
+        "expectedCuisine": null,
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": []
+    },
+    {
+      "label": "branded_cheetos",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/nutrition-label.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 843,
+      "model": "nutrition_database",
+      "parseLaneUsed": "barcode",
+      "parseLaneSource": "fatsecret",
+      "parseLaneLatencyMs": 838,
+      "cuisineUsed": null,
+      "cuisineSource": null,
+      "cuisineConfidence": null,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": false,
+      "confidence": 0.78,
+      "extractedText": "Cheetos Crunchy Cheetos (1 oz)",
+      "totals": {
+        "calories": 160,
+        "protein": 2,
+        "carbs": 15,
+        "fat": 10
+      },
+      "coverage": null,
+      "items": [
+        {
+          "name": "Cheetos Crunchy Cheetos (1 oz)",
+          "calories": 160,
+          "grams": 1,
+          "confidence": 0.78,
+          "needsClarification": false
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 140,
+        "calorieMax": 180,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 2500,
+        "expectedLane": "barcode",
+        "expectedCuisine": null,
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": []
+    },
+    {
+      "label": "branded_unknown_upc",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/nutrition-label.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 229,
+      "model": "nutrition_database",
+      "parseLaneUsed": "barcode",
+      "parseLaneSource": "miss",
+      "parseLaneLatencyMs": 226,
+      "cuisineUsed": null,
+      "cuisineSource": null,
+      "cuisineConfidence": null,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": false,
+      "confidence": 0,
+      "extractedText": "Barcode 0000000000000",
+      "totals": {
+        "calories": 0,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 0
+      },
+      "coverage": null,
+      "items": [],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 0,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 2500,
+        "expectedLane": "barcode",
+        "expectedCuisine": null,
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": []
+    },
+    {
+      "label": "label_granola_bar",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/nutrition-label.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 2156,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "label",
+      "parseLaneSource": "gemini",
+      "parseLaneLatencyMs": 2152,
+      "cuisineUsed": null,
+      "cuisineSource": null,
+      "cuisineConfidence": null,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": false,
+      "confidence": 1,
+      "extractedText": "Packaged food (label)",
+      "totals": {
+        "calories": 190,
+        "protein": 10,
+        "carbs": 24,
+        "fat": 7
+      },
+      "coverage": {
+        "imageType": "nutrition_label",
+        "cuisineHints": [],
+        "visibleComponents": [
+          {
+            "name": "Nutrition Facts panel",
+            "category": "label",
+            "zone": "visible label",
+            "portionHint": "1 bar (40g)",
+            "confidence": 1,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Packaged food (label)",
+          "calories": 190,
+          "grams": 40,
+          "confidence": 1,
+          "needsClarification": false
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 180,
+        "calorieMax": 200,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 4000,
+        "expectedLane": "label",
+        "expectedCuisine": null,
+        "expectedImageType": "nutrition_label"
+      },
+      "error": null,
+      "debugEvents": []
+    },
+    {
+      "label": "label_partial",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/partial-label.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 1490,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "label",
+      "parseLaneSource": "gemini",
+      "parseLaneLatencyMs": 1488,
+      "cuisineUsed": null,
+      "cuisineSource": null,
+      "cuisineConfidence": null,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": false,
+      "confidence": 0.9,
+      "extractedText": "Packaged food (label)",
+      "totals": {
+        "calories": 120,
+        "protein": 4,
+        "carbs": 0,
+        "fat": 3
+      },
+      "coverage": {
+        "imageType": "nutrition_label",
+        "cuisineHints": [],
+        "visibleComponents": [
+          {
+            "name": "Nutrition Facts panel",
+            "category": "label",
+            "zone": "visible label",
+            "portionHint": "not specified",
+            "confidence": 0.9,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.4,
+        "warnings": [
+          "Missing serving size",
+          "Missing carbohydrate information",
+          "Incomplete nutrition panel"
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Packaged food (label)",
+          "calories": 120,
+          "grams": 0,
+          "confidence": 0.9,
+          "needsClarification": false
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 100,
+        "calorieMax": 140,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 4000,
+        "expectedLane": "label",
+        "expectedCuisine": null,
+        "expectedImageType": "nutrition_label"
+      },
+      "error": null,
+      "debugEvents": []
+    },
+    {
+      "label": "label_oats",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/nutrition-label.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 1154,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "label",
+      "parseLaneSource": "gemini",
+      "parseLaneLatencyMs": 1151,
+      "cuisineUsed": null,
+      "cuisineSource": null,
+      "cuisineConfidence": null,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": false,
+      "confidence": 0.95,
+      "extractedText": "Packaged food (label)",
+      "totals": {
+        "calories": 150,
+        "protein": 5,
+        "carbs": 27,
+        "fat": 3
+      },
+      "coverage": {
+        "imageType": "nutrition_label",
+        "cuisineHints": [],
+        "visibleComponents": [
+          {
+            "name": "Nutrition Facts panel",
+            "category": "label",
+            "zone": "visible label",
+            "portionHint": "1/2 cup dry",
+            "confidence": 0.95,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.9,
+        "warnings": [
+          "sugarG not provided",
+          "sodiumMg not provided"
+        ],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Packaged food (label)",
+          "calories": 150,
+          "grams": 40,
+          "confidence": 0.95,
+          "needsClarification": false
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 140,
+        "calorieMax": 160,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 4000,
+        "expectedLane": "label",
+        "expectedCuisine": null,
+        "expectedImageType": "nutrition_label"
+      },
+      "error": null,
+      "debugEvents": []
+    },
+    {
+      "label": "label_high_protein_bar",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/nutrition-label.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 1263,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "label",
+      "parseLaneSource": "gemini",
+      "parseLaneLatencyMs": 1258,
+      "cuisineUsed": null,
+      "cuisineSource": null,
+      "cuisineConfidence": null,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": false,
+      "confidence": 1,
+      "extractedText": "Packaged food (label)",
+      "totals": {
+        "calories": 220,
+        "protein": 20,
+        "carbs": 23,
+        "fat": 8
+      },
+      "coverage": {
+        "imageType": "nutrition_label",
+        "cuisineHints": [],
+        "visibleComponents": [
+          {
+            "name": "Nutrition Facts panel",
+            "category": "label",
+            "zone": "visible label",
+            "portionHint": "1 bar (60g)",
+            "confidence": 1,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Packaged food (label)",
+          "calories": 220,
+          "grams": 60,
+          "confidence": 1,
+          "needsClarification": false
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 200,
+        "calorieMax": 240,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 4000,
+        "expectedLane": "label",
+        "expectedCuisine": null,
+        "expectedImageType": "nutrition_label"
+      },
+      "error": null,
+      "debugEvents": []
+    },
+    {
+      "label": "indian_thali",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/indian-thali.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8024,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8019,
+      "cuisineUsed": "indian",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Dal, Naan or roti, Rice or biryani, Vegetable curry, Raita or chutney",
+      "totals": {
+        "calories": 950,
+        "protein": 28,
+        "carbs": 143,
+        "fat": 30
+      },
+      "coverage": {
+        "imageType": "tray_or_thali",
+        "cuisineHints": [
+          "indian"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Dal",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 katori",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Naan or roti",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 piece",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Rice or biryani",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 cup",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Vegetable curry",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 katori",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Raita or chutney",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 small side",
+            "confidence": 0.48,
+            "isSmallSide": true
+          }
+        ],
+        "visibleComponentCount": 5,
+        "parsedItemCount": 5,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Dal",
+          "calories": 160,
+          "grams": 180,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Naan or roti",
+          "calories": 260,
+          "grams": 90,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Rice or biryani",
+          "calories": 260,
+          "grams": 180,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Vegetable curry",
+          "calories": 200,
+          "grams": 160,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Raita or chutney",
+          "calories": 70,
+          "grams": 60,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 4,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "indian:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 2136.5,
+          "caption": "{\n  \"imageType\": \"tray_or_thali\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"naan\",\n      \"zone\": \"bottom right\",\n      \"visualEv"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Indian Thali, Dal Rice Roti Vegetable Curry, Raita\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Indian Thali, Dal Rice Roti Vegetable Curry, Raita\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For "
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Indian Thali, Dal Rice Roti Vegetable Curry, Raita\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For "
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4013.7
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "product_caption_budget_elapsed",
+          "ms": 5004.9
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3007.3,
+          "caption": "Indian Thali, Dal Rice Roti Vegetable Curry, Raita\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 5162.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 2845
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 2845.4
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8009
+        }
+      ]
+    },
+    {
+      "label": "indian_dosa",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/indian-thali.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8014,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8008,
+      "cuisineUsed": "indian",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Masala dosa, Sambar, Coconut chutney",
+      "totals": {
+        "calories": 590,
+        "protein": 15,
+        "carbs": 82,
+        "fat": 23
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "indian"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Masala dosa",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 dosa",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Sambar",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 small bowl",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Coconut chutney",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 small side",
+            "confidence": 0.48,
+            "isSmallSide": true
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 3,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Masala dosa",
+          "calories": 420,
+          "grams": 240,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Sambar",
+          "calories": 90,
+          "grams": 120,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Coconut chutney",
+          "calories": 80,
+          "grams": 40,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "indian:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1198.4,
+          "caption": "{\n  \"imageType\": \"tray_or_thali\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"naan bread\",\n      \"zone\": \"bottom right\",\n      \"vi"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Masala Dosa, Sambar Chutney\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Ret"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Masala Dosa, Sambar Chutney\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Ret"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Masala Dosa, Sambar Chutney\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Ret"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4004.4
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3002.9,
+          "caption": "Masala Dosa, Sambar Chutney\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4208.8
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3795
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3795
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8003.8
+        }
+      ]
+    },
+    {
+      "label": "indian_chaat",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/indian-thali.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8012,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8007,
+      "cuisineUsed": "indian",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Samosa chaat, Chutney, Chai",
+      "totals": {
+        "calories": 675,
+        "protein": 17,
+        "carbs": 95,
+        "fat": 26
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "indian"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Samosa chaat",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 plate",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Chutney",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 small side",
+            "confidence": 0.48,
+            "isSmallSide": true
+          },
+          {
+            "name": "Chai",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 cup",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 3,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Samosa chaat",
+          "calories": 520,
+          "grams": 280,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Chutney",
+          "calories": 45,
+          "grams": 35,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Chai",
+          "calories": 110,
+          "grams": 180,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "indian:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1085.9,
+          "caption": "{\n  \"imageType\": \"tray_or_thali\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"naan\",\n      \"zone\": \"bottom right\",\n      \"visualEv"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chaat Plate, Samosa Chutney, Chai\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging Ap"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chaat Plate, Samosa Chutney, Chai\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging Ap"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chaat Plate, Samosa Chutney, Chai\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging Ap"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4007.9
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3000.3,
+          "caption": "Chaat Plate, Samosa Chutney, Chai\", Cuisine Router: Indian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4094.4
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3907.7
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3907.8
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8002.2
+        }
+      ]
+    },
+    {
+      "label": "us_burger_fries",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/burger-fries.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8015,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8007,
+      "cuisineUsed": "us",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Cheeseburger, French fries",
+      "totals": {
+        "calories": 940,
+        "protein": 32,
+        "carbs": 92,
+        "fat": 50
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "us"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Cheeseburger",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 burger",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "French fries",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 medium serving",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Cheeseburger",
+          "calories": 560,
+          "grams": 220,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "French fries",
+          "calories": 380,
+          "grams": 110,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "us",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "us:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1444.8,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"double cheeseburger\",\n      \"zone\": \"right\",\n"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Double Cheeseburger, Fries\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return V"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Double Cheeseburger, Fries\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return V"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Double Cheeseburger, Fries\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return V"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4003.2
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3004.4,
+          "caption": "Double Cheeseburger, Fries\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4461.5
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3540.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3540.9
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8002.4
+        }
+      ]
+    },
+    {
+      "label": "us_breakfast",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/burger-fries.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8010,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8004,
+      "cuisineUsed": "us",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Pancakes, Bacon, Bagel",
+      "totals": {
+        "calories": 910,
+        "protein": 30,
+        "carbs": 138,
+        "fat": 27
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "us"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Pancakes",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 stack",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Bacon",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "2 slices",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Bagel",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 bagel",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 3,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Pancakes",
+          "calories": 520,
+          "grams": 220,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Bacon",
+          "calories": 110,
+          "grams": 24,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Bagel",
+          "calories": 280,
+          "grams": 100,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "us",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "us:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1049.4,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"cheeseburger\",\n      \"zone\": \"right\",\n      \""
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Pancake Breakfast, Bacon, Bagel\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Ret"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Pancake Breakfast, Bacon, Bagel\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Ret"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Pancake Breakfast, Bacon, Bagel\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Ret"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4004.1
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3002.5,
+          "caption": "Pancake Breakfast, Bacon, Bagel\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4056.4
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3946.6
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3946.8
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8003.2
+        }
+      ]
+    },
+    {
+      "label": "us_salad",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/menu-screenshot.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8014,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8008,
+      "cuisineUsed": "us",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Chicken Caesar salad with ranch",
+      "totals": {
+        "calories": 620,
+        "protein": 38,
+        "carbs": 20,
+        "fat": 42
+      },
+      "coverage": {
+        "imageType": "single_food",
+        "cuisineHints": [
+          "us"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Chicken Caesar salad with ranch",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 salad",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Chicken Caesar salad with ranch",
+          "calories": 620,
+          "grams": 360,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "us",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "us:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1501.3,
+          "caption": "{\n  \"imageType\": \"menu_or_screenshot\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"chicken caesar salad\",\n      \"zone\": \"top\",\n   "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chicken Caesar Salad, Ranch\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chicken Caesar Salad, Ranch\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return "
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chicken Caesar Salad, Ranch\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return "
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4003.8
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3005.5,
+          "caption": "Chicken Caesar Salad, Ranch\", Cuisine Router: Us (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4523
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "invalid_or_empty_nutrition_json",
+          "ms": 1892.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "gemini_no_response",
+          "ms": 1590.5
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8006.6
+        }
+      ]
+    },
+    {
+      "label": "western_fish_chips",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/fish-and-chips.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8016,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8008,
+      "cuisineUsed": "western",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.62,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Fish and chips",
+      "totals": {
+        "calories": 920,
+        "protein": 34,
+        "carbs": 92,
+        "fat": 44
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "western"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Fish and chips",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 plate",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Fish and chips",
+          "calories": 920,
+          "grams": 430,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "western",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "western:keywords",
+          "ms": 0,
+          "confidence": 0.62
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 2091.8,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"battered fish\",\n      \"zone\": \"center\",\n     "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Fish, Chips\", Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Fish, Chips\", Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON "
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Fish, Chips\", Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON "
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4006
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "product_caption_budget_elapsed",
+          "ms": 5002.5
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3002.5,
+          "caption": "Fish, Chips\", Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 5105.4
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 2901.1
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 2901.2
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8006.7
+        }
+      ]
+    },
+    {
+      "label": "western_croissant",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/croissant.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8012,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8005,
+      "cuisineUsed": "western",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.62,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Croissant",
+      "totals": {
+        "calories": 260,
+        "protein": 5,
+        "carbs": 28,
+        "fat": 14
+      },
+      "coverage": {
+        "imageType": "single_food",
+        "cuisineHints": [
+          "western"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Croissant",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 piece",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Croissant",
+          "calories": 260,
+          "grams": 65,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "western",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "western:keywords",
+          "ms": 0,
+          "confidence": 0.62
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1473.1,
+          "caption": "{\n  \"imageType\": \"single_food\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"croissant\",\n      \"zone\": \"center\",\n      \"visualEvide"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Croissant, Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Onl"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Croissant, Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Onl"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Croissant, Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Onl"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4007.1
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3003.7,
+          "caption": "Croissant, Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String, \"PortionHint\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4484.1
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3519.4
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3519.4
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8003.5
+        }
+      ]
+    },
+    {
+      "label": "western_quiche",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/croissant.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8011,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8004,
+      "cuisineUsed": "western",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Quiche, Baguette, Crepe",
+      "totals": {
+        "calories": 705,
+        "protein": 24,
+        "carbs": 84,
+        "fat": 31
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "western"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Quiche",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 slice",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Baguette",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 piece",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Crepe",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 crepe",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 3,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Quiche",
+          "calories": 360,
+          "grams": 140,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Baguette",
+          "calories": 165,
+          "grams": 60,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Crepe",
+          "calories": 180,
+          "grams": 80,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "western",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "western:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1484,
+          "caption": "{\n  \"imageType\": \"single_food\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"croissant\",\n      \"zone\": \"center\",\n      \"visualEvide"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Quiche, Baguette, Crepe\", Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Quiche, Baguette, Crepe\", Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Quiche, Baguette, Crepe\", Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4002.6
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3005.9,
+          "caption": "Quiche, Baguette, Crepe\", Cuisine Router: Western (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4498.1
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3505.3
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3505.4
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8003.5
+        }
+      ]
+    },
+    {
+      "label": "eastasian_ramen",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/ramen.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8024,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8015,
+      "cuisineUsed": "eastAsian",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.72,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Ramen bowl",
+      "totals": {
+        "calories": 650,
+        "protein": 25,
+        "carbs": 82,
+        "fat": 24
+      },
+      "coverage": {
+        "imageType": "single_food",
+        "cuisineHints": [
+          "eastAsian"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Ramen bowl",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 bowl",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Ramen bowl",
+          "calories": 650,
+          "grams": 650,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "eastAsian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "eastAsian:keywords",
+          "ms": 0,
+          "confidence": 0.72
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1617,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"miso ramen broth\",\n      \"zone\": \"center\",\n  "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Ramen Bowl, Miso\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Vali"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Ramen Bowl, Miso\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Vali"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Ramen Bowl, Miso\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Vali"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4001.7
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3011.6,
+          "caption": "Ramen Bowl, Miso\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4635.5
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3378.4
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3378.5
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8014
+        }
+      ]
+    },
+    {
+      "label": "eastasian_sushi",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/sushi.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8017,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8009,
+      "cuisineUsed": "eastAsian",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Sushi platter, Miso soup",
+      "totals": {
+        "calories": 580,
+        "protein": 32,
+        "carbs": 79,
+        "fat": 14
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "eastAsian"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Sushi platter",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 platter",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Miso soup",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 bowl",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Sushi platter",
+          "calories": 520,
+          "grams": 320,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Miso soup",
+          "calories": 60,
+          "grams": 240,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "eastAsian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "eastAsian:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1758.2,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\"name\": \"tuna maki\", \"zone\": \"top\", \"visualEvidence\": \"small "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Sushi Platter, Sashimi, Miso\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App."
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Sushi Platter, Sashimi, Miso\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App."
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Sushi Platter, Sashimi, Miso\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App."
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4008.9
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3005.3,
+          "caption": "Sushi Platter, Sashimi, Miso\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4772.1
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3234.6
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3234.6
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8006.8
+        }
+      ]
+    },
+    {
+      "label": "eastasian_padthai",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/ramen.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8026,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8014,
+      "cuisineUsed": "eastAsian",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.72,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Pad thai, Spring roll",
+      "totals": {
+        "calories": 880,
+        "protein": 32,
+        "carbs": 114,
+        "fat": 33
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "eastAsian"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Pad thai",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 plate",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Spring roll",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 roll",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Pad thai",
+          "calories": 720,
+          "grams": 420,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Spring roll",
+          "calories": 160,
+          "grams": 70,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "eastAsian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "eastAsian:keywords",
+          "ms": 0,
+          "confidence": 0.72
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1523.1,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"ramen noodles\",\n      \"zone\": \"bottom\",\n     "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Pad Thai, Spring Roll\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Pad Thai, Spring Roll\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Pad Thai, Spring Roll\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4005.3
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3005.6,
+          "caption": "Pad Thai, Spring Roll\", Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4539.6
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3473.1
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3473.1
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8012.7
+        }
+      ]
+    },
+    {
+      "label": "eastasian_dim_sum",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/sushi.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8012,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8004,
+      "cuisineUsed": "eastAsian",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Dim sum dumplings, Bao",
+      "totals": {
+        "calories": 580,
+        "protein": 26,
+        "carbs": 74,
+        "fat": 21
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "eastAsian"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Dim sum dumplings",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "4 pieces",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Bao",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 bun",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Dim sum dumplings",
+          "calories": 360,
+          "grams": 180,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Bao",
+          "calories": 220,
+          "grams": 90,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "eastAsian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "eastAsian:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1191.8,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\"name\": \"tuna maki\", \"zone\": \"top\", \"visualEvidence\": \"small "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Dim Sum Dumpling Bao, Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return V"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Dim Sum Dumpling Bao, Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return V"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Dim Sum Dumpling Bao, Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return V"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4004.9
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3002.2,
+          "caption": "Dim Sum Dumpling Bao, Cuisine Router: EastAsian (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String, \"PortionHint\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4203.6
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3798.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3799
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8002.6
+        }
+      ]
+    },
+    {
+      "label": "mediterranean_pasta",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/carbonara.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8011,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8006,
+      "cuisineUsed": "mediterranean",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.72,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Spaghetti carbonara",
+      "totals": {
+        "calories": 700,
+        "protein": 24,
+        "carbs": 76,
+        "fat": 32
+      },
+      "coverage": {
+        "imageType": "single_food",
+        "cuisineHints": [
+          "mediterranean"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Spaghetti carbonara",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 plate",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Spaghetti carbonara",
+          "calories": 700,
+          "grams": 350,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "mediterranean",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "mediterranean:keywords",
+          "ms": 0,
+          "confidence": 0.72
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1593.6,
+          "caption": "{\n  \"imageType\": \"single_food\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"spaghetti carbonara\",\n      \"zone\": \"center\",\n      \"v"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Spaghetti Carbonara, Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Retur"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Spaghetti Carbonara, Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Retur"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Spaghetti Carbonara, Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Retur"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4001.8
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3004.9,
+          "caption": "Spaghetti Carbonara, Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String, \"PortionHint\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4606.2
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3398.5
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3398.7
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8004.9
+        }
+      ]
+    },
+    {
+      "label": "mediterranean_pizza",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/pizza.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8013,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8006,
+      "cuisineUsed": "mediterranean",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Margherita pizza",
+      "totals": {
+        "calories": 860,
+        "protein": 34,
+        "carbs": 104,
+        "fat": 30
+      },
+      "coverage": {
+        "imageType": "single_food",
+        "cuisineHints": [
+          "mediterranean"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Margherita pizza",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 pizza",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Margherita pizza",
+          "calories": 860,
+          "grams": 360,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "mediterranean",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "mediterranean:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1949.9,
+          "caption": "{\n  \"imageType\": \"single_food\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"margherita pizza\",\n      \"zone\": \"center\",\n      \"visu"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Margherita Pizza, Mozzarella\", Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Margherita Pizza, Mozzarella\", Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging "
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Margherita Pizza, Mozzarella\", Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging "
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4006
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3007.5,
+          "caption": "Margherita Pizza, Mozzarella\", Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4966
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3038.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3039
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8005.1
+        }
+      ]
+    },
+    {
+      "label": "mediterranean_mezze",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/pizza.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8014,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8005,
+      "cuisineUsed": "mediterranean",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Hummus, Falafel, Tabbouleh, Pita",
+      "totals": {
+        "calories": 890,
+        "protein": 30,
+        "carbs": 102,
+        "fat": 42
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "mediterranean"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Hummus",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 serving",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Falafel",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "3 pieces",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Tabbouleh",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 serving",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Pita",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 piece",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 4,
+        "parsedItemCount": 4,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Hummus",
+          "calories": 230,
+          "grams": 100,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Falafel",
+          "calories": 330,
+          "grams": 105,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Tabbouleh",
+          "calories": 160,
+          "grams": 120,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Pita",
+          "calories": 170,
+          "grams": 60,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "mediterranean",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "mediterranean:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1308.5,
+          "caption": "{\n  \"imageType\": \"single_food\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"margherita pizza\",\n      \"zone\": \"center\",\n      \"visu"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Hummus Falafel Tabbouleh, Pita Mezze\", Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Hummus Falafel Tabbouleh, Pita Mezze\", Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Hummus Falafel Tabbouleh, Pita Mezze\", Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4002.9
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3004.2,
+          "caption": "Hummus Falafel Tabbouleh, Pita Mezze\", Cuisine Router: Mediterranean (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4321
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3681.8
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3681.9
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8002.9
+        }
+      ]
+    },
+    {
+      "label": "latin_burrito",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/burrito.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8011,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8004,
+      "cuisineUsed": "latin",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Burrito",
+      "totals": {
+        "calories": 900,
+        "protein": 35,
+        "carbs": 105,
+        "fat": 34
+      },
+      "coverage": {
+        "imageType": "single_food",
+        "cuisineHints": [
+          "latin"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Burrito",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 burrito",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Burrito",
+          "calories": 900,
+          "grams": 420,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "latin",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "latin:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1531.2,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\"name\": \"chicken burrito\", \"zone\": \"center\", \"visualEvidence\""
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chicken Burrito, Salsa Guacamole\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App."
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chicken Burrito, Salsa Guacamole\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App."
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Chicken Burrito, Salsa Guacamole\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App."
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4003.7
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3007.1,
+          "caption": "Chicken Burrito, Salsa Guacamole\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4545.6
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3457.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3458
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8003.6
+        }
+      ]
+    },
+    {
+      "label": "latin_tacos",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/tacos.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8012,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8006,
+      "cuisineUsed": "latin",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Tacos al pastor, Salsa",
+      "totals": {
+        "calories": 710,
+        "protein": 33,
+        "carbs": 70,
+        "fat": 34
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "latin"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Tacos al pastor",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "3 tacos",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Salsa",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 side",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Tacos al pastor",
+          "calories": 690,
+          "grams": 300,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Salsa",
+          "calories": 20,
+          "grams": 45,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "latin",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "latin:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1400.8,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"corn tortillas\",\n      \"zone\": \"center\",\n    "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Tacos Al Pastor, Salsa\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Va"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Tacos Al Pastor, Salsa\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Va"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Tacos Al Pastor, Salsa\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Va"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4003.3
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3011,
+          "caption": "Tacos Al Pastor, Salsa\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4421.3
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3583.5
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3583.6
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8004.9
+        }
+      ]
+    },
+    {
+      "label": "latin_arepa",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/tacos.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8018,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8010,
+      "cuisineUsed": "latin",
+      "cuisineSource": "keywords",
+      "cuisineConfidence": 0.85,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Arepa, Empanada, Plantain",
+      "totals": {
+        "calories": 880,
+        "protein": 23,
+        "carbs": 134,
+        "fat": 29
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "latin"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Arepa",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 arepa",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Empanada",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 piece",
+            "confidence": 0.48,
+            "isSmallSide": false
+          },
+          {
+            "name": "Plantain",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 serving",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 3,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Arepa",
+          "calories": 380,
+          "grams": 180,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Empanada",
+          "calories": 280,
+          "grams": 100,
+          "confidence": 0.48,
+          "needsClarification": true
+        },
+        {
+          "name": "Plantain",
+          "calories": 220,
+          "grams": 120,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": "latin",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "latin:keywords",
+          "ms": 0,
+          "confidence": 0.85
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1347.6,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"corn tortillas\",\n      \"zone\": \"center\",\n    "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Arepa Empanada, Plantain\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Arepa Empanada, Plantain\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return "
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Arepa Empanada, Plantain\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return "
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4004
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3007.9,
+          "caption": "Arepa Empanada, Plantain\", Cuisine Router: Latin (Keywords, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4362.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3646.1
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3646.1
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8009
+        }
+      ]
+    },
+    {
+      "label": "edge_blurry_food",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/blurry-food.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8017,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8005,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Rice bowl with vegetables",
+      "totals": {
+        "calories": 520,
+        "protein": 12,
+        "carbs": 86,
+        "fat": 14
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Rice bowl with vegetables",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 bowl",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Rice bowl with vegetables",
+          "calories": 520,
+          "grams": 420,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 0,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": null,
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1488,
+          "caption": "{\n  \"imageType\": \"unclear\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"rice\",\n      \"zone\": \"center\",\n      \"visualEvidence\": \"te"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Blurry Rice Bowl, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JS"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Blurry Rice Bowl, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JS"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Blurry Rice Bowl, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JS"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4003.6
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3008,
+          "caption": "Blurry Rice Bowl, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String, \"PortionHint\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4503.3
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "invalid_or_empty_nutrition_json",
+          "ms": 1784.6
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "gemini_no_response",
+          "ms": 1714.9
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8004.1
+        }
+      ]
+    },
+    {
+      "label": "edge_non_food",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/non-food.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8016,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8010,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.9,
+      "extractedText": "Non-food image",
+      "totals": {
+        "calories": 0,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 0
+      },
+      "coverage": {
+        "imageType": "non_food",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [],
+        "visibleComponentCount": 0,
+        "parsedItemCount": 0,
+        "score": 1,
+        "warnings": [
+          "No food items were visible enough to estimate."
+        ],
+        "partial": false
+      },
+      "items": [],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 0,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": null,
+        "expectedImageType": "non_food"
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "empty_caption",
+          "ms": 1361.7
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Not Food, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only."
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Not Food, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only."
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Not Food, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only."
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "invalid_or_empty_inventory_json",
+          "ms": 1664.7,
+          "items": 0,
+          "caption": ""
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3008.6,
+          "caption": "Not Food, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String, \"PortionHint\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4377.1
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3629.2
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3629.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8006.4
+        }
+      ]
+    },
+    {
+      "label": "edge_menu_screenshot",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/menu-screenshot.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8019,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8010,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Menu or recipe text image",
+      "totals": {
+        "calories": 0,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 0
+      },
+      "coverage": {
+        "imageType": "menu_or_screenshot",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [],
+        "visibleComponentCount": 0,
+        "parsedItemCount": 0,
+        "score": 0.65,
+        "warnings": [
+          "Text-like food image; ask the user to choose or confirm items before saving."
+        ],
+        "partial": true
+      },
+      "items": [],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 0,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": null,
+        "expectedImageType": "menu_or_screenshot"
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1428.3,
+          "caption": "{\n  \"imageType\": \"menu_or_screenshot\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"chicken caesar salad\",\n      \"zone\": \"top\",\n   "
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Restaurant Menu Screenshot, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Retur"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Restaurant Menu Screenshot, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Retur"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Restaurant Menu Screenshot, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Retur"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4011.4
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3006.3,
+          "caption": "Restaurant Menu Screenshot, Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String, \"PortionHint\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4439.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3569
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3569.1
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8009
+        }
+      ]
+    },
+    {
+      "label": "edge_recipe_card",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/recipe-card.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8013,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8007,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Menu or recipe text image",
+      "totals": {
+        "calories": 0,
+        "protein": 0,
+        "carbs": 0,
+        "fat": 0
+      },
+      "coverage": {
+        "imageType": "menu_or_screenshot",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [],
+        "visibleComponentCount": 0,
+        "parsedItemCount": 0,
+        "score": 0.65,
+        "warnings": [
+          "Text-like food image; ask the user to choose or confirm items before saving."
+        ],
+        "partial": true
+      },
+      "items": [],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 0,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": null,
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1686,
+          "caption": "{\n  \"imageType\": \"menu_or_screenshot\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"banana bread\",\n      \"zone\": \"center\",\n      \"v"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Recipe Card Screenshot, Calorie Text\", Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Recipe Card Screenshot, Calorie Text\", Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Recipe Card Screenshot, Calorie Text\", Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4007
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3004.8,
+          "caption": "Recipe Card Screenshot, Calorie Text\", Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4697.6
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3308.8
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3308.9
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8006.7
+        }
+      ]
+    },
+    {
+      "label": "generic_no_context_meal",
+      "file": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/test-fixtures/image-eval/burger-fries.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 8016,
+      "model": "image_context_fallback",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8011,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.5,
+      "extractedText": "Mixed meal",
+      "totals": {
+        "calories": 550,
+        "protein": 22,
+        "carbs": 55,
+        "fat": 25
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Mixed meal",
+            "category": "food",
+            "zone": "context fallback",
+            "portionHint": "1 serving",
+            "confidence": 0.48,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 0.65,
+        "warnings": [
+          "Image model timed out; returned a conservative reviewable estimate from the note."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Mixed meal",
+          "calories": 550,
+          "grams": 350,
+          "confidence": 0.48,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": null,
+        "calorieMax": null,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 9000,
+        "expectedLane": "vision",
+        "expectedCuisine": null,
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_boilerplate",
+          "ms": 1494,
+          "caption": "{\n  \"imageType\": \"multi_component_meal\",\n  \"orientation\": \"upright\",\n  \"visibleComponents\": [\n    {\n      \"name\": \"cheeseburger\",\n      \"zone\": \"right\",\n      \""
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "caption_probe_failed",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "context",
+          "reason": "merged_sparse_caption_with_context",
+          "ms": 0,
+          "items": 12,
+          "caption": "Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:,"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 12,
+          "caption": "Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:,"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "no_safe_heuristic_match_trying_caption_text",
+          "ms": 0,
+          "items": 12,
+          "caption": "Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:,"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4007.6
+        },
+        {
+          "stage": "image_caption_text",
+          "ok": false,
+          "reason": "text_parse_failed",
+          "ms": 3006.4,
+          "caption": "Cuisine Router: Generic (Default, Apply The Cuisine Guidance Below When Compatible, The Image:, You Are A Nutrition Parser For A Food-Logging App. Return Valid JSON Only., Schema:, \"ImageType\": \"Nutrition_label\" | \"Single_food\" | \"Multi_component_meal\" | \"Tray_or_thali\" | \"Menu_or_screenshot\" | \"Non_food\" | \"Unclear\", \"Orientation\": \"Upright\" | \"Rotated_90\" | \"Rotated_180\" | \"Rotated_270\" | \"Unknown\", \"VisibleComponents\": [{\"Name\": String, \"Zone\": String, \"VisualEvidence\": String, \"PortionHint\": String, \"Confidence\": Number"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4506.2
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3503.1
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3503.2
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "v2_failed_without_safe_result",
+          "ms": 8009.4
+        }
+      ]
+    }
+  ]
+}

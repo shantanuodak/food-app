@@ -180,6 +180,11 @@ struct ParseLogResponse: Decodable {
     let imageMeta: ParseImageMeta?
     let visionModel: String?
     let visionFallbackUsed: Bool?
+    let parseLaneUsed: String?
+    let parseLaneSource: String?
+    let parseLaneLatencyMs: Int?
+    let fallback: String?
+    let missReason: String?
     /// Diet preference / allergy violations detected against the user's
     /// onboarding profile. Optional so older backend builds without the
     /// field still decode cleanly.

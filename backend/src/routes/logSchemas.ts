@@ -3,6 +3,7 @@ import { z } from 'zod';
 const nonNegative = z.number().finite().min(0);
 const confidenceScore = z.number().finite().min(0).max(1);
 const UNRESOLVED_PLACEHOLDER_SOURCE_ID = 'unresolved_placeholder';
+const inputKindSchema = z.enum(['text', 'image', 'image_barcode', 'image_label', 'voice', 'manual']);
 
 const manualOverrideSchema = z.object({
   enabled: z.boolean(),
@@ -39,7 +40,7 @@ export const saveLogSchema = z.object({
     mealType: z.string().trim().min(1).max(40).optional(),
     confidence: confidenceScore,
     imageRef: z.string().trim().min(1).max(500).optional(),
-    inputKind: z.enum(['text', 'image', 'voice', 'manual']).optional(),
+    inputKind: inputKindSchema.optional(),
     totals: z.object({
       calories: nonNegative,
       protein: nonNegative,
@@ -61,7 +62,7 @@ export const patchLogSchema = z.object({
     mealType: z.string().trim().min(1).max(40).optional(),
     confidence: confidenceScore,
     imageRef: z.string().trim().min(1).max(500).nullable().optional(),
-    inputKind: z.enum(['text', 'image', 'voice', 'manual']).optional(),
+    inputKind: inputKindSchema.optional(),
     totals: z.object({
       calories: nonNegative,
       protein: nonNegative,

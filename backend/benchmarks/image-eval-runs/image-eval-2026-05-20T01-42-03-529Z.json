@@ -1,0 +1,1782 @@
+{
+  "runAt": "2026-05-20T01:42:03.532Z",
+  "baseUrl": "http://localhost:8080",
+  "summary": {
+    "total": 10,
+    "passed": 1,
+    "failed": 9,
+    "avgMs": 5419
+  },
+  "reports": [
+    {
+      "label": "user_photo_01_dal_baati_tray",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/1-Photo-1.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 8053,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8010,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.68,
+      "extractedText": "Dal, Green chutney",
+      "totals": {
+        "calories": 270,
+        "protein": 15,
+        "carbs": 42,
+        "fat": 7
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Dal",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Green chutney",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": true
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 2,
+        "score": 0.67,
+        "warnings": [
+          "This is a partial photo estimate. Please review the detected foods because the detailed image pass timed out.",
+          "sparse known meal component caption"
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Dal",
+          "calories": 240,
+          "grams": 240,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Green chutney",
+          "calories": 30,
+          "grams": 30,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": false,
+        "requiredKeywords": true,
+        "caloriesInRange": false,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 4,
+        "calorieMin": 650,
+        "calorieMax": 1600,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "original_inventory_caption",
+          "ms": 1768.3,
+          "caption": "dal, green chutney"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "original_staples_caption",
+          "ms": 1117.8,
+          "caption": "dal"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "original_sides_caption",
+          "ms": 1175.5,
+          "caption": "dal"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "sparse_known_meal_component_caption_targeted_probes_no_gain",
+          "ms": 0,
+          "items": 2,
+          "caption": "Dal, Green chutney"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 2,
+          "caption": "Dal, Green chutney"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "sparse_known_meal_component_caption_structured_rescue_deferred",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 2,
+          "caption": "Dal, Green chutney"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "sparse_known_meal_component_caption_partial_reviewable_result",
+          "ms": 0,
+          "confidence": 0.68,
+          "items": 2,
+          "caption": "Dal, Green chutney"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4009.9
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4010.2
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 3997.5
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 3997.9
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "bounded_rescue_failed_using_reviewable_caption",
+          "ms": 8008.3,
+          "items": 2,
+          "caption": "visible=3 · coverage=0.67"
+        }
+      ]
+    },
+    {
+      "label": "user_photo_02_dal_roti_sabzi",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/2-Photo-2.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 8325,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8305,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.68,
+      "extractedText": "Dal, Potato sabzi",
+      "totals": {
+        "calories": 400,
+        "protein": 17,
+        "carbs": 63,
+        "fat": 12
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Dal",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Potato sabzi",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 2,
+        "score": 0.67,
+        "warnings": [
+          "This is a partial photo estimate. Please review the detected foods because the detailed image pass timed out.",
+          "sparse known meal component caption"
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "Dal",
+          "calories": 240,
+          "grams": 240,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Potato sabzi",
+          "calories": 160,
+          "grams": 120,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": false,
+        "requiredKeywords": false,
+        "caloriesInRange": false,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [
+        "roti"
+      ],
+      "expected": {
+        "minItems": 4,
+        "calorieMin": 500,
+        "calorieMax": 1300,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_prepare",
+          "ok": true,
+          "reason": "optimized_for_vision",
+          "ms": 296.5,
+          "caption": "1895589B -> 260662B"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_inventory_caption",
+          "ms": 1623.3,
+          "caption": "dal, potato sabzi"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_staples_caption",
+          "ms": 962,
+          "caption": "dal"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_sides_caption",
+          "ms": 1226,
+          "caption": "dal"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "sparse_known_meal_component_caption_targeted_probes_no_gain",
+          "ms": 0,
+          "items": 2,
+          "caption": "Dal, Potato sabzi"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 2,
+          "caption": "Dal, Potato sabzi"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "sparse_known_meal_component_caption_structured_rescue_deferred",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 2,
+          "caption": "Dal, Potato sabzi"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "sparse_known_meal_component_caption_partial_reviewable_result",
+          "ms": 0,
+          "confidence": 0.68,
+          "items": 2,
+          "caption": "Dal, Potato sabzi"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4005.6
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4005.8
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4002
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 4002.2
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "bounded_rescue_failed_using_reviewable_caption",
+          "ms": 8008,
+          "items": 2,
+          "caption": "visible=3 · coverage=0.67"
+        }
+      ]
+    },
+    {
+      "label": "user_photo_03_dal_rice_sides",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/3-Photo-3.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 8277,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 8261,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.68,
+      "extractedText": "White Rice, Dal",
+      "totals": {
+        "calories": 445,
+        "protein": 18.3,
+        "carbs": 82.5,
+        "fat": 6.4
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "White Rice",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Dal",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 3,
+        "parsedItemCount": 2,
+        "score": 0.67,
+        "warnings": [
+          "This is a partial photo estimate. Please review the detected foods because the detailed image pass timed out.",
+          "sparse known meal component caption"
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "White rice",
+          "calories": 205,
+          "grams": 158,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Dal",
+          "calories": 240,
+          "grams": 240,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": false,
+        "requiredKeywords": true,
+        "caloriesInRange": false,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 4,
+        "calorieMin": 550,
+        "calorieMax": 1400,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_prepare",
+          "ok": true,
+          "reason": "optimized_for_vision",
+          "ms": 255.2,
+          "caption": "1223250B -> 158873B"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_inventory_caption",
+          "ms": 1583.1,
+          "caption": "white rice, dal"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_staples_caption",
+          "ms": 870.1,
+          "caption": "white rice"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_sides_caption",
+          "ms": 1180.9,
+          "caption": "white rice"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": false,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "sparse_known_meal_component_caption_targeted_probes_no_gain",
+          "ms": 0,
+          "items": 2,
+          "caption": "White Rice, Dal"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 2,
+          "caption": "White Rice, Dal"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": false,
+          "model": "heuristic",
+          "reason": "sparse_known_meal_component_caption_structured_rescue_deferred",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 2,
+          "caption": "White Rice, Dal"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "sparse_known_meal_component_caption_partial_reviewable_result",
+          "ms": 0,
+          "confidence": 0.68,
+          "items": 2,
+          "caption": "White Rice, Dal"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4003.8
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": false,
+          "reason": "fast_paths_failed_trying_bounded_rescue",
+          "ms": 4003.9
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4001.2
+        },
+        {
+          "stage": "image_structured_rescue",
+          "ok": false,
+          "model": "gemini-2.5-pro",
+          "reason": "hard_rescue_budget_exhausted",
+          "ms": 4001.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "bounded_rescue_failed_using_reviewable_caption",
+          "ms": 8005.2,
+          "items": 2,
+          "caption": "visible=3 · coverage=0.67"
+        }
+      ]
+    },
+    {
+      "label": "user_photo_04_carrot_halwa_nuts",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/4-Photo-4.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 4303,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 4287,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.72,
+      "extractedText": "Gajar Halwa, Cashews",
+      "totals": {
+        "calories": 430,
+        "protein": 7,
+        "carbs": 58,
+        "fat": 19
+      },
+      "coverage": {
+        "imageType": "unclear",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Gajar Halwa",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Cashews",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 1,
+        "score": 0.5,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Gajar halwa",
+          "calories": 430,
+          "grams": 180,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 300,
+        "calorieMax": 900,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_prepare",
+          "ok": true,
+          "reason": "optimized_for_vision",
+          "ms": 280.6,
+          "caption": "1615832B -> 236671B"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_inventory_caption",
+          "ms": 1523,
+          "caption": "gajar halwa, cashews"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 2,
+          "caption": "Gajar Halwa, Cashews"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "common_food_inventory_estimate",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 1,
+          "caption": "Gajar Halwa, Cashews"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4006
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "caption_parallel_path_return",
+          "ms": 4006.1,
+          "items": 1
+        }
+      ]
+    },
+    {
+      "label": "user_photo_05_jalebi_rabri",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/5-Photo-5.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 4282,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 4268,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.72,
+      "extractedText": "Jalebi, Rabri",
+      "totals": {
+        "calories": 730,
+        "protein": 12,
+        "carbs": 104,
+        "fat": 31
+      },
+      "coverage": {
+        "imageType": "unclear",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Jalebi",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Rabri",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Jalebi",
+          "calories": 420,
+          "grams": 110,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Rabri",
+          "calories": 310,
+          "grams": 120,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 300,
+        "calorieMax": 1100,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_prepare",
+          "ok": true,
+          "reason": "optimized_for_vision",
+          "ms": 261.9,
+          "caption": "1358055B -> 171822B"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_inventory_caption",
+          "ms": 2354.9,
+          "caption": "jalebi, rabri"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 2,
+          "caption": "Jalebi, Rabri"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "common_food_inventory_estimate",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 2,
+          "caption": "Jalebi, Rabri"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4006.1
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "caption_parallel_path_return",
+          "ms": 4006.1,
+          "items": 2
+        }
+      ]
+    },
+    {
+      "label": "user_photo_06_large_indian_thali",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/6-Photo-6.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 4349,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 4330,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.72,
+      "extractedText": "Paratha, White Rice",
+      "totals": {
+        "calories": 455,
+        "protein": 10.3,
+        "carbs": 76.5,
+        "fat": 11.4
+      },
+      "coverage": {
+        "imageType": "unclear",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Paratha",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "White Rice",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Paratha",
+          "calories": 250,
+          "grams": 80,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "White rice",
+          "calories": 205,
+          "grams": 158,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": false,
+        "requiredKeywords": false,
+        "caloriesInRange": false,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [
+        "roti"
+      ],
+      "expected": {
+        "minItems": 6,
+        "calorieMin": 900,
+        "calorieMax": 2400,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_prepare",
+          "ok": true,
+          "reason": "optimized_for_vision",
+          "ms": 327.2,
+          "caption": "2663676B -> 338787B"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_inventory_caption",
+          "ms": 2333.7,
+          "caption": "paratha, white rice"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 2,
+          "caption": "Paratha, White Rice"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "common_food_inventory_estimate",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 2,
+          "caption": "Paratha, White Rice"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4002.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "caption_parallel_path_return",
+          "ms": 4002.5,
+          "items": 2
+        }
+      ]
+    },
+    {
+      "label": "user_photo_07_burger_salad",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/7-Photo-7.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 4285,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 4272,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.72,
+      "extractedText": "Fried Chicken Sandwich, Mixed Green Salad",
+      "totals": {
+        "calories": 740,
+        "protein": 35,
+        "carbs": 64,
+        "fat": 38
+      },
+      "coverage": {
+        "imageType": "unclear",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Fried Chicken Sandwich",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Mixed Green Salad",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": true
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Fried chicken sandwich",
+          "calories": 650,
+          "grams": 260,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Side salad",
+          "calories": 90,
+          "grams": 150,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": false,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [
+        "burger"
+      ],
+      "expected": {
+        "minItems": 2,
+        "calorieMin": 500,
+        "calorieMax": 1300,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "us",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_prepare",
+          "ok": true,
+          "reason": "optimized_for_vision",
+          "ms": 267.7,
+          "caption": "1507701B -> 208192B"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_inventory_caption",
+          "ms": 2420.5,
+          "caption": "fried chicken sandwich, mixed green salad"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 2,
+          "caption": "Fried Chicken Sandwich, Mixed Green Salad"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "common_food_inventory_estimate",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 2,
+          "caption": "Fried Chicken Sandwich, Mixed Green Salad"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4004.2
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "caption_parallel_path_return",
+          "ms": 4004.3,
+          "items": 2
+        }
+      ]
+    },
+    {
+      "label": "user_photo_08_fried_snack_balls",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/8-Photo-8.jpg",
+      "status": 200,
+      "ok": true,
+      "ms": 4012,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 4007,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.72,
+      "extractedText": "Ladoo, Salad",
+      "totals": {
+        "calories": 570,
+        "protein": 11,
+        "carbs": 74,
+        "fat": 26
+      },
+      "coverage": {
+        "imageType": "unclear",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Ladoo",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Salad",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": true
+          }
+        ],
+        "visibleComponentCount": 2,
+        "parsedItemCount": 2,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Ladoo",
+          "calories": 480,
+          "grams": 120,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Side salad",
+          "calories": 90,
+          "grams": 150,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": true,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 200,
+        "calorieMax": 900,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": null,
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "original_inventory_caption",
+          "ms": 2403.4,
+          "caption": "ladoo, salad"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 2,
+          "caption": "Ladoo, Salad"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "common_food_inventory_estimate",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 2,
+          "caption": "Ladoo, Salad"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4006.5
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "caption_parallel_path_return",
+          "ms": 4006.6,
+          "items": 2
+        }
+      ]
+    },
+    {
+      "label": "user_photo_09_rajma_chawal",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/9-Photo-9.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 4011,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 4004,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.72,
+      "extractedText": "White Rice, Rajma, Onion, Lemon, Cilantro",
+      "totals": {
+        "calories": 521,
+        "protein": 19.7,
+        "carbs": 88.2,
+        "fat": 10.4
+      },
+      "coverage": {
+        "imageType": "multi_component_meal",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "White Rice",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Rajma",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Onion",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": true
+          },
+          {
+            "name": "Lemon",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          },
+          {
+            "name": "Cilantro",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 5,
+        "parsedItemCount": 3,
+        "score": 0.6,
+        "warnings": [
+          "Some visible foods may need review because the image inventory was assembled from fast caption probes."
+        ],
+        "partial": true
+      },
+      "items": [
+        {
+          "name": "White rice",
+          "calories": 205,
+          "grams": 158,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Rajma",
+          "calories": 300,
+          "grams": 200,
+          "confidence": 0.72,
+          "needsClarification": true
+        },
+        {
+          "name": "Onion",
+          "calories": 16,
+          "grams": 40,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": false,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [
+        "bean"
+      ],
+      "expected": {
+        "minItems": 2,
+        "calorieMin": 500,
+        "calorieMax": 1200,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "original_inventory_caption",
+          "ms": 1964.1,
+          "caption": "white rice, rajma"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "original_sides_caption",
+          "ms": 831.3,
+          "caption": "white rice, rajma, red onion, lemon, cilantro"
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "original_staples_caption",
+          "ms": 1000.5,
+          "caption": "white rice"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "expanded_sparse_known_meal_component_caption",
+          "ms": 0,
+          "items": 5,
+          "caption": "White Rice, Rajma, Onion, Lemon, Cilantro"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 5,
+          "caption": "White Rice, Rajma, Onion, Lemon, Cilantro"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "common_food_inventory_estimate",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 3,
+          "caption": "White Rice, Rajma, Onion, Lemon, Cilantro"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4003
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "caption_parallel_path_return",
+          "ms": 4003.1,
+          "items": 3
+        }
+      ]
+    },
+    {
+      "label": "user_photo_10_vada_pav",
+      "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/10-Photo-10.jpg",
+      "status": 200,
+      "ok": false,
+      "ms": 4294,
+      "model": "gemini-3.1-flash-lite",
+      "parseLaneUsed": "vision",
+      "parseLaneSource": "lane_router",
+      "parseLaneLatencyMs": 4281,
+      "cuisineUsed": "generic",
+      "cuisineSource": "default",
+      "cuisineConfidence": 0.3,
+      "orchestratorVersion": "v2",
+      "fallbackUsed": true,
+      "confidence": 0.72,
+      "extractedText": "Vada Pav",
+      "totals": {
+        "calories": 360,
+        "protein": 9,
+        "carbs": 50,
+        "fat": 13
+      },
+      "coverage": {
+        "imageType": "unclear",
+        "cuisineHints": [
+          "generic"
+        ],
+        "visibleComponents": [
+          {
+            "name": "Vada Pav",
+            "category": "food",
+            "zone": "caption probe",
+            "portionHint": "visible portion",
+            "confidence": 0.7,
+            "isSmallSide": false
+          }
+        ],
+        "visibleComponentCount": 1,
+        "parsedItemCount": 1,
+        "score": 1,
+        "warnings": [],
+        "partial": false
+      },
+      "items": [
+        {
+          "name": "Vada pav",
+          "calories": 360,
+          "grams": 180,
+          "confidence": 0.72,
+          "needsClarification": true
+        }
+      ],
+      "checks": {
+        "httpOk": true,
+        "expectedLane": true,
+        "expectedCuisine": false,
+        "expectedImageType": true,
+        "minItems": true,
+        "requiredKeywords": true,
+        "caloriesInRange": true,
+        "partialAllowed": true,
+        "needsClarification": true,
+        "latency": true
+      },
+      "missingKeywords": [],
+      "expected": {
+        "minItems": 1,
+        "calorieMin": 300,
+        "calorieMax": 800,
+        "allowPartial": true,
+        "expectNeedsClarification": null,
+        "maxMs": 15000,
+        "expectedLane": "vision",
+        "expectedCuisine": "indian",
+        "expectedImageType": null
+      },
+      "error": null,
+      "debugEvents": [
+        {
+          "stage": "image_cuisine_router",
+          "ok": true,
+          "reason": "generic:default",
+          "ms": 0,
+          "confidence": 0.3
+        },
+        {
+          "stage": "image_prepare",
+          "ok": true,
+          "reason": "optimized_for_vision",
+          "ms": 275.2,
+          "caption": "1521479B -> 202435B"
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "parallel_fast_paths_started",
+          "ms": 0
+        },
+        {
+          "stage": "image_caption",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "optimized_inventory_caption",
+          "ms": 1377,
+          "caption": "vada pav"
+        },
+        {
+          "stage": "image_caption_fast_v2",
+          "ok": true,
+          "model": "gemini-3.1-flash-lite",
+          "reason": "single_caption_inventory",
+          "ms": 0,
+          "items": 1,
+          "caption": "Vada Pav"
+        },
+        {
+          "stage": "image_caption_heuristic_v2",
+          "ok": true,
+          "model": "heuristic",
+          "reason": "common_food_inventory_estimate",
+          "ms": 0,
+          "confidence": 0.72,
+          "items": 1,
+          "caption": "Vada Pav"
+        },
+        {
+          "stage": "image_inventory_v2",
+          "ok": false,
+          "model": "gemini-2.5-flash",
+          "reason": "gemini_no_response",
+          "ms": 4005.1
+        },
+        {
+          "stage": "image_orchestrator_v2",
+          "ok": true,
+          "reason": "caption_parallel_path_return",
+          "ms": 4005.2,
+          "items": 1
+        }
+      ]
+    }
+  ]
+}

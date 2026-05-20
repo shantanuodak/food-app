@@ -564,7 +564,7 @@ extension MainLoggingShellView {
         let kind = normalizedInputKind(prepared.parsedLog.inputKind, fallback: latestParseInputKind)
         let queuedItem = pendingQueueItem(for: idempotencyKey)
 
-        if kind == "image" {
+        if kind.hasPrefix("image") {
             if let existingRef = pendingImageStorageRef ?? prepared.parsedLog.imageRef,
                !existingRef.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 prepared = requestWithImageRef(prepared, imageRef: existingRef)
@@ -940,7 +940,7 @@ extension MainLoggingShellView {
 
         if promotedRowID == nil {
             let requestText = HomeLoggingTextMatch.normalizedRowText(request.parsedLog.rawText)
-            let isImageSave = normalizedInputKind(request.parsedLog.inputKind, fallback: latestParseInputKind) == "image"
+            let isImageSave = normalizedInputKind(request.parsedLog.inputKind, fallback: latestParseInputKind).hasPrefix("image")
             if let index = inputRows.firstIndex(where: { row in
                 guard !row.isSaved else { return false }
                 if isImageSave, row.imagePreviewData != nil || row.imageRef != nil {

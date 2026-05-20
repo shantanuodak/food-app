@@ -411,7 +411,7 @@ final class SaveCoordinator: ObservableObject {
         normalizedInputKind: String,
         userIDHint: String?
     ) {
-        guard normalizedInputKind == "image" else { return }
+        guard normalizedInputKind.hasPrefix("image") else { return }
         guard let imageStorageService, let apiClient else { return }
         let store = deferredImageUploadStore
 

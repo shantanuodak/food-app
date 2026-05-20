@@ -17,11 +17,13 @@ enum QuickCameraLoggingService {
         let loggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: Date())
         await QuickCameraNotificationService.notifyAnalyzing(id: pendingId)
 
-        let prepared: PreparedImagePayload? = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: MainLoggingShellView.prepareImagePayload(from: image))
-            }
-        }
+        async let visionTask = Task.detached(priority: .userInitiated) {
+            await ImageVisionPipeline.analyze(image, timeoutMs: 800)
+        }.value
+        async let preparedTask = Task.detached(priority: .userInitiated) {
+            MainLoggingShellView.prepareImagePayload(from: image)
+        }.value
+        let (visionResult, prepared) = await (visionTask, preparedTask)
         let prepMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
 
         guard let prepared else {
@@ -51,11 +53,12 @@ enum QuickCameraLoggingService {
 
         do {
             let requestStartedAt = Date()
-            let response = try await apiClient.parseImageLog(
-                imageData: prepared.uploadData,
-                mimeType: prepared.mimeType,
-                loggedAt: loggedAt,
-                clientAttemptId: clientAttemptId
+            let response = try await performLaneParse(
+                prepared: prepared,
+                visionResult: visionResult,
+                apiClient: apiClient,
+                clientAttemptId: clientAttemptId,
+                loggedAt: loggedAt
             )
             let requestMs = Int(Date().timeIntervalSince(requestStartedAt) * 1000)
             let totalMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
@@ -81,7 +84,7 @@ enum QuickCameraLoggingService {
                 rawText: imageRawText(for: response, fallback: displayName),
                 loggedAt: loggedAt,
                 parseResponse: response,
-                inputKind: "image"
+                inputKind: response.inputKind ?? "image"
             )
             let pendingLog = QuickCameraPendingLog(
                 id: pendingId,
@@ -146,6 +149,126 @@ enum QuickCameraLoggingService {
                 body: "Retake the picture from Food Camera."
             )
         }
+    }
+
+    private enum QuickCameraParseLane {
+        case barcode(String, String?)
+        case label(String)
+        case vision
+    }
+
+    private static func decideLane(visionResult: ImageVisionResult) -> QuickCameraParseLane {
+        if let barcode = visionResult.barcode, barcode.confidence >= 0.95 {
+            return .barcode(barcode.payload, barcode.symbology)
+        }
+        if let label = visionResult.labelPanel, label.confidence >= 0.7 {
+            return .label(visionResult.ocrText)
+        }
+        if let barcode = visionResult.barcode,
+           barcode.confidence >= 0.80,
+           visionResult.labelPanel == nil {
+            return .barcode(barcode.payload, barcode.symbology)
+        }
+        return .vision
+    }
+
+    private static func performLaneParse(
+        prepared: PreparedImagePayload,
+        visionResult: ImageVisionResult,
+        apiClient: APIClient,
+        clientAttemptId: String,
+        loggedAt: String
+    ) async throws -> ParseLogResponse {
+        switch decideLane(visionResult: visionResult) {
+        case let .barcode(code, symbology):
+            do {
+                let response = try await apiClient.parseBarcode(
+                    code: code,
+                    symbology: symbology,
+                    clientAttemptId: clientAttemptId,
+                    loggedAt: loggedAt
+                )
+                if response.fallback == "image" {
+                    if visionResult.labelPanel != nil, !visionResult.ocrText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                        return try await parseLabel(
+                            prepared: prepared,
+                            ocrText: visionResult.ocrText,
+                            apiClient: apiClient,
+                            clientAttemptId: clientAttemptId,
+                            loggedAt: loggedAt
+                        )
+                    }
+                    return try await parseVision(
+                        prepared: prepared,
+                        apiClient: apiClient,
+                        clientAttemptId: clientAttemptId,
+                        loggedAt: loggedAt
+                    )
+                }
+                return response
+            } catch {
+                return try await parseVision(
+                    prepared: prepared,
+                    apiClient: apiClient,
+                    clientAttemptId: clientAttemptId,
+                    loggedAt: loggedAt
+                )
+            }
+        case let .label(ocrText):
+            do {
+                return try await parseLabel(
+                    prepared: prepared,
+                    ocrText: ocrText,
+                    apiClient: apiClient,
+                    clientAttemptId: clientAttemptId,
+                    loggedAt: loggedAt
+                )
+            } catch {
+                return try await parseVision(
+                    prepared: prepared,
+                    apiClient: apiClient,
+                    clientAttemptId: clientAttemptId,
+                    loggedAt: loggedAt
+                )
+            }
+        case .vision:
+            return try await parseVision(
+                prepared: prepared,
+                apiClient: apiClient,
+                clientAttemptId: clientAttemptId,
+                loggedAt: loggedAt
+            )
+        }
+    }
+
+    private static func parseLabel(
+        prepared: PreparedImagePayload,
+        ocrText: String,
+        apiClient: APIClient,
+        clientAttemptId: String,
+        loggedAt: String
+    ) async throws -> ParseLogResponse {
+        try await apiClient.parseLabel(
+            ocrText: ocrText,
+            imageData: prepared.uploadData,
+            mimeType: prepared.mimeType,
+            clientAttemptId: clientAttemptId,
+            loggedAt: loggedAt
+        )
+    }
+
+    private static func parseVision(
+        prepared: PreparedImagePayload,
+        apiClient: APIClient,
+        clientAttemptId: String,
+        loggedAt: String
+    ) async throws -> ParseLogResponse {
+        try await apiClient.parseImageLog(
+            imageData: prepared.uploadData,
+            mimeType: prepared.mimeType,
+            loggedAt: loggedAt,
+            clientAttemptId: clientAttemptId
+        )
     }
 
     private static func displayName(for response: ParseLogResponse) -> String {

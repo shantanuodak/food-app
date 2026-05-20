@@ -40,7 +40,7 @@ type SaveLogInput = {
   loggedAt: string;
   mealType?: string;
   imageRef?: string;
-  inputKind?: 'text' | 'image' | 'voice' | 'manual';
+  inputKind?: 'text' | 'image' | 'image_barcode' | 'image_label' | 'voice' | 'manual';
   confidence: number;
   totals: {
     calories: number;
@@ -340,7 +340,7 @@ type UpdateLogInput = {
   loggedAt?: string;
   mealType?: string;
   imageRef?: string | null;
-  inputKind?: 'text' | 'image' | 'voice' | 'manual';
+  inputKind?: 'text' | 'image' | 'image_barcode' | 'image_label' | 'voice' | 'manual';
   confidence: number;
   totals: {
     calories: number;

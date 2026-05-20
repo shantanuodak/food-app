@@ -38,6 +38,7 @@ describe('rewardsService.getRewardsSummary', () => {
 
     expect(query).toHaveBeenCalledWith(expect.stringContaining('WITH log_stats AS'), ['u1']);
     expect(query.mock.calls[0]?.[0]).toContain('fl.id = fli.food_log_id');
+    expect(query.mock.calls[0]?.[0]).toContain("LIKE 'image%'");
     expect(summary.timezone).toBe('America/New_York');
     expect(summary.generatedAt).toEqual(expect.any(String));
     expect(summary.totals).toEqual({

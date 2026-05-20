@@ -81,7 +81,7 @@ describe('food image postprocessing', () => {
     expect(processed.totals.calories).toBe(285);
   });
 
-  test('uses known packaged product facts for obvious RXBAR blueberry photo results', () => {
+  test('does not override packaged-product estimates with baked-in facts', () => {
     const processed = postProcessFoodImageResult(
       result([
         item({
@@ -107,13 +107,14 @@ describe('food image postprocessing', () => {
       quantity: 1,
       unit: 'bar',
       grams: 52,
-      calories: 180,
+      calories: 210,
       protein: 12,
-      carbs: 24,
-      fat: 6,
+      carbs: 23,
+      fat: 9,
       needsClarification: false
     });
-    expect(processed.totals).toEqual({ calories: 180, protein: 12, carbs: 24, fat: 6 });
+    expect(processed.items[0].nutritionSourceId).toBe('gemini_image_estimate');
+    expect(processed.totals).toEqual({ calories: 210, protein: 12, carbs: 23, fat: 9 });
   });
 
   test('merges flatbread alias duplicates into one clean item', () => {

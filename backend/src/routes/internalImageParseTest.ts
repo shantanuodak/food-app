@@ -2,16 +2,29 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
-import { parseImageWithGemini, type ImageParseDebugEvent } from '../services/imageParseService.js';
+import { parseImageWithGemini, type ImageParseDebugEvent, type ImageParseServiceResult } from '../services/imageParseService.js';
+import { routeImageParse } from '../services/imageParse/router.js';
+import type { Cuisine } from '../services/imageParse/cuisineClassifier.js';
 
 const router = Router();
 
 const supportedImageMimeTypes = new Set(['image/jpeg', 'image/png', 'image/heic']);
 
+type InternalImageParseResult = ImageParseServiceResult & {
+  laneSource?: string;
+  laneLatencyMs?: number;
+};
+
 const imageParseTestSchema = z.object({
   imageBase64: z.string().trim().min(1),
   mimeType: z.string().trim().min(1).max(100),
-  contextNote: z.string().trim().max(240).optional()
+  contextNote: z.string().trim().max(240).optional(),
+  lane: z.enum(['barcode', 'label', 'vision']).optional().default('vision'),
+  barcode: z.string().trim().regex(/^\d{8,14}$/).optional(),
+  symbology: z.string().trim().max(32).optional(),
+  ocrText: z.string().trim().min(1).max(4000).optional(),
+  userLocale: z.string().trim().max(40).optional(),
+  recentCuisines: z.array(z.enum(['indian', 'us', 'western', 'eastAsian', 'mediterranean', 'latin', 'generic'])).max(14).optional()
 });
 
 function requireInternalKey(key: string | undefined): void {
@@ -45,12 +58,29 @@ router.post('/image-parse', async (req, res, next) => {
       throw new ApiError(400, 'INVALID_INPUT', `Image exceeds max size (${config.aiImageMaxBytes} bytes).`);
     }
 
-    const parsed = await parseImageWithGemini({
-      mimeType: body.mimeType,
-      dataBase64: body.imageBase64,
-      contextNote: body.contextNote,
-      debugEvents
-    });
+    const useLaneRouter = config.aiImageLaneRouterEnabled || body.lane !== 'vision';
+    const parsed: InternalImageParseResult =
+      useLaneRouter
+        ? await routeImageParse({
+            lane: body.lane,
+            barcode: body.barcode ? { code: body.barcode, symbology: body.symbology } : undefined,
+            ocrText: body.ocrText,
+            image: {
+              mimeType: body.mimeType,
+              dataBase64: body.imageBase64,
+              contextNote: body.contextNote,
+              debugEvents
+            },
+            contextNote: body.contextNote,
+            userLocale: body.userLocale,
+            recentCuisines: body.recentCuisines as Cuisine[] | undefined
+          })
+        : await parseImageWithGemini({
+            mimeType: body.mimeType,
+            dataBase64: body.imageBase64,
+            contextNote: body.contextNote,
+            debugEvents
+          });
 
     const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
 
@@ -68,6 +98,17 @@ router.post('/image-parse', async (req, res, next) => {
       fallbackUsed: parsed.fallbackUsed,
       lowConfidenceAccepted: parsed.lowConfidenceAccepted,
       orchestratorVersion: parsed.orchestratorVersion,
+      parseLaneUsed: body.lane,
+      parseLaneSource: useLaneRouter
+        ? body.lane === 'vision'
+          ? 'lane_router'
+          : parsed.laneSource ?? body.lane
+        : 'legacy_image',
+      parseLaneLatencyMs: parsed.laneLatencyMs ?? Math.round(parseDurationMs),
+      cuisineUsed: parsed.cuisine?.cuisine ?? parsed.coverage?.cuisineHints?.[0] ?? null,
+      cuisineSource: parsed.cuisine?.source ?? null,
+      cuisineConfidence: parsed.cuisine?.confidence ?? null,
+      cuisineMatchedKeywords: parsed.cuisine?.matchedKeywords ?? [],
       coverage: parsed.coverage ?? null,
       confidence: parsed.result.confidence,
       extractedText: parsed.extractedText,

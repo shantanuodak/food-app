@@ -14,6 +14,7 @@ import {
   shouldAcceptCachedResult
 } from './parsePipelineResultUtils.js';
 import { postProcessFoodTextResult } from './foodTextPostprocessService.js';
+import { repairFoodTextInventoryCoverage } from './foodTextInventoryRepairService.js';
 import type {
   ParseDecisionContext,
   ParseDecisionResult,
@@ -114,6 +115,11 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
   let geminiCircuitWasOpen = false;
   let geminiEnabledForRequest = false;
   let geminiFailureReason: UnresolvedReason | null = null;
+  const inventoryBaseline = repairFoodTextInventoryCoverage(text, result);
+  const inventoryBaselineUsed = inventoryBaseline.items.length > result.items.length;
+  if (inventoryBaselineUsed) {
+    result = inventoryBaseline;
+  }
 
   for (const provider of providers) {
     const providerEnabled = provider.isEnabled(context);
@@ -178,8 +184,25 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
       reasons.push(geminiCircuitWasOpen ? 'gemini_circuit_open' : (geminiFailureReason ?? 'gemini_request_failed'));
     }
     logUnresolvedRoute(text, context, reasons);
+    const unresolvedResult = normalizeParseResultContract(ensureItemExplanations(sanitizeResultSources(result, route), route), route);
+    const repairedResult = normalizeParseResultContract(
+      ensureItemExplanations(repairFoodTextInventoryCoverage(text, unresolvedResult), 'gemini'),
+      route
+    );
+    if (repairedResult.items.length > unresolvedResult.items.length || (inventoryBaselineUsed && unresolvedResult.items.length > 0)) {
+      return {
+        result: repairedResult,
+        route,
+        cacheHit,
+        sourcesUsed: collectSourcesUsed(repairedResult.items, route, cacheHit),
+        reasonCodes: [...reasons, 'text_inventory_repair'],
+        fallbackUsed,
+        fallbackModel,
+        fallbackUsage
+      };
+    }
     return {
-      result: normalizeParseResultContract(ensureItemExplanations(sanitizeResultSources(result, route), route), route),
+      result: unresolvedResult,
       route,
       cacheHit,
       sourcesUsed: collectSourcesUsed(result.items, route, cacheHit),
@@ -191,10 +214,17 @@ async function runProviders(text: string, context: ParseDecisionContext, provide
   }
 
   result = postProcessFoodTextResult(text, sanitizeResultSources(result, route));
+  const postProcessedResult = result;
+  result = repairFoodTextInventoryCoverage(text, result);
+  const inventoryRepairApplied = result.items.length > postProcessedResult.items.length || (
+    result.items.length === postProcessedResult.items.length
+    && result.items.some((item) => item.nutritionSourceId === 'gemini_text_inventory_repair')
+    && !postProcessedResult.items.some((item) => item.nutritionSourceId === 'gemini_text_inventory_repair')
+  );
   result = ensureItemExplanations(result, route);
   result = normalizeParseResultContract(result, route);
   const sourcesUsed = collectSourcesUsed(result.items, route, cacheHit);
-  const reasonCodes: string[] = [];
+  const reasonCodes: string[] = inventoryRepairApplied ? ['text_inventory_repair'] : [];
 
   return {
     result,

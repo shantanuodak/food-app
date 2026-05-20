@@ -4,7 +4,7 @@ enum HomeLoggingRowFactory {
     nonisolated static func normalizedInputKind(_ rawValue: String?, fallback: String = "text") -> String {
         let normalized = rawValue?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
         switch normalized {
-        case "text", "image", "voice", "manual":
+        case "text", "image", "image_barcode", "image_label", "voice", "manual":
             return normalized
         default:
             return fallback
@@ -27,7 +27,7 @@ enum HomeLoggingRowFactory {
         let body = item.request.parsedLog
         let parsedItems = body.items.map(parsedFoodItem(from:))
         let displayText: String
-        if normalizedInputKind(body.inputKind, fallback: "text") == "image" &&
+        if normalizedInputKind(body.inputKind, fallback: "text").hasPrefix("image") &&
             body.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             displayText = "Photo meal"
         } else {
@@ -58,7 +58,8 @@ enum HomeLoggingRowFactory {
         let items = entry.items.map(parsedFoodItem(from:))
         let stableID = UUID(uuidString: entry.id) ?? UUID(uuid: stableUUID(from: entry.id))
         let displayText: String
-        if entry.inputKind == "image" && entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if HomeLoggingRowFactory.normalizedInputKind(entry.inputKind, fallback: "text").hasPrefix("image") &&
+            entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             displayText = "Photo meal"
         } else {
             displayText = entry.rawText

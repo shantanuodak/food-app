@@ -9,19 +9,37 @@ extension APIClientError {
         case .missingAuthToken:
             return true
         case let .server(statusCode, payload):
-            if statusCode == 401 || (treatForbiddenAsAuthFailure && statusCode == 403) {
-                return true
-            }
-
             let code = payload.code.uppercased()
-            if code == "UNAUTHORIZED" || code.contains("TOKEN") || code.contains("AUTH") {
+            let message = payload.message.lowercased()
+
+            if statusCode == 401 {
                 return true
             }
 
-            let message = payload.message.lowercased()
+            if treatForbiddenAsAuthFailure && statusCode == 403 {
+                return code == "UNAUTHORIZED" ||
+                    code == "INVALID_TOKEN" ||
+                    code == "TOKEN_EXPIRED" ||
+                    code == "JWT_EXPIRED" ||
+                    code == "MISSING_BEARER_TOKEN" ||
+                    message.contains("invalid token") ||
+                    message.contains("missing bearer token") ||
+                    message.contains("token expired") ||
+                    message.contains("jwt expired")
+            }
+
+            if code == "UNAUTHORIZED" ||
+                code == "INVALID_TOKEN" ||
+                code == "TOKEN_EXPIRED" ||
+                code == "JWT_EXPIRED" ||
+                code == "MISSING_BEARER_TOKEN" {
+                return true
+            }
+
             if message.contains("invalid token") ||
                 message.contains("missing bearer token") ||
-                message.contains("jwt") ||
+                message.contains("token expired") ||
+                message.contains("jwt expired") ||
                 message.contains("unauthorized") {
                 return true
             }

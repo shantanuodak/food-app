@@ -10,6 +10,7 @@ import { executePrimaryParse, executePrimaryParseStreaming } from '../services/p
 import { getGeminiCircuitRetryAfterSeconds } from '../services/geminiFlashClient.js';
 import { collectSourcesUsed } from '../services/parseContractService.js';
 import { parseImageWithGemini, type ImageParseDebugEvent } from '../services/imageParseService.js';
+import { routeImageParse } from '../services/imageParse/router.js';
 import { checkParseRateLimit } from '../services/parseRateLimiterService.js';
 import { getDietAndAllergies } from '../services/onboardingService.js';
 import { detectDietaryConflicts } from '../services/dietaryConflictService.js';
@@ -47,6 +48,23 @@ const imageParseSchema = z.object({
     .optional()
 });
 
+const barcodeParseSchema = z.object({
+  clientAttemptId: z.string().trim().min(1).max(120).optional(),
+  barcode: z.string().trim().regex(/^\d{8,14}$/),
+  symbology: z.string().trim().max(32).optional(),
+  contextNote: z.string().trim().max(240).optional(),
+  loggedAt: z.string().datetime().optional()
+});
+
+const labelParseSchema = z.object({
+  clientAttemptId: z.string().trim().min(1).max(120).optional(),
+  ocrText: z.string().trim().min(20).max(4000),
+  imageBase64: z.string().trim().min(1).optional(),
+  mimeType: z.string().trim().min(1).max(100).optional(),
+  contextNote: z.string().trim().max(240).optional(),
+  loggedAt: z.string().datetime().optional()
+});
+
 const imageParseAttemptSchema = z.object({
   clientAttemptId: z.string().trim().min(1).max(120),
   parseRequestId: z.string().trim().min(1).max(120).optional().nullable(),
@@ -82,6 +100,33 @@ function imageParseAttemptErrorCode(err: unknown): string {
   return 'INTERNAL_ERROR';
 }
 
+async function imageDietaryFlagsFor(authUserId: string, itemNames: string[]) {
+  try {
+    const dietaryProfile = await getDietAndAllergies(authUserId);
+    if (dietaryProfile.dietPreference || dietaryProfile.allergies.length > 0) {
+      return detectDietaryConflicts({
+        itemNames,
+        dietPreference: dietaryProfile.dietPreference,
+        allergies: dietaryProfile.allergies
+      });
+    }
+  } catch (err) {
+    console.warn('[dietary] image lane flag computation failed; returning no flags', err);
+  }
+  return [];
+}
+
+function emptyParseBudget(budget: Awaited<ReturnType<typeof getBudgetSnapshotForUser>>) {
+  return {
+    dailyLimitUsd: budget.dailyBudgetUsd,
+    dailyUsedTodayUsd: roundUsd(budget.globalUsedTodayUsd),
+    userSoftCapUsd: budget.userSoftCapUsd,
+    userUsedTodayUsd: roundUsd(budget.userUsedTodayUsd),
+    userSoftCapExceeded: budget.userSoftCapExceeded,
+    fallbackAllowed: config.aiImageEnableFallback
+  };
+}
+
 router.post('/image-attempts', async (req, res, next) => {
   try {
     const auth = res.locals.auth as { userId: string };
@@ -106,6 +151,240 @@ router.post('/image-attempts', async (req, res, next) => {
     });
     res.status(202).json({ status: 'accepted' });
   } catch (err) {
+    next(err);
+  }
+});
+
+router.post('/barcode', async (req, res, next) => {
+  const startedAt = process.hrtime.bigint();
+  try {
+    if (!config.aiImageParseEnabled) {
+      throw new ApiError(403, 'IMAGE_PARSE_DISABLED', 'Image parse is disabled');
+    }
+
+    const auth = res.locals.auth as { userId: string; authProvider?: string; email?: string | null };
+    const rateLimit = checkParseRateLimit(auth.userId);
+    if (!rateLimit.allowed) {
+      const error = new ApiError(429, 'RATE_LIMITED', 'Too many parse requests. Please retry shortly.');
+      (error as ApiError & { retryAfterSeconds?: number }).retryAfterSeconds = rateLimit.retryAfterSeconds;
+      throw error;
+    }
+
+    const body = barcodeParseSchema.parse(req.body || {});
+    const loggedAt = body.loggedAt ? new Date(body.loggedAt) : new Date();
+    if (Number.isNaN(loggedAt.valueOf())) {
+      throw new ApiError(400, 'INVALID_INPUT', 'Invalid loggedAt timestamp');
+    }
+    await assertLoggedAtNotInFutureForUser(auth.userId, loggedAt);
+
+    const parseRequestId = res.locals.requestId as string;
+    const parsed = await routeImageParse({
+      lane: 'barcode',
+      barcode: { code: body.barcode, symbology: body.symbology },
+      contextNote: body.contextNote,
+      clientAttemptId: body.clientAttemptId
+    });
+
+    const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+    const roundedDurationMs = Math.round(parseDurationMs * 10) / 10;
+    const budget = await getBudgetSnapshotForUser({
+      userId: auth.userId,
+      dailyBudgetUsd: config.aiDailyBudgetUsd,
+      userSoftCapUsd: config.aiUserSoftCapUsd
+    });
+
+    const needsClarification = parsed.fallback === 'image' || parsed.result.items.length === 0;
+    if (!needsClarification) {
+      await createParseRequest({
+        requestId: parseRequestId,
+        userId: auth.userId,
+        rawText: parsed.extractedText,
+        needsClarification: false,
+        cacheHit: false,
+        primaryRoute: 'cache',
+        parseResult: parsed.result,
+        authProvider: auth.authProvider,
+        email: auth.email
+      });
+    }
+
+    const dietaryFlags = needsClarification
+      ? []
+      : await imageDietaryFlagsFor(auth.userId, parsed.result.items.map((item) => item.name));
+
+    res.setHeader('x-parse-route', 'barcode');
+    res.setHeader('x-parse-duration-ms', String(roundedDurationMs));
+    res.setHeader('x-parse-input-kind', 'image_barcode');
+    res.setHeader('x-image-parse-lane', 'barcode');
+    if (parsed.laneSource) res.setHeader('x-image-parse-lane-source', parsed.laneSource);
+
+    res.status(200).json({
+      requestId: parseRequestId,
+      parseRequestId,
+      parseVersion: config.parseVersion,
+      route: 'barcode',
+      cacheHit: false,
+      sourcesUsed: needsClarification ? [] : ['cache'],
+      fallbackUsed: parsed.fallback === 'image',
+      fallbackModel: null,
+      budget: emptyParseBudget(budget),
+      needsClarification,
+      clarificationQuestions: needsClarification ? ['Barcode was not found. Trying image parsing may work better.'] : [],
+      reasonCodes: needsClarification ? ['barcode_not_found'] : [],
+      parseDurationMs: roundedDurationMs,
+      loggedAt: loggedAt.toISOString(),
+      confidence: parsed.result.confidence,
+      totals: parsed.result.totals,
+      items: parsed.result.items,
+      assumptions: parsed.result.assumptions,
+      dietaryFlags,
+      inputKind: 'image_barcode',
+      extractedText: parsed.extractedText,
+      imageMeta: {
+        mimeType: 'barcode',
+        bytes: 0,
+        orchestratorVersion: parsed.orchestratorVersion,
+        coverage: parsed.coverage ?? null
+      },
+      visionModel: parsed.model,
+      visionFallbackUsed: false,
+      visionLowConfidenceAccepted: parsed.lowConfidenceAccepted,
+      parseLaneUsed: 'barcode',
+      parseLaneSource: parsed.laneSource ?? null,
+      parseLaneLatencyMs: parsed.laneLatencyMs ?? null,
+      fallback: parsed.fallback ?? null,
+      missReason: parsed.fallback === 'image' ? 'barcode_not_found' : null
+    });
+  } catch (err) {
+    if (err && typeof err === 'object' && 'retryAfterSeconds' in err) {
+      const retryAfter = (err as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+      if (typeof retryAfter === 'number') res.setHeader('Retry-After', String(retryAfter));
+    }
+    next(err);
+  }
+});
+
+router.post('/label', async (req, res, next) => {
+  const startedAt = process.hrtime.bigint();
+  try {
+    if (!config.aiImageParseEnabled) {
+      throw new ApiError(403, 'IMAGE_PARSE_DISABLED', 'Image parse is disabled');
+    }
+
+    const auth = res.locals.auth as { userId: string; authProvider?: string; email?: string | null };
+    const rateLimit = checkParseRateLimit(auth.userId);
+    if (!rateLimit.allowed) {
+      const error = new ApiError(429, 'RATE_LIMITED', 'Too many parse requests. Please retry shortly.');
+      (error as ApiError & { retryAfterSeconds?: number }).retryAfterSeconds = rateLimit.retryAfterSeconds;
+      throw error;
+    }
+
+    const body = labelParseSchema.parse(req.body || {});
+    if (body.imageBase64 && body.mimeType && !supportedImageMimeTypes.has(body.mimeType)) {
+      throw new ApiError(400, 'INVALID_INPUT', 'Unsupported image type. Use JPEG, PNG, or HEIC.');
+    }
+    const loggedAt = body.loggedAt ? new Date(body.loggedAt) : new Date();
+    if (Number.isNaN(loggedAt.valueOf())) {
+      throw new ApiError(400, 'INVALID_INPUT', 'Invalid loggedAt timestamp');
+    }
+    await assertLoggedAtNotInFutureForUser(auth.userId, loggedAt);
+
+    const parseRequestId = res.locals.requestId as string;
+    const parsed = await routeImageParse({
+      lane: 'label',
+      ocrText: body.ocrText,
+      image: body.imageBase64 && body.mimeType ? { mimeType: body.mimeType, dataBase64: body.imageBase64 } : undefined,
+      contextNote: body.contextNote,
+      clientAttemptId: body.clientAttemptId
+    });
+
+    let budget = await getBudgetSnapshotForUser({
+      userId: auth.userId,
+      dailyBudgetUsd: config.aiDailyBudgetUsd,
+      userSoftCapUsd: config.aiUserSoftCapUsd
+    });
+    for (const usageEvent of parsed.usageEvents) {
+      try {
+        budget = await recordAiCostWithBudgetGuard({
+          userId: auth.userId,
+          requestId: parseRequestId,
+          feature: usageEvent.feature,
+          model: usageEvent.usage.model,
+          inputTokens: usageEvent.usage.inputTokens,
+          outputTokens: usageEvent.usage.outputTokens,
+          estimatedCostUsd: usageEvent.estimatedCostUsd,
+          dailyBudgetUsd: config.aiDailyBudgetUsd,
+          userSoftCapUsd: config.aiUserSoftCapUsd
+        });
+      } catch (err) {
+        console.warn('[label_parse_cost_record_failed_nonfatal]', err);
+      }
+    }
+
+    const needsClarification =
+      parsed.result.confidence < config.aiImageConfidenceMin || parsed.coverage?.partial === true;
+    await createParseRequest({
+      requestId: parseRequestId,
+      userId: auth.userId,
+      rawText: parsed.extractedText,
+      needsClarification,
+      cacheHit: false,
+      primaryRoute: 'gemini',
+      parseResult: parsed.result,
+      authProvider: auth.authProvider,
+      email: auth.email
+    });
+
+    const parseDurationMs = Number(process.hrtime.bigint() - startedAt) / 1_000_000;
+    const roundedDurationMs = Math.round(parseDurationMs * 10) / 10;
+    const dietaryFlags = await imageDietaryFlagsFor(auth.userId, parsed.result.items.map((item) => item.name));
+
+    res.setHeader('x-parse-route', 'label');
+    res.setHeader('x-parse-duration-ms', String(roundedDurationMs));
+    res.setHeader('x-parse-input-kind', 'image_label');
+    res.setHeader('x-image-parse-lane', 'label');
+    if (parsed.laneSource) res.setHeader('x-image-parse-lane-source', parsed.laneSource);
+
+    res.status(200).json({
+      requestId: parseRequestId,
+      parseRequestId,
+      parseVersion: config.parseVersion,
+      route: 'label',
+      cacheHit: false,
+      sourcesUsed: ['gemini'],
+      fallbackUsed: parsed.fallbackUsed,
+      fallbackModel: parsed.fallbackUsed ? parsed.model : null,
+      budget: emptyParseBudget(budget),
+      needsClarification,
+      clarificationQuestions: needsClarification ? ['Please review the serving size and visible label values.'] : [],
+      reasonCodes: parsed.coverage?.partial ? ['label_partial_coverage'] : [],
+      parseDurationMs: roundedDurationMs,
+      loggedAt: loggedAt.toISOString(),
+      confidence: parsed.result.confidence,
+      totals: parsed.result.totals,
+      items: parsed.result.items,
+      assumptions: parsed.result.assumptions,
+      dietaryFlags,
+      inputKind: 'image_label',
+      extractedText: parsed.extractedText,
+      imageMeta: {
+        mimeType: body.mimeType ?? 'ocr_text',
+        bytes: body.imageBase64 ? Math.floor(Buffer.byteLength(body.imageBase64, 'base64')) : 0,
+        orchestratorVersion: parsed.orchestratorVersion,
+        coverage: parsed.coverage ?? null
+      },
+      visionModel: parsed.model,
+      visionFallbackUsed: parsed.fallbackUsed,
+      visionLowConfidenceAccepted: parsed.lowConfidenceAccepted,
+      parseLaneUsed: 'label',
+      parseLaneSource: parsed.laneSource ?? null,
+      parseLaneLatencyMs: parsed.laneLatencyMs ?? null
+    });
+  } catch (err) {
+    if (err && typeof err === 'object' && 'retryAfterSeconds' in err) {
+      const retryAfter = (err as { retryAfterSeconds?: unknown }).retryAfterSeconds;
+      if (typeof retryAfter === 'number') res.setHeader('Retry-After', String(retryAfter));
+    }
     next(err);
   }
 });
@@ -159,12 +438,24 @@ router.post('/image', async (req, res, next) => {
     await assertLoggedAtNotInFutureForUser(auth.userId, loggedAt);
 
     const parseRequestId = res.locals.requestId as string;
-    const parsedImage = await parseImageWithGemini({
-      mimeType: body.mimeType,
-      dataBase64: body.imageBase64,
-      contextNote: body.contextNote,
-      debugEvents
-    });
+    const parsedImage = config.aiImageLaneRouterEnabled
+      ? await routeImageParse({
+          lane: 'vision',
+          image: {
+            mimeType: body.mimeType,
+            dataBase64: body.imageBase64,
+            contextNote: body.contextNote,
+            debugEvents
+          },
+          contextNote: body.contextNote,
+          userLocale: req.header('accept-language')?.split(',')[0]?.trim()
+        })
+      : await parseImageWithGemini({
+          mimeType: body.mimeType,
+          dataBase64: body.imageBase64,
+          contextNote: body.contextNote,
+          debugEvents
+        });
 
     let budget = await getBudgetSnapshotForUser({
       userId: auth.userId,
@@ -329,6 +620,7 @@ router.post('/image', async (req, res, next) => {
     res.setHeader('x-parse-fallback', parsedImage.fallbackUsed ? 'used' : 'not_used');
     res.setHeader('x-parse-clarification', needsClarification ? 'needed' : 'not_needed');
     res.setHeader('x-parse-input-kind', 'image');
+    res.setHeader('x-image-parse-lane', 'vision');
     res.setHeader('x-vision-model', parsedImage.model);
     res.setHeader('x-vision-fallback', parsedImage.fallbackUsed ? 'used' : 'not_used');
     res.setHeader('x-vision-low-confidence-accepted', parsedImage.lowConfidenceAccepted ? 'true' : 'false');
@@ -371,11 +663,18 @@ router.post('/image', async (req, res, next) => {
         mimeType: body.mimeType,
         bytes: imageBytes,
         orchestratorVersion: parsedImage.orchestratorVersion,
-        coverage: parsedImage.coverage ?? null
+        coverage: parsedImage.coverage ?? null,
+        cuisine: parsedImage.cuisine ?? null
       },
       visionModel: parsedImage.model,
       visionFallbackUsed: parsedImage.fallbackUsed,
-      visionLowConfidenceAccepted: parsedImage.lowConfidenceAccepted
+      visionLowConfidenceAccepted: parsedImage.lowConfidenceAccepted,
+      parseLaneUsed: 'vision',
+      parseLaneSource: config.aiImageLaneRouterEnabled ? 'lane_router' : 'legacy_image',
+      parseLaneLatencyMs: Math.round(parseDurationMs),
+      cuisineUsed: parsedImage.cuisine?.cuisine ?? parsedImage.coverage?.cuisineHints?.[0] ?? null,
+      cuisineSource: parsedImage.cuisine?.source ?? null,
+      cuisineConfidence: parsedImage.cuisine?.confidence ?? null
     });
   } catch (err) {
     if (clientAttemptId && authForAttempt?.userId) {

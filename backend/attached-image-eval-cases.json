@@ -1,0 +1,120 @@
+[
+  {
+    "label": "user_photo_01_dal_baati_tray",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/1-Photo-1.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "requiredKeywords": ["dal", "chutney"],
+    "minItems": 4,
+    "calorieMin": 650,
+    "calorieMax": 1600,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_02_dal_roti_sabzi",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/2-Photo-2.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "requiredKeywords": ["dal", "roti"],
+    "minItems": 4,
+    "calorieMin": 500,
+    "calorieMax": 1300,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_03_dal_rice_sides",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/3-Photo-3.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "requiredKeywords": ["dal", "rice"],
+    "minItems": 4,
+    "calorieMin": 550,
+    "calorieMax": 1400,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_04_carrot_halwa_nuts",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/4-Photo-4.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "requiredKeywords": ["halwa"],
+    "minItems": 1,
+    "calorieMin": 300,
+    "calorieMax": 900,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_05_jalebi_rabri",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/5-Photo-5.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "requiredKeywords": ["jalebi"],
+    "minItems": 1,
+    "calorieMin": 300,
+    "calorieMax": 1100,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_06_large_indian_thali",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/6-Photo-6.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "requiredKeywords": ["rice", "roti"],
+    "minItems": 6,
+    "calorieMin": 900,
+    "calorieMax": 2400,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_07_burger_salad",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/7-Photo-7.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "us",
+    "requiredKeywords": ["burger", "salad"],
+    "minItems": 2,
+    "calorieMin": 500,
+    "calorieMax": 1300,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_08_fried_snack_balls",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/8-Photo-8.jpg",
+    "expectedLane": "vision",
+    "minItems": 1,
+    "calorieMin": 200,
+    "calorieMax": 900,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_09_rajma_chawal",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/9-Photo-9.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "requiredKeywords": ["rice", "bean"],
+    "minItems": 2,
+    "calorieMin": 500,
+    "calorieMax": 1200,
+    "allowPartial": true,
+    "maxMs": 15000
+  },
+  {
+    "label": "user_photo_10_vada_pav",
+    "file": "/tmp/codex-remote-attachments/019e4287-dd88-7f31-8741-9762e0ce97a5/49A8F084-3460-4364-90E2-8A13F1884EE7/10-Photo-10.jpg",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "requiredKeywords": ["vada", "pav"],
+    "minItems": 1,
+    "calorieMin": 300,
+    "calorieMax": 800,
+    "allowPartial": true,
+    "maxMs": 15000
+  }
+]

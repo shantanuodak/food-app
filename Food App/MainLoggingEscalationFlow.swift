@@ -93,6 +93,11 @@ extension MainLoggingShellView {
                 imageMeta: nil,
                 visionModel: nil,
                 visionFallbackUsed: nil,
+                parseLaneUsed: nil,
+                parseLaneSource: nil,
+                parseLaneLatencyMs: nil,
+                fallback: nil,
+                missReason: nil,
                 dietaryFlags: nil
             )
             editableItems = response.items.map(EditableParsedItem.init(apiItem:))

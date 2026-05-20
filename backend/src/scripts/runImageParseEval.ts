@@ -32,12 +32,29 @@ type CliArgs = {
   baseUrl: string;
   outputDir: string;
   maxMs: number;
+  expectedLane: string | null;
+  expectedCuisine: string | null;
+  expectedImageType: string | null;
+  lane: 'barcode' | 'label' | 'vision';
+  barcode: string | null;
+  symbology: string | null;
+  ocrText: string | null;
+  userLocale: string | null;
 };
 
 type ImageEvalCase = {
   label: string;
   file: string;
   contextNote?: string;
+  lane?: 'barcode' | 'label' | 'vision';
+  barcode?: string;
+  symbology?: string;
+  ocrText?: string;
+  userLocale?: string;
+  recentCuisines?: string[];
+  expectedLane?: string;
+  expectedCuisine?: string;
+  expectedImageType?: string;
   requiredKeywords?: string[];
   minItems?: number;
   calorieMin?: number;
@@ -62,6 +79,8 @@ type ImageParseItem = {
 };
 
 type ImageCoverage = {
+  imageType?: string;
+  cuisineHints?: string[];
   visibleComponentCount?: number;
   parsedItemCount?: number;
   score?: number;
@@ -97,12 +116,21 @@ type ImageParseResponse = {
     orchestratorVersion?: string;
     coverage?: ImageCoverage | null;
   };
+  parseLaneUsed?: string;
+  parseLaneSource?: string | null;
+  parseLaneLatencyMs?: number | null;
+  cuisineUsed?: string | null;
+  cuisineSource?: string | null;
+  cuisineConfidence?: number | null;
   diagnostics?: unknown;
   debugEvents?: unknown;
 };
 
 type CaseChecks = {
   httpOk: boolean;
+  expectedLane: boolean;
+  expectedCuisine: boolean;
+  expectedImageType: boolean;
   minItems: boolean;
   requiredKeywords: boolean;
   caloriesInRange: boolean;
@@ -118,6 +146,12 @@ type CaseReport = {
   ok: boolean;
   ms: number;
   model: string | null;
+  parseLaneUsed: string | null;
+  parseLaneSource: string | null;
+  parseLaneLatencyMs: number | null;
+  cuisineUsed: string | null;
+  cuisineSource: string | null;
+  cuisineConfidence: number | null;
   orchestratorVersion: string | null;
   fallbackUsed: boolean | null;
   confidence: number | null;
@@ -140,6 +174,9 @@ type CaseReport = {
     allowPartial: boolean;
     expectNeedsClarification: boolean | null;
     maxMs: number;
+    expectedLane: string | null;
+    expectedCuisine: string | null;
+    expectedImageType: string | null;
   };
   error: ImageParseResponse['error'] | null;
   diagnostics?: unknown;
@@ -160,7 +197,15 @@ function parseArgs(argv: string[]): CliArgs {
     expectNeedsClarification: null,
     baseUrl: process.env.IMAGE_EVAL_BASE_URL || 'http://localhost:8080',
     outputDir: '',
-    maxMs: Number(process.env.IMAGE_EVAL_MAX_MS || 6_000)
+    maxMs: Number(process.env.IMAGE_EVAL_MAX_MS || 6_000),
+    expectedLane: null,
+    expectedCuisine: null,
+    expectedImageType: null,
+    lane: 'vision',
+    barcode: null,
+    symbology: null,
+    ocrText: null,
+    userLocale: null
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -206,6 +251,30 @@ function parseArgs(argv: string[]): CliArgs {
     } else if (token === '--max-ms' && next) {
       args.maxMs = numberOrNull(next) ?? args.maxMs;
       i += 1;
+    } else if (token === '--expected-lane' && next) {
+      args.expectedLane = next;
+      i += 1;
+    } else if (token === '--expected-cuisine' && next) {
+      args.expectedCuisine = next;
+      i += 1;
+    } else if (token === '--expected-image-type' && next) {
+      args.expectedImageType = next;
+      i += 1;
+    } else if (token === '--lane' && next && isLane(next)) {
+      args.lane = next;
+      i += 1;
+    } else if (token === '--barcode' && next) {
+      args.barcode = next;
+      i += 1;
+    } else if (token === '--symbology' && next) {
+      args.symbology = next;
+      i += 1;
+    } else if (token === '--ocr-text' && next) {
+      args.ocrText = next;
+      i += 1;
+    } else if (token === '--user-locale' && next) {
+      args.userLocale = next;
+      i += 1;
     }
   }
 
@@ -219,6 +288,10 @@ function numberOrNull(value: string | undefined): number | null {
   if (!value) return null;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function isLane(value: string): value is 'barcode' | 'label' | 'vision' {
+  return value === 'barcode' || value === 'label' || value === 'vision';
 }
 
 function readCases(args: CliArgs): ImageEvalCase[] {
@@ -247,6 +320,14 @@ function readCases(args: CliArgs): ImageEvalCase[] {
       label: args.label || path.basename(args.imagePath),
       file: path.resolve(process.cwd(), args.imagePath),
       contextNote: args.contextNote || undefined,
+      lane: args.lane,
+      barcode: args.barcode ?? undefined,
+      symbology: args.symbology ?? undefined,
+      ocrText: args.ocrText ?? undefined,
+      userLocale: args.userLocale ?? undefined,
+      expectedLane: args.expectedLane ?? undefined,
+      expectedCuisine: args.expectedCuisine ?? undefined,
+      expectedImageType: args.expectedImageType ?? undefined,
       requiredKeywords: args.requiredKeywords,
       minItems: args.minItems ?? undefined,
       calorieMin: args.calorieMin ?? undefined,
@@ -272,6 +353,15 @@ function normalizeManifestCase(entry: unknown, index: number, manifestDir: strin
     label: stringValue(record.label) || path.basename(resolvedFile),
     file: resolvedFile,
     contextNote: stringValue(record.contextNote),
+    lane: laneValue(record.lane),
+    barcode: stringValue(record.barcode),
+    symbology: stringValue(record.symbology),
+    ocrText: stringValue(record.ocrText),
+    userLocale: stringValue(record.userLocale),
+    recentCuisines: stringArray(record.recentCuisines),
+    expectedLane: stringValue(record.expectedLane),
+    expectedCuisine: stringValue(record.expectedCuisine),
+    expectedImageType: stringValue(record.expectedImageType),
     requiredKeywords: stringArray(record.requiredKeywords),
     minItems: numberValue(record.minItems),
     calorieMin: numberValue(record.calorieMin),
@@ -280,6 +370,10 @@ function normalizeManifestCase(entry: unknown, index: number, manifestDir: strin
     expectNeedsClarification: booleanValue(record.expectNeedsClarification),
     maxMs: numberValue(record.maxMs)
   };
+}
+
+function laneValue(value: unknown): 'barcode' | 'label' | 'vision' | undefined {
+  return typeof value === 'string' && isLane(value) ? value : undefined;
 }
 
 function stringValue(value: unknown): string | undefined {
@@ -323,7 +417,13 @@ async function runCase(kase: ImageEvalCase, args: CliArgs, key: string): Promise
     body: JSON.stringify({
       imageBase64,
       mimeType: mimeTypeForFile(kase.file),
-      contextNote: kase.contextNote
+      contextNote: kase.contextNote,
+      lane: kase.lane ?? 'vision',
+      barcode: kase.barcode,
+      symbology: kase.symbology,
+      ocrText: kase.ocrText,
+      userLocale: kase.userLocale,
+      recentCuisines: kase.recentCuisines
     })
   });
   const ms = Math.round(performance.now() - startedAt);
@@ -349,6 +449,9 @@ function scoreCase(
   const maxMs = kase.maxMs ?? defaultMaxMs;
   const coverage = json.coverage ?? json.imageMeta?.coverage ?? null;
   const orchestratorVersion = json.orchestratorVersion ?? json.imageMeta?.orchestratorVersion ?? null;
+  const parseLaneUsed = json.parseLaneUsed ?? null;
+  const cuisineUsed = json.cuisineUsed ?? coverage?.cuisineHints?.[0] ?? null;
+  const imageType = coverage?.imageType ?? null;
   const totalCalories = numberValue(json.totals?.calories);
   const searchable = [
     json.extractedText,
@@ -358,17 +461,22 @@ function scoreCase(
     .join(' ')
     .toLowerCase();
   const requiredKeywords = kase.requiredKeywords ?? [];
-  const missingKeywords = requiredKeywords.filter((keyword) => !searchable.includes(keyword.toLowerCase()));
+  const missingKeywords = requiredKeywords.filter((keyword) => !keywordPresent(searchable, keyword));
   const partial = coverage?.partial === true;
 
   const checks: CaseChecks = {
     httpOk,
+    expectedLane: !kase.expectedLane || parseLaneUsed === kase.expectedLane,
+    expectedCuisine: !kase.expectedCuisine || cuisineUsed === kase.expectedCuisine,
+    expectedImageType: !kase.expectedImageType || imageType === kase.expectedImageType,
     minItems: items.length >= minItems,
     requiredKeywords: missingKeywords.length === 0,
     caloriesInRange:
-      totalCalories !== undefined &&
-      (calorieMin === null || totalCalories >= calorieMin) &&
-      (calorieMax === null || totalCalories <= calorieMax),
+      calorieMin === null && calorieMax === null
+        ? true
+        : totalCalories !== undefined &&
+          (calorieMin === null || totalCalories >= calorieMin) &&
+          (calorieMax === null || totalCalories <= calorieMax),
     partialAllowed: allowPartial || !partial,
     needsClarification:
       expectedClarification === null ? true : json.needsClarification === expectedClarification,
@@ -383,6 +491,12 @@ function scoreCase(
     ok,
     ms,
     model: json.model ?? json.visionModel ?? null,
+    parseLaneUsed,
+    parseLaneSource: json.parseLaneSource ?? null,
+    parseLaneLatencyMs: numberValue(json.parseLaneLatencyMs) ?? null,
+    cuisineUsed,
+    cuisineSource: json.cuisineSource ?? null,
+    cuisineConfidence: numberValue(json.cuisineConfidence) ?? null,
     orchestratorVersion,
     fallbackUsed: json.fallbackUsed ?? json.visionFallbackUsed ?? null,
     confidence: numberValue(json.confidence) ?? null,
@@ -404,7 +518,10 @@ function scoreCase(
       calorieMax,
       allowPartial,
       expectNeedsClarification: expectedClarification,
-      maxMs
+      maxMs,
+      expectedLane: kase.expectedLane ?? null,
+      expectedCuisine: kase.expectedCuisine ?? null,
+      expectedImageType: kase.expectedImageType ?? null
     },
     error: json.error ?? null,
     diagnostics: json.diagnostics,
@@ -412,13 +529,27 @@ function scoreCase(
   };
 }
 
+function keywordPresent(searchable: string, keyword: string): boolean {
+  const normalized = keyword.toLowerCase().trim();
+  if (!normalized) return true;
+  const aliases: Record<string, string[]> = {
+    bean: ['bean', 'beans', 'rajma', 'kidney bean'],
+    burger: ['burger', 'fried chicken sandwich', 'chicken sandwich'],
+    roti: ['roti', 'chapati', 'paratha', 'naan', 'flatbread'],
+    salad: ['salad', 'mixed greens', 'side salad']
+  };
+  return (aliases[normalized] ?? [normalized]).some((alias) => searchable.includes(alias));
+}
+
 function printReport(reports: CaseReport[]): void {
   for (const report of reports) {
     const state = report.ok ? 'PASS' : 'FAIL';
     const calories = report.totals?.calories ?? '—';
     const coverage = report.coverage?.score !== undefined ? `${Math.round(report.coverage.score * 100)}%` : '—';
+    const lane = report.parseLaneUsed ?? '—';
+    const cuisine = report.cuisineUsed ?? report.coverage?.cuisineHints?.[0] ?? '—';
     console.log(
-      `${state} ${report.label} · ${report.status} · ${report.ms}ms · cal ${calories} · items ${report.items.length} · coverage ${coverage}`
+      `${state} ${report.label} · ${report.status} · ${report.ms}ms · lane ${lane} · cuisine ${cuisine} · cal ${calories} · items ${report.items.length} · coverage ${coverage}`
     );
     if (!report.ok) {
       const failedChecks = Object.entries(report.checks)

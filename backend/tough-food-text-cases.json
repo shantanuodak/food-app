@@ -1,0 +1,282 @@
+[
+  {
+    "id": "tough-001",
+    "cuisine": "Indian",
+    "input": "dal baati churma thali with gatte ki sabzi, garlic chutney, onion salad and 1 cup chaas",
+    "expectedKeywords": ["dal", "baati", "churma", "gatte", "chutney", "chaas"],
+    "caloriesRange": { "min": 850, "max": 1800 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-002",
+    "cuisine": "Indian",
+    "input": "2 missal pav extra farsan half vada pav and cutting chai",
+    "expectedKeywords": ["misal", "pav", "farsan", "vada", "chai"],
+    "caloriesRange": { "min": 650, "max": 1600 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-003",
+    "cuisine": "Indian",
+    "input": "rajma chawal bowl with ghee tadka, lachha onion, lemon wedge and roasted papad",
+    "expectedKeywords": ["rajma", "rice", "onion", "papad"],
+    "caloriesRange": { "min": 550, "max": 1200 },
+    "minItems": 3
+  },
+  {
+    "id": "tough-004",
+    "cuisine": "Indian",
+    "input": "street style sev puri 7 pieces with ragda drizzle and sweet chutney",
+    "expectedKeywords": ["sev", "puri", "ragda", "chutney"],
+    "caloriesRange": { "min": 300, "max": 900 },
+    "minItems": 3
+  },
+  {
+    "id": "tough-005",
+    "cuisine": "Indian",
+    "input": "sarson da saag, 2 makki rotis, white butter, jaggery cube and lassi",
+    "expectedKeywords": ["saag", "makki", "butter", "jaggery", "lassi"],
+    "caloriesRange": { "min": 800, "max": 1800 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-006",
+    "cuisine": "Indian",
+    "input": "gajar halwa small bowl with cashews almonds and 2 spoon rabri",
+    "expectedKeywords": ["gajar", "halwa", "cashew", "almond", "rabri"],
+    "caloriesRange": { "min": 350, "max": 1100 },
+    "minItems": 2
+  },
+  {
+    "id": "tough-007",
+    "cuisine": "Indian",
+    "input": "pav bhaji with 2 buttered pav, extra bhaji, onions and lemon",
+    "expectedKeywords": ["pav", "bhaji", "butter", "onion"],
+    "caloriesRange": { "min": 550, "max": 1300 },
+    "minItems": 3
+  },
+  {
+    "id": "tough-008",
+    "cuisine": "Indian",
+    "input": "kadhi khichdi with pickle, papad, potato shaak and 1 tsp ghee",
+    "expectedKeywords": ["kadhi", "khichdi", "pickle", "papad", "potato", "ghee"],
+    "caloriesRange": { "min": 650, "max": 1400 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-009",
+    "cuisine": "Indian",
+    "input": "andhra meals: gongura dal, pappu, rasam, curd rice, poriyal, pickle and appalam",
+    "expectedKeywords": ["gongura", "dal", "rasam", "curd", "rice", "pickle", "appalam"],
+    "caloriesRange": { "min": 800, "max": 1800 },
+    "minItems": 6
+  },
+  {
+    "id": "tough-010",
+    "cuisine": "Indian",
+    "input": "kathi roll with paneer tikka, egg layer, mint chutney and half plate masala fries",
+    "expectedKeywords": ["kathi", "paneer", "egg", "chutney", "fries"],
+    "caloriesRange": { "min": 650, "max": 1600 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-011",
+    "cuisine": "Indian typo",
+    "input": "rajma chawl wth ghee papd and pyaz",
+    "expectedKeywords": ["rajma", "rice", "ghee", "papad", "onion"],
+    "caloriesRange": { "min": 500, "max": 1200 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-012",
+    "cuisine": "Indian typo",
+    "input": "masla dosa sambhar cocnut chutny tomato chutny and filter coffe",
+    "expectedKeywords": ["dosa", "sambar", "coconut", "chutney", "coffee"],
+    "caloriesRange": { "min": 450, "max": 1100 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-013",
+    "cuisine": "Korean",
+    "input": "bibimbap with fried egg, bulgogi, gochujang, kimchi and sesame oil",
+    "expectedKeywords": ["bibimbap", "egg", "bulgogi", "gochujang", "kimchi"],
+    "caloriesRange": { "min": 650, "max": 1400 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-014",
+    "cuisine": "Japanese",
+    "input": "tonkotsu ramen with chashu, ajitama egg, corn, black garlic oil and extra noodles",
+    "expectedKeywords": ["ramen", "chashu", "egg", "corn", "garlic", "noodles"],
+    "caloriesRange": { "min": 800, "max": 1800 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-015",
+    "cuisine": "Thai",
+    "input": "khao soi chicken with crispy noodles, pickled mustard greens, shallots and coconut broth",
+    "expectedKeywords": ["khao soi", "chicken", "noodles", "mustard", "coconut"],
+    "caloriesRange": { "min": 650, "max": 1500 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-016",
+    "cuisine": "Vietnamese",
+    "input": "bun bo hue with beef shank, pork sausage, herbs, rice noodles and chili oil",
+    "expectedKeywords": ["bun bo hue", "beef", "pork", "noodles", "chili"],
+    "caloriesRange": { "min": 550, "max": 1400 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-017",
+    "cuisine": "Chinese",
+    "input": "mapo tofu over rice with chili crisp, minced pork and scallions",
+    "expectedKeywords": ["mapo", "tofu", "rice", "chili", "pork"],
+    "caloriesRange": { "min": 600, "max": 1300 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-018",
+    "cuisine": "Filipino",
+    "input": "silog plate with garlic rice, longganisa, fried egg, atchara and vinegar dip",
+    "expectedKeywords": ["garlic rice", "longganisa", "egg", "atchara", "vinegar"],
+    "caloriesRange": { "min": 700, "max": 1600 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-019",
+    "cuisine": "Middle Eastern",
+    "input": "mixed mezze plate: hummus, baba ganoush, tabbouleh, 3 falafel, pita and tahini",
+    "expectedKeywords": ["hummus", "baba", "tabbouleh", "falafel", "pita", "tahini"],
+    "caloriesRange": { "min": 700, "max": 1700 },
+    "minItems": 6
+  },
+  {
+    "id": "tough-020",
+    "cuisine": "Mediterranean",
+    "input": "lamb gyro bowl with rice, tzatziki, feta, olives, cucumber tomato salad and pita chips",
+    "expectedKeywords": ["lamb", "gyro", "rice", "tzatziki", "feta", "olives", "pita"],
+    "caloriesRange": { "min": 750, "max": 1700 },
+    "minItems": 6
+  },
+  {
+    "id": "tough-021",
+    "cuisine": "Mexican",
+    "input": "birria tacos 3 with consome, Oaxaca cheese, salsa verde and pickled onions",
+    "expectedKeywords": ["birria", "taco", "consome", "cheese", "salsa", "onion"],
+    "caloriesRange": { "min": 650, "max": 1600 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-022",
+    "cuisine": "Peruvian",
+    "input": "lomo saltado with fries, rice, beef strips, onions and aji sauce",
+    "expectedKeywords": ["lomo", "fries", "rice", "beef", "onion", "aji"],
+    "caloriesRange": { "min": 750, "max": 1700 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-023",
+    "cuisine": "Caribbean",
+    "input": "jerk chicken plate with rice and peas, plantains, cabbage slaw and festival bread",
+    "expectedKeywords": ["jerk", "chicken", "rice", "peas", "plantain", "slaw", "bread"],
+    "caloriesRange": { "min": 850, "max": 1900 },
+    "minItems": 6
+  },
+  {
+    "id": "tough-024",
+    "cuisine": "Ethiopian",
+    "input": "injera platter with doro wat, misir wat, gomen, shiro and ayib",
+    "expectedKeywords": ["injera", "doro", "misir", "gomen", "shiro", "ayib"],
+    "caloriesRange": { "min": 800, "max": 1800 },
+    "minItems": 6
+  },
+  {
+    "id": "tough-025",
+    "cuisine": "French",
+    "input": "croque madame with bechamel, ham, gruyere, fried egg and side greens",
+    "expectedKeywords": ["croque", "bechamel", "ham", "gruyere", "egg", "greens"],
+    "caloriesRange": { "min": 650, "max": 1500 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-026",
+    "cuisine": "Italian",
+    "input": "cacio e pepe with burrata, prosciutto crisp and olive oil drizzle",
+    "expectedKeywords": ["cacio", "pepe", "burrata", "prosciutto", "olive oil"],
+    "caloriesRange": { "min": 750, "max": 1700 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-027",
+    "cuisine": "American",
+    "input": "smash burger double patty with bacon jam, aioli, brioche bun and side kale Caesar",
+    "expectedKeywords": ["burger", "bacon", "aioli", "brioche", "caesar"],
+    "caloriesRange": { "min": 900, "max": 2200 },
+    "minItems": 4
+  },
+  {
+    "id": "tough-028",
+    "cuisine": "American",
+    "input": "loaded baked potato with pulled pork, sour cream, cheddar, scallions and bbq sauce",
+    "expectedKeywords": ["potato", "pulled pork", "sour cream", "cheddar", "bbq"],
+    "caloriesRange": { "min": 700, "max": 1700 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-029",
+    "cuisine": "Vegan",
+    "input": "vegan poke bowl with tofu, edamame, seaweed salad, avocado, sushi rice and spicy mayo",
+    "expectedKeywords": ["tofu", "edamame", "seaweed", "avocado", "rice", "mayo"],
+    "caloriesRange": { "min": 650, "max": 1500 },
+    "minItems": 6
+  },
+  {
+    "id": "tough-030",
+    "cuisine": "Breakfast",
+    "input": "shakshuka with 2 eggs, feta, pita, olives and harissa potatoes",
+    "expectedKeywords": ["shakshuka", "egg", "feta", "pita", "olive", "potato"],
+    "caloriesRange": { "min": 650, "max": 1500 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-031",
+    "cuisine": "Dessert",
+    "input": "jalebi stack with rabri, pistachio dust, silver leaf and rose syrup",
+    "expectedKeywords": ["jalebi", "rabri", "pistachio", "rose"],
+    "caloriesRange": { "min": 500, "max": 1500 },
+    "minItems": 3
+  },
+  {
+    "id": "tough-032",
+    "cuisine": "Dessert",
+    "input": "basque cheesecake slice with berry compote and whipped mascarpone",
+    "expectedKeywords": ["cheesecake", "berry", "mascarpone"],
+    "caloriesRange": { "min": 450, "max": 1200 },
+    "minItems": 3
+  },
+  {
+    "id": "tough-033",
+    "cuisine": "Snack",
+    "input": "movie snack box: caramel popcorn, nachos cheese cup, mini pretzel bites and cola",
+    "expectedKeywords": ["popcorn", "nachos", "cheese", "pretzel", "cola"],
+    "caloriesRange": { "min": 900, "max": 2400 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-034",
+    "cuisine": "Ambiguous",
+    "input": "small bowl of yellow lentil soup, one roti torn in pieces, potato fry, fried okra and green chutney",
+    "expectedKeywords": ["lentil", "roti", "potato", "okra", "chutney"],
+    "caloriesRange": { "min": 550, "max": 1300 },
+    "minItems": 5
+  },
+  {
+    "id": "tough-035",
+    "cuisine": "Ambiguous typo",
+    "input": "xtra spicy paneeer qesadilla w guac, sour crem, rice n beans",
+    "expectedKeywords": ["paneer", "quesadilla", "guacamole", "sour cream", "rice", "beans"],
+    "caloriesRange": { "min": 750, "max": 1800 },
+    "minItems": 5
+  }
+]

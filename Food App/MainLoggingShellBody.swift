@@ -170,7 +170,7 @@ extension MainLoggingShellView {
                     suppressDebouncedParseOnce = false
                     return
                 }
-                if latestParseInputKind == "image" {
+                if latestParseInputKind.hasPrefix("image") {
                     clearImageContext()
                 }
                 if !trimmedNoteText.isEmpty, inputMode != .text {

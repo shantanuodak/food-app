@@ -13,7 +13,9 @@ type CostEventInput = {
     | 'parse_image_fallback'
     | 'parse_image_caption'
     | 'parse_image_caption_text'
-    | 'parse_image_inventory_v2';
+    | 'parse_image_inventory_v2'
+    | 'parse_image_label'
+    | 'parse_image_barcode';
   model: string;
   inputTokens: number;
   outputTokens: number;

@@ -63,7 +63,7 @@ export async function getRewardsSummary(userId: string, timezone?: string): Prom
         COUNT(*)::bigint AS logs,
         COUNT(*) FILTER (WHERE COALESCE(NULLIF(input_kind, ''), 'text') = 'text')::bigint AS text_logs,
         COUNT(*) FILTER (WHERE COALESCE(NULLIF(input_kind, ''), 'text') = 'voice')::bigint AS voice_logs,
-        COUNT(*) FILTER (WHERE COALESCE(NULLIF(input_kind, ''), 'text') = 'image')::bigint AS image_logs,
+        COUNT(*) FILTER (WHERE COALESCE(NULLIF(input_kind, ''), 'text') LIKE 'image%')::bigint AS image_logs,
         COUNT(*) FILTER (WHERE COALESCE(NULLIF(input_kind, ''), 'text') = 'manual')::bigint AS manual_logs,
         COUNT(*) FILTER (WHERE parse_confidence >= 0.85)::bigint AS high_confidence_logs
       FROM food_logs

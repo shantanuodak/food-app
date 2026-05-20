@@ -1,0 +1,295 @@
+[
+  {
+    "label": "branded_diet_coke",
+    "file": "test-fixtures/image-eval/nutrition-label.jpg",
+    "lane": "barcode",
+    "barcode": "0049000028911",
+    "expectedLane": "barcode",
+    "calorieMin": 0,
+    "calorieMax": 5,
+    "maxMs": 2000
+  },
+  {
+    "label": "branded_cheetos",
+    "file": "test-fixtures/image-eval/nutrition-label.jpg",
+    "lane": "barcode",
+    "barcode": "0028400433556",
+    "expectedLane": "barcode",
+    "calorieMin": 140,
+    "calorieMax": 180,
+    "maxMs": 2500
+  },
+  {
+    "label": "branded_unknown_upc",
+    "file": "test-fixtures/image-eval/nutrition-label.jpg",
+    "lane": "barcode",
+    "barcode": "0000000000000",
+    "expectedLane": "barcode",
+    "minItems": 0,
+    "allowPartial": true,
+    "maxMs": 2500
+  },
+  {
+    "label": "label_granola_bar",
+    "file": "test-fixtures/image-eval/nutrition-label.jpg",
+    "lane": "label",
+    "ocrText": "Nutrition Facts Serving size 1 bar (40g) Calories 190 Total Fat 7g Total Carbohydrate 24g Protein 10g Sodium 125mg",
+    "expectedLane": "label",
+    "expectedImageType": "nutrition_label",
+    "calorieMin": 180,
+    "calorieMax": 200,
+    "maxMs": 4000
+  },
+  {
+    "label": "label_partial",
+    "file": "test-fixtures/image-eval/partial-label.jpg",
+    "lane": "label",
+    "ocrText": "Nutrition Facts Calories 120 Total Fat 3g Protein 4g",
+    "expectedLane": "label",
+    "expectedImageType": "nutrition_label",
+    "calorieMin": 100,
+    "calorieMax": 140,
+    "allowPartial": true,
+    "maxMs": 4000
+  },
+  {
+    "label": "label_oats",
+    "file": "test-fixtures/image-eval/nutrition-label.jpg",
+    "lane": "label",
+    "ocrText": "Nutrition Facts Serving size 1/2 cup dry (40g) Calories 150 Total Fat 3g Total Carbohydrate 27g Dietary Fiber 4g Protein 5g",
+    "expectedLane": "label",
+    "expectedImageType": "nutrition_label",
+    "calorieMin": 140,
+    "calorieMax": 160,
+    "maxMs": 4000
+  },
+  {
+    "label": "label_high_protein_bar",
+    "file": "test-fixtures/image-eval/nutrition-label.jpg",
+    "lane": "label",
+    "ocrText": "Nutrition Facts Serving size 1 bar (60g) Calories 220 Total Fat 8g Total Carbohydrate 23g Protein 20g Sodium 210mg",
+    "expectedLane": "label",
+    "expectedImageType": "nutrition_label",
+    "calorieMin": 200,
+    "calorieMax": 240,
+    "maxMs": 4000
+  },
+  {
+    "label": "indian_thali",
+    "file": "test-fixtures/image-eval/indian-thali.jpg",
+    "contextNote": "Indian thali with dal rice roti vegetable curry and raita",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "minItems": 4,
+    "requiredKeywords": ["dal", "rice"],
+    "maxMs": 9000
+  },
+  {
+    "label": "indian_dosa",
+    "file": "test-fixtures/image-eval/indian-thali.jpg",
+    "contextNote": "masala dosa with sambar chutney",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "indian_chaat",
+    "file": "test-fixtures/image-eval/indian-thali.jpg",
+    "contextNote": "chaat plate with samosa chutney and chai",
+    "expectedLane": "vision",
+    "expectedCuisine": "indian",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "us_burger_fries",
+    "file": "test-fixtures/image-eval/burger-fries.jpg",
+    "contextNote": "double cheeseburger and fries",
+    "expectedLane": "vision",
+    "expectedCuisine": "us",
+    "requiredKeywords": ["burger", "fries"],
+    "maxMs": 9000
+  },
+  {
+    "label": "us_breakfast",
+    "file": "test-fixtures/image-eval/burger-fries.jpg",
+    "contextNote": "pancake breakfast with bacon and bagel",
+    "expectedLane": "vision",
+    "expectedCuisine": "us",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "us_salad",
+    "file": "test-fixtures/image-eval/menu-screenshot.jpg",
+    "contextNote": "chicken caesar salad with ranch",
+    "expectedLane": "vision",
+    "expectedCuisine": "us",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "western_fish_chips",
+    "file": "test-fixtures/image-eval/fish-and-chips.jpg",
+    "contextNote": "fish and chips",
+    "expectedLane": "vision",
+    "expectedCuisine": "western",
+    "requiredKeywords": ["fish"],
+    "maxMs": 9000
+  },
+  {
+    "label": "western_croissant",
+    "file": "test-fixtures/image-eval/croissant.jpg",
+    "contextNote": "croissant",
+    "expectedLane": "vision",
+    "expectedCuisine": "western",
+    "requiredKeywords": ["croissant"],
+    "maxMs": 9000
+  },
+  {
+    "label": "western_quiche",
+    "file": "test-fixtures/image-eval/croissant.jpg",
+    "contextNote": "quiche with baguette and crepe",
+    "expectedLane": "vision",
+    "expectedCuisine": "western",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "eastasian_ramen",
+    "file": "test-fixtures/image-eval/ramen.jpg",
+    "contextNote": "ramen bowl with miso",
+    "expectedLane": "vision",
+    "expectedCuisine": "eastAsian",
+    "requiredKeywords": ["ramen"],
+    "maxMs": 9000
+  },
+  {
+    "label": "eastasian_sushi",
+    "file": "test-fixtures/image-eval/sushi.jpg",
+    "contextNote": "sushi platter with sashimi and miso",
+    "expectedLane": "vision",
+    "expectedCuisine": "eastAsian",
+    "requiredKeywords": ["sushi"],
+    "maxMs": 9000
+  },
+  {
+    "label": "eastasian_padthai",
+    "file": "test-fixtures/image-eval/ramen.jpg",
+    "contextNote": "pad thai with spring roll",
+    "expectedLane": "vision",
+    "expectedCuisine": "eastAsian",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "eastasian_dim_sum",
+    "file": "test-fixtures/image-eval/sushi.jpg",
+    "contextNote": "dim sum dumpling bao",
+    "expectedLane": "vision",
+    "expectedCuisine": "eastAsian",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "mediterranean_pasta",
+    "file": "test-fixtures/image-eval/carbonara.jpg",
+    "contextNote": "spaghetti carbonara",
+    "expectedLane": "vision",
+    "expectedCuisine": "mediterranean",
+    "requiredKeywords": ["spaghetti"],
+    "maxMs": 9000
+  },
+  {
+    "label": "mediterranean_pizza",
+    "file": "test-fixtures/image-eval/pizza.jpg",
+    "contextNote": "margherita pizza with mozzarella",
+    "expectedLane": "vision",
+    "expectedCuisine": "mediterranean",
+    "requiredKeywords": ["pizza"],
+    "maxMs": 9000
+  },
+  {
+    "label": "mediterranean_mezze",
+    "file": "test-fixtures/image-eval/pizza.jpg",
+    "contextNote": "hummus falafel tabbouleh and pita mezze",
+    "expectedLane": "vision",
+    "expectedCuisine": "mediterranean",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "latin_burrito",
+    "file": "test-fixtures/image-eval/burrito.jpg",
+    "contextNote": "chicken burrito with salsa guacamole",
+    "expectedLane": "vision",
+    "expectedCuisine": "latin",
+    "requiredKeywords": ["burrito"],
+    "maxMs": 9000
+  },
+  {
+    "label": "latin_tacos",
+    "file": "test-fixtures/image-eval/tacos.jpg",
+    "contextNote": "tacos al pastor with salsa",
+    "expectedLane": "vision",
+    "expectedCuisine": "latin",
+    "requiredKeywords": ["taco"],
+    "maxMs": 9000
+  },
+  {
+    "label": "latin_arepa",
+    "file": "test-fixtures/image-eval/tacos.jpg",
+    "contextNote": "arepa empanada and plantain",
+    "expectedLane": "vision",
+    "expectedCuisine": "latin",
+    "minItems": 1,
+    "maxMs": 9000
+  },
+  {
+    "label": "edge_blurry_food",
+    "file": "test-fixtures/image-eval/blurry-food.jpg",
+    "contextNote": "blurry rice bowl with vegetables",
+    "expectedLane": "vision",
+    "minItems": 0,
+    "allowPartial": true,
+    "maxMs": 9000
+  },
+  {
+    "label": "edge_non_food",
+    "file": "test-fixtures/image-eval/non-food.jpg",
+    "contextNote": "not food",
+    "expectedLane": "vision",
+    "expectedImageType": "non_food",
+    "minItems": 0,
+    "allowPartial": true,
+    "maxMs": 9000
+  },
+  {
+    "label": "edge_menu_screenshot",
+    "file": "test-fixtures/image-eval/menu-screenshot.jpg",
+    "contextNote": "restaurant menu screenshot",
+    "expectedLane": "vision",
+    "expectedImageType": "menu_or_screenshot",
+    "minItems": 0,
+    "allowPartial": true,
+    "maxMs": 9000
+  },
+  {
+    "label": "edge_recipe_card",
+    "file": "test-fixtures/image-eval/recipe-card.jpg",
+    "contextNote": "recipe card screenshot with calorie text",
+    "expectedLane": "vision",
+    "minItems": 0,
+    "allowPartial": true,
+    "maxMs": 9000
+  },
+  {
+    "label": "generic_no_context_meal",
+    "file": "test-fixtures/image-eval/burger-fries.jpg",
+    "expectedLane": "vision",
+    "minItems": 1,
+    "allowPartial": true,
+    "maxMs": 9000
+  }
+]

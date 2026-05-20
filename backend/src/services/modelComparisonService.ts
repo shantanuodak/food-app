@@ -118,9 +118,10 @@ export async function runModelComparison(options: ModelComparisonRunOptions = {}
     activeOnly: true,
     category: options.category ?? undefined
   });
-  const selectedCases = reviewedCases
-    .filter((benchmarkCase) => isBenchmarkCaseAllowedForModelComparison(benchmarkCase, truthMode))
-    .slice(0, maxCases);
+  const eligibleCases = reviewedCases.filter((benchmarkCase) =>
+    isBenchmarkCaseAllowedForModelComparison(benchmarkCase, truthMode)
+  );
+  const selectedCases = eligibleCases.slice(0, maxCases);
 
   const results: ModelComparisonCaseResult[] = [];
   for (const benchmarkCase of selectedCases) {
@@ -150,7 +151,7 @@ export async function runModelComparison(options: ModelComparisonRunOptions = {}
     targetScore,
     availableReviewedCases: reviewedCases.length,
     selectedCases: selectedCases.length,
-    excludedCases: reviewedCases.length - selectedCases.length,
+    excludedCases: reviewedCases.length - eligibleCases.length,
     geminiOnlyScore,
     geminiFatSecretScore,
     delta: round(geminiFatSecretScore - geminiOnlyScore),

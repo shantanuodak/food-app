@@ -64,58 +64,6 @@ const FLAVOR_FRAGMENT_KEYS = new Set([
   'curd'
 ]);
 
-type PackagedProductFact = {
-  id: string;
-  name: string;
-  signals: RegExp[];
-  quantity: number;
-  unit: string;
-  grams: number;
-  calories: number;
-  protein: number;
-  carbs: number;
-  fat: number;
-};
-
-const PACKAGED_PRODUCT_FACTS: PackagedProductFact[] = [
-  {
-    id: 'rxbar_blueberry_52g',
-    name: 'RXBAR Blueberry Protein Bar',
-    signals: [/\brxbar\b/, /\bblueberry\b/],
-    quantity: 1,
-    unit: 'bar',
-    grams: 52,
-    calories: 180,
-    protein: 12,
-    carbs: 24,
-    fat: 6
-  },
-  {
-    id: 'cheetos_crunchy_28g',
-    name: 'Cheetos Crunchy Cheese Flavored Snacks',
-    signals: [/\bcheetos\b/, /\bcrunchy\b/],
-    quantity: 1,
-    unit: 'serving',
-    grams: 28,
-    calories: 160,
-    protein: 2,
-    carbs: 15,
-    fat: 10
-  },
-  {
-    id: 'diet_coke_12oz',
-    name: 'Diet Coke',
-    signals: [/\bdiet\s+coke\b/],
-    quantity: 1,
-    unit: 'can',
-    grams: 355,
-    calories: 0,
-    protein: 0,
-    carbs: 0,
-    fat: 0
-  }
-];
-
 function round(value: number, digits = 1): number {
   const factor = 10 ** digits;
   return Math.round(value * factor) / factor;
@@ -555,55 +503,10 @@ function rebuildTotals(items: ParsedItem[]): ParseResult['totals'] {
   };
 }
 
-function packagedProductFactForItem(item: ParsedItem, context?: FoodImagePostprocessContext): PackagedProductFact | null {
-  const key = normalizeKey(
-    [
-      item.name,
-      item.unit,
-      item.foodDescription ?? '',
-      item.explanation ?? '',
-      item.nutritionSourceId,
-      contextKey(context)
-    ].join(' ')
-  );
-
-  if (!key) return null;
-  return PACKAGED_PRODUCT_FACTS.find((fact) => fact.signals.every((signal) => signal.test(key))) ?? null;
-}
-
-function applyKnownPackagedProductFacts(items: ParsedItem[], context?: FoodImagePostprocessContext): ParsedItem[] {
-  return items.map((item) => {
-    const fact = packagedProductFactForItem(item, context);
-    if (!fact) return item;
-
-    return {
-      ...item,
-      name: fact.name,
-      quantity: fact.quantity,
-      amount: fact.quantity,
-      unit: fact.unit,
-      unitNormalized: fact.unit,
-      grams: fact.grams,
-      gramsPerUnit: fact.grams / fact.quantity,
-      calories: fact.calories,
-      protein: fact.protein,
-      carbs: fact.carbs,
-      fat: fact.fat,
-      matchConfidence: Math.max(item.matchConfidence || 0, 0.95),
-      nutritionSourceId: `known_product_${fact.id}`,
-      originalNutritionSourceId: item.originalNutritionSourceId || item.nutritionSourceId,
-      sourceFamily: item.sourceFamily || 'gemini',
-      needsClarification: false,
-      foodDescription: `${fact.name}, ${fact.quantity} ${fact.unit}`,
-      explanation: `Matched the visible packaged product to known per-serving nutrition for ${fact.name}.`
-    };
-  });
-}
-
 export function postProcessFoodImageResult(result: ParseResult, context?: FoodImagePostprocessContext): ParseResult {
   if (result.items.length <= 0) return result;
 
-  const productCollapsed = applyKnownPackagedProductFacts(collapseSingleProductFragments(result.items, context), context);
+  const productCollapsed = collapseSingleProductFragments(result.items, context);
   const compoundCollapsed = collapseCompoundDishFragments(productCollapsed, context);
   const selected = new Map<string, Candidate>();
 
@@ -626,7 +529,7 @@ export function postProcessFoodImageResult(result: ParseResult, context?: FoodIm
     }
   });
 
-  const items = applyKnownPackagedProductFacts([...selected.values()]
+  const items = [...selected.values()]
     .sort((left, right) => left.index - right.index)
     .map(({ item, displayName }) => {
       if (!displayName || normalizeKey(displayName) === normalizeKey(item.name)) {
@@ -639,7 +542,7 @@ export function postProcessFoodImageResult(result: ParseResult, context?: FoodIm
           ? item.foodDescription
           : displayName
       };
-    }), context);
+    });
 
   if (items.length === 0) return result;
 

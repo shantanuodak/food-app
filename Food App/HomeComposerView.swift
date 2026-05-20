@@ -124,8 +124,7 @@ struct HM01LogComposerSection: View {
                                         }
                                     },
                                     onDone: {
-                                        setFocusedMinimalRowID(nil)
-                                        onKeyboardDone()
+                                        advanceToNextRowAfterKeyboardDone(rowID: row.id)
                                     },
                                     onDeleteBackwardWhenEmpty: {
                                         deleteCurrentEmptyRowAndFocusPrevious(rowID: row.id)
@@ -353,6 +352,24 @@ struct HM01LogComposerSection: View {
         }
         let nextIndex = min(index + 1, max(rows.count - 1, 0))
         setFocusedMinimalRowID(rows[nextIndex].id)
+    }
+
+    private func advanceToNextRowAfterKeyboardDone(rowID: UUID) {
+        guard let index = indexForRowID(rowID), rows.indices.contains(index) else {
+            setFocusedMinimalRowID(nil)
+            onKeyboardDone()
+            return
+        }
+
+        let trimmedText = rows[index].text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedText.isEmpty else {
+            setFocusedMinimalRowID(nil)
+            onKeyboardDone()
+            return
+        }
+
+        addMinimalRow(after: rowID)
+        onKeyboardDone()
     }
 
     private func deleteCurrentEmptyRowAndFocusPrevious(rowID: UUID) {

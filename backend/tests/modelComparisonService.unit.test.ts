@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import {
   isBenchmarkCaseAllowedForModelComparison,
   shouldAdoptFatSecretForModelComparison
@@ -30,6 +30,45 @@ describe('modelComparisonService truth filtering', () => {
         'expanded'
       )
     ).toBe(true);
+  });
+});
+
+describe('modelComparisonService run summary', () => {
+  test('does not count max-case truncation as excluded truth', async () => {
+    vi.resetModules();
+
+    const reviewedCases = [
+      benchmarkCase('1', 'Greek yogurt 1 cup'),
+      benchmarkCase('2', 'Chicken burrito 1 burrito'),
+      benchmarkCase('3', 'Salmon sushi 8 pieces')
+    ];
+
+    vi.doMock('../src/services/accuracyBenchmarkService.js', () => ({
+      listBenchmarkCases: vi.fn(async () => reviewedCases)
+    }));
+    vi.doMock('../src/services/aiNormalizerService.js', () => ({
+      tryGeminiPrimaryParse: vi.fn(async (inputText: string) => ({
+        usage: { model: 'gemini-test' },
+        result: {
+          confidence: 0.9,
+          totals: { calories: 100, protein: 10, carbs: 10, fat: 5 },
+          items: [{ name: inputText, calories: 100, protein: 10, carbs: 10, fat: 5 }]
+        }
+      }))
+    }));
+    vi.doMock('../src/services/fatSecretModelLabService.js', () => ({
+      lookupFatSecretReference: vi.fn(async () => null)
+    }));
+
+    const { runModelComparison } = await import('../src/services/modelComparisonService.js');
+
+    const result = await runModelComparison({ truthMode: 'expanded', maxCases: 2 });
+
+    expect(result.availableReviewedCases).toBe(3);
+    expect(result.selectedCases).toBe(2);
+    expect(result.excludedCases).toBe(0);
+
+    vi.resetModules();
   });
 });
 
@@ -128,5 +167,21 @@ function fatSecretMatch(overrides: Partial<FatSecretReference>): FatSecretRefere
     sourceLabel: 'FatSecret Test Food',
     reference: 'Food ID test',
     ...overrides
+  };
+}
+
+function benchmarkCase(id: string, inputText: string) {
+  return {
+    id,
+    inputText,
+    displayName: inputText,
+    category: 'test',
+    referenceSourceType: 'official_brand',
+    referenceSourceLabel: 'Official nutrition page',
+    referenceSourceUrl: 'https://example.com/nutrition',
+    referenceCalories: 100,
+    referenceProtein: 10,
+    referenceCarbs: 10,
+    referenceFat: 5
   };
 }

@@ -31,29 +31,36 @@ extension MainLoggingShellView {
     /// The loop still runs off the main thread and each encode is scoped by
     /// `autoreleasepool` to avoid retaining large intermediate buffers.
     nonisolated static func prepareImagePayload(from image: UIImage) -> PreparedImagePayload? {
+        let normalized = image.fixedOrientation()
         let maxBytes = 1_200_000
-        let dimensionAttempts: [CGFloat] = [1800, 1600, 1440, 1280]
-        let qualityAttempts: [CGFloat] = [0.88, 0.84, 0.80, 0.76, 0.72]
+        let dimensionAttempts: [CGFloat] = [1440, 1280, 1024]
+        let qualityAttempts: [CGFloat] = [0.84, 0.80, 0.76, 0.72]
         var smallestData: Data?
 
         for dimension in dimensionAttempts {
-            let resized = resizeImageIfNeeded(image, maxDimension: dimension)
-            for quality in qualityAttempts {
-                let result: PreparedImagePayload? = autoreleasepool {
-                    guard let data = resized.jpegData(compressionQuality: quality) else {
+            let result: PreparedImagePayload? = autoreleasepool {
+                let resized = resizeImageIfNeeded(normalized, maxDimension: dimension)
+                for quality in qualityAttempts {
+                    let inner: PreparedImagePayload? = autoreleasepool {
+                        guard let data = resized.jpegData(compressionQuality: quality) else {
+                            return nil
+                        }
+                        if smallestData.map({ data.count < $0.count }) != false {
+                            smallestData = data
+                        }
+                        if data.count <= maxBytes {
+                            return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
+                        }
                         return nil
                     }
-                    if smallestData.map({ data.count < $0.count }) != false {
-                        smallestData = data
+                    if let inner {
+                        return inner
                     }
-                    if data.count <= maxBytes {
-                        return PreparedImagePayload(uploadData: data, previewData: data, mimeType: "image/jpeg")
-                    }
-                    return nil
                 }
-                if let result {
-                    return result
-                }
+                return nil
+            }
+            if let result {
+                return result
             }
         }
 

@@ -1,0 +1,728 @@
+{
+  "runId": "2026-05-20T02-30-18-721Z",
+  "runAt": "2026-05-20T02:39:56.808Z",
+  "manifest": "/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App/backend/tough-food-text-cases.json",
+  "summary": {
+    "total": 35,
+    "passed": 35,
+    "failed": 0,
+    "passRate": 1,
+    "avgLatencyMs": 16516,
+    "p95LatencyMs": 30732.2
+  },
+  "cases": [
+    {
+      "id": "tough-001",
+      "cuisine": "Indian",
+      "input": "dal baati churma thali with gatte ki sabzi, garlic chutney, onion salad and 1 cup chaas",
+      "route": "gemini",
+      "itemNames": [
+        "Dal",
+        "Baati",
+        "Churma",
+        "Gatte ki sabzi",
+        "Garlic chutney",
+        "Onion salad",
+        "Chaas"
+      ],
+      "totalCalories": 1192,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 14790.2
+    },
+    {
+      "id": "tough-002",
+      "cuisine": "Indian",
+      "input": "2 missal pav extra farsan half vada pav and cutting chai",
+      "route": "gemini",
+      "itemNames": [
+        "Misal pav",
+        "Farsan",
+        "Vada pav",
+        "Cutting chai"
+      ],
+      "totalCalories": 1430,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 10980.8
+    },
+    {
+      "id": "tough-003",
+      "cuisine": "Indian",
+      "input": "rajma chawal bowl with ghee tadka, lachha onion, lemon wedge and roasted papad",
+      "route": "gemini",
+      "itemNames": [
+        "Rajma",
+        "White rice",
+        "Ghee",
+        "Onion salad",
+        "Papad"
+      ],
+      "totalCalories": 627,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 28078.6
+    },
+    {
+      "id": "tough-004",
+      "cuisine": "Indian",
+      "input": "street style sev puri 7 pieces with ragda drizzle and sweet chutney",
+      "route": "gemini",
+      "itemNames": [
+        "Farsan",
+        "Sev puri",
+        "Ragda",
+        "Sweet chutney"
+      ],
+      "totalCalories": 755,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 9343.8
+    },
+    {
+      "id": "tough-005",
+      "cuisine": "Indian",
+      "input": "sarson da saag, 2 makki rotis, white butter, jaggery cube and lassi",
+      "route": "gemini",
+      "itemNames": [
+        "Sarson da saag",
+        "Makki roti",
+        "White butter",
+        "Jaggery cube",
+        "Lassi"
+      ],
+      "totalCalories": 956,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 12213
+    },
+    {
+      "id": "tough-006",
+      "cuisine": "Indian",
+      "input": "gajar halwa small bowl with cashews almonds and 2 spoon rabri",
+      "route": "gemini",
+      "itemNames": [
+        "Gajar halwa",
+        "Cashews",
+        "Almonds",
+        "Rabri"
+      ],
+      "totalCalories": 740,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 7526.8
+    },
+    {
+      "id": "tough-007",
+      "cuisine": "Indian",
+      "input": "pav bhaji with 2 buttered pav, extra bhaji, onions and lemon",
+      "route": "gemini",
+      "itemNames": [
+        "Pav Bhaji with 2 buttered pav",
+        "Bhaji (extra serving)",
+        "Sliced raw onions",
+        "Lemon wedge"
+      ],
+      "totalCalories": 1183,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 29229.4
+    },
+    {
+      "id": "tough-008",
+      "cuisine": "Indian",
+      "input": "kadhi khichdi with pickle, papad, potato shaak and 1 tsp ghee",
+      "route": "gemini",
+      "itemNames": [
+        "Kadhi",
+        "Khichdi",
+        "Pickle",
+        "Papad",
+        "Potato shaak",
+        "Ghee"
+      ],
+      "totalCalories": 865,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 9831.2
+    },
+    {
+      "id": "tough-009",
+      "cuisine": "Indian",
+      "input": "andhra meals: gongura dal, pappu, rasam, curd rice, poriyal, pickle and appalam",
+      "route": "unresolved",
+      "itemNames": [
+        "Dal",
+        "Rasam",
+        "Curd rice",
+        "White rice",
+        "Poriyal",
+        "Pickle",
+        "Papad"
+      ],
+      "totalCalories": 1045,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 30627.2
+    },
+    {
+      "id": "tough-010",
+      "cuisine": "Indian",
+      "input": "kathi roll with paneer tikka, egg layer, mint chutney and half plate masala fries",
+      "route": "unresolved",
+      "itemNames": [
+        "Kathi roll",
+        "Paneer tikka",
+        "Egg",
+        "Green chutney",
+        "Fries"
+      ],
+      "totalCalories": 1164.5,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 12922
+    },
+    {
+      "id": "tough-011",
+      "cuisine": "Indian typo",
+      "input": "rajma chawl wth ghee papd and pyaz",
+      "route": "gemini",
+      "itemNames": [
+        "Rajma",
+        "White rice",
+        "Ghee",
+        "Papad",
+        "Onion salad"
+      ],
+      "totalCalories": 627,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 9805.2
+    },
+    {
+      "id": "tough-012",
+      "cuisine": "Indian typo",
+      "input": "masla dosa sambhar cocnut chutny tomato chutny and filter coffe",
+      "route": "gemini",
+      "itemNames": [
+        "Masala dosa",
+        "Sambar",
+        "Coconut chutney",
+        "Tomato chutney",
+        "Filter coffee"
+      ],
+      "totalCalories": 750,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 11590.8
+    },
+    {
+      "id": "tough-013",
+      "cuisine": "Korean",
+      "input": "bibimbap with fried egg, bulgogi, gochujang, kimchi and sesame oil",
+      "route": "gemini",
+      "itemNames": [
+        "Bibimbap with fried egg",
+        "Bulgogi",
+        "Gochujang",
+        "Kimchi",
+        "Sesame oil"
+      ],
+      "totalCalories": 1035,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 13472.8
+    },
+    {
+      "id": "tough-014",
+      "cuisine": "Japanese",
+      "input": "tonkotsu ramen with chashu, ajitama egg, corn, black garlic oil and extra noodles",
+      "route": "gemini",
+      "itemNames": [
+        "Tonkotsu ramen",
+        "Chashu",
+        "Egg",
+        "Corn",
+        "Black garlic oil",
+        "Noodles"
+      ],
+      "totalCalories": 1582,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 13515.3
+    },
+    {
+      "id": "tough-015",
+      "cuisine": "Thai",
+      "input": "khao soi chicken with crispy noodles, pickled mustard greens, shallots and coconut broth",
+      "route": "gemini",
+      "itemNames": [
+        "Khao soi chicken",
+        "Noodles",
+        "Pickled mustard greens",
+        "Side greens",
+        "Coconut broth"
+      ],
+      "totalCalories": 1370,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 28120.9
+    },
+    {
+      "id": "tough-016",
+      "cuisine": "Vietnamese",
+      "input": "bun bo hue with beef shank, pork sausage, herbs, rice noodles and chili oil",
+      "route": "gemini",
+      "itemNames": [
+        "Beef",
+        "Pork sausage",
+        "Herbs",
+        "Noodles",
+        "Chili oil"
+      ],
+      "totalCalories": 955,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 12005.2
+    },
+    {
+      "id": "tough-017",
+      "cuisine": "Chinese",
+      "input": "mapo tofu over rice with chili crisp, minced pork and scallions",
+      "route": "gemini",
+      "itemNames": [
+        "Mapo tofu",
+        "Tofu",
+        "White rice",
+        "Chili oil",
+        "Pork sausage",
+        "Herbs"
+      ],
+      "totalCalories": 1200,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 13960.8
+    },
+    {
+      "id": "tough-018",
+      "cuisine": "Filipino",
+      "input": "silog plate with garlic rice, longganisa, fried egg, atchara and vinegar dip",
+      "route": "gemini",
+      "itemNames": [
+        "Garlic rice",
+        "Longganisa",
+        "Fried egg",
+        "Atchara",
+        "Vinegar dip"
+      ],
+      "totalCalories": 815,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 14499.8
+    },
+    {
+      "id": "tough-019",
+      "cuisine": "Middle Eastern",
+      "input": "mixed mezze plate: hummus, baba ganoush, tabbouleh, 3 falafel, pita and tahini",
+      "route": "gemini",
+      "itemNames": [
+        "hummus",
+        "baba ganoush",
+        "tabbouleh",
+        "falafel",
+        "pita bread",
+        "tahini"
+      ],
+      "totalCalories": 880,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 12918.4
+    },
+    {
+      "id": "tough-020",
+      "cuisine": "Mediterranean",
+      "input": "lamb gyro bowl with rice, tzatziki, feta, olives, cucumber tomato salad and pita chips",
+      "route": "unresolved",
+      "itemNames": [
+        "Lamb gyro",
+        "White rice",
+        "Tzatziki",
+        "Feta",
+        "Olives",
+        "Cucumber tomato salad",
+        "Pita"
+      ],
+      "totalCalories": 1050,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 30704.3
+    },
+    {
+      "id": "tough-021",
+      "cuisine": "Mexican",
+      "input": "birria tacos 3 with consome, Oaxaca cheese, salsa verde and pickled onions",
+      "route": "gemini",
+      "itemNames": [
+        "Birria tacos",
+        "Consome",
+        "Oaxaca cheese",
+        "Salsa verde",
+        "Onion salad"
+      ],
+      "totalCalories": 1202,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 10184.8
+    },
+    {
+      "id": "tough-022",
+      "cuisine": "Peruvian",
+      "input": "lomo saltado with fries, rice, beef strips, onions and aji sauce",
+      "route": "unresolved",
+      "itemNames": [
+        "Lomo saltado",
+        "Fries",
+        "White rice",
+        "Beef",
+        "Onion salad",
+        "Aji sauce"
+      ],
+      "totalCalories": 1582,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 30732.2
+    },
+    {
+      "id": "tough-023",
+      "cuisine": "Caribbean",
+      "input": "jerk chicken plate with rice and peas, plantains, cabbage slaw and festival bread",
+      "route": "gemini",
+      "itemNames": [
+        "Chicken",
+        "White rice",
+        "Rice and peas",
+        "Plantains",
+        "Cabbage slaw",
+        "Festival bread"
+      ],
+      "totalCalories": 1525,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 13865.9
+    },
+    {
+      "id": "tough-024",
+      "cuisine": "Ethiopian",
+      "input": "injera platter with doro wat, misir wat, gomen, shiro and ayib",
+      "route": "gemini",
+      "itemNames": [
+        "Injera",
+        "Doro wat",
+        "Misir wat",
+        "Gomen",
+        "Shiro",
+        "Ayib"
+      ],
+      "totalCalories": 1310,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 13032.1
+    },
+    {
+      "id": "tough-025",
+      "cuisine": "French",
+      "input": "croque madame with bechamel, ham, gruyere, fried egg and side greens",
+      "route": "unresolved",
+      "itemNames": [
+        "Croque madame",
+        "Bechamel",
+        "Ham",
+        "Gruyere",
+        "Egg",
+        "Side greens"
+      ],
+      "totalCalories": 1087,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 30754.9
+    },
+    {
+      "id": "tough-026",
+      "cuisine": "Italian",
+      "input": "cacio e pepe with burrata, prosciutto crisp and olive oil drizzle",
+      "route": "gemini",
+      "itemNames": [
+        "Cacio e pepe",
+        "Burrata",
+        "Prosciutto",
+        "Olives",
+        "Olive oil"
+      ],
+      "totalCalories": 1215,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 12736
+    },
+    {
+      "id": "tough-027",
+      "cuisine": "American",
+      "input": "smash burger double patty with bacon jam, aioli, brioche bun and side kale Caesar",
+      "route": "gemini",
+      "itemNames": [
+        "Smash burger",
+        "Bacon jam",
+        "Aioli",
+        "Brioche bun",
+        "Side greens"
+      ],
+      "totalCalories": 1320,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 11745.1
+    },
+    {
+      "id": "tough-028",
+      "cuisine": "American",
+      "input": "loaded baked potato with pulled pork, sour cream, cheddar, scallions and bbq sauce",
+      "route": "gemini",
+      "itemNames": [
+        "Loaded baked potato",
+        "Potato shaak",
+        "Pulled pork",
+        "Pork sausage",
+        "Sour cream",
+        "Oaxaca cheese",
+        "Herbs",
+        "BBQ sauce"
+      ],
+      "totalCalories": 1485,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 10433.6
+    },
+    {
+      "id": "tough-029",
+      "cuisine": "Vegan",
+      "input": "vegan poke bowl with tofu, edamame, seaweed salad, avocado, sushi rice and spicy mayo",
+      "route": "gemini",
+      "itemNames": [
+        "Vegan poke bowl with tofu",
+        "Edamame",
+        "Seaweed salad",
+        "Avocado",
+        "Sushi rice",
+        "Spicy mayo"
+      ],
+      "totalCalories": 1200,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 14343
+    },
+    {
+      "id": "tough-030",
+      "cuisine": "Breakfast",
+      "input": "shakshuka with 2 eggs, feta, pita, olives and harissa potatoes",
+      "route": "unresolved",
+      "itemNames": [
+        "Shakshuka",
+        "Egg",
+        "Feta",
+        "Pita",
+        "Olives",
+        "Harissa potatoes"
+      ],
+      "totalCalories": 1069,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 30674.4
+    },
+    {
+      "id": "tough-031",
+      "cuisine": "Dessert",
+      "input": "jalebi stack with rabri, pistachio dust, silver leaf and rose syrup",
+      "route": "gemini",
+      "itemNames": [
+        "Jalebi stack with Rabri",
+        "Pistachio dust",
+        "Silver leaf",
+        "Rose syrup"
+      ],
+      "totalCalories": 658,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 12752.5
+    },
+    {
+      "id": "tough-032",
+      "cuisine": "Dessert",
+      "input": "basque cheesecake slice with berry compote and whipped mascarpone",
+      "route": "gemini",
+      "itemNames": [
+        "Basque cheesecake",
+        "Berry compote",
+        "Whipped mascarpone"
+      ],
+      "totalCalories": 640,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 8181
+    },
+    {
+      "id": "tough-033",
+      "cuisine": "Snack",
+      "input": "movie snack box: caramel popcorn, nachos cheese cup, mini pretzel bites and cola",
+      "route": "gemini",
+      "itemNames": [
+        "Caramel popcorn",
+        "Nachos",
+        "Oaxaca cheese",
+        "Cheese cup",
+        "Pretzel bites",
+        "Cola"
+      ],
+      "totalCalories": 1800,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 10785
+    },
+    {
+      "id": "tough-034",
+      "cuisine": "Ambiguous",
+      "input": "small bowl of yellow lentil soup, one roti torn in pieces, potato fry, fried okra and green chutney",
+      "route": "gemini",
+      "itemNames": [
+        "Yellow lentil soup",
+        "Roti",
+        "Potato fry",
+        "Fried okra",
+        "Green chutney"
+      ],
+      "totalCalories": 740,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 28266.8
+    },
+    {
+      "id": "tough-035",
+      "cuisine": "Ambiguous typo",
+      "input": "xtra spicy paneeer qesadilla w guac, sour crem, rice n beans",
+      "route": "gemini",
+      "itemNames": [
+        "Paneer quesadilla",
+        "Guacamole",
+        "Sour cream",
+        "White rice",
+        "Rice and beans"
+      ],
+      "totalCalories": 1355,
+      "passKeywords": true,
+      "missingKeywords": [],
+      "passCalories": true,
+      "passMinItems": true,
+      "passed": true,
+      "latencyMs": 13442.9
+    }
+  ]
+}

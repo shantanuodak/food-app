@@ -31,6 +31,8 @@ final class APIClient {
         static let `default`: TimeInterval = 20
         static let parseText: TimeInterval = 35
         static let parseImage: TimeInterval = 45
+        static let parseBarcode: TimeInterval = 2
+        static let parseLabel: TimeInterval = 6
         /// Generous timeout for endpoints that hit on cold launch or onboarding.
         /// Render.com free tier can take up to ~60s to wake from inactivity.
         static let coldStart: TimeInterval = 65
@@ -180,6 +182,69 @@ final class APIClient {
         )
         return try await request(
             path: "/v1/logs/parse/image",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+    }
+
+    func parseBarcode(
+        code: String,
+        symbology: String?,
+        contextNote: String? = nil,
+        clientAttemptId: String? = nil,
+        loggedAt: String?
+    ) async throws -> ParseLogResponse {
+        struct BarcodeParseBody: Encodable {
+            let clientAttemptId: String?
+            let barcode: String
+            let symbology: String?
+            let contextNote: String?
+            let loggedAt: String?
+        }
+        let trimmedContextNote = contextNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = BarcodeParseBody(
+            clientAttemptId: clientAttemptId,
+            barcode: code,
+            symbology: symbology,
+            contextNote: trimmedContextNote?.isEmpty == false ? trimmedContextNote : nil,
+            loggedAt: loggedAt
+        )
+        return try await request(
+            path: "/v1/logs/parse/barcode",
+            method: "POST",
+            body: body,
+            requiresAuth: true
+        )
+    }
+
+    func parseLabel(
+        ocrText: String,
+        imageData: Data?,
+        mimeType: String?,
+        contextNote: String? = nil,
+        clientAttemptId: String? = nil,
+        loggedAt: String?
+    ) async throws -> ParseLogResponse {
+        struct LabelParseBody: Encodable {
+            let clientAttemptId: String?
+            let ocrText: String
+            let imageBase64: String?
+            let mimeType: String?
+            let contextNote: String?
+            let loggedAt: String?
+        }
+        let trimmedContextNote = contextNote?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let body = LabelParseBody(
+            clientAttemptId: clientAttemptId,
+            ocrText: ocrText,
+            imageBase64: imageData?.base64EncodedString(),
+            mimeType: mimeType,
+            contextNote: trimmedContextNote?.isEmpty == false ? trimmedContextNote : nil,
+            loggedAt: loggedAt
+        )
+        return try await request(
+            path: "/v1/logs/parse/label",
             method: "POST",
             body: body,
             requiresAuth: true
@@ -555,6 +620,10 @@ final class APIClient {
             return RequestTimeout.parseText
         case "/v1/logs/parse/image":
             return RequestTimeout.parseImage
+        case "/v1/logs/parse/barcode":
+            return RequestTimeout.parseBarcode
+        case "/v1/logs/parse/label":
+            return RequestTimeout.parseLabel
         // These endpoints are hit at launch and after onboarding — allow time for cold starts.
         case "/v1/onboarding", "/v1/logs/day-summary", "/v1/logs/day-logs", "/v1/logs/day-range":
             return RequestTimeout.coldStart

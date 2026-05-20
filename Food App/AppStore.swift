@@ -286,6 +286,16 @@ final class AppStore: ObservableObject {
         guard apiError.isAuthTokenError() else {
             return false
         }
+
+        // Do not let transient backend auth/JWKS/cold-start issues eject a
+        // valid local session. AuthService clears the stored session only when
+        // refresh recovery proves the token is invalid/revoked; until then,
+        // keep the user in-app and let the next request retry recovery.
+        if authSessionStore.session != nil {
+            NSLog("[Auth] Suppressed sign-out for recoverable API auth error: \(apiError.localizedDescription)")
+            return false
+        }
+
         signOut()
         return true
     }

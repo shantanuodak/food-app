@@ -27,7 +27,7 @@ enum HomeLoggingSaveRequestUtils {
 
         let inputKind = HomeLoggingRowFactory.normalizedInputKind(body.inputKind, fallback: "text")
         let imageRef = body.imageRef?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return inputKind == "image" &&
+        return inputKind.hasPrefix("image") &&
             ((imageRef?.isEmpty == false) || item.imageUploadData != nil || item.imagePreviewData != nil)
     }
 }
