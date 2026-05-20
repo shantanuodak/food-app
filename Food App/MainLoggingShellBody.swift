@@ -383,7 +383,9 @@ extension MainLoggingShellView {
                             isQuickCameraCaptureActive = false
                         }
                         cameraDrawerImage = image
-                        cameraDrawerState = .analyzing(image)
+                        // Lane hint nil for now; parseAndUpdateDrawer updates it
+                        // once iOS Vision pipeline picks a lane (~500-800ms).
+                        cameraDrawerState = .analyzing(image, nil)
                         isCameraAnalysisSheetPresented = true
                         Task { await parseAndUpdateDrawer(image) }
                     },
@@ -520,7 +522,7 @@ extension MainLoggingShellView {
             },
             onRetry: {
                 if let image = cameraDrawerImage {
-                    cameraDrawerState = .analyzing(image)
+                    cameraDrawerState = .analyzing(image, nil)
                     Task { await parseAndUpdateDrawer(image, contextNote: cameraDrawerContextNote) }
                 }
             }

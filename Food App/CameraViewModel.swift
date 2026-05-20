@@ -88,6 +88,12 @@ final class CameraViewModel: ObservableObject {
     @Published var currentZoomFactor: CGFloat = 1.0
     @Published var showPermissionDeniedAlert = false
     @Published private(set) var capturedImage: UIImage?
+    /// V3.1 Phase 2: live barcode the camera is currently seeing. Drives the
+    /// "Barcode detected — tap to capture" pill in the viewfinder.
+    /// Republished from CameraService.onBarcodeStateChanged so SwiftUI views
+    /// observing this view model react without subscribing to the service
+    /// directly.
+    @Published private(set) var detectedBarcode: DetectedBarcode?
 
     // MARK: Callbacks
 
@@ -107,6 +113,12 @@ final class CameraViewModel: ObservableObject {
 
     init(cameraService: CameraService) {
         self.cameraService = cameraService
+        // Republish live barcode detection from the service. Callback fires
+        // on MainActor (see CameraService.publishBarcodeDetection) so direct
+        // @Published mutation is safe.
+        cameraService.onBarcodeStateChanged = { [weak self] detection in
+            self?.detectedBarcode = detection
+        }
     }
 
     // MARK: - Lifecycle

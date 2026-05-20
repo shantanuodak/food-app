@@ -2,9 +2,37 @@ import SwiftUI
 
 // MARK: - Drawer State
 
+/// V3.1 Phase 4: which parse lane the iOS Vision pipeline picked for this
+/// capture. Used to drive lane-specific status text in the analyzing
+/// drawer ("Scanning barcode…" vs "Reading nutrition label…" vs
+/// "Analyzing your meal…"). nil means lane hasn't been decided yet —
+/// renders the generic "Analyzing your meal" copy.
+enum AnalysisLaneHint: Equatable {
+    case barcode
+    case label
+    case vision
+
+    /// Top-line header shown in the analyzing card.
+    var headerText: String {
+        switch self {
+        case .barcode: return "Scanning barcode"
+        case .label:   return "Reading nutrition label"
+        case .vision:  return "Analyzing your meal"
+        }
+    }
+
+    /// Whether to show the multi-phase progress phrases. Barcode + label
+    /// finish in ~1-3s — too fast to be worth churning through "Reading
+    /// the photo…" / "Finding every visible food item…" copy. Vision-lane
+    /// is slower (5-8s) so the progression helps the user feel progress.
+    var showsMultiPhaseProgression: Bool {
+        self == .vision
+    }
+}
+
 enum CameraDrawerState {
     case idle
-    case analyzing(UIImage)
+    case analyzing(UIImage, AnalysisLaneHint?)
     case parsed(UIImage, [ParsedFoodItem], NutritionTotals)
     case error(String, UIImage?)
 
@@ -63,8 +91,8 @@ struct CameraResultDrawerView: View {
                 switch state {
                 case .idle:
                     EmptyView()
-                case .analyzing(let image):
-                    analyzingContent(image: image)
+                case .analyzing(let image, let laneHint):
+                    analyzingContent(image: image, laneHint: laneHint)
                 case .parsed(let image, let items, let totals):
                     parsedContent(image: image, items: items, totals: totals)
                         .onAppear {
@@ -90,7 +118,7 @@ struct CameraResultDrawerView: View {
 
     // MARK: - Analyzing State
 
-    private func analyzingContent(image: UIImage) -> some View {
+    private func analyzingContent(image: UIImage, laneHint: AnalysisLaneHint?) -> some View {
         return VStack(alignment: .leading, spacing: 0) {
             // Full-width image with shimmer sweep
             ZStack(alignment: .topTrailing) {
@@ -126,7 +154,7 @@ struct CameraResultDrawerView: View {
                 }
             }
 
-            analyzingStatusCard()
+            analyzingStatusCard(laneHint: laneHint)
                 .padding(.horizontal, 20)
             .padding(.top, 18)
 
@@ -163,8 +191,51 @@ struct CameraResultDrawerView: View {
         }
     }
 
+    /// V3.1 Phase 4: lane-specific copy. Vision lane keeps the existing
+    /// multi-phase progression (5-8s parse — user benefits from progress
+    /// feedback). Barcode + label finish in 1-3s — suppress the churn so
+    /// the copy doesn't change underneath the user.
+    private struct AnalyzingCopy {
+        let header: String
+        let primaryLine: String
+        let secondaryLine: String
+        let showsProgression: Bool
+    }
+
+    private func analyzingCopy(for hint: AnalysisLaneHint?) -> AnalyzingCopy {
+        let header = hint?.headerText ?? "Analyzing your meal"
+        let showsProgression = hint?.showsMultiPhaseProgression ?? true
+        switch hint {
+        case .barcode:
+            return AnalyzingCopy(
+                header: header,
+                primaryLine: "Looking up product",
+                secondaryLine: "Fast packaged-item lookup.",
+                showsProgression: showsProgression
+            )
+        case .label:
+            return AnalyzingCopy(
+                header: header,
+                primaryLine: "Reading the label",
+                secondaryLine: "Pulling calories and macros straight off the panel.",
+                showsProgression: showsProgression
+            )
+        case .vision, .none:
+            return AnalyzingCopy(
+                header: header,
+                primaryLine: analyzingPhrases[analyzePhaseIndex],
+                secondaryLine: analyzeTickCount >= 7
+                    ? "Still working - this photo has a few details to check."
+                    : "Checking visible foods, portions, and calories.",
+                showsProgression: showsProgression
+            )
+        }
+    }
+
     @ViewBuilder
-    private func analyzingStatusCard() -> some View {
+    private func analyzingStatusCard(laneHint: AnalysisLaneHint?) -> some View {
+        let copy = analyzingCopy(for: laneHint)
+
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 10) {
                 ProgressView()
@@ -172,10 +243,10 @@ struct CameraResultDrawerView: View {
                     .tint(Color(red: 0.380, green: 0.333, blue: 0.961))
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Analyzing your meal")
+                    Text(copy.header)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.secondary)
-                    Text(analyzingPhrases[analyzePhaseIndex])
+                    Text(copy.primaryLine)
                         .font(.system(size: 17, weight: .semibold))
                         .foregroundStyle(.primary)
                         .contentTransition(.opacity)
@@ -185,16 +256,18 @@ struct CameraResultDrawerView: View {
                 Spacer()
             }
 
-            HStack(spacing: 7) {
-                ForEach(analyzingPhrases.indices, id: \.self) { index in
-                    Capsule()
-                        .fill(index <= analyzePhaseIndex ? Color(red: 0.380, green: 0.333, blue: 0.961) : Color(.systemGray4))
-                        .frame(width: index == analyzePhaseIndex ? 24 : 7, height: 7)
-                        .animation(.spring(response: 0.34, dampingFraction: 0.82), value: analyzePhaseIndex)
+            if copy.showsProgression {
+                HStack(spacing: 7) {
+                    ForEach(analyzingPhrases.indices, id: \.self) { index in
+                        Capsule()
+                            .fill(index <= analyzePhaseIndex ? Color(red: 0.380, green: 0.333, blue: 0.961) : Color(.systemGray4))
+                            .frame(width: index == analyzePhaseIndex ? 24 : 7, height: 7)
+                            .animation(.spring(response: 0.34, dampingFraction: 0.82), value: analyzePhaseIndex)
+                    }
                 }
             }
 
-            Text(analyzeTickCount >= 7 ? "Still working - this photo has a few details to check." : "Checking visible foods, portions, and calories.")
+            Text(copy.secondaryLine)
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
                 .animation(.easeInOut(duration: 0.25), value: analyzeTickCount >= 7)

@@ -11,6 +11,9 @@ struct CameraView: View {
     @State private var focusRingID = UUID()
     @State private var showCaptureFlash = false
     @State private var showPhotoLibrary = false
+    /// V3.1 Phase 3: one-time tip shown on first camera open. Initialized
+    /// from UserDefaults so subsequent opens don't reshow it.
+    @State private var showFirstLaunchTip = CameraFirstLaunchTip.shouldShow
 
     // Callbacks
     private let onImageCaptured: (UIImage) -> Void
@@ -85,7 +88,21 @@ struct CameraView: View {
                     })
                         .padding(.top, safeInsets.top + 6)
 
-                    Spacer(minLength: 18)
+                    // V3.1 Phase 2: live detection pill — only renders when a
+                    // barcode is currently in the viewfinder. Drives intuition
+                    // that the upcoming capture will go through the fast
+                    // barcode lane.
+                    BarcodeDetectionPill(detection: viewModel.detectedBarcode)
+                        .padding(.top, 10)
+                        .padding(.bottom, 4)
+
+                    // V3.1 Phase 3: informational icon row that communicates
+                    // "we auto-detect three kinds of input" without using
+                    // intrusive text.
+                    CameraModeIconRow()
+                        .padding(.bottom, 6)
+
+                    Spacer(minLength: 10)
 
                     ZStack {
                         stagePreviewSurface(width: stageWidth, height: stageHeight)
@@ -132,6 +149,13 @@ struct CameraView: View {
                 }
 
                 CaptureFlashOverlay(isVisible: $showCaptureFlash)
+
+                // V3.1 Phase 3: first-launch tip overlay. Z-stacked above
+                // everything else so it's the user's first interaction.
+                if showFirstLaunchTip {
+                    CameraFirstLaunchTip(isPresented: $showFirstLaunchTip)
+                        .zIndex(100)
+                }
             }
         }
     }

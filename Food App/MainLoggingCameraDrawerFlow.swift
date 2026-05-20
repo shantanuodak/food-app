@@ -150,6 +150,21 @@ extension MainLoggingShellView {
         }.value
 
         let (visionResult, prepared) = await (visionTask, preparedTask)
+        // V3.1 Phase 4: as soon as iOS Vision picks a lane, push the hint
+        // into the analyzing drawer so the user sees "Scanning barcode…" or
+        // "Reading nutrition label…" instead of the generic copy. Vision-lane
+        // (the default) keeps the existing multi-phase progression.
+        let earlyLane = decideLane(visionResult: visionResult)
+        let earlyHint: AnalysisLaneHint = {
+            switch earlyLane {
+            case .barcode: return .barcode
+            case .label:   return .label
+            case .vision:  return .vision
+            }
+        }()
+        if cameraDrawerState.isVisible {
+            cameraDrawerState = .analyzing(image, earlyHint)
+        }
         let imagePrepMs = Int(Date().timeIntervalSince(flowStartedAt) * 1000)
         guard let prepared else {
             ImageParseAttemptTelemetry.emit(
@@ -501,7 +516,7 @@ extension MainLoggingShellView {
 
         cameraDrawerImage = image
         cameraDrawerContextNote = ""
-        cameraDrawerState = .analyzing(image)
+        cameraDrawerState = .analyzing(image, nil)
         isCameraAnalysisSheetPresented = true
         await parseAndUpdateDrawer(image)
     }

@@ -34,6 +34,14 @@ enum CameraPermissionStatus {
     case restricted
 }
 
+/// A barcode the camera is currently seeing in the viewfinder, surfaced for
+/// the live "Barcode detected" UI hint. Distinct from a captured-photo
+/// barcode (which is handled post-capture by ImageVisionPipeline).
+struct DetectedBarcode: Equatable {
+    let payload: String
+    let symbology: String
+}
+
 // MARK: - CameraService
 
 @MainActor
@@ -58,13 +66,24 @@ final class CameraService: NSObject, ObservableObject {
     nonisolated private let captureSession = AVCaptureSession()
     private var videoDeviceInput: AVCaptureDeviceInput?
     nonisolated private let photoOutput = AVCapturePhotoOutput()
+    nonisolated private let metadataOutput = AVCaptureMetadataOutput()
 
     nonisolated private let sessionQueue = DispatchQueue(label: "com.foodapp.camera.session")
+    nonisolated private let metadataQueue = DispatchQueue(label: "com.foodapp.camera.metadata")
 
     // MARK: Photo Capture
 
     private var photoContinuation: CheckedContinuation<UIImage, Error>?
     private var flashMode: AVCaptureDevice.FlashMode = .auto
+
+    // MARK: Live Barcode Detection
+
+    /// Set by CameraViewModel during init. Fires on MainActor when the live
+    /// viewfinder starts/stops seeing a barcode. Used to drive the
+    /// "Barcode detected — tap to capture" hint pill.
+    var onBarcodeStateChanged: ((DetectedBarcode?) -> Void)?
+    private var lastDetectedBarcode: DetectedBarcode?
+    private var clearBarcodeTask: Task<Void, Never>?
 
     // MARK: - Public API
 
@@ -123,6 +142,18 @@ final class CameraService: NSObject, ObservableObject {
             }
 
             photoOutput.maxPhotoQualityPrioritization = .quality
+
+            // V3.1 Phase 2: live barcode detection via metadata output so the
+            // viewfinder can show "Barcode detected — tap to capture" before
+            // the user actually shoots. This is near-zero cost (system-level
+            // detection running on the GPU; no per-frame work for us).
+            if !captureSession.outputs.contains(metadataOutput) {
+                if captureSession.canAddOutput(metadataOutput) {
+                    captureSession.addOutput(metadataOutput)
+                    metadataOutput.metadataObjectTypes = [.ean13, .ean8, .upce, .code128]
+                    metadataOutput.setMetadataObjectsDelegate(self, queue: metadataQueue)
+                }
+            }
 
             // V3.1 Phase 1: continuous AF/AE so the camera is always trying to be
             // sharp before the user taps shutter, and enable macro auto-engage on
@@ -265,6 +296,58 @@ final class CameraService: NSObject, ObservableObject {
             return wide
         }
         return AVCaptureDevice.default(for: .video)
+    }
+}
+
+// MARK: - AVCaptureMetadataOutputObjectsDelegate (live barcode detection)
+
+extension CameraService: AVCaptureMetadataOutputObjectsDelegate {
+    nonisolated func metadataOutput(
+        _ output: AVCaptureMetadataOutput,
+        didOutput metadataObjects: [AVMetadataObject],
+        from connection: AVCaptureConnection
+    ) {
+        // Take the first machine-readable code with a non-empty payload. If
+        // multiple are in frame, we just pick one; the lane router will run
+        // again on the captured photo and re-decide.
+        guard
+            let object = metadataObjects.first(where: { ($0 as? AVMetadataMachineReadableCodeObject)?.stringValue?.isEmpty == false }) as? AVMetadataMachineReadableCodeObject,
+            let payload = object.stringValue,
+            !payload.isEmpty
+        else { return }
+
+        let symbology = Self.symbologyName(object.type)
+        let detection = DetectedBarcode(payload: payload, symbology: symbology)
+        Task { @MainActor [weak self] in
+            self?.publishBarcodeDetection(detection)
+        }
+    }
+
+    /// Called on MainActor when a barcode lands in the viewfinder. Schedules
+    /// a 1.2s auto-clear so the pill fades out when the user looks away.
+    @MainActor
+    private func publishBarcodeDetection(_ detection: DetectedBarcode) {
+        if lastDetectedBarcode != detection {
+            lastDetectedBarcode = detection
+            onBarcodeStateChanged?(detection)
+        }
+        clearBarcodeTask?.cancel()
+        clearBarcodeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            if Task.isCancelled { return }
+            self?.lastDetectedBarcode = nil
+            self?.onBarcodeStateChanged?(nil)
+        }
+    }
+
+    private nonisolated static func symbologyName(_ type: AVMetadataObject.ObjectType) -> String {
+        switch type {
+        case .ean13:   return "EAN-13"
+        case .ean8:    return "EAN-8"
+        case .upce:    return "UPC-E"
+        case .code128: return "Code128"
+        default:       return type.rawValue
+        }
     }
 }
 

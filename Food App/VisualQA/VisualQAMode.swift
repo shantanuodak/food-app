@@ -138,7 +138,7 @@ struct VisualQARootView: View {
         case "home/camera-analysis/loading":
             VisualQADrawerShell {
                 CameraResultDrawerView(
-                    state: .analyzing(VisualQAFixtures.foodImage),
+                    state: .analyzing(VisualQAFixtures.foodImage, nil),
                     contextNote: .constant(""),
                     onLogIt: { _, _ in },
                     onDiscard: {},
