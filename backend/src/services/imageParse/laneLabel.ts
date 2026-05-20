@@ -3,6 +3,7 @@ import { config } from '../../config.js';
 import { ApiError } from '../../utils/errors.js';
 import type { ParseResult, ParsedItem } from '../deterministicParser.js';
 import { generateGeminiMultimodalJson, type GeminiUsage } from '../geminiFlashClient.js';
+import { resolveThinkingBudget } from '../geminiThinkingConfig.js';
 import { buildLabelParsePrompt } from './prompts/labelParse.js';
 import type { ImageParseServiceResult } from './types.js';
 
@@ -149,7 +150,8 @@ export async function parseLabel(args: {
     temperature: 0,
     maxOutputTokens: 650,
     timeoutMs: args.timeoutMs ?? 3000,
-    maxAttempts: 1
+    maxAttempts: 1,
+    thinkingBudget: resolveThinkingBudget(config.aiImageLabelThinking)
   });
 
   let payload: z.infer<typeof labelResponseSchema> | null = null;

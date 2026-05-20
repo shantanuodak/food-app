@@ -6,6 +6,7 @@ import type { ParseResult, ParsedItem } from '../deterministicParser.js';
 import { createEmptyParseResult } from '../parsePipelineResultUtils.js';
 import { normalizeParseResultContract } from '../parseContractService.js';
 import { generateGeminiMultimodalJson, generateGeminiMultimodalText, type GeminiUsage } from '../geminiFlashClient.js';
+import { resolveThinkingBudget } from '../geminiThinkingConfig.js';
 import { tryGeminiPrimaryParse } from '../aiNormalizerService.js';
 import { postProcessFoodImageResult, type FoodImagePostprocessContext } from '../foodImagePostprocessService.js';
 
@@ -1462,12 +1463,14 @@ async function runImageInventoryV2(image: ImagePart): Promise<{
   const startedAt = process.hrtime.bigint();
   const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
   const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 6_000), 12_000);
+  const thinkingBudget = resolveThinkingBudget(config.aiImageInventoryThinking);
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.05,
     maxOutputTokens: 1100,
     timeoutMs,
     maxAttempts: 1,
+    thinkingBudget,
     parts: [
       { text: buildImageInventoryV2Prompt(image.contextNote) },
       {

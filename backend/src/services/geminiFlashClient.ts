@@ -29,6 +29,7 @@ type GenerateOptions = {
   maxOutputTokens?: number;
   timeoutMs?: number;
   maxAttempts?: number;
+  thinkingBudget?: number;
 };
 
 type MultimodalPart =
@@ -50,7 +51,12 @@ type GenerateMultimodalOptions = {
   timeoutMs?: number;
   maxAttempts?: number;
   responseMimeType?: 'application/json' | 'text/plain';
+  thinkingBudget?: number;
 };
+
+// resolveThinkingBudget lives in ./geminiThinkingConfig.ts so test mocks
+// of this client module don't shadow it. Re-exported here for convenience.
+export { resolveThinkingBudget } from './geminiThinkingConfig.js';
 
 type GeminiCandidate = {
   content?: {
@@ -190,7 +196,8 @@ async function performGeminiJsonRequest(
   maxOutputTokens?: number,
   timeoutMsOverride?: number,
   responseMimeType: 'application/json' | 'text/plain' = 'application/json',
-  maxAttemptsOverride?: number
+  maxAttemptsOverride?: number,
+  thinkingBudget?: number
 ): Promise<GeminiSuccess | GeminiFailure | null> {
   if (!config.geminiApiKey) {
     return null;
@@ -230,7 +237,8 @@ async function performGeminiJsonRequest(
           generationConfig: {
             temperature,
             responseMimeType,
-            ...(maxOutputTokens ? { maxOutputTokens } : {})
+            ...(maxOutputTokens ? { maxOutputTokens } : {}),
+            ...(thinkingBudget !== undefined ? { thinkingConfig: { thinkingBudget } } : {})
           }
         }),
         signal: controller.signal
@@ -516,7 +524,8 @@ export async function generateGeminiJsonWithDiagnostics(
     options.maxOutputTokens,
     options.timeoutMs,
     undefined,
-    options.maxAttempts
+    options.maxAttempts,
+    options.thinkingBudget
   );
 }
 
@@ -530,7 +539,8 @@ export async function generateGeminiMultimodalJson(
     options.maxOutputTokens,
     options.timeoutMs,
     options.responseMimeType,
-    options.maxAttempts
+    options.maxAttempts,
+    options.thinkingBudget
   );
   return result && 'jsonText' in result ? result : null;
 }
@@ -545,7 +555,8 @@ export async function generateGeminiMultimodalText(
     options.maxOutputTokens,
     options.timeoutMs,
     'text/plain',
-    options.maxAttempts
+    options.maxAttempts,
+    options.thinkingBudget
   );
   return result && 'jsonText' in result ? result : null;
 }
