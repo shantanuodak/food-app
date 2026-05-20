@@ -532,10 +532,18 @@ function scoreCase(
 function keywordPresent(searchable: string, keyword: string): boolean {
   const normalized = keyword.toLowerCase().trim();
   if (!normalized) return true;
+  // V3 audit (2026-05-19): tightened aliases. The previous map had:
+  //   burger: ['burger', 'fried chicken sandwich', 'chicken sandwich']
+  //   bean: [..., 'rajma']
+  //   roti: ['roti', 'chapati', 'paratha', 'naan', 'flatbread']
+  // These let semantically-different dishes count as matches, making
+  // the eval pass without the parser being more accurate. If you want
+  // "bean" to match "rajma", change the test case to expect "rajma"
+  // directly instead of bridging at the eval layer.
   const aliases: Record<string, string[]> = {
-    bean: ['bean', 'beans', 'rajma', 'kidney bean'],
-    burger: ['burger', 'fried chicken sandwich', 'chicken sandwich'],
-    roti: ['roti', 'chapati', 'paratha', 'naan', 'flatbread'],
+    bean: ['bean', 'beans', 'kidney bean'],
+    burger: ['burger', 'cheeseburger', 'hamburger'],
+    roti: ['roti', 'chapati'],
     salad: ['salad', 'mixed greens', 'side salad']
   };
   return (aliases[normalized] ?? [normalized]).some((alias) => searchable.includes(alias));

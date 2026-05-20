@@ -151,6 +151,17 @@ function contextFallbackResult(args: {
     return documentImageResult(args);
   }
 
+  // V3 audit (2026-05-19): removed hardcoded canned-recipe fallbacks.
+  // These were pattern-matching contextNote keywords (e.g. "thali" -> fixed
+  // Dal+Naan+Rice+Sabzi+Raita) and returning fake items that made Gemini
+  // failures look like successful parses. They rigged the uploaded-photo
+  // eval from 1/10 -> 10/10 without actually improving real-world parsing.
+  // Now returns null on genuine failure so the user sees an honest
+  // "couldn't parse" state instead of items they didn't eat.
+  // Dead code below preserved temporarily for diff visibility; will be
+  // deleted in a follow-up commit after the team confirms no regressions.
+  return null;
+
   if (args.cuisine === 'indian' && text.includes('thali')) {
     imageType = 'tray_or_thali';
     items = [

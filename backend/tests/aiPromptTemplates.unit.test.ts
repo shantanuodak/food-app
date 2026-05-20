@@ -35,7 +35,7 @@ describe('AI nutrition prompt templates', () => {
   test('default prompt version is bumped for the accuracy prompt revision', async () => {
     const { config } = await import('../src/config.js');
 
-    expect(config.parsePromptVersion).toBe('gemini-2.5-flash:v3');
+    expect(config.parsePromptVersion).toBe('gemini-3.1-flash-lite:v3');
   });
 
   test('fallback template avoids conflicting segment instructions', () => {

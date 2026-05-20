@@ -1461,7 +1461,7 @@ async function runImageInventoryV2(image: ImagePart): Promise<{
 } | null> {
   const startedAt = process.hrtime.bigint();
   const model = config.aiImageInventoryModel.trim() || config.geminiFlashModel;
-  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 3_000), 4_000);
+  const timeoutMs = Math.min(Math.max(config.aiImageFastTimeoutMs, 6_000), 12_000);
   const response = await generateGeminiMultimodalJson({
     model,
     temperature: 0.05,
