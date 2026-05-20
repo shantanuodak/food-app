@@ -128,3 +128,47 @@ struct ExistingAccountDetectedView: View {
         }
     }
 }
+
+#if DEBUG
+#Preview("Existing user — 47 meals") {
+    ExistingAccountDetectedView(
+        status: OnboardingStatusResponse(
+            hasCompletedOnboarding: true,
+            mealCount: 47,
+            createdAt: "2026-04-12T12:00:00Z"
+        ),
+        displayName: "Shantanu",
+        onContinueWithExisting: { print("preview: continue") },
+        onUpdateProfile: { print("preview: update") },
+        onCancel: { print("preview: cancel") }
+    )
+}
+
+#Preview("Existing user — no meals (just goals)") {
+    ExistingAccountDetectedView(
+        status: OnboardingStatusResponse(
+            hasCompletedOnboarding: true,
+            mealCount: 0,
+            createdAt: "2026-05-01T12:00:00Z"
+        ),
+        displayName: nil,
+        onContinueWithExisting: { print("preview: continue") },
+        onUpdateProfile: { print("preview: update") },
+        onCancel: { print("preview: cancel") }
+    )
+}
+
+#Preview("Existing user — single meal") {
+    ExistingAccountDetectedView(
+        status: OnboardingStatusResponse(
+            hasCompletedOnboarding: true,
+            mealCount: 1,
+            createdAt: "2026-05-20T12:00:00Z"
+        ),
+        displayName: "Pornima",
+        onContinueWithExisting: { print("preview: continue") },
+        onUpdateProfile: { print("preview: update") },
+        onCancel: { print("preview: cancel") }
+    )
+}
+#endif

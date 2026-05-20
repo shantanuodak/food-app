@@ -172,3 +172,33 @@ extension CameraFirstLaunchTip {
         !UserDefaults.standard.bool(forKey: userDefaultsKey)
     }
 }
+
+#if DEBUG
+#Preview("Barcode detected pill") {
+    ZStack {
+        Color.black.ignoresSafeArea()
+        VStack(spacing: 24) {
+            BarcodeDetectionPill(detection: nil)
+            BarcodeDetectionPill(detection: DetectedBarcode(payload: "0049000028911", symbology: "UPC-A"))
+            BarcodeDetectionPill(detection: DetectedBarcode(payload: "0028400433556", symbology: "EAN-13"))
+        }
+    }
+}
+
+#Preview("Mode icon row") {
+    ZStack {
+        Color.black.ignoresSafeArea()
+        CameraModeIconRow()
+    }
+}
+
+#Preview("First-launch tip") {
+    @Previewable @State var showTip = true
+    return ZStack {
+        Color.gray.opacity(0.4).ignoresSafeArea()
+        if showTip {
+            CameraFirstLaunchTip(isPresented: $showTip)
+        }
+    }
+}
+#endif
