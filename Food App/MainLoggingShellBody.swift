@@ -395,20 +395,44 @@ extension MainLoggingShellView {
                             isQuickCameraCaptureActive = false
                         }
                         cameraDrawerImage = image
-                        // Lane hint nil for now; parseAndUpdateDrawer updates it
-                        // once iOS Vision pipeline picks a lane (~500-800ms).
-                        cameraDrawerState = .analyzing(image, nil)
-                        // Kick off parse immediately — runs in parallel with
-                        // the sheet-up animation, so the result lands closer
-                        // to when the user actually sees the analyzing UI.
+                        // V3.1 hotfix v4 (2026-05-20): pass nil as the
+                        // image so the drawer pops up instantly with a
+                        // gray placeholder. The captured photo from a real
+                        // iPhone is 12-48MP HEIC; SwiftUI's first decode
+                        // happens on the main thread the moment we hand it
+                        // to Image(uiImage:), and that decode is what was
+                        // making the drawer appear seconds late on device.
+                        // We then prepare a small display thumbnail on a
+                        // detached task and re-set the state with the
+                        // populated image (~100-300ms later, well before
+                        // the parse result lands).
+                        cameraDrawerState = .analyzing(nil, nil)
+                        // Kick off parse immediately — runs in parallel
+                        // with the sheet-up animation, so the result lands
+                        // closer to when the user actually sees the
+                        // analyzing UI.
                         Task { await parseAndUpdateDrawer(image) }
-                        // Present the drawer sheet immediately. Because it's
-                        // nested in the cover, iOS animates it up over the
-                        // camera (no cover-dismiss serialization). The cover
-                        // stays alive underneath and only dismisses when the
-                        // sheet dismisses. Use the OverCover flag so the
-                        // sibling sheet (used by the photo-library path)
-                        // doesn't also try to fire.
+                        // Prepare a small display thumbnail off the main
+                        // thread, then swap it into the drawer state. If
+                        // the drawer has already moved past .analyzing
+                        // (e.g., parse came back early via cache), we skip
+                        // the swap.
+                        Task.detached(priority: .userInitiated) {
+                            let thumbnail = await image.byPreparingThumbnail(ofSize: CGSize(width: 1024, height: 1024))
+                            await MainActor.run {
+                                if case .analyzing(_, let hint) = cameraDrawerState {
+                                    cameraDrawerState = .analyzing(thumbnail ?? image, hint)
+                                }
+                            }
+                        }
+                        // Present the drawer sheet immediately. Because
+                        // it's nested in the cover, iOS animates it up
+                        // over the camera (no cover-dismiss
+                        // serialization). The cover stays alive underneath
+                        // and only dismisses when the sheet dismisses. Use
+                        // the OverCover flag so the sibling sheet (used by
+                        // the photo-library path) doesn't also try to
+                        // fire.
                         isCameraAnalysisSheetPresentedOverCover = true
                     },
                     onOpenPhotoLibrary: {

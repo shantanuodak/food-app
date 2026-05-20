@@ -32,7 +32,16 @@ enum AnalysisLaneHint: Equatable {
 
 enum CameraDrawerState {
     case idle
-    case analyzing(UIImage, AnalysisLaneHint?)
+    /// V3.1 hotfix v4 (2026-05-20): image is now optional. The host (camera
+    /// capture path) hands `nil` initially so the drawer can pop up the
+    /// instant the user taps "Use Photo" — no waiting for SwiftUI to
+    /// decode + downsample a 12-48MP HEIC on the main thread, which is
+    /// what was making the drawer appear "a couple of seconds" late on
+    /// real iPhones. The host then asynchronously prepares a small
+    /// display-sized thumbnail and re-sets the state with the populated
+    /// image. The photo-library + parsed/error paths still pass a real
+    /// UIImage because those images are already small or already decoded.
+    case analyzing(UIImage?, AnalysisLaneHint?)
     case parsed(UIImage, [ParsedFoodItem], NutritionTotals)
     case error(String, UIImage?)
 
@@ -118,20 +127,35 @@ struct CameraResultDrawerView: View {
 
     // MARK: - Analyzing State
 
-    private func analyzingContent(image: UIImage, laneHint: AnalysisLaneHint?) -> some View {
+    private func analyzingContent(image: UIImage?, laneHint: AnalysisLaneHint?) -> some View {
         return VStack(alignment: .leading, spacing: 0) {
-            // Full-width image with shimmer sweep
+            // Full-width image (or placeholder) with shimmer sweep.
+            // V3.1 hotfix v4 (2026-05-20): when image is nil, we render a
+            // neutral gray placeholder of the same dimensions so the drawer
+            // layout doesn't jump when the host hands us the decoded
+            // thumbnail a moment later. This is the codepath used by the
+            // camera-capture path on first appear — `Image(uiImage:)` with
+            // a 12-48MP HEIC blocks the main thread for hundreds of ms
+            // while SwiftUI decodes and downsamples it, which is why the
+            // drawer was appearing seconds late on real iPhones.
             ZStack(alignment: .topTrailing) {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 260)
-                    .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    .overlay(
-                        shimmerOverlay()
-                            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                    )
+                Group {
+                    if let image {
+                        Image(uiImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    } else {
+                        Rectangle()
+                            .fill(Color(white: 0.18))
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 260)
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .overlay(
+                    shimmerOverlay()
+                        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                )
 
                 AppCloseButton(action: onDiscard, variant: .onImage, visualSize: 30, hitSize: 44)
                 .padding(14)
