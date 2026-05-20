@@ -23,7 +23,8 @@ extension MainLoggingShellView {
               !isNutritionSummaryPresented,
               !isStreakDrawerPresented,
               !isCustomCameraPresented,
-              !isCameraAnalysisSheetPresented else {
+              !isCameraAnalysisSheetPresented,
+              !isCameraAnalysisSheetPresentedOverCover else {
             return
         }
 

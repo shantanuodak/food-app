@@ -374,9 +374,21 @@ extension MainLoggingShellView {
             .fullScreenCover(isPresented: $isCustomCameraPresented, onDismiss: {
                 isQuickCameraCaptureActive = false
             }) {
+                // V3.1 hotfix v2 (2026-05-20): the drawer sheet is now nested
+                // INSIDE the camera fullScreenCover instead of sitting next to
+                // it on MainLoggingShellBody. Previous architecture had cover
+                // + sheet as sibling modals on the same parent view; iOS
+                // serializes those, so "Use Photo" forced a wait for the
+                // cover dismiss animation + AVCaptureSession teardown before
+                // the sheet could begin presenting (4-5s user-perceived lag
+                // on real devices). Nesting lets the sheet slide up OVER the
+                // cover the moment "Use Photo" is tapped — the camera review
+                // screen stays in place behind the sheet and only dismisses
+                // when the drawer dismisses (handled in the sheet's onDismiss
+                // below). Net effect: drawer appears in ~0.35s sheet-up
+                // animation, not several seconds of frozen camera review.
                 CameraView(
                     onImageCaptured: { image in
-                        isCustomCameraPresented = false
                         inputMode = .text
                         selectedCameraSource = nil
                         if isQuickCameraCaptureActive {
@@ -386,32 +398,39 @@ extension MainLoggingShellView {
                         // Lane hint nil for now; parseAndUpdateDrawer updates it
                         // once iOS Vision pipeline picks a lane (~500-800ms).
                         cameraDrawerState = .analyzing(image, nil)
-
-                        // V3.1 hotfix (2026-05-20): the parse work is fully
-                        // async, so kick it off immediately — it runs in
-                        // parallel with the fullScreenCover dismissal
-                        // animation, which means the result lands closer to
-                        // when the user actually sees the analyzing sheet.
+                        // Kick off parse immediately — runs in parallel with
+                        // the sheet-up animation, so the result lands closer
+                        // to when the user actually sees the analyzing UI.
                         Task { await parseAndUpdateDrawer(image) }
-
-                        // Defer the sheet presentation until after the cover
-                        // finishes dismissing. iOS doesn't reliably overlap
-                        // "dismiss a fullScreenCover" with "present a sheet"
-                        // — without this delay the sheet races the cover
-                        // animation and the user perceives it as lag/stutter.
-                        // 0.35s matches the system cover dismiss duration.
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-                            isCameraAnalysisSheetPresented = true
-                        }
+                        // Present the drawer sheet immediately. Because it's
+                        // nested in the cover, iOS animates it up over the
+                        // camera (no cover-dismiss serialization). The cover
+                        // stays alive underneath and only dismisses when the
+                        // sheet dismisses. Use the OverCover flag so the
+                        // sibling sheet (used by the photo-library path)
+                        // doesn't also try to fire.
+                        isCameraAnalysisSheetPresentedOverCover = true
                     },
                     onOpenPhotoLibrary: {
                         // After camera dismisses, open photo library
+                        isCustomCameraPresented = false
                         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                             handleCameraSourceSelection(.photo)
                         }
                     }
                 )
                 .ignoresSafeArea()
+                .sheet(isPresented: $isCameraAnalysisSheetPresentedOverCover, onDismiss: {
+                    cameraDrawerState = .idle
+                    cameraDrawerImage = nil
+                    cameraDrawerContextNote = ""
+                    // Dismiss the camera cover from beneath the (now-gone)
+                    // sheet so the user lands back on the home screen instead
+                    // of the camera review they came from.
+                    isCustomCameraPresented = false
+                }) {
+                    cameraAnalysisSheetContent
+                }
             }
             .modifier(QuickCameraPromptDialogModifier(
                 prompt: $quickCameraPrompt,
@@ -433,6 +452,13 @@ extension MainLoggingShellView {
             .sheet(item: $selectedRowDetails) { details in
                 rowCalorieDetailsSheet(details)
             }
+            // V3.1 hotfix v2 (2026-05-20): this sibling sheet is now ONLY
+            // used by the photo-library path (handlePickedImage). The camera
+            // capture path uses a separate sheet nested inside the camera
+            // fullScreenCover (see above) — that avoids the cover→sheet
+            // serialization lag the user reported (4-5s of frozen camera
+            // review before the drawer slid up). Two state flags keep them
+            // from firing each other.
             .sheet(isPresented: $isCameraAnalysisSheetPresented, onDismiss: {
                 cameraDrawerState = .idle
                 cameraDrawerImage = nil
@@ -533,6 +559,15 @@ extension MainLoggingShellView {
                 handleDrawerLogIt(editedItems: editedItems, editedTotals: editedTotals)
             },
             onDiscard: {
+                // V3.1 hotfix v2 (2026-05-20): there are two possible
+                // presenters depending on entry point. Dismiss both — only
+                // one is actually true at a time, the other is a no-op.
+                //   - Camera capture: cover is up, dismissing the cover
+                //     tears down the nested analysis sheet in one animation
+                //     (no flash of the camera review).
+                //   - Photo library: sibling sheet on home view, dismissed
+                //     by flipping isCameraAnalysisSheetPresented.
+                isCustomCameraPresented = false
                 isCameraAnalysisSheetPresented = false
             },
             onRetry: {

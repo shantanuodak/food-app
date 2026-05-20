@@ -145,6 +145,14 @@ struct MainLoggingShellView: View {
     @State var cameraDrawerImage: UIImage?
     @State var cameraDrawerContextNote: String = ""
     @State var isCameraAnalysisSheetPresented = false
+    /// V3.1 hotfix v2 (2026-05-20): separate flag for the camera-capture
+    /// path, which presents the analysis drawer as a sheet NESTED inside
+    /// the camera fullScreenCover (so it can slide up without waiting for
+    /// the cover to dismiss). The photo-library path still uses
+    /// `isCameraAnalysisSheetPresented` (sibling sheet on the home view)
+    /// because there's no cover in play there. Keeping them separate keeps
+    /// the two sheet modifiers from racing each other.
+    @State var isCameraAnalysisSheetPresentedOverCover = false
 
     @State var autoSavedParseIDs: Set<String> = []
     let homeTutorialShownKey = "home.first_run_tutorial.shown.v1"

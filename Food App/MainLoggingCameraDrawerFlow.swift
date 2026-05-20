@@ -444,7 +444,14 @@ extension MainLoggingShellView {
         )
         scheduleAutoSave()
 
-        // Dismiss the sheet — food appears on home screen
+        // V3.1 hotfix v2 (2026-05-20): two possible presenters depending on
+        // entry point — dismiss both. For the camera-capture path the
+        // analysis sheet is nested in the camera fullScreenCover, so
+        // dismissing the cover tears the sheet down too (avoids a flash of
+        // the camera review screen). For the photo-library path it's a
+        // sibling sheet on the home view, dismissed by the second flag.
+        // Setting whichever flag isn't currently true is a no-op.
+        isCustomCameraPresented = false
         isCameraAnalysisSheetPresented = false
     }
 
