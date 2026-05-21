@@ -118,6 +118,13 @@ struct OnboardingRequest: Encodable {
     let weightKg: Double
     let pace: String
     let activityDetail: String?
+    /// V3.1 Phase 5.1 (2026-05-21): explicit overwrite confirmation. The
+    /// backend now returns 409 ONBOARDING_PROFILE_EXISTS when this is
+    /// false (default) and an onboarding row already exists with
+    /// different inputs — protects against silent profile wipes after
+    /// re-login. Only set true when the user explicitly tapped "Update
+    /// my profile with new info" on ExistingAccountDetectedView.
+    let overwriteExisting: Bool?
 }
 
 struct OnboardingResponse: Decodable {

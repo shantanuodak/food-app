@@ -9,41 +9,64 @@ extension OnboardingView {
         isAccountLoading = true
         setScreenState(.account, state: .loading)
 
-        // V3.1 Phase 5: capture sign-up vs sign-in intent so we know whether
-        // to surface the existing-account-detected screen. In the "already
-        // have an account" flow the user *expects* to land on their existing
-        // account — no need for the confirmation step.
+        // V3.1 Phase 5.1 (2026-05-21): capture sign-up vs sign-in intent so
+        // we know how to route after the status check. Both paths now call
+        // the status endpoint — sign-in just routes straight to home if a
+        // profile exists, sign-up shows the confirmation screen.
         let isSigningUp = !isExistingAccountSignIn
 
         Task {
             do {
                 _ = try await appStore.authService.signIn(with: provider)
 
-                // V3.1 Phase 5: after OAuth lands a session, check whether
-                // this identity already has a completed profile in our DB.
-                // If yes AND the user came through the sign-up flow, show
-                // the ExistingAccountDetectedView so they can pick:
-                //   - continue with existing (skip rest of onboarding)
-                //   - update profile (continues onboarding, overwrites)
-                //   - cancel
-                // Failures of this check are non-fatal — fall through to the
-                // normal "next screen" path. Worst case: existing user gets
-                // the standard onboarding flow which UPSERTs their profile.
-                if isSigningUp {
-                    do {
-                        let status = try await appStore.apiClient.fetchOnboardingStatus()
-                        if status.hasCompletedOnboarding {
-                            await MainActor.run {
-                                isAccountLoading = false
-                                setScreenState(.account, state: .default)
-                                existingAccountStatus = status
-                            }
-                            return
-                        }
-                    } catch {
-                        // Swallow — let the user continue. Logging only.
-                        NSLog("[OnboardingView] fetchOnboardingStatus failed; treating as new user: %@", String(describing: error))
+                // V3.1 Phase 5.1 (2026-05-21): ALWAYS check status after
+                // OAuth, regardless of sign-up vs sign-in path. The
+                // previous code skipped the check for the sign-in path
+                // assuming the user "expects" to land on home — but
+                // sign-in still continued through onboarding screens and
+                // ended in submitOnboarding clobbering the existing
+                // profile. (Tanmay's incident 2026-05-21 13:52 UTC.)
+                //
+                // Routing:
+                //   - sign-in + has profile → mark complete, show home
+                //   - sign-up + has profile → show ExistingAccountDetectedView
+                //   - either + no profile  → continue onboarding screens
+                //
+                // Errors are NO LONGER swallowed. If the status check
+                // fails (Render cold-start timeout, 5xx, network), we
+                // surface the error and let the user retry rather than
+                // silently falling through and risking a profile wipe.
+                let status: OnboardingStatusResponse
+                do {
+                    status = try await appStore.apiClient.fetchOnboardingStatus()
+                } catch {
+                    NSLog("[OnboardingView] fetchOnboardingStatus failed: %@", String(describing: error))
+                    let message = "Couldn't verify your account just now. Check your connection and try again."
+                    await MainActor.run {
+                        isAccountLoading = false
+                        localError = message
+                        setScreenState(.account, state: .error, errorMessage: message)
                     }
+                    return
+                }
+
+                if status.hasCompletedOnboarding {
+                    await MainActor.run {
+                        isAccountLoading = false
+                        setScreenState(.account, state: .default)
+                        if isSigningUp {
+                            // Sign-up path → surface the confirmation
+                            // screen so the user explicitly picks
+                            // continue-existing vs overwrite.
+                            existingAccountStatus = status
+                        } else {
+                            // Sign-in path → user already knows they have
+                            // an account, land them on home directly.
+                            appStore.markOnboardingComplete()
+                            flow.showHome()
+                        }
+                    }
+                    return
                 }
 
                 await MainActor.run {
@@ -82,7 +105,14 @@ extension OnboardingView {
                 heightCm: draft.heightInCm,
                 weightKg: draft.weightInKg,
                 pace: (draft.pace ?? .balanced).rawValue,
-                activityDetail: draft.activity?.rawValue
+                activityDetail: draft.activity?.rawValue,
+                // V3.1 Phase 5.1 (2026-05-21): pass overwriteExisting only
+                // when the user explicitly tapped "Update my profile with
+                // new info" on ExistingAccountDetectedView. Otherwise the
+                // backend's 409 safety net will fire if a profile already
+                // exists, and the catch block below routes the user to
+                // the confirmation screen.
+                overwriteExisting: userConfirmedProfileOverwrite
             )
 
             // Retry up to 2 times for network/timeout failures, mostly Render cold starts.
@@ -110,6 +140,32 @@ extension OnboardingView {
                         setScreenState(.account, state: .error, errorMessage: message)
                         pendingRouteError = message
                         flow.moveToOnboarding(.account)
+                        return
+                    }
+
+                    // V3.1 Phase 5.1 (2026-05-21): backend 409 means an
+                    // onboarding profile already exists and we didn't
+                    // pass overwriteExisting=true. This is the safety net
+                    // firing. Surface the ExistingAccountDetectedView so
+                    // the user explicitly picks continue-existing vs
+                    // overwrite. This catches the case where both iOS
+                    // gates (continueAccount status check + sign-in
+                    // routing) somehow fail and we get to submit anyway.
+                    if case let APIClientError.server(statusCode, _) = error, statusCode == 409 {
+                        do {
+                            let status = try await appStore.apiClient.fetchOnboardingStatus()
+                            await MainActor.run {
+                                setScreenState(.ready, state: .default)
+                                existingAccountStatus = status
+                                flow.moveToOnboarding(.account)
+                            }
+                        } catch {
+                            // If even the status fetch fails, fall back
+                            // to a generic error so the user can retry.
+                            let message = "Account already exists. Please sign out and sign in again."
+                            appStore.setError(message)
+                            setScreenState(.ready, state: .error, errorMessage: message)
+                        }
                         return
                     }
 

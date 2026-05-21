@@ -22,6 +22,13 @@ struct OnboardingView: View {
     /// server reported the user has previously onboarded. Drives the
     /// ExistingAccountDetectedView sheet.
     @State var existingAccountStatus: OnboardingStatusResponse?
+    /// V3.1 Phase 5.1 (2026-05-21): set to true when the user explicitly
+    /// tapped "Update my profile with new info" on
+    /// ExistingAccountDetectedView. submitOnboarding sends this through to
+    /// the backend as `overwriteExisting: true` so the safety check
+    /// passes. Default false → backend returns 409 if a profile already
+    /// exists, preventing silent clobbers.
+    @State var userConfirmedProfileOverwrite = false
     @State var screenStates: [OnboardingRoute: OnboardingScreenState] = {
         OnboardingRoute.allCases.reduce(into: [OnboardingRoute: OnboardingScreenState]()) { result, route in
             result[route] = OnboardingScreenState()
@@ -183,15 +190,24 @@ struct OnboardingView: View {
                     displayName: nil,
                     onContinueWithExisting: {
                         existingAccountStatus = nil
+                        userConfirmedProfileOverwrite = false
                         appStore.markOnboardingComplete()
                         flow.showHome()
                     },
                     onUpdateProfile: {
                         existingAccountStatus = nil
+                        // V3.1 Phase 5.1 (2026-05-21): user has explicitly
+                        // confirmed they want to overwrite their existing
+                        // profile with whatever they enter in the rest of
+                        // onboarding. finishOnboarding() will read this
+                        // flag and pass overwriteExisting=true so the
+                        // backend's 409 safety check passes.
+                        userConfirmedProfileOverwrite = true
                         flow.moveNextOnboarding()
                     },
                     onCancel: {
                         existingAccountStatus = nil
+                        userConfirmedProfileOverwrite = false
                     }
                 )
             }

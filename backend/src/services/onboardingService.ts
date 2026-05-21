@@ -1,6 +1,7 @@
 import { pool } from '../db.js';
 import { ensureUserExists } from './userService.js';
 import { createHash } from 'node:crypto';
+import { ApiError } from '../utils/errors.js';
 
 const ONBOARDING_PROVENANCE_MODE = 'computed_provenance_v1' as const;
 const ONBOARDING_CALCULATOR_VERSION = 'onboarding-target-calculator-v4' as const;
@@ -21,6 +22,14 @@ export type OnboardingInput = {
   pace?: 'conservative' | 'balanced' | 'aggressive';
   activityDetail?: 'mostlySitting' | 'lightlyActive' | 'moderatelyActive' | 'veryActive';
   timezone: string;
+  /// V3.1 Phase 5.1 (2026-05-21): when true, the caller has explicitly
+  /// confirmed they want to overwrite an existing onboarding_profiles
+  /// row. When false/undefined and a row already exists, upsertOnboarding
+  /// throws a 409 ApiError so the client can show the
+  /// ExistingAccountDetectedView instead of silently clobbering. Added
+  /// after Tanmay's 2026-05-21 13:52 UTC profile wipe — see the lesson
+  /// note in /Users/shantanuodak/.claude/projects/.../memory/.
+  overwriteExisting?: boolean;
 };
 
 export type OnboardingProvenance = {
@@ -433,6 +442,36 @@ export async function upsertOnboarding(input: OnboardingInput): Promise<{ calori
     authProvider: input.authProvider,
     email: input.userEmail
   });
+
+  // V3.1 Phase 5.1 safety net (2026-05-21): refuse to overwrite an existing
+  // onboarding_profiles row with DIFFERENT inputs unless the caller
+  // explicitly confirms with `overwriteExisting: true`. Without this, an
+  // iOS bug that re-runs the onboarding flow against an established
+  // account silently clobbers the user's calorie target, dietary
+  // preferences, biometrics, etc. (see Tanmay's incident on 2026-05-21
+  // 13:52 UTC where his profile got reset 3 minutes after his last food
+  // log). The 409 lets the client route to ExistingAccountDetectedView so
+  // the user explicitly confirms the overwrite, or backs out and keeps
+  // their data.
+  //
+  // Idempotent re-submits (same inputs hash) are still allowed without
+  // the flag — that preserves the existing contract used by tests + any
+  // accidental retry that resends identical values. Only a real
+  // value-different clobber attempt gets blocked.
+  if (!input.overwriteExisting) {
+    const existing = await pool.query<{ onboarding_inputs_hash: string | null }>(
+      'SELECT onboarding_inputs_hash FROM onboarding_profiles WHERE user_id = $1',
+      [input.userId]
+    );
+    const existingHash = existing.rows[0]?.onboarding_inputs_hash;
+    if (existingHash && existingHash.length > 0 && existingHash !== inputsHash) {
+      throw new ApiError(
+        409,
+        'ONBOARDING_PROFILE_EXISTS',
+        'An onboarding profile already exists for this user with different inputs. Pass overwriteExisting=true to replace it.'
+      );
+    }
+  }
 
   await pool.query(
     `

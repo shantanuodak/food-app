@@ -895,7 +895,10 @@ struct HomeProfileScreen: View {
                 heightCm: draft.heightInCm,
                 weightKg: draft.weightInKg,
                 pace: (draft.pace ?? .balanced).rawValue,
-                activityDetail: draft.activity?.rawValue
+                activityDetail: draft.activity?.rawValue,
+                // V3.1 Phase 5.1 (2026-05-21): home profile edit screen.
+                // Explicit user-initiated update, OK to overwrite.
+                overwriteExisting: true
             )
             saveStatus = .saving
             do {

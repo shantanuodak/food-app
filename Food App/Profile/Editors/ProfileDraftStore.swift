@@ -87,7 +87,11 @@ final class ProfileDraftStore: ObservableObject {
                 heightCm: draft.heightInCm,
                 weightKg: draft.weightInKg,
                 pace: (draft.pace ?? .balanced).rawValue,
-                activityDetail: draft.activity?.rawValue
+                activityDetail: draft.activity?.rawValue,
+                // V3.1 Phase 5.1 (2026-05-21): in-app profile edit. User
+                // is explicitly editing their profile from Settings, so
+                // we want the backend to overwrite the existing row.
+                overwriteExisting: true
             )
             saveStatus = .saving
             do {

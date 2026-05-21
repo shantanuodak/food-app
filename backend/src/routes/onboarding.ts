@@ -32,7 +32,13 @@ const onboardingSchema = z.object({
     .min(1)
     .max(100)
     .refine((value) => isValidTimezone(value), 'timezone must be a valid IANA timezone')
-    .default('UTC')
+    .default('UTC'),
+  /// V3.1 Phase 5.1 (2026-05-21): explicit confirmation flag the client
+  /// must set when it intends to overwrite an existing onboarding profile
+  /// (e.g., user picked "Update my profile with new info" on the
+  /// ExistingAccountDetectedView). Default false — backend then returns
+  /// 409 if a row already exists, preventing silent profile wipes.
+  overwriteExisting: z.boolean().optional().default(false)
 });
 
 router.get('/', async (req, res, next) => {
@@ -82,7 +88,8 @@ router.post('/', async (req, res, next) => {
       weightKg: body.weightKg,
       pace: body.pace,
       activityDetail: body.activityDetail,
-      timezone: body.timezone
+      timezone: body.timezone,
+      overwriteExisting: body.overwriteExisting
     });
 
     res.status(200).json(response);
