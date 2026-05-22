@@ -8,6 +8,7 @@ import type { Request, Response, NextFunction } from 'express';
 import { requestIdMiddleware } from './utils/requestId.js';
 import { authRequired } from './middleware/auth.js';
 import onboardingRoutes from './routes/onboarding.js';
+import userRoutes from './routes/users.js';
 import parseRoutes from './routes/parse.js';
 import logsRoutes from './routes/logs.js';
 import rewardsRoutes from './routes/rewards.js';
@@ -205,6 +206,7 @@ export function createApp() {
   );
 
   app.use('/v1/onboarding', authRequired, onboardingRoutes);
+  app.use('/v1/users', authRequired, userRoutes);
   app.use('/v1/logs/parse', authRequired, parseRoutes);
   app.use('/v1/logs', authRequired, logsRoutes);
   app.use('/v1/rewards', authRequired, rewardsRoutes);

@@ -135,7 +135,8 @@ struct ExistingAccountDetectedView: View {
         status: OnboardingStatusResponse(
             hasCompletedOnboarding: true,
             mealCount: 47,
-            createdAt: "2026-04-12T12:00:00Z"
+            createdAt: "2026-04-12T12:00:00Z",
+            displayName: nil
         ),
         displayName: "Shantanu",
         onContinueWithExisting: { print("preview: continue") },
@@ -149,7 +150,8 @@ struct ExistingAccountDetectedView: View {
         status: OnboardingStatusResponse(
             hasCompletedOnboarding: true,
             mealCount: 0,
-            createdAt: "2026-05-01T12:00:00Z"
+            createdAt: "2026-05-01T12:00:00Z",
+            displayName: nil
         ),
         displayName: nil,
         onContinueWithExisting: { print("preview: continue") },
@@ -163,7 +165,8 @@ struct ExistingAccountDetectedView: View {
         status: OnboardingStatusResponse(
             hasCompletedOnboarding: true,
             mealCount: 1,
-            createdAt: "2026-05-20T12:00:00Z"
+            createdAt: "2026-05-20T12:00:00Z",
+            displayName: nil
         ),
         displayName: "Pornima",
         onContinueWithExisting: { print("preview: continue") },

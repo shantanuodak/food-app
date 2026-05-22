@@ -96,6 +96,21 @@ final class APIClient {
         try await request(path: "/v1/onboarding/status", method: "GET", requiresAuth: true)
     }
 
+    /// Bug 2 (2026-05-22): set the user's display name. Used by the Account
+    /// screen so testers like Tanmay who lost their name after Apple Sign In
+    /// re-auth can type a replacement. Server trims + caps at 80 chars and
+    /// returns the persisted value (or nil if the user cleared the field).
+    @discardableResult
+    func updateDisplayName(_ name: String) async throws -> UpdateDisplayNameResponse {
+        struct Body: Encodable { let displayName: String }
+        return try await request(
+            path: "/v1/users/me",
+            method: "PATCH",
+            body: Body(displayName: name),
+            requiresAuth: true
+        )
+    }
+
     func parseLog(_ requestBody: ParseLogRequest) async throws -> ParseLogResponse {
         try await request(path: "/v1/logs/parse", method: "POST", body: requestBody, requiresAuth: true)
     }

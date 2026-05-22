@@ -164,6 +164,15 @@ struct OnboardingStatusResponse: Decodable, Equatable {
     let hasCompletedOnboarding: Bool
     let mealCount: Int
     let createdAt: String?
+    /// Bug 2 (2026-05-22): editable display name surfaced alongside the
+    /// status flag so the Account screen can populate without an extra
+    /// round trip. Optional so older builds against an old backend keep
+    /// decoding.
+    let displayName: String?
+}
+
+struct UpdateDisplayNameResponse: Decodable, Equatable {
+    let displayName: String?
 }
 
 struct ParseLogRequest: Encodable {

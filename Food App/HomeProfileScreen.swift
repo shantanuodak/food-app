@@ -27,6 +27,18 @@ struct HomeProfileScreen: View {
     @State private var isSignOutConfirmationPresented = false
     @State private var bodyMetricEditorSheet: BodyMetricEditorSheet?
 
+    // Bug 2 (2026-05-22): editable display name. Pre-fills from the server
+    // (`GET /v1/users/me`) on appear, with the Apple/JWT-derived name as a
+    // fallback so testers like Tanmay always see something they can edit
+    // rather than a blank field. `displayNameSavedValue` tracks what the
+    // server currently has so the Save button only enables on actual changes.
+    @State private var displayNameDraft: String = ""
+    @State private var displayNameSavedValue: String = ""
+    @State private var hasLoadedDisplayName = false
+    @State private var isSavingDisplayName = false
+    @State private var displayNameError: String?
+    @FocusState private var isDisplayNameFieldFocused: Bool
+
     // Auto-save
     private enum SaveStatus: Equatable {
         case idle, saving, saved, failed(String)
@@ -56,6 +68,7 @@ struct HomeProfileScreen: View {
         .task {
             await loadDraftIfNeeded()
             await loadAdminFlags()
+            await loadDisplayNameIfNeeded()
         }
         .fullScreenCover(item: $adminPreviewBadge) { badge in
             StreakAchievementPopup(badge: badge) {
@@ -465,13 +478,7 @@ struct HomeProfileScreen: View {
             } label: {
                 Label("Signed in with", systemImage: accountProviderIcon)
             }
-            LabeledContent {
-                Text(accountDisplayName)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.trailing)
-            } label: {
-                Label("Name", systemImage: "person.crop.circle")
-            }
+            displayNameRow
             LabeledContent {
                 Text(accountEmail)
                     .foregroundStyle(.secondary)
@@ -493,6 +500,114 @@ struct HomeProfileScreen: View {
             } message: {
                 Text("This clears this device's session and returns you to sign in. Your saved food logs stay in your account.")
             }
+        }
+    }
+
+    // Bug 2 (2026-05-22): inline name editor. Apple Sign In only delivers the
+    // user's full name on FIRST sign-in, so re-auth (or first sign-in that
+    // dropped the name) leaves the row stuck on a single letter like "N".
+    // Tap-to-edit with an explicit Save button — the request goes out only
+    // when the user actually changes the value, so opening Account never
+    // accidentally wipes a name with the AuthSession-derived fallback.
+    @ViewBuilder
+    private var displayNameRow: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 12) {
+                Label("Name", systemImage: "person.crop.circle")
+                Spacer(minLength: 12)
+                TextField("Your name", text: $displayNameDraft)
+                    .focused($isDisplayNameFieldFocused)
+                    .multilineTextAlignment(.trailing)
+                    .textInputAutocapitalization(.words)
+                    .autocorrectionDisabled(true)
+                    .submitLabel(.done)
+                    .onSubmit { saveDisplayName() }
+                    .disabled(isSavingDisplayName)
+            }
+            if canSaveDisplayName || isSavingDisplayName {
+                HStack(spacing: 12) {
+                    Spacer()
+                    if isSavingDisplayName {
+                        ProgressView().scaleEffect(0.8)
+                    }
+                    Button("Save") { saveDisplayName() }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(!canSaveDisplayName || isSavingDisplayName)
+                }
+                .transition(.opacity)
+            }
+            if let displayNameError {
+                Text(displayNameError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+        }
+        .padding(.vertical, 2)
+    }
+
+    private var canSaveDisplayName: Bool {
+        let trimmedDraft = displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedSaved = displayNameSavedValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmedDraft != trimmedSaved && trimmedDraft.count <= 80
+    }
+
+    private func saveDisplayName() {
+        let trimmed = displayNameDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != displayNameSavedValue.trimmingCharacters(in: .whitespacesAndNewlines) else {
+            isDisplayNameFieldFocused = false
+            return
+        }
+        guard !isSavingDisplayName else { return }
+        let capped = String(trimmed.prefix(80))
+        isSavingDisplayName = true
+        displayNameError = nil
+        Task {
+            do {
+                let response = try await appStore.apiClient.updateDisplayName(capped)
+                await MainActor.run {
+                    let persisted = response.displayName ?? ""
+                    displayNameSavedValue = persisted
+                    displayNameDraft = persisted
+                    isSavingDisplayName = false
+                    isDisplayNameFieldFocused = false
+                }
+            } catch {
+                let message = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+                await MainActor.run {
+                    displayNameError = message
+                    isSavingDisplayName = false
+                }
+            }
+        }
+    }
+
+    private func loadDisplayNameIfNeeded() async {
+        guard !hasLoadedDisplayName else { return }
+        hasLoadedDisplayName = true
+
+        let fallback = accountDisplayName
+        // Seed the field with the AuthSession-derived value first so the row
+        // is never visibly empty while the network call is in flight. If the
+        // server has a stored value, it overwrites the seed below.
+        if displayNameDraft.isEmpty, !fallback.isEmpty, fallback != "Name unavailable" {
+            displayNameDraft = fallback
+            displayNameSavedValue = ""
+        }
+
+        do {
+            let response = try await appStore.apiClient.fetchOnboardingStatus()
+            let serverValue = response.displayName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            await MainActor.run {
+                if !serverValue.isEmpty {
+                    displayNameDraft = serverValue
+                    displayNameSavedValue = serverValue
+                }
+            }
+        } catch {
+            // Best-effort. Field still shows the AuthSession fallback so the
+            // user can edit and save anyway.
+            NSLog("[HomeProfileScreen] fetchOnboardingStatus failed: %@", String(describing: error))
         }
     }
 

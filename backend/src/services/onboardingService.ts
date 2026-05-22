@@ -168,6 +168,7 @@ export async function getOnboardingStatus(userId: string): Promise<{
   hasCompletedOnboarding: boolean;
   mealCount: number;
   createdAt: string | null;
+  displayName: string | null;
 }> {
   const profileResult = await pool.query<{ created_at: Date }>(
     'SELECT created_at FROM onboarding_profiles WHERE user_id = $1 LIMIT 1',
@@ -185,10 +186,22 @@ export async function getOnboardingStatus(userId: string): Promise<{
   const rawN = mealResult.rows[0]?.n;
   const mealCount = typeof rawN === 'number' ? rawN : Number(rawN ?? 0);
 
+  // Bug 2 (2026-05-22): include display_name in /onboarding/status so iOS
+  // can populate the Account screen on launch without a separate round
+  // trip. The status endpoint is already in the cold-launch path.
+  const userResult = await pool.query<{ display_name: string | null }>(
+    'SELECT display_name FROM users WHERE id = $1',
+    [userId]
+  );
+  const rawDisplayName = userResult.rows[0]?.display_name;
+  const trimmedDisplayName = typeof rawDisplayName === 'string' ? rawDisplayName.trim() : '';
+  const displayName = trimmedDisplayName.length > 0 ? trimmedDisplayName : null;
+
   return {
     hasCompletedOnboarding,
     mealCount: Number.isFinite(mealCount) ? mealCount : 0,
-    createdAt
+    createdAt,
+    displayName
   };
 }
 
