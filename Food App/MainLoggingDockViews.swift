@@ -275,7 +275,10 @@ struct MainLoggingTopHeaderStrip: View {
     @Binding var isCalendarPresented: Bool
 
     @State private var isTutorialPresented: Bool = false
-    @State private var helpIconRotation: Double = 0
+    /// Drives a 3D Y-axis wobble on the help affordance — oscillates ±22° so
+    /// the glyph face stays readable (no full flip), reading as "interactive"
+    /// instead of the previous flat Z-axis spin.
+    @State private var helpIconWobble: Bool = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -286,25 +289,52 @@ struct MainLoggingTopHeaderStrip: View {
             } label: {
                 HomeGreetingChip(firstName: firstName)
             }
-            .buttonStyle(.plain)
+            // 2026-05-23: matching the date chip on the right — glassy
+            // capsule with the same 14h × 8v padding. The translucent
+            // background keeps the greeting readable when content scrolls
+            // beneath it, and the symmetric pill treatment makes the top
+            // strip read as two paired controls instead of one floating
+            // text label + a pill.
+            .buttonStyle(LiquidGlassCapsuleButtonStyle())
             .accessibilityLabel(Text("Open profile"))
 
             Spacer(minLength: 0)
 
-            // Tutorial entry point. Bare icon (no chip/background), slow
-            // continuous rotation to read as "interactive". Opens a half-sheet
-            // placeholder until the actual tutorial videos are wired up.
+            // Tutorial entry point. Filled play triangle on a rich
+            // orange-to-pink gradient so it reads as the "watch a quick
+            // intro" affordance — playful but on-brand. 3D Y-axis wobble
+            // (±22°, never past 90°) so the glyph face stays toward the
+            // camera. Hit area uses contentShape so the rotated transform
+            // doesn't shrink the tap target.
             Button {
                 AppHaptics.lightImpact()
                 isTutorialPresented = true
             } label: {
-                Image(systemName: "questionmark.circle")
-                    .font(.system(size: 18, weight: .regular))
-                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.72) : Color.primary.opacity(0.55))
-                    .rotationEffect(.degrees(helpIconRotation))
+                Image(systemName: "play.fill")
+                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color(red: 1.00, green: 0.74, blue: 0.32),
+                                Color(red: 0.98, green: 0.55, blue: 0.18),
+                                Color(red: 0.90, green: 0.36, blue: 0.10)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .shadow(color: Color(red: 0.90, green: 0.36, blue: 0.10).opacity(0.32), radius: 6, y: 3)
+                    .shadow(color: Color(red: 1.00, green: 0.62, blue: 0.20).opacity(0.22), radius: 3, y: 1)
+                    .frame(width: 30, height: 30)
+                    .contentShape(Rectangle())
+                    .rotation3DEffect(
+                        .degrees(helpIconWobble ? 22 : -22),
+                        axis: (x: 0, y: 1, z: 0),
+                        perspective: 0.6
+                    )
             }
             .buttonStyle(.plain)
-            .accessibilityLabel(Text("Open tutorial"))
+            .accessibilityLabel(Text("Watch tutorial"))
 
             Button {
                 AppHaptics.selection()
@@ -324,24 +354,29 @@ struct MainLoggingTopHeaderStrip: View {
                 .presentationDragIndicator(.visible)
         }
         .onAppear {
-            startHelpIconRotationIfAllowed()
+            startHelpIconWobble()
         }
         .onChange(of: reduceMotion) { _, newValue in
             if newValue {
-                withAnimation(.none) { helpIconRotation = 0 }
+                // Settle to center when Reduce Motion turns on.
+                withAnimation(.none) { helpIconWobble = false }
             } else {
-                startHelpIconRotationIfAllowed()
+                startHelpIconWobble()
             }
         }
     }
 
-    private func startHelpIconRotationIfAllowed() {
+    /// 2026-05-23: implicit `.animation(_, value:)` + `repeatForever` was
+    /// unreliable when the bound value only flipped once on appear — the
+    /// loop never started. Triggering the autoreversing animation via an
+    /// explicit `withAnimation` block fixes the wobble.
+    private func startHelpIconWobble() {
         guard !reduceMotion else { return }
-        // Reset to 0 first so the animation always starts from a known state
-        // (avoids cumulative drift on re-appear).
-        helpIconRotation = 0
-        withAnimation(.linear(duration: 12).repeatForever(autoreverses: false)) {
-            helpIconRotation = 360
+        helpIconWobble = false
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
+                helpIconWobble = true
+            }
         }
     }
 }

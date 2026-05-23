@@ -308,29 +308,34 @@ private struct PeekAnimation: View {
             offsetY = -2
             return
         }
+
+        // === Initial appearance — pop up + first-time wiggle ===
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) {
+            offsetY = -2
+        }
+        try? await Task.sleep(for: .seconds(0.5))
+
+        withAnimation(.easeInOut(duration: 0.28)) { wiggleX = 2 }
+        try? await Task.sleep(for: .seconds(0.28))
+        withAnimation(.easeInOut(duration: 0.32)) { wiggleX = -2 }
+        try? await Task.sleep(for: .seconds(0.32))
+        withAnimation(.easeInOut(duration: 0.28)) { wiggleX = 0 }
+
+        // === Stay visible at rest. Every 30s, do a quick peek-a-boo
+        // gesture (dip down + pop back up). The dip is brisk so the
+        // chip is effectively never empty for more than ~0.4s. ===
         while !Task.isCancelled {
-            // Pop up
-            withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) {
+            try? await Task.sleep(for: .seconds(30))
+
+            // Dip down (fast, then immediately rebound)
+            withAnimation(.easeIn(duration: 0.28)) { offsetY = 22 }
+            try? await Task.sleep(for: .seconds(0.28))
+
+            // Pop back up with a springy overshoot
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) {
                 offsetY = -2
             }
-            try? await Task.sleep(for: .seconds(0.5))
-
-            // Wiggle right → left → center
-            withAnimation(.easeInOut(duration: 0.28)) { wiggleX = 2 }
-            try? await Task.sleep(for: .seconds(0.28))
-            withAnimation(.easeInOut(duration: 0.32)) { wiggleX = -2 }
-            try? await Task.sleep(for: .seconds(0.32))
-            withAnimation(.easeInOut(duration: 0.28)) { wiggleX = 0 }
-            try? await Task.sleep(for: .seconds(0.4))
-
-            // Drop down
-            withAnimation(.easeIn(duration: 0.4)) { offsetY = 22 }
-            try? await Task.sleep(for: .seconds(0.4))
-
-            // Long pause — peek-a-boo at ~5s intervals is distracting. 30s
-            // means it fires roughly twice per minute, which reads as
-            // "surprise" instead of "twitch".
-            try? await Task.sleep(for: .seconds(30))
+            try? await Task.sleep(for: .seconds(0.6))
         }
     }
 }
@@ -587,29 +592,22 @@ private struct SproutAnimation: View {
             stemHeight = 12; leafScale = 1; leafOpacity = 1
             return
         }
+
+        // === Initial grow (once): stem extends, leaves unfurl, hold. ===
+        withAnimation(.easeInOut(duration: 0.9)) { stemHeight = 12 }
+        try? await Task.sleep(for: .seconds(0.65))
+        withAnimation(.spring(response: 0.55, dampingFraction: 0.65)) { leafScale = 1 }
+        withAnimation(.easeOut(duration: 0.4)) { leafOpacity = 1 }
+
+        // === Stay fully grown. Every 30s, the leaves squish briefly
+        // and spring back — like a tiny breath. Stem + leaves remain
+        // visible the whole time. ===
         while !Task.isCancelled {
-            stemHeight = 0
-            leafScale = 0
-            leafOpacity = 0
-
-            withAnimation(.easeInOut(duration: 0.9)) {
-                stemHeight = 12
-            }
-            try? await Task.sleep(for: .seconds(0.65))
-
-            withAnimation(.spring(response: 0.55, dampingFraction: 0.65)) {
-                leafScale = 1
-            }
-            withAnimation(.easeOut(duration: 0.4)) {
-                leafOpacity = 1
-            }
-            try? await Task.sleep(for: .seconds(1.8))
-
-            withAnimation(.easeIn(duration: 0.4)) {
-                leafOpacity = 0
-            }
-            // Long pause — sprout grows + unfurls is an event, not idle motion.
             try? await Task.sleep(for: .seconds(30))
+            withAnimation(.easeInOut(duration: 0.25)) { leafScale = 0.78 }
+            try? await Task.sleep(for: .seconds(0.25))
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) { leafScale = 1 }
+            try? await Task.sleep(for: .seconds(0.5))
         }
     }
 }
@@ -731,25 +729,26 @@ private struct Pancake: View {
                     translateY = restingY; scaleX = 1; opacity = 1
                     return
                 }
-                while !Task.isCancelled {
-                    translateY = -14
-                    scaleX = 0.6
-                    opacity = 0
-                    try? await Task.sleep(for: .seconds(delay))
 
-                    withAnimation(.easeOut(duration: 0.25)) { opacity = 1 }
-                    withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) {
-                        translateY = restingY
-                        scaleX = 1.12
-                    }
-                    try? await Task.sleep(for: .seconds(0.35))
-                    withAnimation(.easeOut(duration: 0.15)) { scaleX = 1.0 }
-                    try? await Task.sleep(for: .seconds(2.1))
-                    withAnimation(.easeIn(duration: 0.3)) { opacity = 0 }
-                    // Long pause between stack cycles; add the per-pancake
-                    // delay back as a negative term so all 3 pancakes finish
-                    // their cycle in lock-step and re-fire together.
-                    try? await Task.sleep(for: .seconds(30 + max(0.05, 0.4 - delay)))
+                // === Initial drop (once): pancake falls into the stack. ===
+                try? await Task.sleep(for: .seconds(delay))
+                withAnimation(.easeOut(duration: 0.25)) { opacity = 1 }
+                withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) {
+                    translateY = restingY
+                    scaleX = 1.12
+                }
+                try? await Task.sleep(for: .seconds(0.35))
+                withAnimation(.easeOut(duration: 0.15)) { scaleX = 1.0 }
+
+                // === Stack stays visible. Each pancake squishes briefly
+                // every 30s, staggered by its delay so the whole stack
+                // does a small wave. ===
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(30))
+                    withAnimation(.easeInOut(duration: 0.18)) { scaleX = 1.12 }
+                    try? await Task.sleep(for: .seconds(0.18))
+                    withAnimation(.spring(response: 0.38, dampingFraction: 0.5)) { scaleX = 1.0 }
+                    try? await Task.sleep(for: .seconds(0.5))
                 }
             }
     }
@@ -777,20 +776,21 @@ private struct Syrup: View {
             .opacity(opacity)
             .task {
                 guard !reduceMotion else { scaleY = 1; opacity = 1; return }
-                while !Task.isCancelled {
-                    scaleY = 0
-                    opacity = 0
-                    try? await Task.sleep(for: .seconds(delay))
 
-                    withAnimation(.easeOut(duration: 0.5)) {
-                        scaleY = 1
-                        opacity = 1
-                    }
-                    try? await Task.sleep(for: .seconds(1.6))
-                    withAnimation(.easeIn(duration: 0.3)) { opacity = 0 }
-                    // Match the 30s pancake-cycle delay so syrup stays in sync
-                    // with the stack when the next event fires.
-                    try? await Task.sleep(for: .seconds(30 + max(0.05, 0.6 - delay)))
+                // === Initial pour (once) ===
+                try? await Task.sleep(for: .seconds(delay))
+                withAnimation(.easeOut(duration: 0.5)) {
+                    scaleY = 1
+                    opacity = 1
+                }
+
+                // === Stays visible. Brief drip pulse every 30s. ===
+                while !Task.isCancelled {
+                    try? await Task.sleep(for: .seconds(30))
+                    withAnimation(.easeInOut(duration: 0.22)) { scaleY = 0.82 }
+                    try? await Task.sleep(for: .seconds(0.22))
+                    withAnimation(.spring(response: 0.4, dampingFraction: 0.5)) { scaleY = 1.0 }
+                    try? await Task.sleep(for: .seconds(0.5))
                 }
             }
     }
@@ -824,14 +824,22 @@ private struct SunAnimation: View {
 
     private func loop() async {
         guard !reduceMotion else { offsetY = 0; return }
+
+        // === Initial rise (once) — sun comes up over the horizon ===
+        withAnimation(.easeOut(duration: 1.5)) { offsetY = 0 }
+
+        // === Stay up. Every 30s, a brief dip-and-bounce so the sun
+        // looks alive without ever leaving the chip empty. ===
         while !Task.isCancelled {
-            offsetY = 13
-            withAnimation(.easeOut(duration: 1.5)) { offsetY = 0 }
-            try? await Task.sleep(for: .seconds(2.0))
-            withAnimation(.easeIn(duration: 1.4)) { offsetY = 13 }
-            // Long pause — sun rises, sits, sets, then waits 30s before the
-            // next cycle so it doesn't feel like a relentless metronome.
             try? await Task.sleep(for: .seconds(30))
+
+            // Small dip below the resting position
+            withAnimation(.easeInOut(duration: 0.28)) { offsetY = 5 }
+            try? await Task.sleep(for: .seconds(0.28))
+
+            // Spring back up
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.5)) { offsetY = 0 }
+            try? await Task.sleep(for: .seconds(0.5))
         }
     }
 }
@@ -934,14 +942,17 @@ private struct MoonAnimation: View {
                 try? await Task.sleep(for: .seconds(1.0))
             }
         }
+        // === Initial rise (once) ===
+        withAnimation(.easeOut(duration: 1.7)) { offsetY = 0 }
+
+        // === Stay up. Brief dip + spring back every 30s so the moon
+        // is always visible but periodically reasserts itself. ===
         while !Task.isCancelled {
-            offsetY = 13
-            withAnimation(.easeOut(duration: 1.7)) { offsetY = 0 }
-            try? await Task.sleep(for: .seconds(2.4))
-            withAnimation(.easeIn(duration: 1.5)) { offsetY = 13 }
-            // Long pause between rise/set events. Star twinkle (separate Task
-            // above) keeps running so the chip never feels frozen.
             try? await Task.sleep(for: .seconds(30))
+            withAnimation(.easeInOut(duration: 0.3)) { offsetY = 5 }
+            try? await Task.sleep(for: .seconds(0.3))
+            withAnimation(.spring(response: 0.45, dampingFraction: 0.5)) { offsetY = 0 }
+            try? await Task.sleep(for: .seconds(0.5))
         }
     }
 }

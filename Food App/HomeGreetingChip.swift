@@ -41,7 +41,10 @@ struct HomeGreetingChip: View {
                 .foregroundStyle(textColor.opacity(0.45))
                 .padding(.leading, -2)
         }
-        .padding(.vertical, 4)
+        // The wrapping Button in MainLoggingTopHeaderStrip now uses
+        // LiquidGlassCapsuleButtonStyle (14h × 8v padding + glassy capsule),
+        // which matches the date chip on the right. Don't add vertical
+        // padding here — the button style handles spacing.
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("\(nameLine). Opens profile."))
     }
