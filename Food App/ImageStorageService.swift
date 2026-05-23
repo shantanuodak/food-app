@@ -100,6 +100,59 @@ final class ImageStorageService {
         return objectPath
     }
 
+    /// Fetches an uploaded food-log JPEG by its storage path (the value
+    /// returned by `uploadJPEG` and persisted into `food_logs.image_ref`).
+    /// Adds the same auth headers Supabase storage expects for reads —
+    /// RLS on the food-images bucket allows the file owner to GET their
+    /// own objects.
+    ///
+    /// Added 2026-05-23 to back the row-detail drawer's image display
+    /// fallback (when in-memory `imagePreviewData` has been evicted, the
+    /// drawer can still render the image by fetching the remote bytes
+    /// via this method).
+    func fetchJPEG(at objectPath: String) async throws -> Data {
+        guard let supabaseURL = configuration.supabaseURL,
+              let supabaseAnonKey = configuration.supabaseAnonKey?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !supabaseAnonKey.isEmpty else {
+            throw ImageStorageServiceError.missingSupabaseConfiguration
+        }
+
+        guard let accessToken = try await authTokenProvider()?.trimmingCharacters(in: .whitespacesAndNewlines), !accessToken.isEmpty else {
+            throw ImageStorageServiceError.missingAuthToken
+        }
+
+        let bucket = configuration.supabaseStorageBucket
+        guard var components = URLComponents(url: supabaseURL, resolvingAgainstBaseURL: false) else {
+            throw ImageStorageServiceError.invalidUploadURL
+        }
+
+        let encodedObjectPath = objectPath
+            .split(separator: "/")
+            .map { String($0).addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? String($0) }
+            .joined(separator: "/")
+
+        components.path = "/storage/v1/object/\(bucket)/\(encodedObjectPath)"
+        guard let url = components.url else {
+            throw ImageStorageServiceError.invalidUploadURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 20
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue(supabaseAnonKey, forHTTPHeaderField: "apikey")
+
+        let (data, response) = try await session.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw ImageStorageServiceError.uploadFailed(statusCode: -1, message: "No HTTP response from storage")
+        }
+        guard (200 ... 299).contains(httpResponse.statusCode) else {
+            let message = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+            throw ImageStorageServiceError.uploadFailed(statusCode: httpResponse.statusCode, message: message?.isEmpty == false ? message! : "Unknown storage error")
+        }
+        return data
+    }
+
     private static func jwtSubject(from token: String) -> String? {
         let segments = token.split(separator: ".")
         guard segments.count > 1 else {

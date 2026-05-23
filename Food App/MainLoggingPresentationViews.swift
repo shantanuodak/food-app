@@ -82,6 +82,8 @@ struct MainLoggingDetailsDrawer: View {
                 }
             }
         }
+        .background(AppDrawerSurface.gradient)
+        .presentationBackground(AppDrawerSurface.gradient)
         .presentationDragIndicator(.visible)
     }
 }
@@ -118,6 +120,12 @@ struct MainLoggingRowCalorieDetailsSheet: View {
     let onCancelDelete: () -> Void
     let onDone: () -> Void
     let onItemQuantityChange: (Int, Double) -> Void
+
+    /// 2026-05-23: needed so `headerMedia` can fall back to fetching the
+    /// remote JPEG via `appStore.imageStorageService.fetchJPEG(...)`
+    /// when `details.imagePreviewData` is nil (cold launch, scrolling
+    /// through past days, etc.).
+    @EnvironmentObject private var appStore: AppStore
 
     var body: some View {
         NavigationStack {
@@ -179,6 +187,7 @@ struct MainLoggingRowCalorieDetailsSheet: View {
         // drawer was changed to also open fully.
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
+        .presentationBackground(AppDrawerSurface.gradient)
     }
 
     private var totals: NutritionTotals {
@@ -192,6 +201,16 @@ struct MainLoggingRowCalorieDetailsSheet: View {
 
     @ViewBuilder
     private var headerMedia: some View {
+        // Preference order:
+        //   1. In-memory `imagePreviewData` — instant render, no network.
+        //      This is what's available right after a save in the same
+        //      session.
+        //   2. Remote `imageRef` — lazily fetched from Supabase storage.
+        //      Used when the in-memory preview has been dropped (cold
+        //      launch, scrolling far into history, sheet reopened after
+        //      the AppStore released the bytes).
+        //   3. Nothing — text-only logs or logs whose image upload
+        //      failed both inline and in the deferred retry path.
         if let imageData = details.imagePreviewData,
            let uiImage = UIImage(data: imageData) {
             Image(uiImage: uiImage)
@@ -202,8 +221,99 @@ struct MainLoggingRowCalorieDetailsSheet: View {
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
                 .padding(.horizontal, 20)
                 .padding(.top, 16)
+        } else if let imageRef = details.imageRef?.trimmingCharacters(in: .whitespacesAndNewlines),
+                  !imageRef.isEmpty {
+            RemoteFoodLogImageView(
+                imageRef: imageRef,
+                imageStorageService: appStore.imageStorageService
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 224)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .padding(.horizontal, 20)
+            .padding(.top, 16)
         } else {
             EmptyView()
+        }
+    }
+}
+
+/// Loads a food-log image from Supabase storage via `imageRef` and renders
+/// it with the same visual treatment as the in-memory preview path. Caches
+/// the decoded bytes process-wide so re-opening the same sheet (or scrolling
+/// past the same row in a list) doesn't trigger a refetch.
+///
+/// Added 2026-05-23 to fix the "I can see the photo right after I save it
+/// but it disappears on cold relaunch" bug. The image bytes are in Supabase
+/// storage (food_logs.image_ref is populated for 30/31 recent image saves —
+/// verified in prod DB) but the row-detail sheet was only reading the
+/// in-memory `imagePreviewData`. This view is the remote fallback.
+struct RemoteFoodLogImageView: View {
+    let imageRef: String
+    let imageStorageService: ImageStorageService
+
+    @State private var loadedImage: UIImage?
+    @State private var loadFailed = false
+
+    /// Process-wide cache of imageRef → UIImage. NSCache limits itself
+    /// under memory pressure so we don't have to think about eviction.
+    /// Keyed on the raw imageRef string (e.g.
+    /// `users/<uuid>/food-logs/2026/05/<uuid>.jpg`).
+    private static let cache: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 100  // ~100 thumbnails ≈ a few MB; iOS evicts under pressure anyway
+        return cache
+    }()
+
+    var body: some View {
+        ZStack {
+            if let image = loadedImage {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else if loadFailed {
+                placeholder
+            } else {
+                placeholder.overlay {
+                    ProgressView()
+                        .tint(.secondary)
+                }
+            }
+        }
+        .task(id: imageRef) {
+            await loadIfNeeded()
+        }
+    }
+
+    private var placeholder: some View {
+        Rectangle()
+            .fill(Color.secondary.opacity(0.10))
+            .overlay {
+                Image(systemName: "photo")
+                    .font(.system(size: 28, weight: .light))
+                    .foregroundStyle(.secondary)
+                    .opacity(loadFailed ? 1 : 0)
+            }
+    }
+
+    private func loadIfNeeded() async {
+        if let cached = Self.cache.object(forKey: imageRef as NSString) {
+            loadedImage = cached
+            return
+        }
+        do {
+            let data = try await imageStorageService.fetchJPEG(at: imageRef)
+            guard let uiImage = UIImage(data: data) else {
+                loadFailed = true
+                return
+            }
+            Self.cache.setObject(uiImage, forKey: imageRef as NSString)
+            // Guard against the view being reused for a different
+            // imageRef before this fetch completed (the .task(id:)
+            // modifier already cancels old loads, but be defensive).
+            loadedImage = uiImage
+        } catch {
+            loadFailed = true
         }
     }
 }
@@ -218,18 +328,17 @@ struct MainLoggingHomeStatusStrip: View {
     let onRetryParse: () -> Void
     let onLoggingTips: () -> Void
 
+    // 2026-05-23: the inline "Logging tips" chip was retired in favor of
+    // the bottom-sheet popup that auto-presents whenever a row parses as
+    // vague (see LoggingTipsPromptSheet). The shouldShowLoggingTipsButton
+    // + onLoggingTips properties are kept on the struct for backwards
+    // compatibility with callers that still construct this strip, but the
+    // button itself no longer renders.
     var body: some View {
         HStack(spacing: 10) {
             statusText
 
             Spacer(minLength: 0)
-
-            if shouldShowLoggingTipsButton {
-                Button("Logging tips", action: onLoggingTips)
-                    .font(.system(size: 13, weight: .semibold))
-                    .buttonStyle(.bordered)
-                    .accessibilityHint(Text("Shows examples of food descriptions that improve nutrition estimates."))
-            }
 
             if shouldShowRetryParseButton {
                 Button(L10n.retryParseButton, action: onRetryParse)
