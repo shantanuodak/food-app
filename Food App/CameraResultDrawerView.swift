@@ -69,6 +69,10 @@ struct CameraResultDrawerView: View {
     @State private var phaseTimer: Timer?
     @State private var editablePhotoItems: [EditableParsedItem] = []
     @State private var editablePhotoSeedSignature = ""
+    /// Drives focus-on-tap behavior for the context note text field — lets
+    /// the user tap anywhere on the "Add a note to refine" card to start
+    /// typing, instead of having to hit the tiny text field area.
+    @FocusState private var isContextNoteFocused: Bool
 
     private let analyzingPhrases = [
         "Reading the photo...",
@@ -119,6 +123,8 @@ struct CameraResultDrawerView: View {
             }
         }
         .scrollBounceBehavior(.basedOnSize)
+        .background(AppDrawerSurface.gradient)
+        .presentationBackground(AppDrawerSurface.gradient)
         .onDisappear {
             phaseTimer?.invalidate()
             phaseTimer = nil
@@ -436,10 +442,7 @@ struct CameraResultDrawerView: View {
 
             // CTA
             VStack(spacing: 10) {
-                photoContextNoteEditor(
-                    title: "Improve this estimate",
-                    placeholder: "Optional: 2 slices, homemade, with chutney..."
-                )
+                improveEstimateCard
 
                 Button {
                     onLogIt(displayItems, displayTotals)
@@ -461,19 +464,6 @@ struct CameraResultDrawerView: View {
                 }
                 .buttonStyle(.plain)
 
-                Button(action: onRetry) {
-                    Label(contextNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Recalculate" : "Recalculate with note", systemImage: "arrow.clockwise")
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(Color(red: 0.420, green: 0.370, blue: 1.0))
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 50)
-                        .background(
-                            Color(red: 0.420, green: 0.370, blue: 1.0).opacity(0.10),
-                            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        )
-                }
-                .buttonStyle(.plain)
-
                 Button(role: .destructive, action: onDiscard) {
                     Text("Discard")
                         .font(.system(size: 15, weight: .semibold))
@@ -487,6 +477,106 @@ struct CameraResultDrawerView: View {
             .padding(.top, 20)
             .padding(.bottom, 32)
         }
+    }
+
+    /// 2026-05-23: replaces the earlier loose "Improve this estimate" label
+    /// + bare TextField + standalone Recalculate button. The new card
+    /// visually groups the three so users see one cohesive affordance:
+    /// header → field → action. Tapping anywhere on the header focuses the
+    /// field so it doesn't require pixel-perfect aim on the text input.
+    private var improveEstimateCard: some View {
+        let hasNote = !contextNote.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+
+        return VStack(alignment: .leading, spacing: 12) {
+            Button(action: { isContextNoteFocused = true }) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Add a note to refine")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.141, green: 0.098, blue: 0.078))
+                    Text("Tell us anything the camera missed — portion size, cooking method, brand.")
+                        .font(.system(size: 12, weight: .medium, design: .rounded))
+                        .foregroundStyle(Color(red: 0.467, green: 0.416, blue: 0.380))
+                        .multilineTextAlignment(.leading)
+                        .lineSpacing(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            TextField(
+                "e.g. 2 slices, homemade, with chutney",
+                text: $contextNote,
+                axis: .vertical
+            )
+            .font(.system(size: 15, weight: .medium))
+            .lineLimit(1...3)
+            .textInputAutocapitalization(.sentences)
+            .disableAutocorrection(false)
+            .focused($isContextNoteFocused)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(.white)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(
+                        isContextNoteFocused
+                            ? Color(red: 0.902, green: 0.361, blue: 0.102).opacity(0.55)
+                            : Color.black.opacity(0.08),
+                        lineWidth: isContextNoteFocused ? 1.5 : 1
+                    )
+            )
+
+            Button {
+                isContextNoteFocused = false
+                onRetry()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .bold))
+                    Text(hasNote ? "Recalculate with note" : "Recalculate")
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
+                    if hasNote {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 11, weight: .black))
+                    }
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: hasNote
+                                    ? [Color(red: 1.00, green: 0.62, blue: 0.20),
+                                       Color(red: 0.902, green: 0.361, blue: 0.102)]
+                                    : [Color(red: 0.420, green: 0.370, blue: 1.0).opacity(0.78),
+                                       Color(red: 0.340, green: 0.295, blue: 0.900).opacity(0.78)],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text(hasNote ? "Recalculate with note" : "Recalculate"))
+            .accessibilityHint(Text("Re-runs the photo parse and applies any note you added."))
+        }
+        .padding(16)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(.white)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.10), lineWidth: 1)
+        )
+        .shadow(color: Color.black.opacity(0.04), radius: 12, y: 6)
     }
 
     private func seedEditablePhotoItemsIfNeeded(_ items: [ParsedFoodItem], force: Bool) {
