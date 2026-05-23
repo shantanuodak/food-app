@@ -24,6 +24,7 @@ struct HomeProfileScreen: View {
     @State private var adminDebugStatus: String?
     @State private var adminPreviewBadge: EarnedBadge?
     @State private var isAdminWidgetGuidePresented = false
+    @State private var isGreetingPlaygroundPresented = false
     @State private var isSignOutConfirmationPresented = false
     @State private var bodyMetricEditorSheet: BodyMetricEditorSheet?
 
@@ -83,6 +84,18 @@ struct HomeProfileScreen: View {
             )
             .presentationDetents([.large])
             .presentationDragIndicator(.hidden)
+        }
+        .sheet(isPresented: $isGreetingPlaygroundPresented) {
+            GreetingAnimationPlaygroundView()
+        }
+        // 2026-05-23: bodyMetricEditorSheet was previously attached to the
+        // Body Section. With three nested sheets (bento → manage account →
+        // body picker) iOS would occasionally dismiss the parent instead
+        // of presenting the child, which the user perceived as a crash
+        // when tapping age/height. Moving the modifier to the outer body
+        // gives it a single stable scope.
+        .sheet(item: $bodyMetricEditorSheet) { editor in
+            bodyMetricEditorSheetView(editor)
         }
     }
 
@@ -300,9 +313,6 @@ struct HomeProfileScreen: View {
             )
         } header: {
             Text("Body")
-        }
-        .sheet(item: $bodyMetricEditorSheet) { editor in
-            bodyMetricEditorSheetView(editor)
         }
     }
 
@@ -716,6 +726,18 @@ struct HomeProfileScreen: View {
             Text("Tutorial debug")
         } footer: {
             Text("Closes Profile and starts the guided home tutorial. Admin-only; this does not reset onboarding.")
+        }
+
+        Section {
+            Button {
+                isGreetingPlaygroundPresented = true
+            } label: {
+                Label("Preview greeting animations", systemImage: "hand.wave.fill")
+            }
+        } header: {
+            Text("Greeting playground")
+        } footer: {
+            Text("Renders every greeting animation (wave, peek, dog, heart, sparkle, sprout, coffee, pancakes, sun, z's, moon, confetti) grouped by time-of-day slot. Includes a Replay All button so you can see periodic ones (peek, sun, etc.) fire again without waiting 30 seconds.")
         }
 
         if let adminDebugStatus {
