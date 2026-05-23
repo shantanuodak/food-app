@@ -229,8 +229,30 @@ struct AppDrawerHeader<Title: View>: View {
             .padding(.horizontal, 12)
             .padding(.bottom, 6)
         }
-        .background(Color.white)
+        // 2026-05-23: was Color.white, which left a hard white strip at the
+        // top of every drawer. Now transparent so the parent sheet's surface
+        // (typically AppDrawerSurface.gradient) carries through unbroken.
+        .background(Color.clear)
     }
+}
+
+/// Canonical warm cream gradient used as the background for every full-sheet
+/// drawer in the app (Profile, Insights, Saved Meals, Badges, Widget Guide,
+/// Logging Tips, Streak). Sourced from the Saved Meals screen which the user
+/// flagged as the gold-standard look on 2026-05-23. Apply via
+/// `.presentationBackground(AppDrawerSurface.gradient)` on the sheet content
+/// and (optionally) `.background(AppDrawerSurface.gradient)` underneath the
+/// drawer body if a non-scrollable region needs to opt in.
+enum AppDrawerSurface {
+    static let gradient = LinearGradient(
+        colors: [
+            Color(red: 0.995, green: 0.983, blue: 0.968),
+            Color(red: 0.988, green: 0.972, blue: 0.952),
+            Color(red: 0.982, green: 0.961, blue: 0.936)
+        ],
+        startPoint: .top,
+        endPoint: .bottom
+    )
 }
 
 extension View {
