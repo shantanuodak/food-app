@@ -38,64 +38,57 @@ struct CameraPreviewStageOverlay: View {
     let flashMode: CameraFlashMode
     let onFlashToggle: () -> Void
     let onFlipCamera: () -> Void
-    @State private var isScanLineAtBottom = false
 
     var body: some View {
-        GeometryReader { proxy in
-            let size = proxy.size
-
-            ZStack {
-                RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous)
-                    .stroke(CameraOverlayTokens.stageBorder, lineWidth: 1.5)
-                    .background(
-                        RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous)
-                            .fill(
-                                LinearGradient(
-                                    colors: [
-                                        CameraOverlayTokens.stageInnerGlow,
-                                        Color.clear,
-                                        Color.black.opacity(0.16)
-                                    ],
-                                    startPoint: .top,
-                                    endPoint: .bottom
-                                )
+        ZStack {
+            RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous)
+                .stroke(CameraOverlayTokens.stageBorder, lineWidth: 1.5)
+                .background(
+                    RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous)
+                        .fill(
+                            LinearGradient(
+                                colors: [
+                                    CameraOverlayTokens.stageInnerGlow,
+                                    Color.clear,
+                                    Color.black.opacity(0.16)
+                                ],
+                                startPoint: .top,
+                                endPoint: .bottom
                             )
+                        )
+                )
+
+            scanSurfaceShade
+
+            // 2026-05-23: scanning line (bobbing capsule) and viewfinder
+            // icon on the right of the helper text both removed. The line
+            // was purely decorative and the icon was a non-interactive
+            // affordance that read as tappable but did nothing.
+
+            VStack {
+                topHint
+
+                Spacer()
+
+                HStack(spacing: 14) {
+                    CameraStageUtilityButton(
+                        systemImage: flashMode.icon,
+                        accent: flashMode == .off ? Color.white.opacity(0.78) : Color(red: 1.0, green: 0.77, blue: 0.28),
+                        action: onFlashToggle
                     )
 
-                scanSurfaceShade
-
-                scanningLine(in: size)
-
-                VStack {
-                    topHint
-
-                    Spacer()
-
-                    HStack(spacing: 14) {
-                        CameraStageUtilityButton(
-                            systemImage: flashMode.icon,
-                            accent: flashMode == .off ? Color.white.opacity(0.78) : Color(red: 1.0, green: 0.77, blue: 0.28),
-                            action: onFlashToggle
-                        )
-
-                        CameraStageUtilityButton(
-                            systemImage: "camera.rotate.fill",
-                            accent: Color.white.opacity(0.86),
-                            action: onFlipCamera
-                        )
-                    }
-                    .padding(.bottom, 28)
+                    CameraStageUtilityButton(
+                        systemImage: "camera.rotate.fill",
+                        accent: Color.white.opacity(0.86),
+                        action: onFlipCamera
+                    )
                 }
-                .padding(.horizontal, 20)
-                .padding(.top, 18)
+                .padding(.bottom, 22)
             }
-            .clipShape(RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous))
-            .onAppear {
-                withAnimation(.easeInOut(duration: 2.1).repeatForever(autoreverses: true)) {
-                    isScanLineAtBottom = true
-                }
-            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
         }
+        .clipShape(RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous))
         .allowsHitTesting(true)
     }
 
@@ -112,59 +105,20 @@ struct CameraPreviewStageOverlay: View {
     }
 
     private var topHint: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Align your meal in frame")
-                    .font(.system(size: 16, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color.white.opacity(0.96))
+        // 2026-05-23: dropped the trailing viewfinder icon. The icon was
+        // sized like a tappable control (38pt circle with stroke) but had
+        // no action attached, which read as "button that doesn't work".
+        // Helper text stack now spans the full width.
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Align your meal in frame")
+                .font(.system(size: 16, weight: .semibold, design: .rounded))
+                .foregroundStyle(Color.white.opacity(0.96))
 
-                Text("Snap once the food sits inside the scan field.")
-                    .font(.system(size: 12, weight: .medium, design: .rounded))
-                    .foregroundStyle(CameraOverlayTokens.helperText)
-            }
-
-            Spacer(minLength: 12)
-
-            Image(systemName: "viewfinder")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(Color.white.opacity(0.74))
-                .frame(width: 38, height: 38)
-                .background(CameraOverlayTokens.controlSurface, in: Circle())
-                .overlay(Circle().stroke(CameraOverlayTokens.controlStroke, lineWidth: 1))
+            Text("Snap once the food sits inside the scan field.")
+                .font(.system(size: 12, weight: .medium, design: .rounded))
+                .foregroundStyle(CameraOverlayTokens.helperText)
         }
-    }
-
-    @ViewBuilder
-    private func scanningLine(in size: CGSize) -> some View {
-        let horizontalInset: CGFloat = 34
-        let travelTop = size.height * 0.28
-        let travelBottom = size.height * 0.68
-
-        ZStack {
-            Capsule(style: .continuous)
-                .fill(CameraOverlayTokens.scanLineCore)
-                .frame(width: max(0, size.width - (horizontalInset * 2)), height: 5)
-                .shadow(color: CameraOverlayTokens.scanLineGlow.opacity(0.62), radius: 18, y: 0)
-
-            Capsule(style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color.clear,
-                            CameraOverlayTokens.scanLineGlow.opacity(0.28),
-                            Color.clear
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-                .frame(width: max(0, size.width - (horizontalInset * 2)), height: 34)
-        }
-        .position(
-            x: size.width / 2,
-            y: isScanLineAtBottom ? travelBottom : travelTop
-        )
-        .accessibilityHidden(true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -174,13 +128,18 @@ private struct CameraStageUtilityButton: View {
     let action: () -> Void
 
     var body: some View {
+        // 2026-05-23: visual circle shrunk from 74→52pt. The icon still
+        // sits in a contentShape that meets Apple's 44pt minimum, so the
+        // tap target is preserved. Smaller circles read as utilities
+        // rather than competing with the capture button.
         Button(action: action) {
             Image(systemName: systemImage)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 17, weight: .semibold))
                 .foregroundStyle(accent)
-                .frame(width: 74, height: 74)
+                .frame(width: 52, height: 52)
                 .background(CameraOverlayTokens.controlSurface, in: Circle())
                 .overlay(Circle().stroke(CameraOverlayTokens.controlStroke, lineWidth: 1))
+                .contentShape(Circle().inset(by: -4))
         }
         .buttonStyle(.plain)
     }
@@ -241,14 +200,18 @@ struct CameraBottomBar: View {
     let onOpenLibrary: () -> Void
 
     var body: some View {
+        // 2026-05-23: library button shrunk 72→52pt to match the new
+        // flash / flip sizes inside the stage. Capture button stays at
+        // 92pt — it's the primary action and should anchor the bar.
         HStack(alignment: .center) {
             Button(action: onOpenLibrary) {
                 Image(systemName: "photo.stack.fill")
-                    .font(.system(size: 19, weight: .semibold))
+                    .font(.system(size: 17, weight: .semibold))
                     .foregroundStyle(Color.white.opacity(0.92))
-                .frame(width: 72, height: 72)
-                .background(Color.white.opacity(0.12), in: Circle())
-                .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    .frame(width: 52, height: 52)
+                    .background(Color.white.opacity(0.12), in: Circle())
+                    .overlay(Circle().stroke(Color.white.opacity(0.10), lineWidth: 1))
+                    .contentShape(Circle().inset(by: -4))
             }
             .buttonStyle(.plain)
 
@@ -258,8 +221,9 @@ struct CameraBottomBar: View {
 
             Spacer()
 
+            // Symmetric spacer keeps the capture button centered.
             Color.clear
-                .frame(width: 72, height: 72)
+                .frame(width: 52, height: 52)
         }
     }
 }

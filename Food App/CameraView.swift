@@ -105,10 +105,12 @@ struct CameraView: View {
                     // V3.1 Phase 3: informational icon row that communicates
                     // "we auto-detect three kinds of input" without using
                     // intrusive text.
+                    // 2026-05-23: dropped the bottom padding + flex spacer
+                    // so the chip sits right above the stage rectangle.
+                    // Was reading as visually orphaned between the top
+                    // bar and the stage.
                     CameraModeIconRow()
-                        .padding(.bottom, 6)
-
-                    Spacer(minLength: 10)
+                        .padding(.bottom, 8)
 
                     ZStack {
                         stagePreviewSurface(width: stageWidth, height: stageHeight)
