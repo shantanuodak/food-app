@@ -39,10 +39,31 @@ struct CameraPreviewStageOverlay: View {
     let onFlashToggle: () -> Void
     let onFlipCamera: () -> Void
 
+    // 2026-05-23: continuous shimmer running around the stage border.
+    // Drives an AngularGradient stroke whose bright spot rotates around
+    // the center, which reads as a single light traveling around the
+    // perimeter. Continuous loop (6s/rev) so the frame feels "alive"
+    // even when the user is composing a shot.
+    @State private var shimmerAngle: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         ZStack {
             RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous)
-                .stroke(CameraOverlayTokens.stageBorder, lineWidth: 1.5)
+                .stroke(
+                    AngularGradient(
+                        stops: [
+                            .init(color: Color.white.opacity(0.42), location: 0.00),
+                            .init(color: Color.white.opacity(0.42), location: 0.38),
+                            .init(color: Color.white.opacity(1.00), location: 0.50),
+                            .init(color: Color.white.opacity(0.42), location: 0.62),
+                            .init(color: Color.white.opacity(0.42), location: 1.00),
+                        ],
+                        center: .center,
+                        angle: .degrees(shimmerAngle)
+                    ),
+                    lineWidth: 1.5
+                )
                 .background(
                     RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous)
                         .fill(
@@ -90,6 +111,16 @@ struct CameraPreviewStageOverlay: View {
         }
         .clipShape(RoundedRectangle(cornerRadius: CameraOverlayTokens.stageCornerRadius, style: .continuous))
         .allowsHitTesting(true)
+        .onAppear { startBorderShimmer() }
+        .onChange(of: reduceMotion) { _, _ in startBorderShimmer() }
+    }
+
+    private func startBorderShimmer() {
+        shimmerAngle = 0
+        guard !reduceMotion else { return }
+        withAnimation(.linear(duration: 6).repeatForever(autoreverses: false)) {
+            shimmerAngle = 360
+        }
     }
 
     private var scanSurfaceShade: some View {

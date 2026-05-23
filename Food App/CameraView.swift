@@ -94,6 +94,15 @@ struct CameraView: View {
                     })
                         .padding(.top, safeInsets.top + 6)
 
+                    // 2026-05-23: flex spacer between the top bar and the
+                    // detection cluster (pill + mode row + stage). Pairs with
+                    // the `Spacer(minLength: 28)` below the stage so the
+                    // detection cluster sits vertically centered in the
+                    // available area instead of being top-anchored. Lets
+                    // the user's thumb sit near the bottom bar while the
+                    // viewfinder is at eye level.
+                    Spacer(minLength: 0)
+
                     // V3.1 Phase 2: live detection pill — only renders when a
                     // barcode is currently in the viewfinder. Drives intuition
                     // that the upcoming capture will go through the fast
