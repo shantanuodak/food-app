@@ -281,17 +281,17 @@ final class CameraService: NSObject, ObservableObject {
     // MARK: - Private Helpers
 
     private func bestDevice(for position: AVCaptureDevice.Position) -> AVCaptureDevice? {
-        // Prefer multi-camera virtual devices so iOS can auto-switch lenses
-        // (especially to the ultra-wide for macro on iPhone 13 Pro+).
-        //   builtInTripleCamera   — iPhone Pro models (wide + ultra-wide + tele)
-        //   builtInDualWideCamera — non-Pro recent iPhones (wide + ultra-wide)
-        //   builtInWideAngleCamera — fallback for older iPhones / front camera
-        if let triple = AVCaptureDevice.default(.builtInTripleCamera, for: .video, position: position) {
-            return triple
-        }
-        if let dualWide = AVCaptureDevice.default(.builtInDualWideCamera, for: .video, position: position) {
-            return dualWide
-        }
+        // Use the primary 1x wide-angle lens directly. Per user feedback on
+        // 2026-05-22, the multi-camera virtual devices' auto-switch to the
+        // ultra-wide constituent for close subjects looked like "the camera
+        // is using the wide angle" even though it was technically the macro
+        // lane on iPhone Pro models. Locking to .builtInWideAngleCamera
+        // gives a predictable 1x field of view across all devices.
+        //
+        // Tradeoff: loses iOS auto-macro engage on iPhone 13 Pro+. Close-up
+        // barcodes / labels may need the user to step back ~12-15cm. If
+        // barcode parse rates drop noticeably we can revisit by exposing a
+        // manual Macro toggle in the camera UI.
         if let wide = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position) {
             return wide
         }
