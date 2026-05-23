@@ -1,59 +1,62 @@
 import SwiftUI
 
+/// Home-screen greeting button. No longer a "chip" visually (the yellow
+/// capsule is gone), but the struct name is preserved so the call site
+/// in `MainLoggingTopHeaderStrip` doesn't need to change.
+///
+/// The view now:
+///   - Resolves a time-of-day-aware animation via `GreetingAnimationResolver`
+///   - Renders the selected animation in a 24×24 frame
+///   - Greets with a slot-aware prefix ("Good morning", "Hey", "Evening",
+///     "Good night", "Nice")
+///   - Shimmers the name once on first render then every ~10s
+///   - Trails a small chevron to signal "opens a sheet"
 struct HomeGreetingChip: View {
+    @EnvironmentObject private var appStore: AppStore
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.colorScheme) private var colorScheme
 
-    @State private var handRotation = 0.0
-
     let firstName: String?
+    /// Override hook for milestone moments (streak hit, goal met). The
+    /// caller flips this true for the duration of one launch.
+    var hasMilestone: Bool = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            Text("👋")
-                .font(.system(size: 14))
-                .rotationEffect(.degrees(handRotation), anchor: .bottomTrailing)
-
-            Text(title)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(colorScheme == .dark ? .white.opacity(0.96) : Color.primary.opacity(0.80))
-                .lineLimit(1)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
-        .background(
-            Capsule(style: .continuous)
-                .fill(Color(red: 1.00, green: 0.78, blue: 0.33).opacity(0.12))
+        let resolved = GreetingAnimationResolver.resolve(
+            userId: appStore.authSessionStore.session?.userID,
+            date: Date(),
+            hasMilestone: hasMilestone
         )
-        .glassyBackground(in: .capsule)
+        let nameLine = greetingLine(prefix: resolved.slot.greetingPrefix, firstName: firstName)
+
+        return HStack(spacing: 6) {
+            GreetingAnimationView(animation: resolved.animation)
+
+            ShimmerText(text: nameLine, baseColor: textColor)
+                .font(.system(size: 15, weight: .semibold))
+                .lineLimit(1)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(textColor.opacity(0.45))
+                .padding(.leading, -2)
+        }
+        .padding(.vertical, 4)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Greeting: \(title)"))
-        .onAppear {
-            applyWaveAnimation(isReducedMotion: reduceMotion)
-        }
-        .onChange(of: reduceMotion) { _, newValue in
-            applyWaveAnimation(isReducedMotion: newValue)
-        }
-        .onDisappear {
-            handRotation = 0
-        }
+        .accessibilityLabel(Text("\(nameLine). Opens profile."))
     }
 
-    private var title: String {
-        guard let firstName, !firstName.isEmpty else {
-            return "Hello"
-        }
-        return "Hey, \(firstName)"
+    private var textColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.96)
+            : Color.primary.opacity(0.85)
     }
 
-    private func applyWaveAnimation(isReducedMotion: Bool) {
-        handRotation = 0
-        guard !isReducedMotion else {
-            return
+    private func greetingLine(prefix: String, firstName: String?) -> String {
+        if let name = firstName, !name.isEmpty {
+            return "\(prefix), \(name)"
         }
-
-        withAnimation(.easeInOut(duration: 0.45).repeatForever(autoreverses: true)) {
-            handRotation = 16
-        }
+        // Slot-aware fallback when we don't have a first name.
+        return prefix == "Hey" ? "Hey there" : prefix
     }
 }
