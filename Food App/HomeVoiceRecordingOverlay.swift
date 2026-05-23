@@ -11,6 +11,10 @@ struct VoiceRecordingOverlay: View {
     let audioLevel: Float
     let phase: Phase
     let onCancel: () -> Void
+    /// Tapped while recording — stops listening and sends the transcript to
+    /// the parser. Distinct from `onCancel` (which discards). Optional so
+    /// callers that haven't migrated yet still compile.
+    var onStop: (() -> Void)? = nil
     /// Called when the user stays silent for too long after the overlay appears.
     var onSilenceTimeout: (() -> Void)? = nil
 
@@ -249,20 +253,35 @@ struct VoiceRecordingOverlay: View {
                     .frame(maxWidth: .infinity)
             }
 
-            Button("Cancel") {
-                onCancel()
+            // 2026-05-23: was "Cancel" (discard). Now "Stop" — ends the
+            // recording and ships the transcript through the parser. Falls
+            // back to onCancel only when callers haven't wired onStop yet.
+            Button(action: {
+                if let onStop {
+                    onStop()
+                } else {
+                    onCancel()
+                }
+            }) {
+                HStack(spacing: 6) {
+                    Image(systemName: "stop.fill")
+                        .font(.system(size: 11, weight: .black))
+                    Text("Stop")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                }
             }
             .buttonStyle(.plain)
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
-            .foregroundStyle(.black.opacity(0.66))
+            .foregroundStyle(.black.opacity(0.78))
             .padding(.horizontal, 18)
-            .padding(.vertical, 9)
+            .padding(.vertical, 10)
             .background(.white.opacity(0.34), in: Capsule(style: .continuous))
             .overlay(
                 Capsule(style: .continuous)
-                    .stroke(.white.opacity(0.26), lineWidth: 1)
+                    .stroke(.white.opacity(0.32), lineWidth: 1)
             )
             .opacity(phase == .handoff ? 0 : 1)
+            .accessibilityLabel(Text("Stop recording and send"))
+            .accessibilityHint(Text("Ends the voice recording and sends the transcript to be parsed."))
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
