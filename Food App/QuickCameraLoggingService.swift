@@ -17,8 +17,14 @@ enum QuickCameraLoggingService {
         let loggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: Date())
         await QuickCameraNotificationService.notifyAnalyzing(id: pendingId)
 
+        // P1+P2 fix (2026-05-20): drop the explicit timeoutMs:800 so this
+        // picks up ImageVisionPipeline's new 2500ms default (paired with
+        // an internal downscale to 1280px). The old 800ms cap on the
+        // raw full-res HEIC was reliably expiring on real devices and
+        // making every quick-camera barcode/label scan fall through to
+        // the vision lane.
         async let visionTask = Task.detached(priority: .userInitiated) {
-            await ImageVisionPipeline.analyze(image, timeoutMs: 800)
+            await ImageVisionPipeline.analyze(image)
         }.value
         async let preparedTask = Task.detached(priority: .userInitiated) {
             MainLoggingShellView.prepareImagePayload(from: image)

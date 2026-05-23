@@ -16,11 +16,17 @@ struct CameraView: View {
     @State private var showFirstLaunchTip = CameraFirstLaunchTip.shouldShow
 
     // Callbacks
-    private let onImageCaptured: (UIImage) -> Void
+    /// P0 fix (2026-05-20): second arg is the live-viewfinder barcode
+    /// snapshotted at the exact moment of capture, or nil if the
+    /// viewfinder didn't see one. Host uses it to route to the barcode
+    /// lane directly instead of paying the VNDetectBarcodesRequest tax
+    /// on the full-res capture (which was timing out in production and
+    /// silently falling back to the vision lane).
+    private let onImageCaptured: (UIImage, DetectedBarcode?) -> Void
     private let onOpenPhotoLibrary: (() -> Void)?
 
     init(
-        onImageCaptured: @escaping (UIImage) -> Void,
+        onImageCaptured: @escaping (UIImage, DetectedBarcode?) -> Void,
         onOpenPhotoLibrary: (() -> Void)? = nil
     ) {
         self.onImageCaptured = onImageCaptured

@@ -94,10 +94,19 @@ final class CameraViewModel: ObservableObject {
     /// observing this view model react without subscribing to the service
     /// directly.
     @Published private(set) var detectedBarcode: DetectedBarcode?
+    /// P0 fix (2026-05-20): the live barcode value snapshotted at the exact
+    /// moment of capture. Without this snapshot, by the time the user
+    /// taps "Use Photo" the barcode auto-clear timer might have nilled out
+    /// `detectedBarcode`. This frozen value is what we hand off to
+    /// `onImageCaptured` so `parseAndUpdateDrawer` can route to the
+    /// barcode lane directly instead of re-detecting on the full-res
+    /// captured photo (which was failing the 800ms Vision timeout in
+    /// production — see ImageVisionPipeline.swift P1 notes).
+    @Published private(set) var capturedBarcode: DetectedBarcode?
 
     // MARK: Callbacks
 
-    var onImageCaptured: ((UIImage) -> Void)?
+    var onImageCaptured: ((UIImage, DetectedBarcode?) -> Void)?
     var onDismiss: (() -> Void)?
 
     // MARK: Service
@@ -173,6 +182,12 @@ final class CameraViewModel: ObservableObject {
         do {
             let image = try await cameraService.capturePhoto()
             capturedImage = image
+            // P0 fix (2026-05-20): snapshot the live-detected barcode AT
+            // capture time, before the auto-clear timer or session stop
+            // can nil it out. This is what gets handed to the host as the
+            // prefetched barcode so we don't waste 800ms re-detecting on
+            // the full-res HEIC.
+            capturedBarcode = detectedBarcode
             cameraState = .reviewingPhoto(image)
             // V3.1 hotfix v5 (2026-05-20): stop the AVCaptureSession the
             // moment we enter review state. Otherwise the session keeps
@@ -211,6 +226,11 @@ final class CameraViewModel: ObservableObject {
         }
         AppHaptics.mediumImpact()
         capturedImage = image
+        // Match real-capture path: snapshot the (likely nil) live
+        // barcode at capture time. Simulator has no live AVCapture
+        // pipeline, so this will always be nil, which means parsing
+        // falls back to ImageVisionPipeline detection — fine for sim.
+        capturedBarcode = detectedBarcode
         cameraState = .reviewingPhoto(image)
     }
 #endif
@@ -233,12 +253,18 @@ final class CameraViewModel: ObservableObject {
         // analysis drawer. The "X" button on CameraTopBar still calls the
         // Environment dismiss() directly for users who want to back out
         // before tapping Use Photo.
-        onImageCaptured?(image)
+        //
+        // P0 fix (2026-05-20): pass the snapshotted live barcode along
+        // with the image so the host can route directly to the barcode
+        // lane without paying the ~800ms VNDetectBarcodesRequest tax on
+        // the full-res HEIC.
+        onImageCaptured?(image, capturedBarcode)
     }
 
     func retakePhoto() {
         AppHaptics.lightImpact()
         capturedImage = nil
+        capturedBarcode = nil
         cameraState = .ready
         cameraService.startSession()
     }

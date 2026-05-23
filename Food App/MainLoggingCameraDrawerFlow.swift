@@ -4,67 +4,54 @@ import UIKit
 extension MainLoggingShellView {
     // MARK: - Camera Input
 
-    /// Drawer row for an unresolved-placeholder item. Shows the original
-    /// segment text + a Retry button (or a spinner while a retry is
-    /// in flight). Tapping Retry calls `retryUnresolvedItem`.
+    /// Drawer row for an unresolved-placeholder item. Renders the original
+    /// segment text plus a quiet inline caption with an underlined "Retry"
+    /// link — same visual register as the offline/syncing caption. Tapping
+    /// the link calls `retryUnresolvedItem`. While retrying the link is
+    /// replaced by an inline spinner + "Retrying…" caption with no layout
+    /// shift.
     @ViewBuilder
     func unresolvedItemRow(rowID: UUID, itemIndex: Int, item: ParsedFoodItem) -> some View {
         let key = "\(rowID.uuidString)-\(itemIndex)"
         let isRetrying = retryingPlaceholderKeys.contains(key)
 
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "exclamationmark.circle.fill")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.red)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(item.name)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(.primary)
+                .lineLimit(2)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(item.name)
-                    .font(.subheadline.weight(.medium))
-                    .foregroundStyle(.primary)
-                    .lineLimit(2)
-                Text("Couldn't parse — tap Retry")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            Button {
-                Task { await retryUnresolvedItem(rowID: rowID, itemIndex: itemIndex) }
-            } label: {
-                Group {
-                    if isRetrying {
-                        ProgressView()
-                            .controlSize(.small)
-                            .tint(.primary)
-                    } else {
+            HStack(spacing: 4) {
+                if isRetrying {
+                    ProgressView()
+                        .controlSize(.mini)
+                    Text("Retrying…")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.467, green: 0.416, blue: 0.380))
+                } else {
+                    Text("Couldn't parse · ")
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.467, green: 0.416, blue: 0.380))
+                    Button {
+                        Task { await retryUnresolvedItem(rowID: rowID, itemIndex: itemIndex) }
+                    } label: {
                         Text("Retry")
-                            .font(.subheadline.weight(.semibold))
+                            .font(.system(size: 12, weight: .semibold, design: .rounded))
+                            .foregroundStyle(Color(red: 0.902, green: 0.361, blue: 0.102))
+                            .underline()
+                            .padding(.vertical, 6)
+                            .padding(.horizontal, 2)
+                            .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
+                    .disabled(isRetrying)
+                    .accessibilityLabel(Text("Retry parsing \(item.name)"))
+                    .accessibilityHint(Text("Re-attempt to parse this item"))
                 }
-                .frame(width: 64, height: 32)
-                .background(
-                    Capsule().fill(Color.red.opacity(0.12))
-                )
-                .overlay(
-                    Capsule().stroke(Color.red.opacity(0.35), lineWidth: 1)
-                )
-                .foregroundStyle(.red)
             }
-            .buttonStyle(.plain)
-            .disabled(isRetrying)
-            .accessibilityLabel(Text("Retry parsing \(item.name)"))
         }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(Color.red.opacity(0.04))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(Color.red.opacity(0.18), lineWidth: 1)
-                )
-        )
+        .padding(.vertical, 6)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     // MARK: - Per-item Retry (drawer)
@@ -141,10 +128,14 @@ extension MainLoggingShellView {
     // MARK: - Custom Camera Drawer Flow
 
     @MainActor
-    func parseAndUpdateDrawer(_ image: UIImage, contextNote: String? = nil) async {
+    func parseAndUpdateDrawer(_ image: UIImage, prefetchedBarcode: DetectedBarcode? = nil, contextNote: String? = nil) async {
         let flowStartedAt = Date()
         let clientAttemptId = UUID().uuidString.lowercased()
-        async let visionTask = ImageVisionPipeline.analyze(image, timeoutMs: 800)
+        // P1+P2 fix (2026-05-20): ImageVisionPipeline now downscales to
+        // <=1280px and uses a 2500ms default timeout (was 800ms which
+        // was consistently expiring on full-res HEIC). Removing the
+        // explicit timeoutMs arg here picks up the new default.
+        async let visionTask = ImageVisionPipeline.analyze(image)
         async let preparedTask = Task.detached(priority: .userInitiated) {
             MainLoggingShellView.prepareImagePayload(from: image)
         }.value
@@ -154,7 +145,12 @@ extension MainLoggingShellView {
         // into the analyzing drawer so the user sees "Scanning barcode…" or
         // "Reading nutrition label…" instead of the generic copy. Vision-lane
         // (the default) keeps the existing multi-phase progression.
-        let earlyLane = decideLane(visionResult: visionResult)
+        //
+        // P0 fix (2026-05-20): pass the live-detected barcode (if any)
+        // so the lane decision can short-circuit Vision's on-image
+        // detection — the live AVCaptureMetadataOutput already validated
+        // it, no need to re-detect on the full-res capture.
+        let earlyLane = decideLane(visionResult: visionResult, prefetched: prefetchedBarcode)
         let earlyHint: AnalysisLaneHint = {
             switch earlyLane {
             case .barcode: return .barcode
@@ -198,6 +194,7 @@ extension MainLoggingShellView {
                 image: image,
                 prepared: prepared,
                 visionResult: visionResult,
+                prefetchedBarcode: prefetchedBarcode,
                 contextNote: contextNote,
                 clientAttemptId: clientAttemptId,
                 loggedAt: loggedAt
@@ -267,7 +264,17 @@ extension MainLoggingShellView {
         case vision
     }
 
-    private func decideLane(visionResult: ImageVisionResult) -> CameraParseLane {
+    private func decideLane(visionResult: ImageVisionResult, prefetched: DetectedBarcode? = nil) -> CameraParseLane {
+        // P0 fix (2026-05-20): trust the live AVCaptureMetadataOutput
+        // detection unconditionally — it's already been validated at
+        // video rate by AVF's own barcode pipeline before we even got
+        // here. No need to make Vision re-derive the same answer on the
+        // full-res capture. This is the single biggest accuracy win
+        // because in prod the on-image VNDetectBarcodesRequest was
+        // routinely timing out and falling through to the vision lane.
+        if let prefetched {
+            return .barcode(prefetched.payload, prefetched.symbology)
+        }
         if let barcode = visionResult.barcode, barcode.confidence >= 0.95 {
             return .barcode(barcode.payload, barcode.symbology)
         }
@@ -286,11 +293,12 @@ extension MainLoggingShellView {
         image: UIImage,
         prepared: PreparedImagePayload,
         visionResult: ImageVisionResult,
+        prefetchedBarcode: DetectedBarcode? = nil,
         contextNote: String?,
         clientAttemptId: String,
         loggedAt: String
     ) async throws -> ParseLogResponse {
-        switch decideLane(visionResult: visionResult) {
+        switch decideLane(visionResult: visionResult, prefetched: prefetchedBarcode) {
         case let .barcode(code, symbology):
             do {
                 let barcodeResponse = try await appStore.apiClient.parseBarcode(

@@ -23,14 +23,31 @@ struct ImageVisionResult {
 }
 
 enum ImageVisionPipeline {
-    static func analyze(_ image: UIImage, timeoutMs: Int = 800) async -> ImageVisionResult {
+    /// Max edge size we ask Vision to see. Real iPhone captures are
+    /// 12-48MP (~4000x3000+) — VNDetectBarcodesRequest and
+    /// VNRecognizeTextRequest take 1-2 seconds on those, which routinely
+    /// exceeds our timeout budget on real devices. Downsizing to 1280
+    /// reduces detection time by 10-30x with no accuracy loss for
+    /// barcodes (barcodes survive aggressive downscaling) or for
+    /// nutrition-label OCR (label text remains legible well below 1280
+    /// wide).
+    private static let visionMaxEdge: CGFloat = 1280
+
+    static func analyze(_ image: UIImage, timeoutMs: Int = 2500) async -> ImageVisionResult {
         let start = Date()
         // V3 hotfix (2026-05-20): pass orientation to Vision via the API parameter
         // instead of redrawing via fixedOrientation(). UIImage.draw(in:) crashes on
         // background threads for certain image backings on iOS 17+.
-        guard let cgImage = image.cgImage else {
+        guard let originalCG = image.cgImage else {
             return ImageVisionResult(barcode: nil, labelPanel: nil, ocrText: "", elapsedMs: 0)
         }
+        // P1 fix (2026-05-20): resize the CGImage to <=1280 on the long
+        // edge before handing to Vision. The old code passed the raw
+        // 12-48MP cgImage straight in, which is what was making the
+        // 800ms timeout consistently expire on real device → no barcode
+        // detected → fall through to vision lane → "barcode inaccurate"
+        // user reports.
+        let cgImage = downscaledForVision(originalCG) ?? originalCG
         let orientation = cgImagePropertyOrientation(from: image.imageOrientation)
 
         async let barcodeTask = detectBarcode(cgImage, orientation: orientation, timeoutMs: timeoutMs)
@@ -129,6 +146,46 @@ enum ImageVisionPipeline {
             return nil
         }
         return Int(text[valueRange])
+    }
+
+    /// Returns a CGImage downscaled so its longest edge is at most
+    /// `visionMaxEdge` pixels. Returns nil and the caller should fall
+    /// back to the original if downscaling fails for any reason.
+    ///
+    /// Uses `CGContext` (not `UIImage.draw(in:)`) so this is safe on
+    /// background threads — UIImage.draw was the source of the iOS 17+
+    /// crash we hit in V3 hotfix territory. We also pass `colorSpace`
+    /// explicitly so the destination context doesn't pick up the
+    /// HEIC's wide-gamut color space (which Vision sometimes chokes
+    /// on).
+    private static func downscaledForVision(_ source: CGImage) -> CGImage? {
+        let width = CGFloat(source.width)
+        let height = CGFloat(source.height)
+        let longest = max(width, height)
+        // Image is already small enough — no work needed, Vision is
+        // fast on small images.
+        guard longest > visionMaxEdge else { return source }
+
+        let scale = visionMaxEdge / longest
+        let targetWidth = Int((width * scale).rounded())
+        let targetHeight = Int((height * scale).rounded())
+        guard targetWidth > 0, targetHeight > 0 else { return nil }
+
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let context = CGContext(
+            data: nil,
+            width: targetWidth,
+            height: targetHeight,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: colorSpace,
+            bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+        ) else {
+            return nil
+        }
+        context.interpolationQuality = .medium
+        context.draw(source, in: CGRect(x: 0, y: 0, width: targetWidth, height: targetHeight))
+        return context.makeImage()
     }
 
     /// Map UIImage.Orientation to CGImagePropertyOrientation so Vision rotates

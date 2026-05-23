@@ -127,16 +127,12 @@ extension MainLoggingShellView {
                     .presentationDragIndicator(.hidden)
                     .presentationCornerRadius(24)
             }
-            .sheet(isPresented: $isLoggingTipsPresented) {
-                FoodLoggingTipsView(
-                    presentationStyle: .sheet(onClose: {
-                        isLoggingTipsPresented = false
-                    })
+            .modifier(
+                MainLoggingTipsPromptModifier(
+                    isLoggingTipsPresented: $isLoggingTipsPresented,
+                    isLoggingTipsPromptPresented: $isLoggingTipsPromptPresented
                 )
-                .presentationDetents([.large])
-                .presentationDragIndicator(.hidden)
-                .presentationCornerRadius(24)
-            }
+            )
             .sheet(isPresented: $isStreakDrawerPresented) {
                 HomeStreakDrawerView()
                     .environmentObject(appStore)
@@ -402,7 +398,7 @@ extension MainLoggingShellView {
                 // with no modal machinery in the way.
                 ZStack {
                     CameraView(
-                        onImageCaptured: { image in
+                        onImageCaptured: { image, prefetchedBarcode in
                             inputMode = .text
                             selectedCameraSource = nil
                             if isQuickCameraCaptureActive {
@@ -414,14 +410,26 @@ extension MainLoggingShellView {
                             // prepared off the main thread (12-48MP HEIC
                             // decode would otherwise block this render
                             // pass for hundreds of ms on real devices).
-                            cameraDrawerState = .analyzing(nil, nil)
+                            //
+                            // P0 fix (2026-05-20): if the live viewfinder
+                            // already detected a barcode, set the lane
+                            // hint immediately so the drawer copy says
+                            // "Scanning barcode…" from frame zero instead
+                            // of waiting for ImageVisionPipeline to
+                            // re-detect (which often timed out → showed
+                            // generic "Analyzing your meal" instead).
+                            let immediateHint: AnalysisLaneHint? = prefetchedBarcode != nil ? .barcode : nil
+                            cameraDrawerState = .analyzing(nil, immediateHint)
                             // Flip the overlay flag — triggers the ZStack
                             // transition below.
                             withAnimation(.easeOut(duration: 0.28)) {
                                 isCameraAnalysisSheetPresentedOverCover = true
                             }
                             // Heavy work scheduled AFTER the overlay flag.
-                            Task { await parseAndUpdateDrawer(image) }
+                            // Hand the snapshotted live barcode through so
+                            // parseAndUpdateDrawer can skip the Vision
+                            // re-detection step entirely if present.
+                            Task { await parseAndUpdateDrawer(image, prefetchedBarcode: prefetchedBarcode) }
                             Task.detached(priority: .userInitiated) {
                                 let thumbnail = await image.byPreparingThumbnail(ofSize: CGSize(width: 1024, height: 1024))
                                 await MainActor.run {
@@ -483,32 +491,7 @@ extension MainLoggingShellView {
                 cameraAnalysisSheetContent
             }
             .overlay(alignment: .bottom) {
-                if isVoiceOverlayPresented {
-                    VoiceRecordingOverlay(
-                        transcribedText: speechService.transcribedText,
-                        isListening: speechService.isListening,
-                        audioLevel: speechService.audioLevel,
-                        phase: voiceOverlayPhase,
-                        onCancel: {
-                            cancelVoiceCapture()
-                        },
-                        onSilenceTimeout: {
-                            cancelVoiceCapture()
-                            parseInfoMessage = "No speech detected. Try again."
-                            Task { @MainActor in
-                                try? await Task.sleep(nanoseconds: 3_000_000_000)
-                                if parseInfoMessage == "No speech detected. Try again." {
-                                    withAnimation { parseInfoMessage = nil }
-                                }
-                            }
-                        }
-                    )
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
-                    .padding(.horizontal, -16)
-                    .padding(.bottom, -24)
-                    .ignoresSafeArea(.container, edges: .bottom)
-                }
+                voiceRecordingOverlayContent
             }
             .overlay(alignment: .bottom) {
                 if !isVoiceOverlayPresented {
@@ -516,21 +499,15 @@ extension MainLoggingShellView {
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
-            .homeCoachCardTutorialHost(
-                isPresented: $isHomeTutorialPresented,
-                step: $homeTutorialStep,
-                onFocusComposer: {
-                    focusComposerInputFromBackgroundTap()
-                },
-                onOpenCamera: {
-                    NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
-                },
-                onOpenProgress: {
-                    isProgressChartsPresented = true
-                },
-                onFinish: {
-                    finishHomeTutorial()
-                }
+            .modifier(
+                MainLoggingTutorialModifier(
+                    isHomeTutorialPresented: $isHomeTutorialPresented,
+                    homeTutorialStep: $homeTutorialStep,
+                    isDaySwipeTutorialPresented: $isDaySwipeTutorialPresented,
+                    onFinishHomeTutorial: { finishHomeTutorial() },
+                    onFinishDaySwipeTutorial: { finishDaySwipeTutorial() },
+                    onDaySwipeShift: { days in shiftSelectedSummaryDate(byDays: days) }
+                )
             )
             .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
             .animation(.easeInOut(duration: 0.2), value: isKeyboardVisible)
@@ -621,10 +598,52 @@ extension MainLoggingShellView {
                         topTrailingRadius: 24,
                         style: .continuous
                     )
-                    .fill(Color(.systemBackground))
+                    .fill(AppDrawerSurface.gradient)
                     .ignoresSafeArea(edges: .bottom)
                 )
             }
+        }
+    }
+
+    /// Voice recording overlay — extracted into its own computed property so
+    /// the type-checker on the main body doesn't time out. Driven entirely
+    /// by `isVoiceOverlayPresented` and the speech service.
+    @ViewBuilder
+    var voiceRecordingOverlayContent: some View {
+        if isVoiceOverlayPresented {
+            VoiceRecordingOverlay(
+                transcribedText: speechService.transcribedText,
+                isListening: speechService.isListening,
+                audioLevel: speechService.audioLevel,
+                phase: voiceOverlayPhase,
+                onCancel: {
+                    cancelVoiceCapture()
+                },
+                onStop: {
+                    // stopListening() ends the audio capture but lets the
+                    // recognition task finalize so we get the final
+                    // transcript. The .onChange listener on
+                    // speechService.isListening picks up the transition and
+                    // calls completeVoiceCapture automatically — same code
+                    // path as the natural silence-timeout commit.
+                    speechService.stopListening()
+                },
+                onSilenceTimeout: {
+                    cancelVoiceCapture()
+                    parseInfoMessage = "No speech detected. Try again."
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 3_000_000_000)
+                        if parseInfoMessage == "No speech detected. Try again." {
+                            withAnimation { parseInfoMessage = nil }
+                        }
+                    }
+                }
+            )
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+            .animation(.easeInOut(duration: 0.25), value: isVoiceOverlayPresented)
+            .padding(.horizontal, -16)
+            .padding(.bottom, -24)
+            .ignoresSafeArea(.container, edges: .bottom)
         }
     }
 
@@ -680,6 +699,83 @@ private struct MainLoggingNotificationRoutingModifier: ViewModifier {
             }
             .onReceive(NotificationCenter.default.publisher(for: .openRemindersFromNotification)) { _ in
                 isProfilePresented = true
+            }
+    }
+}
+
+/// Hosts the home tutorial and the day-swipe tutorial overlays, plus the
+/// notification listener that drives the actual day shift when the user
+/// performs the swipe inside the day-swipe overlay (Items 1, 2, 14).
+/// Extracted from the shell body for the same SwiftUI type-checker reason
+/// as `MainLoggingTipsPromptModifier`.
+private struct MainLoggingTutorialModifier: ViewModifier {
+    @Binding var isHomeTutorialPresented: Bool
+    @Binding var homeTutorialStep: HomeCoachCardTutorialStep
+    @Binding var isDaySwipeTutorialPresented: Bool
+    let onFinishHomeTutorial: () -> Void
+    let onFinishDaySwipeTutorial: () -> Void
+    let onDaySwipeShift: (Int) -> Void
+
+    func body(content: Content) -> some View {
+        content
+            .homeCoachCardTutorialHost(
+                isPresented: $isHomeTutorialPresented,
+                step: $homeTutorialStep,
+                onFinish: onFinishHomeTutorial
+            )
+            .daySwipeTutorialHost(
+                isPresented: $isDaySwipeTutorialPresented,
+                onDismiss: onFinishDaySwipeTutorial
+            )
+            .onReceive(NotificationCenter.default.publisher(for: .daySwipeTutorialDidAcknowledge)) { notification in
+                let direction = (notification.object as? [String: String])?["direction"] ?? ""
+                if direction == "right" {
+                    onDaySwipeShift(-1)
+                } else if direction == "left" {
+                    onDaySwipeShift(1)
+                }
+            }
+    }
+}
+
+/// Hosts both the full logging-tips sheet and the new compact prompt
+/// (Item 4, 2026-05-22). Extracted from the main shell body so SwiftUI's
+/// type checker doesn't choke on the deep modifier chain.
+private struct MainLoggingTipsPromptModifier: ViewModifier {
+    @Binding var isLoggingTipsPresented: Bool
+    @Binding var isLoggingTipsPromptPresented: Bool
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $isLoggingTipsPresented) {
+                FoodLoggingTipsView(
+                    presentationStyle: .sheet(onClose: {
+                        isLoggingTipsPresented = false
+                    })
+                )
+                .presentationDetents([.large])
+                .presentationDragIndicator(.hidden)
+                .presentationCornerRadius(24)
+            }
+            .sheet(isPresented: $isLoggingTipsPromptPresented) {
+                LoggingTipsPromptSheet(
+                    onShowTips: {
+                        isLoggingTipsPromptPresented = false
+                        // Defer slightly so the dismiss completes before the
+                        // next sheet presents — iOS doesn't enjoy stacked
+                        // sheet flips in the same runloop turn.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                            isLoggingTipsPresented = true
+                        }
+                    },
+                    onSkip: {
+                        LoggingTipsPromptSheet.skipForCooldown()
+                        isLoggingTipsPromptPresented = false
+                    }
+                )
+                .presentationDetents([.height(360)])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(24)
             }
     }
 }

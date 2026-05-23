@@ -201,7 +201,14 @@ router.post('/barcode', async (req, res, next) => {
         rawText: parsed.extractedText,
         needsClarification: false,
         cacheHit: false,
-        primaryRoute: 'cache',
+        // P3 fix (2026-05-20): tag the row with the actual lane that ran
+        // ('barcode'), not 'cache'. Previously every successful barcode
+        // lookup was stored as primary_route='cache', which made it
+        // impossible to tell barcode-lane hits apart from text-mode cache
+        // hits in production analytics. Now `SELECT COUNT(*) FROM
+        // parse_requests WHERE primary_route='barcode'` actually means
+        // what it says.
+        primaryRoute: 'barcode',
         parseResult: parsed.result,
         authProvider: auth.authProvider,
         email: auth.email
@@ -329,7 +336,11 @@ router.post('/label', async (req, res, next) => {
       rawText: parsed.extractedText,
       needsClarification,
       cacheHit: false,
-      primaryRoute: 'gemini',
+      // P3 fix (2026-05-20): tag with the lane that ran ('label'), not
+      // 'gemini'. The label lane uses Gemini internally but it's a
+      // distinct lane from the vision lane and analytics need to see them
+      // separately to spot when label routing fails.
+      primaryRoute: 'label',
       parseResult: parsed.result,
       authProvider: auth.authProvider,
       email: auth.email
