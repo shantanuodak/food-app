@@ -221,73 +221,91 @@ private struct WaveAnimation: View {
     }
 }
 
-// MARK: - 2. Peek-a-boo
+// MARK: - 2. Peek-a-boo (over-the-ledge)
 
+/// 2026-05-23 redesign: previously this was a round clay face that
+/// popped up + wiggled in place. At 24×24 it just read as a fuzzy
+/// circular emoji. The new design is a character peeking *over a
+/// ledge* — fingertips gripping the top of a wall, only the forehead
+/// + eyes + hair visible above. Same outer footprint (24×24) and
+/// same 30s loop cadence so callers don't need to change anything.
 private struct PeekAnimation: View {
-    @State private var offsetY: CGFloat = 22
-    @State private var wiggleX: CGFloat = 0
+    /// Y position of the head's TOP edge within the 24-tall frame.
+    /// Smaller value = head peeks higher. ~4 = peek-rest (eyes just
+    /// above the wall), ~13 = hidden behind the wall (only a hair
+    /// tuft barely showing).
+    @State private var headTopY: CGFloat = 13
+    @State private var eyeDartX: CGFloat = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let skinHighlight = Color(red: 1.00, green: 0.79, blue: 0.55)
     private let skinMid       = Color(red: 1.00, green: 0.67, blue: 0.43)
     private let skinShadow    = Color(red: 0.90, green: 0.55, blue: 0.27)
-    private let cheekColor    = Color(red: 0.96, green: 0.48, blue: 0.43)
+    private let hairColor     = Color(red: 0.26, green: 0.16, blue: 0.09)
+    private let wallBase      = Color(red: 0.42, green: 0.30, blue: 0.20)
+    private let wallEdge      = Color(red: 0.55, green: 0.40, blue: 0.27)
+
+    /// Y of the wall's top edge — above this is the "sky" the head
+    /// peeks into, below this is the wall the hands grip.
+    private let wallTopY: CGFloat = 14
+    private let headDiameter: CGFloat = 15
 
     var body: some View {
-        ZStack {
-            face
-                .offset(x: wiggleX, y: offsetY)
+        ZStack(alignment: .topLeading) {
+            // === Head (drawn first → goes BEHIND the wall) ===
+            // .position anchors the head's center, so I add the radius
+            // to headTopY to align with the head's top edge.
+            head
+                .position(x: 12, y: headTopY + headDiameter / 2)
+
+            // === Wall (drawn after the head → hides everything below
+            // wallTopY). Thin highlight strip on top gives it a
+            // surface plane to grip onto. ===
+            wallShape
+
+            // === Hands gripping the wall (drawn last → on top) ===
+            HStack(spacing: 9) {
+                fingertipCluster
+                fingertipCluster
+            }
+            .position(x: 12, y: wallTopY - 1.4)
         }
         .frame(width: 24, height: 24)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .task { await loop() }
-        .onChange(of: reduceMotion) { _, _ in offsetY = reduceMotion ? -2 : 22 }
+        .onChange(of: reduceMotion) { _, _ in
+            headTopY = reduceMotion ? 4 : 4
+        }
     }
 
-    private var face: some View {
+    private var head: some View {
         ZStack {
-            // Head — clay-mation feel via radial gradient + drop shadow
-            RoundedRectangle(cornerRadius: 9, style: .continuous)
+            // Head — clay-mation gradient
+            Circle()
                 .fill(
                     RadialGradient(
                         colors: [skinHighlight, skinMid, skinShadow],
-                        center: UnitPoint(x: 0.32, y: 0.30),
+                        center: UnitPoint(x: 0.34, y: 0.28),
                         startRadius: 1,
-                        endRadius: 14
+                        endRadius: 11
                     )
                 )
-                .frame(width: 20, height: 20)
+                .frame(width: headDiameter, height: headDiameter)
                 .shadow(color: Color(red: 0.5, green: 0.25, blue: 0.1).opacity(0.18),
-                        radius: 1.5, x: 0, y: 1)
+                        radius: 1, x: 0, y: 0.4)
 
-            // Cheeks — soft blurred blush
-            HStack(spacing: 9) {
-                Ellipse()
-                    .fill(cheekColor)
-                    .frame(width: 3.5, height: 2.5)
-                    .opacity(0.55)
-                    .blur(radius: 0.6)
-                Ellipse()
-                    .fill(cheekColor)
-                    .frame(width: 3.5, height: 2.5)
-                    .opacity(0.55)
-                    .blur(radius: 0.6)
-            }
-            .offset(y: 2.5)
+            // Hair tuft on top of head
+            Capsule()
+                .fill(hairColor)
+                .frame(width: 10, height: 2.8)
+                .offset(y: -5.6)
 
-            // Eyes — black with subtle white highlight
-            HStack(spacing: 5.5) {
+            // Eyes — dart left/right via eyeDartX
+            HStack(spacing: 4) {
                 eye
                 eye
             }
-            .offset(y: -2)
-
-            // Smile
-            SmileShape()
-                .stroke(Color.black.opacity(0.85),
-                        style: StrokeStyle(lineWidth: 1.3, lineCap: .round))
-                .frame(width: 8, height: 3)
-                .offset(y: 5)
+            .offset(x: eyeDartX, y: 0)
         }
     }
 
@@ -295,60 +313,92 @@ private struct PeekAnimation: View {
         ZStack {
             Circle()
                 .fill(Color.black.opacity(0.88))
-                .frame(width: 3, height: 3)
+                .frame(width: 2.2, height: 2.2)
             Circle()
                 .fill(Color.white.opacity(0.6))
-                .frame(width: 1, height: 1)
-                .offset(x: 0.4, y: -0.4)
+                .frame(width: 0.8, height: 0.8)
+                .offset(x: 0.3, y: -0.3)
         }
+    }
+
+    /// The wall the character is peeking over. Top edge has a thin
+    /// highlight strip to give it surface-like depth.
+    private var wallShape: some View {
+        VStack(spacing: 0) {
+            Color.clear.frame(height: wallTopY)
+            ZStack(alignment: .top) {
+                LinearGradient(
+                    colors: [wallEdge, wallBase],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                Rectangle()
+                    .fill(Color.white.opacity(0.22))
+                    .frame(height: 0.8)
+            }
+            .frame(height: 24 - wallTopY)
+        }
+    }
+
+    /// 3 small fingertip capsules peeking up just above the wall edge —
+    /// reads as a hand gripping the ledge at 24×24 without needing
+    /// individual finger detail.
+    private var fingertipCluster: some View {
+        HStack(spacing: 0.6) {
+            fingertip
+            fingertip
+            fingertip
+        }
+    }
+
+    private var fingertip: some View {
+        Capsule()
+            .fill(
+                LinearGradient(
+                    colors: [skinHighlight, skinMid],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+            )
+            .frame(width: 1.6, height: 2.8)
     }
 
     private func loop() async {
         guard !reduceMotion else {
-            offsetY = -2
+            headTopY = 4
             return
         }
 
-        // === Initial appearance — pop up + first-time wiggle ===
+        // === Initial: peek up from behind the wall ===
+        try? await Task.sleep(for: .seconds(0.15))
         withAnimation(.spring(response: 0.42, dampingFraction: 0.62)) {
-            offsetY = -2
+            headTopY = 4
         }
-        try? await Task.sleep(for: .seconds(0.5))
+        try? await Task.sleep(for: .seconds(0.45))
 
-        withAnimation(.easeInOut(duration: 0.28)) { wiggleX = 2 }
-        try? await Task.sleep(for: .seconds(0.28))
-        withAnimation(.easeInOut(duration: 0.32)) { wiggleX = -2 }
-        try? await Task.sleep(for: .seconds(0.32))
-        withAnimation(.easeInOut(duration: 0.28)) { wiggleX = 0 }
+        // First curious eye-dart left → right → center
+        withAnimation(.easeInOut(duration: 0.32)) { eyeDartX = -1.5 }
+        try? await Task.sleep(for: .seconds(0.38))
+        withAnimation(.easeInOut(duration: 0.32)) { eyeDartX = 1.5 }
+        try? await Task.sleep(for: .seconds(0.38))
+        withAnimation(.easeInOut(duration: 0.32)) { eyeDartX = 0 }
 
-        // === Stay visible at rest. Every 30s, do a quick peek-a-boo
-        // gesture (dip down + pop back up). The dip is brisk so the
-        // chip is effectively never empty for more than ~0.4s. ===
+        // === Loop: every 30s do a "duck behind wall + peek back up"
+        // gesture. Same cadence as the prior implementation so the
+        // greeting chip's animation rhythm doesn't change. ===
         while !Task.isCancelled {
             try? await Task.sleep(for: .seconds(30))
 
-            // Dip down (fast, then immediately rebound)
-            withAnimation(.easeIn(duration: 0.28)) { offsetY = 22 }
-            try? await Task.sleep(for: .seconds(0.28))
+            // Duck behind the wall (head drops down)
+            withAnimation(.easeIn(duration: 0.30)) { headTopY = 13 }
+            try? await Task.sleep(for: .seconds(0.30))
 
             // Pop back up with a springy overshoot
-            withAnimation(.spring(response: 0.4, dampingFraction: 0.55)) {
-                offsetY = -2
+            withAnimation(.spring(response: 0.42, dampingFraction: 0.55)) {
+                headTopY = 4
             }
             try? await Task.sleep(for: .seconds(0.6))
         }
-    }
-}
-
-private struct SmileShape: Shape {
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        path.move(to: CGPoint(x: 0, y: 0))
-        path.addQuadCurve(
-            to: CGPoint(x: rect.width, y: 0),
-            control: CGPoint(x: rect.width / 2, y: rect.height * 1.4)
-        )
-        return path
     }
 }
 
