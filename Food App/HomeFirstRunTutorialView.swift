@@ -10,9 +10,6 @@ enum HomeCoachCardTutorialStep: Equatable {
 private struct HomeCoachCardTutorialHostModifier: ViewModifier {
     @Binding var isPresented: Bool
     @Binding var step: HomeCoachCardTutorialStep
-    let onFocusComposer: () -> Void
-    let onOpenCamera: () -> Void
-    let onOpenProgress: () -> Void
     let onFinish: () -> Void
 
     func body(content: Content) -> some View {
@@ -21,9 +18,6 @@ private struct HomeCoachCardTutorialHostModifier: ViewModifier {
                 HomeCoachCardTutorialOverlay(
                     isPresented: $isPresented,
                     step: $step,
-                    onFocusComposer: onFocusComposer,
-                    onOpenCamera: onOpenCamera,
-                    onOpenProgress: onOpenProgress,
                     onFinish: onFinish
                 )
                 .zIndex(200)
@@ -36,18 +30,12 @@ extension View {
     func homeCoachCardTutorialHost(
         isPresented: Binding<Bool>,
         step: Binding<HomeCoachCardTutorialStep>,
-        onFocusComposer: @escaping () -> Void,
-        onOpenCamera: @escaping () -> Void,
-        onOpenProgress: @escaping () -> Void,
         onFinish: @escaping () -> Void
     ) -> some View {
         modifier(
             HomeCoachCardTutorialHostModifier(
                 isPresented: isPresented,
                 step: step,
-                onFocusComposer: onFocusComposer,
-                onOpenCamera: onOpenCamera,
-                onOpenProgress: onOpenProgress,
                 onFinish: onFinish
             )
         )
@@ -102,19 +90,56 @@ extension MainLoggingShellView {
     }
 
     func finishHomeTutorial() {
+        // We only chain into the day-swipe tutorial when the user is on
+        // the FINAL step (.progress) tapping Done. Skip / X paths set the
+        // step elsewhere or close mid-flow — those shouldn't summon the
+        // day-swipe overlay. Admin replay also lands here, but the
+        // day-swipe flag in UserDefaults is permanent so it won't fire.
+        let reachedDone = homeTutorialStep == .progress
+
         withAnimation(.easeOut(duration: 0.22)) {
             isHomeTutorialPresented = false
         }
         homeTutorialStep = .composer
+
+        guard reachedDone else { return }
+        guard !UserDefaults.standard.bool(forKey: daySwipeTutorialShownKey) else { return }
+
+        // Tiny delay so the tutorial card finishes fading before the
+        // day-swipe overlay's backdrop fades in. Both transitions are
+        // ~220ms ease, so a 240ms wait gives a clean handoff.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.24) {
+            withAnimation(.easeOut(duration: 0.22)) {
+                isDaySwipeTutorialPresented = true
+            }
+        }
+    }
+
+    func finishDaySwipeTutorial() {
+        UserDefaults.standard.set(true, forKey: daySwipeTutorialShownKey)
+        withAnimation(.easeOut(duration: 0.32)) {
+            isDaySwipeTutorialPresented = false
+        }
+        // Item 2 (2026-05-22): after the user finishes the day-swipe
+        // tutorial, surface the full logging-tips sheet exactly once — this
+        // is what teaches them how to phrase entries (portion, brand,
+        // count, etc.) so the first real logs land accurate. Gated by a
+        // separate UserDefaults flag so we never repeat.
+        guard !UserDefaults.standard.bool(forKey: postTutorialLoggingTipsShownKey) else { return }
+        UserDefaults.standard.set(true, forKey: postTutorialLoggingTipsShownKey)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            isLoggingTipsPresented = true
+        }
     }
 }
+
+let postTutorialLoggingTipsShownKey = "food-app.postTutorialLoggingTips.shown.v1"
+
+let daySwipeTutorialShownKey = "food-app.daySwipeTutorial.shown.v1"
 
 struct HomeCoachCardTutorialOverlay: View {
     @Binding var isPresented: Bool
     @Binding var step: HomeCoachCardTutorialStep
-    let onFocusComposer: () -> Void
-    let onOpenCamera: () -> Void
-    let onOpenProgress: () -> Void
     let onFinish: () -> Void
 
     var body: some View {
@@ -227,44 +252,20 @@ struct HomeCoachCardTutorialOverlay: View {
 
     @ViewBuilder
     private var buttons: some View {
-        switch step {
-        case .composer:
-            HStack(spacing: 10) {
-                tutorialButton("Not now", style: .secondary) {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
-                        step = .camera
-                    }
-                }
-
-                tutorialButton("Try typing", style: .primary) {
-                    onFocusComposer()
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
-                        step = .camera
-                    }
-                }
-            }
-        case .camera:
-            HStack(spacing: 10) {
-                tutorialButton("Skip", style: .secondary) {
-                    withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
-                        step = .progress
-                    }
-                }
-
-                tutorialButton("Try camera", style: .primary) {
-                    onOpenCamera()
-                    onFinish()
-                }
-            }
-        case .progress:
-            HStack(spacing: 10) {
-                tutorialButton("Finish", style: .secondary) {
-                    onFinish()
-                }
-
-                tutorialButton("Open progress", style: .primary) {
-                    onOpenProgress()
-                    onFinish()
+        // Tutorial v2 (Item 1, 2026-05-22): the tutorial is now a passive
+        // read-through. Each card has one primary CTA — Next / Next / Done —
+        // that just advances. The previous build wired the primary into
+        // real-app actions (focus composer, open camera, open progress),
+        // which made the tutorial feel like setup work the user had to do.
+        // The Skip link in the top-right (alongside the X) lets users bail
+        // out at any point without entering the day-swipe overlay.
+        let isFinalStep = step == .progress
+        tutorialButton(isFinalStep ? "Done" : "Next", style: .primary) {
+            if isFinalStep {
+                onFinish()
+            } else {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.90)) {
+                    step = step == .composer ? .camera : .progress
                 }
             }
         }
@@ -422,4 +423,200 @@ private extension HomeCoachCardTutorialStep {
         .camera,
         .progress
     ]
+}
+
+// MARK: - Day-swipe interactive overlay (Items 2 & 14, 2026-05-22)
+//
+// Shown one time after the user finishes the home tutorial via Done.
+// Teaches the left/right day-swipe gesture by asking the user to perform
+// it themselves: dim backdrop + animated chevron + headline. Swipe left
+// → flips to "swipe right". Swipe right → dismiss + persist shown flag.
+// Skip link in the bottom corner ends the overlay early.
+
+enum DaySwipeTutorialPhase {
+    /// Prompt user to swipe right (translation.width > 0) — goes BACK a day.
+    /// This works from any starting day, including a brand new user on
+    /// today: the app loads the empty day view for yesterday.
+    case promptRight
+    /// Prompt user to swipe left (translation.width < 0) — returns FORWARD
+    /// toward today (clamped at today, so this always lands them home).
+    case promptLeft
+}
+
+private struct DaySwipeTutorialOverlay: View {
+    @Binding var isPresented: Bool
+    let onDismiss: () -> Void
+
+    @State private var phase: DaySwipeTutorialPhase = .promptRight
+    @State private var arrowOffset: CGFloat = 0
+    @State private var arrowPulse: Double = 0.7
+    @State private var dragTranslation: CGFloat = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.36)
+                .ignoresSafeArea()
+                .accessibilityHidden(true)
+
+            VStack(spacing: 18) {
+                Spacer()
+
+                Image(systemName: arrowSystemImage)
+                    .font(.system(size: 64, weight: .black))
+                    .foregroundStyle(.white)
+                    .opacity(arrowPulse)
+                    .offset(x: arrowOffset)
+                    .accessibilityHidden(true)
+
+                Text(headline)
+                    .font(.custom("InstrumentSerif-Italic", size: 32))
+                    .foregroundStyle(.white)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text(subtext)
+                    .font(.system(size: 15, weight: .medium, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Spacer()
+
+                Button(action: dismissNow) {
+                    Text("Skip")
+                        .font(.system(size: 14, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.62))
+                        .underline()
+                        .padding(.vertical, 10)
+                        .padding(.horizontal, 14)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .padding(.bottom, 36)
+                .accessibilityLabel(Text("Skip day-swipe tutorial"))
+            }
+        }
+        .transition(.opacity)
+        .contentShape(Rectangle())
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24, coordinateSpace: .local)
+                .onChanged { value in
+                    dragTranslation = value.translation.width
+                }
+                .onEnded { value in
+                    let dx = value.translation.width
+                    let dy = abs(value.translation.height)
+                    dragTranslation = 0
+                    // Treat as a horizontal swipe only when the move is
+                    // dominantly horizontal — vertical drags shouldn't
+                    // count.
+                    guard abs(dx) > 40, abs(dx) > dy else {
+                        AppHaptics.lightImpact()
+                        return
+                    }
+                    handleSwipe(dx: dx)
+                }
+        )
+        .onAppear { startArrowAnimation() }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("Day swipe tutorial. \(headline). \(subtext)"))
+        .accessibilityAddTraits(.isModal)
+    }
+
+    private var arrowSystemImage: String {
+        phase == .promptRight ? "chevron.compact.right" : "chevron.compact.left"
+    }
+
+    private var headline: String {
+        phase == .promptRight ? "Swipe right to see other days" : "Swipe left to come back"
+    }
+
+    private var subtext: String {
+        phase == .promptRight
+            ? "Days slide sideways. You can scrub through your history."
+            : "One more swipe and you're done."
+    }
+
+    private func handleSwipe(dx: CGFloat) {
+        let swipedRight = dx > 0
+        switch phase {
+        case .promptRight:
+            guard swipedRight else {
+                AppHaptics.lightImpact()
+                return
+            }
+            // Forward the gesture to the underlying day list via
+            // notification so the user actually sees the day change while
+            // still inside the tutorial overlay.
+            AppHaptics.lightImpact()
+            NotificationCenter.default.post(name: .daySwipeTutorialDidAcknowledge, object: ["direction": "right"])
+            withAnimation(.easeOut(duration: 0.22)) {
+                phase = .promptLeft
+                arrowOffset = 0
+            }
+            startArrowAnimation()
+        case .promptLeft:
+            guard !swipedRight else {
+                AppHaptics.lightImpact()
+                return
+            }
+            AppHaptics.lightImpact()
+            NotificationCenter.default.post(name: .daySwipeTutorialDidAcknowledge, object: ["direction": "left"])
+            dismissNow()
+        }
+    }
+
+    private func dismissNow() {
+        onDismiss()
+    }
+
+    private func startArrowAnimation() {
+        guard !reduceMotion else {
+            arrowPulse = 1.0
+            return
+        }
+        // promptRight → arrow points right and nudges right (+8).
+        // promptLeft  → arrow points left and nudges left (-8).
+        withAnimation(.easeInOut(duration: 1.4).repeatForever(autoreverses: true)) {
+            arrowOffset = phase == .promptRight ? 8 : -8
+            arrowPulse = 1.0
+        }
+    }
+}
+
+private struct DaySwipeTutorialHostModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let onDismiss: () -> Void
+
+    func body(content: Content) -> some View {
+        content.overlay {
+            if isPresented {
+                DaySwipeTutorialOverlay(
+                    isPresented: $isPresented,
+                    onDismiss: onDismiss
+                )
+                .zIndex(220)
+            }
+        }
+    }
+}
+
+extension View {
+    func daySwipeTutorialHost(
+        isPresented: Binding<Bool>,
+        onDismiss: @escaping () -> Void
+    ) -> some View {
+        modifier(DaySwipeTutorialHostModifier(isPresented: isPresented, onDismiss: onDismiss))
+    }
+}
+
+extension Notification.Name {
+    /// Posted when the user acknowledges the day-swipe tutorial. Listeners
+    /// (MainLoggingShellBody) can react by performing the actual day
+    /// transition so the user sees the swipe land while still inside the
+    /// overlay.
+    static let daySwipeTutorialDidAcknowledge = Notification.Name("food-app.daySwipeTutorial.acknowledge")
 }

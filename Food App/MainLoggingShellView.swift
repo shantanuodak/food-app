@@ -121,9 +121,21 @@ struct MainLoggingShellView: View {
     @State var isProgressChartsPresented = false
     @State var isSavedMealsPresented = false
     @State var isLoggingTipsPresented = false
+    /// Bottom sheet popup that nudges the user toward Logging Tips when a
+    /// fresh entry parses with low confidence. Fires at most once per
+    /// session per vague row; honors a 24-hour Skip cooldown.
+    @State var isLoggingTipsPromptPresented = false
+    /// Per-session set of row IDs we've already prompted, so re-parses
+    /// don't re-trigger the popup for the same row.
+    @State var promptedTipsRowIDs: Set<UUID> = []
     @State var isHomeTutorialPresented = false
     @State var hasEvaluatedAutoHomeTutorialPresentation = false
     @State var homeTutorialStep: HomeCoachCardTutorialStep = .composer
+    /// Day-swipe interactive overlay (Items 2 & 14). Shown one time only,
+    /// after the home tutorial finishes naturally (via Done — not Skip).
+    /// Teaches the left/right day-swipe gesture by asking the user to
+    /// perform it themselves.
+    @State var isDaySwipeTutorialPresented = false
     @State var currentFoodLogStreak: Int?
     @State var isLoadingFoodLogStreak = false
     @State var isStreakDrawerPresented = false
