@@ -1,6 +1,53 @@
 import SwiftUI
 import Charts
+import Combine
+import CoreMotion
 import UIKit
+
+/// Drives the device-tilt parallax on premium cards. Reads
+/// `CMMotionManager.deviceMotion` at 30 Hz, low-pass filters the roll/pitch,
+/// and publishes normalized values in -1...1. Callers multiply by a per-layer
+/// intensity (pt) to get the layer's offset. Respects reduce-motion: the
+/// caller is responsible for not calling `start()` when reduce-motion is on.
+@MainActor
+final class DeviceTiltMotion: ObservableObject {
+    @Published var roll: Double = 0
+    @Published var pitch: Double = 0
+
+    private let manager = CMMotionManager()
+    /// Low-pass filter coefficient. 0.18 keeps motion smooth without lag.
+    private let smoothing = 0.18
+    /// Clamp tilt to ±0.5 rad (~28°) so the normalized output stays bounded.
+    private let clampRadians = 0.5
+
+    func start() {
+        guard manager.isDeviceMotionAvailable else { return }
+        guard !manager.isDeviceMotionActive else { return }
+        manager.deviceMotionUpdateInterval = 1.0 / 30.0
+        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+            guard let self, let motion else { return }
+            let clampedRoll = max(-self.clampRadians, min(self.clampRadians, motion.attitude.roll))
+            let clampedPitch = max(-self.clampRadians, min(self.clampRadians, motion.attitude.pitch))
+            let normalizedRoll = clampedRoll / self.clampRadians
+            let normalizedPitch = clampedPitch / self.clampRadians
+            self.roll += self.smoothing * (normalizedRoll - self.roll)
+            self.pitch += self.smoothing * (normalizedPitch - self.pitch)
+        }
+    }
+
+    func stop() {
+        guard manager.isDeviceMotionActive else { return }
+        manager.stopDeviceMotionUpdates()
+        roll = 0
+        pitch = 0
+    }
+
+    deinit {
+        if manager.isDeviceMotionActive {
+            manager.stopDeviceMotionUpdates()
+        }
+    }
+}
 
 /// Bento-style profile dashboard. Replaces the legacy `HomeProfileScreen`
 /// list as the sheet content when the user taps the greeting chip on the
@@ -48,7 +95,13 @@ struct HomeProfileBentoScreen: View {
                         if let errorMessage {
                             errorBanner(errorMessage)
                         }
-                        CalorieHeroTile(data: heroData)
+                        // 2026-05-22 (Phase F, Item 7): Today's calorie ring
+                        // was moved out of the bento profile and into the
+                        // Insights screen as the new top card. Keeping the
+                        // streak indicator inside the dock + macros + diet
+                        // tiles here means the bento still feels like a
+                        // dashboard, without doubling up the calorie hero
+                        // on every glance.
                         SavedMealsTile()
                         HStack(alignment: .top, spacing: 12) {
                             LoggingTipsTile()
@@ -76,7 +129,7 @@ struct HomeProfileBentoScreen: View {
                 }
             }
             .scrollIndicators(.hidden)
-            .background(BentoTokens.profileCanvas)
+            .background(AppDrawerSurface.gradient)
             // Cap accessibility text scaling so the dense hero stats grid
             // and ring don't blow out the layout on iPhone SE width.
             // Dynamic Type still scales, just within readable bounds; users
@@ -96,6 +149,7 @@ struct HomeProfileBentoScreen: View {
             }
         }
         .environmentObject(draftStore)
+        .presentationBackground(AppDrawerSurface.gradient)
         .task {
             applyCachedSnapshotIfAvailable()
             await loadAll()
@@ -377,8 +431,34 @@ struct HomeProfileBentoScreen: View {
 // MARK: - Tiles
 
 /// Hero card — full-width warm gradient, calorie ring + 2×2 macro stats.
-private struct CalorieHeroTile: View {
+struct CalorieHeroTile: View {
     struct Data {
+        /// Build the hero data from the shared dashboard snapshot. Mirrors
+        /// the construction inside HomeProfileBentoScreen so the Insights
+        /// surface (Item 7, 2026-05-22) renders identically without
+        /// duplicating the adapter logic.
+        static func from(snapshot: ProfileDashboardSnapshot?, isInitialLoad: Bool) -> Data {
+            let totals = snapshot?.daySummary?.totals
+            let profile = snapshot?.profile
+            let calorieTarget = Double(profile?.calorieTarget ?? 2_500)
+            let proteinTarget = profile?.macroTargets.protein ?? 0
+            let carbsTarget = profile?.macroTargets.carbs ?? 0
+            let fatTarget = profile?.macroTargets.fat ?? 0
+
+            return Data(
+                consumed: totals?.calories ?? 0,
+                target: calorieTarget,
+                protein: totals?.protein ?? 0,
+                proteinTarget: proteinTarget,
+                carbs: totals?.carbs ?? 0,
+                carbsTarget: carbsTarget,
+                fat: totals?.fat ?? 0,
+                fatTarget: fatTarget,
+                logs: snapshot?.todayLogsCount ?? 0,
+                isLoading: isInitialLoad && totals == nil
+            )
+        }
+
         let consumed: Double
         let target: Double
         let protein: Double
@@ -393,6 +473,19 @@ private struct CalorieHeroTile: View {
 
     let data: Data
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    /// Drives the Daily Targets editor sheet when the user taps the tile or
+    /// the pencil glyph. Owned locally so the tile works regardless of
+    /// whether the parent has a NavigationStack (the Insights screen does
+    /// not, which is why the previous NavigationLink-based pencil button
+    /// was a no-op there).
+    @State private var isTargetsEditorPresented: Bool = false
+    /// Local draft store so TargetsEditorScreen always has the
+    /// @EnvironmentObject it needs when presented from this tile.
+    @StateObject private var heroDraftStore: ProfileDraftStore = ProfileDraftStore()
+    /// Device-tilt parallax source. Drives the multi-layer shift on the
+    /// hero card — background highlight, specular sweep, and ring/macros
+    /// each respond at different intensities so the card reads as 3D.
+    @StateObject private var tilt = DeviceTiltMotion()
 
     private var progress: Double {
         guard data.target > 0 else { return 0 }
@@ -404,86 +497,298 @@ private struct CalorieHeroTile: View {
         return "\(Int(data.consumed.rounded())) of \(Int(data.target.rounded())) calories, \(percent) percent of goal"
     }
 
+    private var percentText: String {
+        "\(Int((progress * 100).rounded()))%"
+    }
+
+    private var remainingKcal: Int {
+        max(0, Int((data.target - data.consumed).rounded()))
+    }
+
+    /// Short motivational line that adapts to where the user is on the
+    /// calorie goal. Keep tone warm + brief — this is glance content, not
+    /// a coaching lecture. Updates immediately when progress changes
+    /// because it's a derived view.
+    private var motivationalCopy: String {
+        let percent = progress
+        if percent <= 0 { return "Log your first meal" }
+        if percent < 0.25 { return "Off to a fresh start" }
+        if percent < 0.5 { return "Cruising along" }
+        if percent < 0.75 { return "Past the halfway mark" }
+        if percent < 1.0 { return "Almost at your goal" }
+        return "Goal hit — nice work"
+    }
+
+    // 2026-05-23 (revision 2): swapped translate-based parallax for a true
+    // 3D tilt. The card rotates around both X (pitch) and Y (roll) axes in
+    // response to phone orientation — diagonal phone tilt produces diagonal
+    // card tilt. Max ±10° on each axis keeps it expressive but never breaks
+    // readability. Perspective 0.55 gives a real depth illusion (front edge
+    // looks bigger, back edge recedes).
+    private let cardTiltDegrees: Double = 10
+    private let cardPerspective: CGFloat = 0.55
+
+    private var parallaxEnabled: Bool { !reduceMotion }
+
     var body: some View {
+        Button(action: { isTargetsEditorPresented = true }) {
+            ZStack {
+                premiumBackground
+                premiumContent
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            .overlay(
+                // Top-edge rim light + warm border — adds the "lifted off the
+                // surface" feel without darkening the bottom of the card.
+                RoundedRectangle(cornerRadius: 28, style: .continuous)
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(0.48),
+                                .white.opacity(0.10),
+                                .black.opacity(0.05)
+                            ],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        ),
+                        lineWidth: 1
+                    )
+            )
+            // Elevation: a broad warm orange cast + a closer black depth
+            // shadow. Together they read as a real card floating above the
+            // cream Insights surface.
+            .shadow(color: Color(red: 0.95, green: 0.42, blue: 0.18).opacity(0.34), radius: 22, y: 14)
+            .shadow(color: Color.black.opacity(0.10), radius: 8, y: 4)
+            .contentShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+            // True 3D card tilt — rotates the card around both X (pitch)
+            // and Y (roll) axes in response to phone orientation. Tilt the
+            // phone diagonally and the card tilts diagonally. Roll axis is
+            // negated so leaning the phone right shows the card's right
+            // edge lifting toward the user (matches Apple Card / Wallet
+            // tilt behavior).
+            .rotation3DEffect(
+                .degrees(parallaxEnabled ? -cardTiltDegrees * tilt.roll : 0),
+                axis: (x: 0, y: 1, z: 0),
+                perspective: cardPerspective
+            )
+            .rotation3DEffect(
+                .degrees(parallaxEnabled ? cardTiltDegrees * tilt.pitch : 0),
+                axis: (x: 1, y: 0, z: 0),
+                perspective: cardPerspective
+            )
+            .animation(.easeOut(duration: 0.20), value: tilt.roll)
+            .animation(.easeOut(duration: 0.20), value: tilt.pitch)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Today's progress. Tap to edit daily targets.")
+        .onAppear {
+            if parallaxEnabled { tilt.start() }
+        }
+        .onDisappear { tilt.stop() }
+        .onChange(of: reduceMotion) { _, newValue in
+            if newValue { tilt.stop() } else { tilt.start() }
+        }
+        .sheet(isPresented: $isTargetsEditorPresented) {
+            NavigationStack {
+                TargetsEditorScreen()
+                    .navigationTitle("Daily targets")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .topBarTrailing) {
+                            Button("Done") { isTargetsEditorPresented = false }
+                                .fontWeight(.semibold)
+                        }
+                    }
+            }
+            .environmentObject(heroDraftStore)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+        }
+    }
+
+    /// Saturated brand gradient + a single soft spotlight in the top-right.
+    /// 2026-05-23 revision: dropped the ultra-thin material + opposite-
+    /// direction specular sweep — those layers were dulling the orange and
+    /// making the per-layer parallax look jittery. Pure gradient + static
+    /// highlight reads more vivid, and the whole-card translation gives the
+    /// motion feel without the layered jitter.
+    private var premiumBackground: some View {
+        ZStack {
+            // Boosted-saturation brand orange gradient. Slightly more
+            // vivid than BentoTokens.heroGradient — punches up the card so
+            // the rim light and shadows still read as "lifted" without a
+            // glass overlay damping the color.
+            LinearGradient(
+                colors: [
+                    Color(red: 1.00, green: 0.65, blue: 0.22),
+                    Color(red: 0.98, green: 0.48, blue: 0.16),
+                    Color(red: 0.93, green: 0.36, blue: 0.10)
+                ],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+
+            // Soft spotlight in the top-right corner. Static (no
+            // counter-parallax) so it always feels like the light source
+            // is "above" — the whole-card translation moves this with the
+            // rest of the card, which reads correctly.
+            RadialGradient(
+                colors: [Color.white.opacity(0.34), .clear],
+                center: .init(x: 0.85, y: 0.08),
+                startRadius: 4,
+                endRadius: 260
+            )
+        }
+    }
+
+    /// Foreground content — no internal parallax. The whole card translates
+    /// together as one unit (see body's `.offset`).
+    private var premiumContent: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(spacing: 10) {
                 Text("Today's Progress")
-                    .font(.system(size: 11, weight: .bold))
-                    .tracking(0.6)
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .tracking(0.8)
                     .textCase(.uppercase)
-                    .foregroundStyle(.white.opacity(0.78))
+                    .foregroundStyle(.white.opacity(0.86))
 
                 Spacer()
 
-                NavigationLink {
-                    TargetsEditorScreen()
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .frame(width: 30, height: 30)
-                        .background(.white.opacity(0.18), in: Circle())
-                        .overlay {
-                            Circle()
-                                .stroke(.white.opacity(0.18), lineWidth: 0.75)
-                        }
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Edit daily targets")
+                Image(systemName: "pencil")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(.white.opacity(0.20), in: Circle())
+                    .overlay {
+                        Circle()
+                            .stroke(.white.opacity(0.28), lineWidth: 0.75)
+                    }
+                    .accessibilityHidden(true)
             }
 
-            HStack(spacing: 18) {
+            HStack(alignment: .center, spacing: 18) {
                 ring
                 statsGrid
             }
+
+            motivationalRow
         }
-        .padding(.horizontal, 18)
-        .padding(.top, 18)
+        .padding(.horizontal, 22)
+        .padding(.top, 22)
         .padding(.bottom, 22)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            ZStack {
-                BentoTokens.heroGradient
-                RadialGradient(
-                    colors: [Color.white.opacity(0.20), .clear],
-                    center: .init(x: 0.85, y: 0.1),
-                    startRadius: 4,
-                    endRadius: 220
-                )
+    }
+
+    private var motivationalRow: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "sparkles")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.white.opacity(0.92))
+
+            Text(motivationalCopy)
+                .font(.system(size: 13, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+
+            Spacer(minLength: 8)
+
+            if remainingKcal > 0 && data.target > 0 {
+                Text("\(remainingKcal.formatted()) to go")
+                    .font(.system(size: 12, weight: .semibold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.88))
+                    .monospacedDigit()
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(.white.opacity(0.18), in: Capsule())
+                    .overlay(
+                        Capsule().stroke(.white.opacity(0.22), lineWidth: 0.75)
+                    )
             }
-        )
-        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .shadow(color: .black.opacity(0.04), radius: 2, y: 1)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(motivationalCopy). \(remainingKcal) calories remaining.")
     }
 
     private var ring: some View {
         ZStack {
+            // Background track — softer so the white fill pops.
             Circle()
-                .stroke(Color.white.opacity(0.22), lineWidth: 10)
+                .stroke(Color.white.opacity(0.22), lineWidth: 15)
+
+            // Progress fill.
             Circle()
                 .trim(from: 0, to: progress)
                 .stroke(
                     Color.white,
-                    style: StrokeStyle(lineWidth: 10, lineCap: .round)
+                    style: StrokeStyle(lineWidth: 15, lineCap: .round)
                 )
                 .rotationEffect(.degrees(-90))
+                .shadow(color: .white.opacity(0.38), radius: 7, y: 2)
                 .animation(reduceMotion ? nil : .spring(response: 0.6, dampingFraction: 0.85), value: progress)
+
+            // Endpoint dot — small white pebble at the end of the fill,
+            // with a soft glow so the eye lands on it. Hidden when there
+            // is no progress to mark.
+            if progress > 0.02 {
+                endpointDot
+                    .animation(reduceMotion ? nil : .spring(response: 0.6, dampingFraction: 0.85), value: progress)
+            }
         }
-        .frame(width: 132, height: 132)
+        .frame(width: 158, height: 158)
         .overlay {
-            VStack(spacing: 6) {
+            VStack(spacing: 5) {
+                Text(percentText)
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.92))
+                    .tracking(0.5)
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3)
+                    .background(.white.opacity(0.20), in: Capsule())
+                    .overlay(
+                        Capsule().stroke(.white.opacity(0.26), lineWidth: 0.75)
+                    )
+
                 Text(Int(data.consumed.rounded()).formatted())
-                    .font(.system(size: 30, weight: .heavy))
-                    .kerning(-0.6)
+                    .font(.system(size: 40, weight: .heavy, design: .rounded))
+                    .kerning(-0.8)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.62)
+                    .padding(.horizontal, 22)
                     .contentTransition(reduceMotion ? .identity : .numericText())
+
                 Text("of \(Int(data.target.rounded()).formatted()) kcal")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.78))
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white.opacity(0.82))
             }
             .foregroundStyle(.white)
         }
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(ringAccessibilityLabel)
+    }
+
+    /// Small white dot positioned at the end of the progress arc, with a
+    /// soft outer glow. Tracks `progress` so it slides smoothly along the
+    /// ring when calories are added.
+    private var endpointDot: some View {
+        GeometryReader { proxy in
+            let radius = min(proxy.size.width, proxy.size.height) / 2
+            let center = CGPoint(x: proxy.size.width / 2, y: proxy.size.height / 2)
+            let angle = (progress * 2 * .pi) - (.pi / 2)
+            let dotX = center.x + cos(angle) * radius
+            let dotY = center.y + sin(angle) * radius
+
+            ZStack {
+                Circle()
+                    .fill(.white.opacity(0.28))
+                    .frame(width: 22, height: 22)
+                    .blur(radius: 4)
+                Circle()
+                    .fill(.white)
+                    .frame(width: 12, height: 12)
+                    .shadow(color: .white.opacity(0.42), radius: 4)
+            }
+            .position(x: dotX, y: dotY)
+        }
+        .accessibilityHidden(true)
     }
 
     private var statsGrid: some View {
@@ -516,19 +821,19 @@ private struct CalorieHeroTile: View {
     }
 
     private func statCell(label: String, value: String, suffix: String?) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: 3) {
             Text(label.uppercased())
-                .font(.system(size: 9, weight: .bold))
-                .tracking(0.5)
-                .foregroundStyle(.white.opacity(0.78))
+                .font(.system(size: 10, weight: .black, design: .rounded))
+                .tracking(0.7)
+                .foregroundStyle(.white.opacity(0.82))
             HStack(alignment: .firstTextBaseline, spacing: 2) {
                 Text(value)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 20, weight: .heavy, design: .rounded))
                     .contentTransition(reduceMotion ? .identity : .numericText())
                 if let suffix {
                     Text(" \(suffix)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.74))
                 }
             }
             .foregroundStyle(.white)
@@ -684,13 +989,13 @@ private struct WidgetSetupTile: View {
     private var widgetStack: some View {
         ZStack {
             Circle()
-                .fill(BentoTokens.coolIconGradient)
+                .fill(BentoTokens.warmIconGradient)
             Image(systemName: "rectangle.stack.badge.plus")
                 .font(.system(size: 18, weight: .bold))
                 .foregroundStyle(.white)
         }
         .frame(width: 42, height: 42)
-        .shadow(color: BentoTokens.blue700.opacity(0.14), radius: 8, y: 4)
+        .shadow(color: BentoTokens.orange700.opacity(0.14), radius: 8, y: 4)
     }
 }
 
@@ -773,13 +1078,13 @@ private struct NotificationReminderTile: View {
                     VStack(alignment: .leading, spacing: 0) {
                         ZStack {
                             Circle()
-                                .fill(BentoTokens.coolIconGradient)
+                                .fill(BentoTokens.warmIconGradient)
                             Image(systemName: "bell.badge.fill")
                                 .font(.system(size: 18, weight: .bold))
                                 .foregroundStyle(.white)
                         }
                         .frame(width: 38, height: 38)
-                        .shadow(color: BentoTokens.blue700.opacity(0.14), radius: 6, y: 3)
+                        .shadow(color: BentoTokens.orange700.opacity(0.14), radius: 6, y: 3)
                         .padding(.bottom, 12)
                         .accessibilityHidden(true)
 
@@ -791,7 +1096,7 @@ private struct NotificationReminderTile: View {
 
                         Text(summary)
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(BentoTokens.blue700)
+                            .foregroundStyle(BentoTokens.gray700)
                             .lineLimit(2)
                             .minimumScaleFactor(0.82)
                             .padding(.top, 6)
@@ -853,9 +1158,17 @@ private struct DietTile: View {
                     .font(.system(size: 17, weight: .bold))
                     .foregroundStyle(BentoTokens.gray900)
                     .padding(.bottom, 6)
-                statRow(name: "Preferences", value: "\(diet.preferencesCount)")
-                statRow(name: "Allergies", value: "\(diet.allergiesCount)")
-                statRow(name: "Pace", value: diet.pace)
+                statRow(
+                    name: "Preferences",
+                    value: diet.preferencesCount > 0 ? "\(diet.preferencesCount)" : "—",
+                    isPlaceholder: diet.preferencesCount == 0
+                )
+                statRow(
+                    name: "Allergies",
+                    value: diet.allergiesCount > 0 ? "\(diet.allergiesCount)" : "—",
+                    isPlaceholder: diet.allergiesCount == 0
+                )
+                statRow(name: "Pace", value: diet.pace, isPlaceholder: false)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .accessibilityElement(children: .combine)
@@ -866,11 +1179,7 @@ private struct DietTile: View {
 
     private var iconCircle: some View {
         ZStack {
-            LinearGradient(
-                colors: [BentoTokens.green500, BentoTokens.green700],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            BentoTokens.warmIconGradient
             Image(systemName: "fork.knife")
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundStyle(.white)
@@ -880,7 +1189,7 @@ private struct DietTile: View {
         .shadow(color: BentoTokens.green700.opacity(0.25), radius: 4, y: 2)
     }
 
-    private func statRow(name: String, value: String) -> some View {
+    private func statRow(name: String, value: String, isPlaceholder: Bool) -> some View {
         HStack {
             Text(name)
                 .font(.system(size: 14, weight: .medium))
@@ -888,7 +1197,7 @@ private struct DietTile: View {
             Spacer()
             Text(value)
                 .font(.system(size: 14, weight: .bold))
-                .foregroundStyle(BentoTokens.gray900)
+                .foregroundStyle(isPlaceholder ? BentoTokens.gray400 : BentoTokens.gray900)
         }
         .padding(.vertical, 3)
     }
@@ -1239,21 +1548,34 @@ private enum BentoTokens {
         endPoint: .bottomTrailing
     )
 
-    static let warmCardTop = Color(red: 0.998, green: 0.978, blue: 0.948)
-    static let warmCardBottom = Color(red: 0.992, green: 0.946, blue: 0.892)
-    static let warmBorder = Color(red: 0.963, green: 0.871, blue: 0.765)
+    // 2026-05-22: bento restraint pass (Phase F, Item 6). The previous build
+    // gave each section family its own pastel gradient (warm cream for body,
+    // saved-meal yellow, cool blue for diet, soft green for elsewhere) which
+    // collectively felt loud. All tile chrome now resolves to a single warm
+    // cream surface with a quiet warm border. Color stays reserved for KPIs,
+    // action affordances, the streak ring tile, and the per-tile icon
+    // gradients (those small icon chips are tuned by `warmIconGradient` /
+    // `coolIconGradient`). To revert the restraint pass, restore the
+    // original gradient values from git history.
+    private static let unifiedCardTop = Color(red: 0.998, green: 0.985, blue: 0.965)
+    private static let unifiedCardBottom = Color(red: 0.995, green: 0.972, blue: 0.935)
+    private static let unifiedBorder = Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.10)
 
-    static let savedCardTop = Color(red: 0.999, green: 0.971, blue: 0.938)
-    static let savedCardBottom = Color(red: 0.991, green: 0.938, blue: 0.872)
-    static let savedBorder = Color(red: 0.953, green: 0.828, blue: 0.690)
+    static let warmCardTop = unifiedCardTop
+    static let warmCardBottom = unifiedCardBottom
+    static let warmBorder = unifiedBorder
 
-    static let coolCardTop = Color(red: 0.962, green: 0.981, blue: 1.0)
-    static let coolCardBottom = Color(red: 0.947, green: 0.956, blue: 0.996)
-    static let coolBorder = Color(red: 0.820, green: 0.886, blue: 0.972)
+    static let savedCardTop = unifiedCardTop
+    static let savedCardBottom = unifiedCardBottom
+    static let savedBorder = unifiedBorder
 
-    static let greenCardTop = Color(red: 0.951, green: 0.985, blue: 0.961)
-    static let greenCardBottom = Color(red: 0.922, green: 0.972, blue: 0.939)
-    static let greenBorder = Color(red: 0.782, green: 0.902, blue: 0.824)
+    static let coolCardTop = unifiedCardTop
+    static let coolCardBottom = unifiedCardBottom
+    static let coolBorder = unifiedBorder
+
+    static let greenCardTop = unifiedCardTop
+    static let greenCardBottom = unifiedCardBottom
+    static let greenBorder = unifiedBorder
 
     /// Vertical orange→deep-orange for chart bars (matches the prototype
     /// trend chart bars which fade darker top-to-bottom).

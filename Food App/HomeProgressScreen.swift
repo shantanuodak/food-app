@@ -24,6 +24,8 @@ struct HomeProgressScreen: View {
 
             ProgressSectionView()
         }
+        .background(AppDrawerSurface.gradient)
+        .presentationBackground(AppDrawerSurface.gradient)
     }
 }
 
@@ -58,6 +60,18 @@ struct ProgressSectionView: View {
                 if !appStore.configuration.progressFeatureEnabled {
                     disabledFeatureCard
                 } else {
+                    // 2026-05-22 (Phase F, Item 7): Today's calorie ring
+                    // now lives at the top of Insights so the daily-targets
+                    // story is the first thing users see. The segmented
+                    // range picker sits below it and controls only the
+                    // historical charts that follow.
+                    CalorieHeroTile(
+                        data: CalorieHeroTile.Data.from(
+                            snapshot: appStore.profileDashboardSnapshot,
+                            isInitialLoad: progressResponse == nil && isLoadingProgress
+                        )
+                    )
+
                     rangePicker
                     caloriesHeroCard
                     macroAdherenceCard
