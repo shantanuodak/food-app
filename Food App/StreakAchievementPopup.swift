@@ -12,9 +12,6 @@ struct StreakAchievementPopup: View {
     let badge: EarnedBadge
     let onDismiss: () -> Void
 
-    /// Total time the popup stays on screen before auto-dismissing.
-    private static let displayDuration: TimeInterval = 3.5
-
     @State private var hasAppeared = false
     @State private var medalScale: CGFloat = 0.6
     @State private var medalRotation: Double = -12
@@ -75,11 +72,10 @@ struct StreakAchievementPopup: View {
 
                 Spacer(minLength: 0)
 
-                Text("Tap to dismiss")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.42))
-                    .padding(.bottom, 36)
+                dismissButton
                     .opacity(titleOpacity)
+                    .padding(.horizontal, 32)
+                    .padding(.bottom, 36)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -154,6 +150,26 @@ struct StreakAchievementPopup: View {
         .frame(width: 320, height: 320)
     }
 
+    // MARK: - Dismiss button
+
+    private var dismissButton: some View {
+        Button(action: dismissNow) {
+            Text("Let's go")
+                .font(.system(size: 17, weight: .bold, design: .rounded))
+                .foregroundStyle(Color(red: 0.141, green: 0.098, blue: 0.078))
+                .frame(maxWidth: .infinity)
+                .frame(height: 52)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(.white)
+                )
+                .shadow(color: .black.opacity(0.16), radius: 16, y: 6)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Let's go"))
+        .accessibilityHint(Text("Dismiss this celebration"))
+    }
+
     // MARK: - Animation choreography
 
     private func runEntranceAnimation() {
@@ -182,12 +198,9 @@ struct StreakAchievementPopup: View {
             titleOffset = 0
         }
 
-        // Auto-dismiss timer.
-        dismissTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(Self.displayDuration * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            dismissNow()
-        }
+        // The popup stays until the user taps the dismiss button (or taps
+        // anywhere as a fallback). No auto-dismiss timer — users explicitly
+        // asked for time to read the badge details.
     }
 
     private func dismissNow() {

@@ -1,8 +1,8 @@
 import SwiftUI
 
 private enum WidgetGuideMode: String, CaseIterable {
-    case home = "Home"
-    case lock = "Lock"
+    case home = "Home Screen"
+    case lock = "Lock Screen"
 
     var eyebrow: String {
         switch self {
@@ -92,7 +92,8 @@ struct WidgetSetupGuideView: View {
                 }
             }
         }
-        .background(WidgetGuideTokens.screenBackground.ignoresSafeArea())
+        .background(AppDrawerSurface.gradient.ignoresSafeArea())
+        .presentationBackground(AppDrawerSurface.gradient)
     }
 
     private var content: some View {
@@ -100,7 +101,7 @@ struct WidgetSetupGuideView: View {
             VStack(alignment: .leading, spacing: 18) {
                 hero
                 modePicker
-                WidgetPreviewStrip(mode: selectedMode)
+                WidgetPreviewStrip(mode: selectedMode, snapshot: WidgetDailyCaloriesStore.loadCurrent())
                 interactiveStepCard
                 tipCard
             }
@@ -221,12 +222,16 @@ struct WidgetSetupGuideView: View {
                     Text(steps[safeStep])
                         .font(.system(size: 22, weight: .heavy))
                         .foregroundStyle(WidgetGuideTokens.ink)
+                        .lineLimit(3)
+                        .minimumScaleFactor(0.88)
                         .fixedSize(horizontal: false, vertical: true)
 
                     Text(selectedMode.benefit)
                         .font(.system(size: 14, weight: .medium))
                         .foregroundStyle(WidgetGuideTokens.muted)
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(minHeight: 92, alignment: .topLeading)
             }
 
             stepProgress
@@ -340,6 +345,27 @@ private enum WidgetGuideTokens {
 
 private struct WidgetPreviewStrip: View {
     let mode: WidgetGuideMode
+    let snapshot: WidgetDailyCaloriesSnapshot?
+
+    private var consumedCaloriesText: String {
+        Int((snapshot?.consumedCalories ?? 0).rounded()).formatted()
+    }
+
+    private var targetCaloriesText: String {
+        let target = Int((snapshot?.targetCalories ?? 0).rounded())
+        return target > 0 ? target.formatted() : "1,770"
+    }
+
+    private var calorieFraction: CGFloat {
+        let consumed = snapshot?.consumedCalories ?? 0
+        let target = snapshot?.targetCalories ?? 0
+        guard target > 0 else { return 0 }
+        return CGFloat(min(consumed / target, 1))
+    }
+
+    private var sampleLabelText: String? {
+        snapshot == nil ? "Sample preview" : nil
+    }
 
     var body: some View {
         ZStack {
@@ -373,47 +399,52 @@ private struct WidgetPreviewStrip: View {
     }
 
     private var previewSmallWidget: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(alignment: .firstTextBaseline, spacing: 5) {
-                Text("842")
-                    .font(.system(size: 30, weight: .black, design: .rounded))
-                    .monospacedDigit()
-                Text("cal")
-                    .font(.system(size: 13, weight: .black, design: .rounded))
-                    .foregroundStyle(.white.opacity(0.58))
-            }
-            .foregroundStyle(.white)
-
-            Capsule()
-                .fill(.white.opacity(0.18))
-                .frame(height: 7)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(WidgetGuideTokens.brandGradient)
-                        .frame(width: 72, height: 7)
+        GeometryReader { proxy in
+            VStack(alignment: .leading, spacing: 9) {
+                HStack(alignment: .firstTextBaseline, spacing: 5) {
+                    Text(consumedCaloriesText)
+                        .font(.system(size: 30, weight: .black, design: .rounded))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.7)
+                        .lineLimit(1)
+                    Text("cal")
+                        .font(.system(size: 13, weight: .black, design: .rounded))
+                        .foregroundStyle(.white.opacity(0.58))
                 }
+                .foregroundStyle(.white)
 
-            HStack(spacing: 8) {
-                widgetActionIcon("camera.fill", tint: WidgetGuideTokens.orange)
-                widgetActionIcon("mic.fill", tint: WidgetGuideTokens.blue)
+                Capsule()
+                    .fill(.white.opacity(0.18))
+                    .frame(height: 7)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(WidgetGuideTokens.brandGradient)
+                            .frame(width: max(4, proxy.size.width * 0.7 * calorieFraction), height: 7)
+                    }
+
+                HStack(spacing: 8) {
+                    widgetActionIcon("camera.fill", tint: WidgetGuideTokens.orange)
+                    widgetActionIcon("mic.fill", tint: WidgetGuideTokens.blue)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
             }
-            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(15)
+            .frame(maxWidth: .infinity)
+            .frame(height: 132)
+            .background(
+                LinearGradient(
+                    colors: [
+                        Color(red: 0.055, green: 0.060, blue: 0.085),
+                        Color(red: 0.090, green: 0.075, blue: 0.125),
+                        Color(red: 0.060, green: 0.085, blue: 0.115)
+                    ],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+            )
         }
-        .padding(15)
-        .frame(maxWidth: .infinity)
         .frame(height: 132)
-        .background(
-            LinearGradient(
-                colors: [
-                    Color(red: 0.055, green: 0.060, blue: 0.085),
-                    Color(red: 0.090, green: 0.075, blue: 0.125),
-                    Color(red: 0.060, green: 0.085, blue: 0.115)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-        )
     }
 
     private var homeActionsCard: some View {
@@ -471,45 +502,48 @@ private struct WidgetPreviewStrip: View {
     }
 
     private var previewLockWidget: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                Image(systemName: "fork.knife")
-                    .font(.system(size: 11, weight: .bold))
-                    .frame(width: 26, height: 26)
-                    .background(.white.opacity(0.28), in: Circle())
-                Text("842")
-                    .font(.system(size: 22, weight: .bold, design: .rounded))
-                    .monospacedDigit()
-                Text("cal")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.65))
-            }
-            .foregroundStyle(.white)
-
-            Capsule()
-                .fill(.white.opacity(0.20))
-                .frame(height: 5)
-                .overlay(alignment: .leading) {
-                    Capsule()
-                        .fill(.white)
-                        .frame(width: 62, height: 5)
+        GeometryReader { proxy in
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text("\(consumedCaloriesText)")
+                        .font(.system(size: 22, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .minimumScaleFactor(0.72)
+                        .lineLimit(1)
+                    Text("kcal")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.65))
                 }
+                .foregroundStyle(.white)
 
-            Text("of 1,770 kcal")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.68))
+                Capsule()
+                    .fill(.white.opacity(0.20))
+                    .frame(height: 5)
+                    .overlay(alignment: .leading) {
+                        Capsule()
+                            .fill(.white)
+                            .frame(width: max(4, proxy.size.width * 0.72 * calorieFraction), height: 5)
+                    }
+
+                Text("of \(targetCaloriesText)")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.68))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity)
+            .frame(height: 132)
+            .background(
+                LinearGradient(
+                    colors: [WidgetGuideTokens.blue, Color(red: 0.349, green: 0.251, blue: 0.780)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 24, style: .continuous)
+            )
         }
-        .padding(14)
-        .frame(maxWidth: .infinity)
         .frame(height: 132)
-        .background(
-            LinearGradient(
-                colors: [WidgetGuideTokens.blue, Color(red: 0.349, green: 0.251, blue: 0.780)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            ),
-            in: RoundedRectangle(cornerRadius: 24, style: .continuous)
-        )
     }
 
     private func widgetActionIcon(_ systemName: String, tint: Color) -> some View {

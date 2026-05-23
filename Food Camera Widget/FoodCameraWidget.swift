@@ -186,23 +186,22 @@ struct FoodCameraWidgetView: View {
         let target = max(0, entry.calories?.targetCalories ?? 0)
         let fraction = target > 0 ? min(consumed / target, 1) : 0
 
+        // 2026-05-22: dropped the leading fork.knife badge from this layout.
+        // On iPhone SE / mini lock screens the badge + spacer left the
+        // calorie Text too little horizontal room and SwiftUI was clipping
+        // 3-digit numbers ("842" rendered as "8…"). Two-line stack with
+        // minimumScaleFactor keeps the value readable across all devices,
+        // and the system already paints the widget glyph above the layout.
         return VStack(alignment: .leading, spacing: 4) {
-            HStack(alignment: .center, spacing: 6) {
-                Image(systemName: "fork.knife")
-                    .font(.system(size: 11, weight: .semibold))
-                    .frame(width: 24, height: 24)
-                    .background(.ultraThinMaterial, in: Circle())
-
-                HStack(alignment: .firstTextBaseline, spacing: 3) {
-                    Text("\(Int(consumed.rounded()).formatted())")
-                        .font(.system(size: 18, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                    Text("cal")
-                        .font(.caption2.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                }
-                .lineLimit(1)
-
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text("\(Int(consumed.rounded()).formatted())")
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .monospacedDigit()
+                    .minimumScaleFactor(0.72)
+                    .lineLimit(1)
+                Text("kcal")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
             }
 
@@ -217,9 +216,10 @@ struct FoodCameraWidgetView: View {
             }
             .frame(height: 4)
 
-            Text(target > 0 ? "of \(Int(target.rounded()).formatted()) kcal" : "Today")
+            Text(target > 0 ? "of \(Int(target.rounded()).formatted())" : "Today")
                 .font(.caption2.weight(.medium))
                 .lineLimit(1)
+                .minimumScaleFactor(0.85)
                 .foregroundStyle(.secondary)
         }
     }

@@ -34,4 +34,15 @@ enum WidgetDailyCaloriesStore {
         UserDefaults(suiteName: appGroupID)?.set(data, forKey: snapshotKey)
         WidgetCenter.shared.reloadTimelines(ofKind: widgetKind)
     }
+
+    /// Reads the most recent snapshot the main app pushed to the shared
+    /// app-group store. Used by in-app surfaces (e.g., the widget setup
+    /// guide preview) so they render the same data the live widget shows.
+    /// Returns nil when no snapshot has been written yet.
+    static func loadCurrent() -> WidgetDailyCaloriesSnapshot? {
+        guard let data = UserDefaults(suiteName: appGroupID)?.data(forKey: snapshotKey) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(WidgetDailyCaloriesSnapshot.self, from: data)
+    }
 }
