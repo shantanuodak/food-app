@@ -327,8 +327,10 @@ private struct PeekAnimation: View {
             withAnimation(.easeIn(duration: 0.4)) { offsetY = 22 }
             try? await Task.sleep(for: .seconds(0.4))
 
-            // Pause before next loop
-            try? await Task.sleep(for: .seconds(1.0))
+            // Long pause — peek-a-boo at ~5s intervals is distracting. 30s
+            // means it fires roughly twice per minute, which reads as
+            // "surprise" instead of "twitch".
+            try? await Task.sleep(for: .seconds(30))
         }
     }
 }
@@ -606,7 +608,8 @@ private struct SproutAnimation: View {
             withAnimation(.easeIn(duration: 0.4)) {
                 leafOpacity = 0
             }
-            try? await Task.sleep(for: .seconds(0.5))
+            // Long pause — sprout grows + unfurls is an event, not idle motion.
+            try? await Task.sleep(for: .seconds(30))
         }
     }
 }
@@ -743,7 +746,10 @@ private struct Pancake: View {
                     withAnimation(.easeOut(duration: 0.15)) { scaleX = 1.0 }
                     try? await Task.sleep(for: .seconds(2.1))
                     withAnimation(.easeIn(duration: 0.3)) { opacity = 0 }
-                    try? await Task.sleep(for: .seconds(max(0.05, 0.4 - delay)))
+                    // Long pause between stack cycles; add the per-pancake
+                    // delay back as a negative term so all 3 pancakes finish
+                    // their cycle in lock-step and re-fire together.
+                    try? await Task.sleep(for: .seconds(30 + max(0.05, 0.4 - delay)))
                 }
             }
     }
@@ -782,7 +788,9 @@ private struct Syrup: View {
                     }
                     try? await Task.sleep(for: .seconds(1.6))
                     withAnimation(.easeIn(duration: 0.3)) { opacity = 0 }
-                    try? await Task.sleep(for: .seconds(max(0.05, 0.6 - delay)))
+                    // Match the 30s pancake-cycle delay so syrup stays in sync
+                    // with the stack when the next event fires.
+                    try? await Task.sleep(for: .seconds(30 + max(0.05, 0.6 - delay)))
                 }
             }
     }
@@ -821,7 +829,9 @@ private struct SunAnimation: View {
             withAnimation(.easeOut(duration: 1.5)) { offsetY = 0 }
             try? await Task.sleep(for: .seconds(2.0))
             withAnimation(.easeIn(duration: 1.4)) { offsetY = 13 }
-            try? await Task.sleep(for: .seconds(0.6))
+            // Long pause — sun rises, sits, sets, then waits 30s before the
+            // next cycle so it doesn't feel like a relentless metronome.
+            try? await Task.sleep(for: .seconds(30))
         }
     }
 }
@@ -929,7 +939,9 @@ private struct MoonAnimation: View {
             withAnimation(.easeOut(duration: 1.7)) { offsetY = 0 }
             try? await Task.sleep(for: .seconds(2.4))
             withAnimation(.easeIn(duration: 1.5)) { offsetY = 13 }
-            try? await Task.sleep(for: .seconds(0.6))
+            // Long pause between rise/set events. Star twinkle (separate Task
+            // above) keeps running so the chip never feels frozen.
+            try? await Task.sleep(for: .seconds(30))
         }
     }
 }
