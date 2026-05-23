@@ -19,80 +19,59 @@ struct MainLoggingBottomDock: View {
                     .transition(.opacity.combined(with: .move(edge: .bottom)))
             }
 
-            ZStack {
-                HStack(spacing: 0) {
-                    HStack(spacing: 12) {
-                        bottomDockButton(
-                            systemImage: "camera.fill",
-                            color: Color(red: 0.380, green: 0.333, blue: 0.961),
-                            accessibilityLabel: "Open camera"
-                        ) {
-                            NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
-                        }
-
-                        bottomDockButton(
-                            systemImage: "mic.fill",
-                            color: Color(red: 0.796, green: 0.188, blue: 0.878),
-                            accessibilityLabel: "Voice input"
-                        ) {
-                            NotificationCenter.default.post(name: .openVoiceFromTabBar, object: nil)
-                        }
+            // 2026-05-23 dock layout: rewards/streak sits dead center of the
+            // screen with two equal flex spacers on either side. Left cluster
+            // stays Camera + Mic, right cluster stays Saved + Graph.
+            HStack(spacing: 0) {
+                HStack(spacing: 12) {
+                    bottomDockButton(
+                        systemImage: "camera.fill",
+                        color: Color(red: 0.380, green: 0.333, blue: 0.961),
+                        accessibilityLabel: "Open camera"
+                    ) {
+                        NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
                     }
 
-                    Spacer(minLength: 12)
-
-                    HStack(spacing: 12) {
-                        streakDockIndicator
-
-                        bottomDockButton(
-                            systemImage: "chart.bar.fill",
-                            color: Color(red: 0.95, green: 0.47, blue: 0.11),
-                            accessibilityLabel: "Open progress charts"
-                        ) {
-                            isProgressChartsPresented = true
-                        }
+                    bottomDockButton(
+                        systemImage: "mic.fill",
+                        color: Color(red: 0.796, green: 0.188, blue: 0.878),
+                        accessibilityLabel: "Voice input"
+                    ) {
+                        NotificationCenter.default.post(name: .openVoiceFromTabBar, object: nil)
                     }
                 }
 
-                if isKeyboardVisible {
-                    savedMealsKeyboardChip
-                        .transition(.opacity.combined(with: .scale(scale: 0.6)))
+                Spacer(minLength: 6)
+
+                streakDockIndicator
+
+                Spacer(minLength: 6)
+
+                HStack(spacing: 12) {
+                    bottomDockButton(
+                        systemImage: "bookmark.fill",
+                        color: Color(red: 0.902, green: 0.361, blue: 0.102),
+                        accessibilityLabel: "Open saved meals"
+                    ) {
+                        // Saved meals lives in MainLoggingShellView; route via
+                        // the existing keyboard-dismiss + binding flip.
+                        NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
+                        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                        isSavedMealsPresented = true
+                    }
+
+                    bottomDockButton(
+                        systemImage: "chart.line.uptrend.xyaxis",
+                        color: Color(red: 0.95, green: 0.47, blue: 0.11),
+                        accessibilityLabel: "Open progress charts"
+                    ) {
+                        isProgressChartsPresented = true
+                    }
                 }
             }
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
-    }
-
-    private var savedMealsKeyboardChip: some View {
-        Button {
-            AppHaptics.lightImpact()
-            NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
-            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-            isSavedMealsPresented = true
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "bookmark.fill")
-                    .font(.system(size: 13, weight: .bold))
-                Text("Saved")
-                    .font(.system(size: 14, weight: .semibold))
-            }
-            .foregroundStyle(Color(red: 0.902, green: 0.361, blue: 0.102))
-            .padding(.horizontal, 14)
-            .frame(height: 38)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color(red: 1.0, green: 0.941, blue: 0.878))
-            )
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(Color(red: 1.0, green: 0.835, blue: 0.675), lineWidth: 1)
-            )
-            .shadow(color: Color(red: 0.376, green: 0.212, blue: 0.078).opacity(0.10), radius: 12, y: 5)
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(Text("Open saved meals"))
-        .accessibilityHint(Text("Shows your saved meals in a drawer."))
     }
 
     private var syncStatusPill: some View {
@@ -295,6 +274,10 @@ struct MainLoggingTopHeaderStrip: View {
     @Binding var isProfilePresented: Bool
     @Binding var isCalendarPresented: Bool
 
+    @State private var isTutorialPresented: Bool = false
+    @State private var helpIconRotation: Double = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
             Button {
@@ -308,6 +291,21 @@ struct MainLoggingTopHeaderStrip: View {
 
             Spacer(minLength: 0)
 
+            // Tutorial entry point. Bare icon (no chip/background), slow
+            // continuous rotation to read as "interactive". Opens a half-sheet
+            // placeholder until the actual tutorial videos are wired up.
+            Button {
+                AppHaptics.lightImpact()
+                isTutorialPresented = true
+            } label: {
+                Image(systemName: "questionmark.circle")
+                    .font(.system(size: 18, weight: .regular))
+                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.72) : Color.primary.opacity(0.55))
+                    .rotationEffect(.degrees(helpIconRotation))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Open tutorial"))
+
             Button {
                 AppHaptics.selection()
                 isCalendarPresented = true
@@ -320,5 +318,62 @@ struct MainLoggingTopHeaderStrip: View {
             .accessibilityLabel(Text("Select date"))
         }
         .padding(.horizontal, 10)
+        .sheet(isPresented: $isTutorialPresented) {
+            TutorialPlaceholderSheet()
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+        }
+        .onAppear {
+            startHelpIconRotationIfAllowed()
+        }
+        .onChange(of: reduceMotion) { _, newValue in
+            if newValue {
+                withAnimation(.none) { helpIconRotation = 0 }
+            } else {
+                startHelpIconRotationIfAllowed()
+            }
+        }
+    }
+
+    private func startHelpIconRotationIfAllowed() {
+        guard !reduceMotion else { return }
+        // Reset to 0 first so the animation always starts from a known state
+        // (avoids cumulative drift on re-appear).
+        helpIconRotation = 0
+        withAnimation(.linear(duration: 12).repeatForever(autoreverses: false)) {
+            helpIconRotation = 360
+        }
+    }
+}
+
+private struct TutorialPlaceholderSheet: View {
+    var body: some View {
+        VStack(spacing: 18) {
+            Spacer().frame(height: 20)
+
+            ZStack {
+                Circle()
+                    .fill(Color(red: 1.00, green: 0.78, blue: 0.33).opacity(0.18))
+                    .frame(width: 88, height: 88)
+                Image(systemName: "play.rectangle.fill")
+                    .font(.system(size: 36, weight: .medium))
+                    .foregroundStyle(Color(red: 0.95, green: 0.55, blue: 0.20))
+            }
+
+            VStack(spacing: 8) {
+                Text("Tutorial coming soon")
+                    .font(.system(size: 22, weight: .bold))
+                    .multilineTextAlignment(.center)
+
+                Text("Quick walkthroughs of how to log meals, scan barcodes, and track your goals — coming in a future build.")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 36)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
