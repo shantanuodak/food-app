@@ -112,23 +112,42 @@ struct CalorieUpdateShimmerModifier: ViewModifier {
     }
 }
 
+// 2026-05-23: row-level status indicators were red/orange "Edit & Retry" /
+// "Retry" labels that read as alarming alerts. Quieted to match the
+// inline-caption pattern used in the drawer's unresolved-item row —
+// muted-ink caption with the actionable word underlined in brand orange.
+private let kRowCaptionMuted = Color(red: 0.467, green: 0.416, blue: 0.380)
+private let kRowCaptionBrand = Color(red: 0.902, green: 0.361, blue: 0.102)
+
 struct UnresolvedRowStatusView: View {
     var body: some View {
-        Text("Edit & Retry")
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Color.orange.opacity(0.95))
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+        HStack(spacing: 3) {
+            Text("Needs a clue · ")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(kRowCaptionMuted)
+            Text("Edit")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(kRowCaptionBrand)
+                .underline()
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 
 struct FailedRowStatusView: View {
     var body: some View {
-        Text(L10n.parseRetryShortLabel)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Color.red.opacity(0.95))
-            .lineLimit(1)
-            .frame(maxWidth: .infinity, alignment: .trailing)
+        HStack(spacing: 3) {
+            Text("Couldn't parse · ")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(kRowCaptionMuted)
+            Text(L10n.parseRetryShortLabel)
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(kRowCaptionBrand)
+                .underline()
+        }
+        .lineLimit(1)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 }
 

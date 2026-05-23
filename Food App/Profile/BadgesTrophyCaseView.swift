@@ -64,6 +64,13 @@ struct BadgesTrophyCaseView: View {
             subtitle = "Every streak badge unlocked"
         }
 
+        let featuredIsEarned: Bool
+        if let featured {
+            featuredIsEarned = streakDays >= featured.requiredDays
+        } else {
+            featuredIsEarned = false
+        }
+
         return BadgeHeroData(
             title: title,
             subtitle: subtitle,
@@ -72,7 +79,9 @@ struct BadgesTrophyCaseView: View {
             targetValue: target,
             earnedCount: earnedCount,
             totalCount: BadgeCatalog.totalCount,
-            streakDays: streakDays
+            streakDays: streakDays,
+            badge: featured,
+            isEarned: featuredIsEarned
         )
     }
 
@@ -109,7 +118,8 @@ struct BadgesTrophyCaseView: View {
                 .padding(.bottom, 36)
             }
         }
-        .background(Color.white.ignoresSafeArea())
+        .background(AppDrawerSurface.gradient.ignoresSafeArea())
+        .presentationBackground(AppDrawerSurface.gradient)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .task {
@@ -181,27 +191,33 @@ struct BadgesTrophyCaseView: View {
         let timezone = TimeZone.current.identifier
         async let summaryTask = appStore.apiClient.getBadgesSummary(timezone: timezone)
         async let streakTask = appStore.apiClient.getStreaks(range: 365, timezone: timezone)
-        var didFail = false
+        var summaryFailed = false
+        var streakFailed = false
 
         do {
             summary = try await summaryTask
         } catch is CancellationError {
-            didFail = true
+            summaryFailed = true
         } catch {
-            didFail = true
+            summaryFailed = true
         }
 
         do {
             let streak = try await streakTask
             refreshedStreakDays = streak.currentDays
         } catch is CancellationError {
-            didFail = true
+            streakFailed = true
         } catch {
-            didFail = true
+            streakFailed = true
         }
 
-        if didFail {
-            errorMessage = "Couldn't refresh all badge progress yet."
+        // Only surface the banner when there is genuinely nothing to show.
+        // Partial failures (e.g., streak fetch flaked while summary loaded)
+        // were previously firing the banner on every refresh, which made
+        // the rewards screen feel broken even when the badges still
+        // rendered. Stay quiet if any cached data is available.
+        if summaryFailed && streakFailed && summary == nil {
+            errorMessage = "Couldn't load badge progress. Check your connection."
         }
         isLoading = false
     }
@@ -233,6 +249,13 @@ private struct BadgeHeroData {
     let earnedCount: Int
     let totalCount: Int
     let streakDays: Int
+    /// The StreakBadge instance the medallion should render. When nil the
+    /// hero falls back to the system-image rendering (used for the share
+    /// snapshot, where we want a flat single-color glyph).
+    let badge: StreakBadge?
+    /// Whether the user has already earned `badge`. Drives the medallion's
+    /// earned-vs-locked styling.
+    let isEarned: Bool
 
     var shareText: String {
         "I am working on \(title): \(subtitle) in Food App."
@@ -251,30 +274,14 @@ private struct BadgeHeroCard: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(BadgeTokens.goldGradient)
-                    Image(systemName: data.systemImage)
-                        .font(.system(size: 30, weight: .heavy))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 72, height: 72)
-                .shadow(color: BadgeTokens.amber.opacity(0.25), radius: 18, y: 8)
-                .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(data.title)
-                        .font(.custom("InstrumentSerif-Regular", size: 34))
-                        .foregroundStyle(BadgeTokens.ink)
-                    Text(data.subtitle)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(BadgeTokens.muted)
-                }
-                Spacer(minLength: 0)
-
-                if showsShareButton {
+        VStack(alignment: .center, spacing: 16) {
+            // Share button sits in a top-trailing slot so the medallion can
+            // be the visual centerpiece of the card. Earlier layout pushed
+            // the medallion to the left of the title — that made the icon
+            // feel like an afterthought next to the serif headline.
+            if showsShareButton {
+                HStack {
+                    Spacer()
                     Button {
                         onShare?()
                     } label: {
@@ -287,7 +294,46 @@ private struct BadgeHeroCard: View {
                     .buttonStyle(.plain)
                     .accessibilityLabel("Share badge")
                 }
+                .frame(maxWidth: .infinity)
             }
+
+            // 2026-05-23: the previous medallion was a plain orange
+            // gradient circle with a white SF Symbol on top. On the
+            // Century Club tier the `100.circle.fill` glyph rendered as a
+            // near-invisible white blob (filled circle + filled text both
+            // white). Swapped to the richer StreakBadgeMedallion that's
+            // already used elsewhere — it handles tier colors, gloss, and
+            // the locked-vs-earned state explicitly. Also centered for
+            // visual gravity.
+            Group {
+                if let badge = data.badge {
+                    StreakBadgeMedallion(badge: badge, isEarned: data.isEarned, size: 88)
+                } else {
+                    ZStack {
+                        Circle()
+                            .fill(BadgeTokens.goldGradient)
+                        Image(systemName: data.systemImage)
+                            .font(.system(size: 36, weight: .heavy))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(width: 96, height: 96)
+                    .shadow(color: BadgeTokens.amber.opacity(0.25), radius: 18, y: 8)
+                }
+            }
+            .accessibilityHidden(true)
+            .padding(.top, showsShareButton ? -8 : 4)
+
+            VStack(spacing: 6) {
+                Text(data.title)
+                    .font(.custom("InstrumentSerif-Regular", size: 34))
+                    .foregroundStyle(BadgeTokens.ink)
+                    .multilineTextAlignment(.center)
+                Text(data.subtitle)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(BadgeTokens.muted)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
 
             HStack(spacing: 10) {
                 heroStat(value: "\(data.earnedCount)", label: "earned")
@@ -487,7 +533,6 @@ private struct BadgeCelebrationPopup: View {
     let badge: BadgeDefinition
     let onDismiss: () -> Void
 
-    private static let displayDuration: TimeInterval = 3.5
     private static let medallionSize: CGFloat = 156
 
     @State private var hasAppeared = false
@@ -540,11 +585,24 @@ private struct BadgeCelebrationPopup: View {
 
                 Spacer(minLength: 0)
 
-                Text("Tap to dismiss")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.42))
-                    .padding(.bottom, 36)
-                    .opacity(titleOpacity)
+                Button(action: dismissNow) {
+                    Text("Let's go")
+                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .foregroundStyle(Color(red: 0.141, green: 0.098, blue: 0.078))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 52)
+                        .background(
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(.white)
+                        )
+                        .shadow(color: .black.opacity(0.16), radius: 16, y: 6)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(Text("Let's go"))
+                .accessibilityHint(Text("Dismiss this celebration"))
+                .opacity(titleOpacity)
+                .padding(.horizontal, 32)
+                .padding(.bottom, 36)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -626,11 +684,9 @@ private struct BadgeCelebrationPopup: View {
             titleOffset = 0
         }
 
-        dismissTask = Task { @MainActor in
-            try? await Task.sleep(nanoseconds: UInt64(Self.displayDuration * 1_000_000_000))
-            guard !Task.isCancelled else { return }
-            dismissNow()
-        }
+        // No auto-dismiss — user dismisses via the Let's go button or
+        // tap-anywhere fallback. Matches the celebration popup in
+        // StreakAchievementPopup.swift.
     }
 
     private func dismissNow() {

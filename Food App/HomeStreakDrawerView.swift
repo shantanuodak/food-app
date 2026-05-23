@@ -39,7 +39,8 @@ struct HomeStreakDrawerView: View {
                 .animation(.easeInOut(duration: 0.28), value: response?.range)
             }
         }
-        .background(Color(.systemBackground))
+        .background(AppDrawerSurface.gradient)
+        .presentationBackground(AppDrawerSurface.gradient)
         .task {
             applyCachedStreaksIfAvailable()
             await loadStreaks()
@@ -245,35 +246,20 @@ struct HomeStreakDrawerView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
+        // 2026-05-23: the warm cream tile gradient blended into the unified
+        // AppDrawerSurface background. Switched to white so the card lifts
+        // off the surface again. Single soft drop shadow — the previous
+        // stack of black + orange shadows produced an oddly doubled / warm
+        // halo against the new cream surface.
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 1.0, green: 0.985, blue: 0.955),
-                            Color(red: 0.965, green: 0.965, blue: 0.955)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(Color.white)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(
-                    LinearGradient(
-                        colors: [
-                            Color.white.opacity(0.95),
-                            Color.black.opacity(0.07)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    ),
-                    lineWidth: 1
-                )
+                .stroke(Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.10), lineWidth: 1)
         }
-        .shadow(color: Color.black.opacity(0.055), radius: 16, x: 0, y: 8)
-        .shadow(color: Color.orange.opacity(0.035), radius: 18, x: 0, y: 10)
+        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             Text("\(badge.title), \(daysRemaining) days remaining, \(badge.subtitle)")
@@ -489,9 +475,17 @@ struct HomeStreakDrawerView: View {
             detectNewlyEarnedBadges(previousDays: lastLoadedStreakDays, currentDays: result.currentDays)
             lastLoadedStreakDays = result.currentDays
         } catch let apiError as APIClientError {
-            errorMessage = apiError.errorDescription ?? "Could not load badges."
+            // Only surface the error card on a true cold-load failure. If
+            // we already have a response from cache or a previous fetch,
+            // keep showing it — a flaky refresh shouldn't make the screen
+            // look broken.
+            if response == nil {
+                errorMessage = apiError.errorDescription ?? "Could not load badges."
+            }
         } catch {
-            errorMessage = "Could not load badges."
+            if response == nil {
+                errorMessage = "Could not load badges."
+            }
         }
     }
 
