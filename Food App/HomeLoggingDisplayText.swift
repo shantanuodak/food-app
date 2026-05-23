@@ -4,7 +4,7 @@ enum HomeLoggingDisplayText {
     nonisolated static func sourceDisplayName(_ source: String) -> String {
         switch source.lowercased() {
         case "gemini":
-            return "Gemini"
+            return "AI estimate"
         case "cache":
             return "Cache"
         case "manual":
@@ -17,7 +17,7 @@ enum HomeLoggingDisplayText {
     nonisolated static func sourceReferenceLabel(for rawSourceID: String) -> String {
         let normalized = normalizedLookupValue(rawSourceID)
         if normalized.contains("gemini") {
-            return "Gemini nutrition estimate"
+            return "AI-driven nutrition estimate"
         }
         if normalized.contains("cache") {
             return "Cached nutrition result"
@@ -75,7 +75,7 @@ enum HomeLoggingDisplayText {
 
         let normalized = trimmed.lowercased()
         if normalized.contains("gemini") {
-            return "Gemini"
+            return "AI estimate"
         }
         if normalized.contains("manual") {
             return "Manual"
@@ -97,6 +97,8 @@ enum HomeLoggingDisplayText {
         needsClarification: Bool
     ) -> String {
         let rowText = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let isApproximate = row.isApproximate || needsClarification
+
         if items.count > 1 {
             let itemNames = items.map(\.name)
             let previewNames: String
@@ -106,32 +108,42 @@ enum HomeLoggingDisplayText {
                 previewNames = itemNames.prefix(3).joined(separator: ", ") + " +\(itemNames.count - 3) more"
             }
             let estimatedCalories = Int(items.reduce(0) { $0 + $1.calories }.rounded())
-            var thought = "Interpreted “\(rowText)” as multiple items: \(previewNames). "
-            thought += "Used \(sourceLabel) nutrition data to estimate \(estimatedCalories) kcal total."
-            if row.isApproximate || needsClarification {
-                thought += " This is marked as approximate because confidence is below the strict threshold."
+            var thought = "Detected “\(rowText)” as a mix of items: \(previewNames). "
+            thought += "Used typical serving sizes and ingredient ratios to estimate \(estimatedCalories) kcal total across \(items.count) items. "
+            thought += "Macros (protein, carbs, fat) were scaled from each matched serving so the totals stay internally consistent."
+            if isApproximate {
+                thought += " Marked as approximate — the description left some portion details unclear. Add a count, brand, or size to tighten the estimate."
             }
             return thought
         }
 
         if let item = items.first {
+            let qty = formatOneDecimal(item.quantity)
+            let grams = formatOneDecimal(item.grams)
+            let calories = Int(item.calories.rounded())
+
             if let explanation = item.explanation, !explanation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 let trimmedExplanation = explanation.trimmingCharacters(in: .whitespacesAndNewlines)
-                let qty = formatOneDecimal(item.quantity)
-                return "\(trimmedExplanation) Food App used \(qty) \(item.unit) (~\(formatOneDecimal(item.grams)) g) with \(sourceLabel) nutrition data, then scaled calories, protein, carbs, and fat from that serving."
+                var thought = "\(trimmedExplanation) "
+                thought += "Matched portion: \(qty) \(item.unit) (~\(grams) g) → \(calories) kcal. "
+                thought += "Protein, carbs, and fat were scaled from the same matched serving, so the macro total stays consistent with the calorie estimate."
+                if isApproximate {
+                    thought += " Marked as approximate — confidence is below the strict threshold. Adding a brand, count, or place name would tighten this."
+                }
+                return thought
             }
-            var thought = "Interpreted “\(rowText)” as “\(item.name)”. "
-            thought += "Food App used \(formatOneDecimal(item.quantity)) \(item.unit) (~\(formatOneDecimal(item.grams)) g) "
-            thought += "with \(sourceLabel) nutrition data to estimate \(Int(item.calories.rounded())) kcal. "
-            thought += "The protein, carbs, and fat values are scaled from the same matched serving so the macro total stays consistent with the calorie estimate."
-            if row.isApproximate || needsClarification {
-                thought += " This is marked as approximate because confidence is below the strict threshold."
+
+            var thought = "Recognized “\(rowText)” as “\(item.name)”. "
+            thought += "Matched portion: \(qty) \(item.unit) (~\(grams) g) → \(calories) kcal. "
+            thought += "Protein, carbs, and fat were scaled from the same matched serving so the macro total stays consistent with the calorie estimate."
+            if isApproximate {
+                thought += " Marked as approximate — confidence is below the strict threshold. Adding a brand, count, or place name would tighten this."
             }
             return thought
         }
 
-        var fallback = "A calorie estimate is available for this row, but no fully matched nutrition item was retained."
-        fallback += " Re-parse or open Parse Details to refine mapping and macro breakdown."
+        var fallback = "A calorie estimate is available for this row, but no fully matched nutrition item was retained. "
+        fallback += "Re-parse or open Parse Details to refine the mapping and macro breakdown."
         return fallback
     }
 

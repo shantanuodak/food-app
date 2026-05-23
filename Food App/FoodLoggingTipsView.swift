@@ -31,7 +31,8 @@ struct FoodLoggingTipsView: View {
                 }
             }
         }
-        .background(FoodLoggingTipsTokens.screenBackground.ignoresSafeArea())
+        .background(AppDrawerSurface.gradient.ignoresSafeArea())
+        .presentationBackground(AppDrawerSurface.gradient)
     }
 
     private var content: some View {
@@ -441,4 +442,273 @@ private struct FoodLoggingTipExampleRow: View {
     NavigationStack {
         FoodLoggingTipsView()
     }
+}
+
+// MARK: - Compact prompt sheet (Item 4, 2026-05-22)
+//
+// Surfaces a short popup after a vague entry to ask whether the user wants
+// to see Logging Tips. Replaces the inline-row treatment the user found
+// awkward. Two actions: "Show me tips" opens the full FoodLoggingTipsView,
+// "Skip for now" dismisses and honors a 24-hour cooldown stored in
+// UserDefaults under `loggingTipsPromptSkippedUntilKey`.
+
+struct LoggingTipsPromptSheet: View {
+    let onShowTips: () -> Void
+    let onSkip: () -> Void
+
+    static let skipCooldownKey = "loggingTipsPromptSkippedUntil.v1"
+
+    // 2026-05-23: cooldown removed — popup now fires on every vague entry.
+    // Helpers kept as no-ops so the call sites that still invoke them
+    // (MainLoggingShellBody) don't have to change.
+    static func skipForCooldown(defaults: UserDefaults = .standard) {
+        // Intentional no-op. Skip just dismisses for this entry.
+    }
+
+    static func isWithinSkipCooldown(defaults: UserDefaults = .standard) -> Bool {
+        false
+    }
+
+    @State private var example: LoggingTipsPromptExample = LoggingTipsPromptExample.random()
+    @State private var arrowPulse: Bool = false
+    @State private var hasAppeared: Bool = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        VStack(spacing: 0) {
+            header
+                .padding(.horizontal, 20)
+                .padding(.top, 22)
+
+            exampleCard
+                .padding(.horizontal, 20)
+                .padding(.top, 16)
+
+            Spacer(minLength: 14)
+
+            actionStack
+                .padding(.horizontal, 20)
+                .padding(.bottom, 20)
+        }
+        .background(FoodLoggingTipsPromptTokens.surface.ignoresSafeArea())
+        .onAppear {
+            guard !hasAppeared else { return }
+            hasAppeared = true
+            example = LoggingTipsPromptExample.random()
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
+                arrowPulse = true
+            }
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Clue tip")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .tracking(0.6)
+                .foregroundStyle(FoodLoggingTipsPromptTokens.orangeDeep)
+                .textCase(.uppercase)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(.white.opacity(0.72), in: Capsule())
+                .overlay(
+                    Capsule().stroke(FoodLoggingTipsPromptTokens.border, lineWidth: 1)
+                )
+
+            (
+                Text("Give the app ")
+                    .font(.custom("InstrumentSerif-Regular", size: 30))
+                + Text("one good clue.")
+                    .font(.custom("InstrumentSerif-Italic", size: 30))
+                    .foregroundStyle(FoodLoggingTipsPromptTokens.orangeDeep)
+            )
+            .foregroundStyle(FoodLoggingTipsPromptTokens.ink)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var exampleCard: some View {
+        HStack(alignment: .center, spacing: 0) {
+            exampleSide(
+                tagText: "Needs clue",
+                tagInk: FoodLoggingTipsPromptTokens.redInk,
+                glyph: "xmark",
+                text: example.vague,
+                surface: FoodLoggingTipsPromptTokens.needsClueSurface,
+                surfaceBorder: FoodLoggingTipsPromptTokens.redInk.opacity(0.18)
+            )
+
+            arrowBridge
+                .frame(width: 36)
+
+            exampleSide(
+                tagText: "With clue",
+                tagInk: FoodLoggingTipsPromptTokens.greenInk,
+                glyph: "checkmark",
+                text: example.withClue,
+                surface: FoodLoggingTipsPromptTokens.withClueSurface,
+                surfaceBorder: FoodLoggingTipsPromptTokens.greenInk.opacity(0.18)
+            )
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .fill(.white.opacity(0.6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 22, style: .continuous)
+                        .stroke(FoodLoggingTipsPromptTokens.border, lineWidth: 1)
+                )
+                .shadow(color: FoodLoggingTipsPromptTokens.shadow, radius: 20, y: 10)
+        )
+    }
+
+    @ViewBuilder
+    private func exampleSide(
+        tagText: String,
+        tagInk: Color,
+        glyph: String,
+        text: String,
+        surface: LinearGradient,
+        surfaceBorder: Color
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 5) {
+                Image(systemName: glyph)
+                    .font(.system(size: 8, weight: .black))
+                    .foregroundStyle(.white)
+                    .frame(width: 16, height: 16)
+                    .background(tagInk, in: Circle())
+                Text(tagText.uppercased())
+                    .font(.system(size: 9, weight: .black, design: .rounded))
+                    .tracking(0.6)
+                    .foregroundStyle(tagInk.opacity(0.82))
+                    .lineLimit(1)
+            }
+
+            Text(text)
+                .font(.system(size: 14, weight: .heavy, design: .rounded))
+                .foregroundStyle(FoodLoggingTipsPromptTokens.ink)
+                .lineLimit(3)
+                .minimumScaleFactor(0.82)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: 92, alignment: .topLeading)
+        .background(surface, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(surfaceBorder, lineWidth: 1)
+        )
+    }
+
+    private var arrowBridge: some View {
+        ZStack {
+            Circle()
+                .fill(FoodLoggingTipsPromptTokens.orangeDeep.opacity(arrowPulse ? 0.0 : 0.18))
+                .frame(width: arrowPulse ? 34 : 22, height: arrowPulse ? 34 : 22)
+
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(FoodLoggingTipsPromptTokens.brandGradient)
+                .frame(width: 26, height: 26)
+                .overlay(
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 11, weight: .black))
+                        .foregroundStyle(.white)
+                )
+                .shadow(color: FoodLoggingTipsPromptTokens.orangeDeep.opacity(0.32), radius: 8, y: 5)
+        }
+        .accessibilityHidden(true)
+    }
+
+    private var actionStack: some View {
+        VStack(spacing: 10) {
+            Button(action: onShowTips) {
+                HStack(spacing: 6) {
+                    Text("See more clues")
+                        .font(.system(size: 16, weight: .bold, design: .rounded))
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 13, weight: .black))
+                }
+                .foregroundStyle(.white)
+                .frame(maxWidth: .infinity)
+                .frame(height: 50)
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(FoodLoggingTipsPromptTokens.brandGradient)
+                )
+                .shadow(color: FoodLoggingTipsPromptTokens.orangeDeep.opacity(0.28), radius: 14, y: 8)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("See more logging clues"))
+
+            Button(action: onSkip) {
+                Text("Got it")
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+                    .foregroundStyle(FoodLoggingTipsPromptTokens.muted)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 36)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Dismiss the clue tip"))
+        }
+    }
+}
+
+struct LoggingTipsPromptExample {
+    let vague: String
+    let withClue: String
+
+    static func random() -> LoggingTipsPromptExample {
+        all.randomElement() ?? all[0]
+    }
+
+    static let all: [LoggingTipsPromptExample] = [
+        LoggingTipsPromptExample(vague: "sandwich", withClue: "turkey sandwich, 2 slices wheat"),
+        LoggingTipsPromptExample(vague: "coffee", withClue: "8 oz cold coffee with milk"),
+        LoggingTipsPromptExample(vague: "salad", withClue: "Chipotle salad bowl, chicken, no rice"),
+        LoggingTipsPromptExample(vague: "pizza", withClue: "2 slices Margherita pizza"),
+        LoggingTipsPromptExample(vague: "protein bar", withClue: "1 Kirkland chocolate brownie bar"),
+        LoggingTipsPromptExample(vague: "dal rice", withClue: "1 cup dal + 1 cup rice"),
+        LoggingTipsPromptExample(vague: "chips", withClue: "1 small bag Lay's classic chips"),
+        LoggingTipsPromptExample(vague: "omelette", withClue: "4-egg omelette with cheese"),
+        LoggingTipsPromptExample(vague: "coke", withClue: "Coke Zero, 12 oz can"),
+        LoggingTipsPromptExample(vague: "pasta", withClue: "1.5 cups pasta, tomato sauce")
+    ]
+}
+
+private enum FoodLoggingTipsPromptTokens {
+    static let ink = Color(red: 0.141, green: 0.098, blue: 0.078)
+    static let muted = Color(red: 0.467, green: 0.416, blue: 0.380)
+    static let orangeDeep = Color(red: 0.725, green: 0.306, blue: 0.071)
+    static let redInk = Color(red: 0.812, green: 0.286, blue: 0.247)
+    static let greenInk = Color(red: 0.122, green: 0.561, blue: 0.384)
+    static let border = Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.11)
+    static let shadow = Color(red: 0.376, green: 0.212, blue: 0.078).opacity(0.14)
+
+    static let brandGradient = LinearGradient(
+        colors: [Color(red: 1.00, green: 0.62, blue: 0.20), Color(red: 0.90, green: 0.36, blue: 0.10)],
+        startPoint: .leading,
+        endPoint: .trailing
+    )
+    static let surface = LinearGradient(
+        colors: [
+            Color(red: 0.984, green: 0.917, blue: 0.835),
+            Color(red: 1.000, green: 0.976, blue: 0.941)
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let needsClueSurface = LinearGradient(
+        colors: [Color(red: 1.000, green: 0.941, blue: 0.925).opacity(0.92), .white.opacity(0.80)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+    static let withClueSurface = LinearGradient(
+        colors: [Color(red: 0.914, green: 0.973, blue: 0.933).opacity(0.94), .white.opacity(0.80)],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
 }

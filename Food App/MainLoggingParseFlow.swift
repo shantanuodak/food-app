@@ -311,6 +311,13 @@ extension MainLoggingShellView {
                 .flatMap { $0.rowItems }
                 .map(EditableParsedItem.init(apiItem:))
 
+            // Logging tips popup (Item 4): if this row's parse came back
+            // needing clarification and the user hasn't been prompted for
+            // this row in this session, surface the prompt sheet. Respect a
+            // 24h skip cooldown so a stubborn skipper isn't pestered. The
+            // popup itself is presented in MainLoggingShellBody.
+            maybePresentLoggingTipsPrompt(for: snapshot.activeRowID, response: response)
+
             if remainingDirtyRowIDs.isEmpty {
                 scheduleDetailsDrawer(for: response)
             }
@@ -349,6 +356,32 @@ extension MainLoggingShellView {
             return false
         }
         return response.route == "unresolved" || response.route == "gemini"
+    }
+
+    /// Decide whether to surface the logging-tips popup for a freshly
+    /// parsed row. Per user request (2026-05-23), this fires on every
+    /// vague entry — no per-row dedup, no skip cooldown. The only gates
+    /// are:
+    ///   • Response is approximate (`needsClarification` or low confidence).
+    ///   • No competing sheet is already up (iOS sheet stacking is finicky).
+    @MainActor
+    func maybePresentLoggingTipsPrompt(for rowID: UUID?, response: ParseLogResponse) {
+        let isApproximate = response.needsClarification || response.confidence < 0.70
+        guard isApproximate else { return }
+
+        guard !isLoggingTipsPresented,
+              !isLoggingTipsPromptPresented,
+              !isDetailsDrawerPresented,
+              !isCalendarPresented,
+              !isProfilePresented,
+              !isCameraAnalysisSheetPresented,
+              !isCustomCameraPresented else { return }
+
+        // Tiny delay so the row's calorie shimmer / fade animation completes
+        // before the sheet slides up. Feels less abrupt.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
+            isLoggingTipsPromptPresented = true
+        }
     }
 
     func isTrustedZeroNutritionResponse(_ response: ParseLogResponse) -> Bool {
