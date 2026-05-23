@@ -64,7 +64,8 @@ struct HomeProfileBentoScreen: View {
 
                             NotificationReminderTile(
                                 summary: reminderSummaryText,
-                                isEnabled: reminderEnabledBinding
+                                isEnabled: reminderEnabledBinding,
+                                onOpenSettings: { isReminderSettingsPresented = true }
                             )
                         }
                         DietTile(diet: dietData)
@@ -756,36 +757,54 @@ private struct BadgeTile: View {
 private struct NotificationReminderTile: View {
     let summary: String
     @Binding var isEnabled: Bool
+    let onOpenSettings: () -> Void
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
             VStack(alignment: .leading, spacing: 0) {
-                ZStack {
-                    Circle()
-                        .fill(BentoTokens.coolIconGradient)
-                    Image(systemName: "bell.badge.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
+                // 2026-05-22: tap-to-open the reminder settings screen.
+                // Previously the card body had no gesture, so when reminders
+                // were OFF there was no way to enter the detail view — the
+                // only path was flipping the toggle, which had a permission
+                // side effect. Toggle stays its own hit target below; this
+                // Button covers the upper region (icon/title/summary) so
+                // testers can reach the settings regardless of toggle state.
+                Button(action: onOpenSettings) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        ZStack {
+                            Circle()
+                                .fill(BentoTokens.coolIconGradient)
+                            Image(systemName: "bell.badge.fill")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundStyle(.white)
+                        }
+                        .frame(width: 38, height: 38)
+                        .shadow(color: BentoTokens.blue700.opacity(0.14), radius: 6, y: 3)
+                        .padding(.bottom, 12)
+                        .accessibilityHidden(true)
+
+                        Text("Reminders")
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(BentoTokens.gray900)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+
+                        Text(summary)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(BentoTokens.blue700)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.82)
+                            .padding(.top, 6)
+
+                        Spacer(minLength: 0)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel("Notifications and reminders, \(summary)")
+                    .accessibilityHint("Opens reminder settings.")
                 }
-                .frame(width: 38, height: 38)
-                .shadow(color: BentoTokens.blue700.opacity(0.14), radius: 6, y: 3)
-                .padding(.bottom, 12)
-                .accessibilityHidden(true)
-
-                Text("Reminders")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(BentoTokens.gray900)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
-
-                Text(summary)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(BentoTokens.blue700)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.82)
-                    .padding(.top, 6)
-
-                Spacer(minLength: 0)
+                .buttonStyle(BentoPressScaleStyle())
 
                 HStack {
                     Spacer(minLength: 0)
@@ -800,14 +819,12 @@ private struct NotificationReminderTile: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(BentoTokens.gray400)
                 .padding(.top, 1)
-            .accessibilityHidden(true)
+                .accessibilityHidden(true)
         }
         .bentoTile(
             background: BentoTokens.whiteTileBackground,
             border: BentoTokens.whiteTileBorder
         )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Notifications and reminders, \(isEnabled ? "on" : "off"), \(summary)")
     }
 }
 

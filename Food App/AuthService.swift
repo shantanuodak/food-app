@@ -162,16 +162,38 @@ final class AuthService {
         }
     }
 
-    private func runWithStartupTimeout(_ operation: @escaping () async throws -> Void) async throws {
+    private func runWithStartupTimeout(_ operation: @escaping @Sendable () async throws -> Void) async throws {
+        // 2026-05-22 (Tanmay's logout): detach the operation so it can't be
+        // cancelled when the timeout below fires. Supabase rotates the
+        // refresh token server-side on the FIRST byte of a successful refresh
+        // — if we cancel the URLSession request mid-flight, the server has
+        // already invalidated the old token while we never captured the new
+        // one. Result: keychain holds an "already used" refresh token and
+        // the very next authenticated API call clears the session, bouncing
+        // the user back to the sign-in screen.
+        //
+        // By detaching, the refresh keeps running. If it finishes late and
+        // successfully, persistRecoveredSession writes the new tokens to
+        // keychain and the next API call uses them. If it finishes late
+        // and fails for real, the keychain still has the (now genuinely
+        // invalid) old token, and the next validAccessToken/recovery cycle
+        // clears the session — same outcome as today, just driven by a
+        // real failure instead of by our own cancellation.
+        let refreshTask = Task.detached(priority: .userInitiated) {
+            try await operation()
+        }
+
         try await withThrowingTaskGroup(of: Void.self) { group in
             group.addTask {
-                try await operation()
+                try await refreshTask.value
             }
             group.addTask {
                 try await Task.sleep(nanoseconds: UInt64(StartupRecovery.sessionRestoreTimeout * 1_000_000_000))
                 throw RestoreSessionTimeout.timedOut
             }
             try await group.next()
+            // Cancels the loser subtask only — refreshTask is detached so
+            // it keeps running until the network call resolves.
             group.cancelAll()
         }
     }
