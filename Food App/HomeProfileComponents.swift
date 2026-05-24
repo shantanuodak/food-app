@@ -318,9 +318,14 @@ private struct ProfileWheelPickerCard<Content: View>: View {
         }
         .padding(.vertical, 20)
         .frame(maxWidth: .infinity)
+        // 2026-05-24: was Color.white.opacity(0.86), which rendered as a
+        // bright white slab over the now-dark OnboardingStaticBackground
+        // and the wheel digits became unreadable. Routed through
+        // AppColor.surfaceChip so the card adapts (white in light, soft
+        // charcoal in dark).
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color.white.opacity(0.86))
+                .fill(AppColor.surfaceChip)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)

@@ -286,15 +286,12 @@ struct HomeProfileScreen: View {
 
     @ViewBuilder
     private var bodySection: some View {
+        // 2026-05-24: dropped the top-of-section segmented Units picker.
+        // HeightPickerView / WeightPickerView already host an inline
+        // Cm/Feet (or Kg/lbs) toggle inside their sheets, so the row was
+        // duplicated and broke the "every row is the same shape" rhythm
+        // of the section.
         Section {
-            Picker("Units", selection: unitsBinding) {
-                ForEach(UnitsOption.allCases) { opt in
-                    Text(L10n.unitsLabel(opt)).tag(opt)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.vertical, 4)
-
             bodySexRow
 
             bodyAgeRow
