@@ -1040,35 +1040,33 @@ private struct BadgeTile: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        // 2026-05-24: re-laid out to match LoggingTips/Widgets/Reminders
-        // tiles — icon at top, then left-aligned title and subtitle below.
-        // The streak number moved to a right-side column with a larger
-        // font so it reads as the headline data point on the tile.
-        HStack(alignment: .top, spacing: 8) {
-            VStack(alignment: .leading, spacing: 0) {
-                trophyIcon
-                    .padding(.bottom, 12)
-                    .accessibilityHidden(true)
+        // 2026-05-24: matches the LoggingTips/Widgets/Reminders layout —
+        // icon → "Badges" → subtitle left-aligned at top. Streak number
+        // floats in the bottom-right via overlay so it reads as the
+        // headline metric without disturbing the standard tile rhythm.
+        VStack(alignment: .leading, spacing: 0) {
+            trophyIcon
+                .padding(.bottom, 12)
+                .accessibilityHidden(true)
 
-                Text("Badges")
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(BentoTokens.gray900)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.82)
+            Text("Badges")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(BentoTokens.gray900)
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
 
-                Text(badgeTitle)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(BentoTokens.gray700)
-                    .lineLimit(3)
-                    .minimumScaleFactor(0.82)
-                    .padding(.top, 6)
-
-                Spacer(minLength: 0)
-            }
+            Text(badgeTitle)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(BentoTokens.gray700)
+                .lineLimit(3)
+                .minimumScaleFactor(0.82)
+                .padding(.top, 6)
 
             Spacer(minLength: 0)
-
-            VStack(alignment: .trailing, spacing: 2) {
+        }
+        .frame(maxWidth: .infinity, minHeight: 146, alignment: .topLeading)
+        .overlay(alignment: .bottomTrailing) {
+            VStack(alignment: .trailing, spacing: 0) {
                 Text("\(days)")
                     .font(.system(size: 52, weight: .heavy))
                     .foregroundStyle(BentoTokens.brandGradient)
@@ -1083,7 +1081,6 @@ private struct BadgeTile: View {
                     .lineLimit(1)
             }
         }
-        .frame(maxWidth: .infinity, minHeight: 146, alignment: .topLeading)
         .bentoTile(
             background: BentoTokens.whiteTileBackground,
             border: BentoTokens.whiteTileBorder

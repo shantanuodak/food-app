@@ -246,20 +246,18 @@ struct HomeStreakDrawerView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
-        // 2026-05-23: the warm cream tile gradient blended into the unified
-        // AppDrawerSurface background. Switched to white so the card lifts
-        // off the surface again. Single soft drop shadow — the previous
-        // stack of black + orange shadows produced an oddly doubled / warm
-        // halo against the new cream surface.
+        // 2026-05-23: white card lifts off the cream AppDrawerSurface.
+        // 2026-05-24: routed through AppColor tokens so the card adapts
+        // to dark mode — was a hardcoded white slab on a dark drawer.
         .background(
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(Color.white)
+                .fill(AppColor.surfaceChip)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .stroke(Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.10), lineWidth: 1)
+                .stroke(AppColor.borderSubtle, lineWidth: 1)
         }
-        .shadow(color: Color.black.opacity(0.06), radius: 12, x: 0, y: 4)
+        .shadow(color: AppColor.shadow, radius: 12, x: 0, y: 4)
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(
             Text("\(badge.title), \(daysRemaining) days remaining, \(badge.subtitle)")
@@ -340,11 +338,11 @@ struct HomeStreakDrawerView: View {
     }
 
     private var heroBackground: LinearGradient {
+        // 2026-05-24: was a literal white-to-white gradient. Forwarded to
+        // AppColor.surfaceChip so the hero adapts (cream/white in light,
+        // mid-charcoal in dark) instead of slabbing white over a dark drawer.
         LinearGradient(
-            colors: [
-                Color.white,
-                Color.white
-            ],
+            colors: [AppColor.surfaceChip, AppColor.surfaceChip],
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )

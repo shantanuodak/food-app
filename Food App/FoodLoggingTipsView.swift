@@ -93,7 +93,7 @@ struct FoodLoggingTipsView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 34, style: .continuous)
-                .fill(.white.opacity(0.72))
+                .fill(FoodLoggingTipsTokens.cardSurface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 34, style: .continuous)
                         .stroke(FoodLoggingTipsTokens.border, lineWidth: 1)
@@ -112,14 +112,21 @@ struct FoodLoggingTipsView: View {
 }
 
 private enum FoodLoggingTipsTokens {
-    static let ink = Color(red: 0.141, green: 0.098, blue: 0.078)
-    static let muted = Color(red: 0.467, green: 0.416, blue: 0.380)
+    // 2026-05-24: text + border + shadow forwarded to AppColor so the
+    // tips drawer adapts to dark mode. Brand orange + accent green/red
+    // stay fixed (semantic colors look the same in both modes).
+    static let ink = AppColor.textPrimary
+    static let muted = AppColor.textSecondary
     static let orange = Color(red: 0.941, green: 0.482, blue: 0.133)
     static let orangeDeep = Color(red: 0.725, green: 0.306, blue: 0.071)
     static let green = Color(red: 0.122, green: 0.561, blue: 0.384)
     static let red = Color(red: 0.812, green: 0.286, blue: 0.247)
-    static let border = Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.11)
-    static let shadow = Color(red: 0.376, green: 0.212, blue: 0.078).opacity(0.13)
+    static let border = AppColor.borderSubtle
+    static let shadow = AppColor.shadow
+
+    /// Card surface — opaque white in light, slightly-elevated charcoal in
+    /// dark. Replaces `.white.opacity(0.5–0.7)` sprinkled across the cards.
+    static let cardSurface = AppColor.surfaceChip
 
     static let brandGradient = LinearGradient(
         colors: [Color(red: 1.00, green: 0.62, blue: 0.20), Color(red: 0.90, green: 0.36, blue: 0.10)],
@@ -186,7 +193,7 @@ private struct FoodLoggingTipsMarqueeView: View {
                         .foregroundStyle(Color(red: 0.384, green: 0.267, blue: 0.212))
                         .padding(.horizontal, 13)
                         .padding(.vertical, 9)
-                        .background(.white.opacity(0.70), in: Capsule())
+                        .background(FoodLoggingTipsTokens.cardSurface, in: Capsule())
                         .overlay {
                             Capsule()
                                 .stroke(FoodLoggingTipsTokens.border, lineWidth: 1)
@@ -335,7 +342,7 @@ private struct FoodLoggingTipsBridge: View {
                 .frame(height: 36)
         }
         .frame(maxHeight: .infinity)
-        .background(.white.opacity(0.52), in: Capsule())
+        .background(FoodLoggingTipsTokens.cardSurface, in: Capsule())
         .overlay {
             Capsule()
                 .stroke(FoodLoggingTipsTokens.border, lineWidth: 1)
@@ -387,7 +394,7 @@ private struct FoodLoggingTipExampleRow: View {
                 .frame(width: 25, height: 25)
                 .background(FoodLoggingTipsTokens.brandGradient, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
                 .frame(width: 36)
-                .background(.white.opacity(0.56), in: RoundedRectangle(cornerRadius: 17, style: .continuous))
+                .background(FoodLoggingTipsTokens.cardSurface, in: RoundedRectangle(cornerRadius: 17, style: .continuous))
 
             miniCard(
                 title: "With clue",
@@ -398,7 +405,7 @@ private struct FoodLoggingTipExampleRow: View {
             )
         }
         .padding(8)
-        .background(.white.opacity(0.56), in: RoundedRectangle(cornerRadius: 25, style: .continuous))
+        .background(FoodLoggingTipsTokens.cardSurface, in: RoundedRectangle(cornerRadius: 25, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 25, style: .continuous)
                 .stroke(FoodLoggingTipsTokens.border, lineWidth: 1)
@@ -515,7 +522,7 @@ struct LoggingTipsPromptSheet: View {
                 .textCase(.uppercase)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 5)
-                .background(.white.opacity(0.72), in: Capsule())
+                .background(FoodLoggingTipsTokens.cardSurface, in: Capsule())
                 .overlay(
                     Capsule().stroke(FoodLoggingTipsPromptTokens.border, lineWidth: 1)
                 )
@@ -559,7 +566,7 @@ struct LoggingTipsPromptSheet: View {
         .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.white.opacity(0.6))
+                .fill(FoodLoggingTipsTokens.cardSurface)
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
                         .stroke(FoodLoggingTipsPromptTokens.border, lineWidth: 1)

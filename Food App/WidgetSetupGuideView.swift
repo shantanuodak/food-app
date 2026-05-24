@@ -119,7 +119,7 @@ struct WidgetSetupGuideView: View {
                 .foregroundStyle(WidgetGuideTokens.orangeDeep)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 9)
-                .background(.white.opacity(0.72), in: Capsule())
+                .background(WidgetGuideTokens.cardSurface, in: Capsule())
                 .overlay {
                     Capsule()
                         .stroke(WidgetGuideTokens.border, lineWidth: 1)
@@ -176,7 +176,7 @@ struct WidgetSetupGuideView: View {
             }
         }
         .padding(6)
-        .background(.white.opacity(0.42), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(WidgetGuideTokens.cardSurface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 24, style: .continuous)
                 .stroke(WidgetGuideTokens.border, lineWidth: 1)
@@ -248,7 +248,7 @@ struct WidgetSetupGuideView: View {
                         .padding(.vertical, 13)
                 }
                 .foregroundStyle(activeStep == 0 ? WidgetGuideTokens.muted.opacity(0.5) : WidgetGuideTokens.ink)
-                .background(.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .background(WidgetGuideTokens.cardSurface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
                 .disabled(activeStep == 0)
 
                 Button {
@@ -309,7 +309,7 @@ struct WidgetSetupGuideView: View {
             }
         }
         .padding(16)
-        .background(.white.opacity(0.58), in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .background(WidgetGuideTokens.cardSurface, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
                 .stroke(WidgetGuideTokens.border, lineWidth: 1)
@@ -318,13 +318,22 @@ struct WidgetSetupGuideView: View {
 }
 
 private enum WidgetGuideTokens {
-    static let ink = Color(red: 0.141, green: 0.098, blue: 0.078)
-    static let muted = Color(red: 0.467, green: 0.416, blue: 0.380)
+    // 2026-05-24: text + border + shadow forwarded to AppColor so the
+    // guide adapts to dark mode. Brand orange + accent blue stay fixed
+    // (brand identity colors look the same in both modes).
+    static let ink = AppColor.textPrimary
+    static let muted = AppColor.textSecondary
     static let orange = Color(red: 0.941, green: 0.482, blue: 0.133)
     static let orangeDeep = Color(red: 0.725, green: 0.306, blue: 0.071)
     static let blue = Color(red: 0.333, green: 0.404, blue: 0.969)
-    static let border = Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.11)
-    static let shadow = Color(red: 0.376, green: 0.212, blue: 0.078).opacity(0.13)
+    static let border = AppColor.borderSubtle
+    static let shadow = AppColor.shadow
+
+    /// Card surface — opaque white in light mode (kept the original look),
+    /// slightly-elevated charcoal in dark so the cards lift off the drawer.
+    /// Replaces the previous `.white.opacity(0.4–0.7)` sprinkled through
+    /// every card background.
+    static let cardSurface = AppColor.surfaceChip
 
     static let brandGradient = LinearGradient(
         colors: [Color(red: 1.00, green: 0.62, blue: 0.20), Color(red: 0.90, green: 0.36, blue: 0.10)],
@@ -466,7 +475,7 @@ private struct WidgetPreviewStrip: View {
         .padding(15)
         .frame(maxWidth: .infinity, alignment: .leading)
         .frame(height: 132)
-        .background(.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .background(WidgetGuideTokens.cardSurface, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     private var lockScreenMock: some View {
