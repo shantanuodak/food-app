@@ -124,7 +124,7 @@ extension MainLoggingShellView {
                 HomeFoodStoryDrawerView(
                     anchorDate: selectedSummaryDate,
                     currentDayLogs: dayLogs,
-                    cachedDayLogs: dayCacheLogs,
+                    cachedDayLogs: $dayCacheLogs,
                     imageStorageService: appStore.imageStorageService
                 )
                 .presentationDetents([.large])

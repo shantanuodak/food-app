@@ -8,8 +8,9 @@ struct HomeFoodStoryDrawerView: View {
 
     let anchorDate: Date
     let currentDayLogs: DayLogsResponse?
-    let cachedDayLogs: [String: DayLogsResponse]
     let imageStorageService: ImageStorageService
+
+    @Binding private var cachedDayLogs: [String: DayLogsResponse]
 
     @State private var selectedID: String?
     @State private var selectedBackgroundsByDay: [String: FoodStoryBackgroundOption] = [:]
@@ -19,18 +20,18 @@ struct HomeFoodStoryDrawerView: View {
     init(
         anchorDate: Date,
         currentDayLogs: DayLogsResponse?,
-        cachedDayLogs: [String: DayLogsResponse],
+        cachedDayLogs: Binding<[String: DayLogsResponse]>,
         imageStorageService: ImageStorageService
     ) {
         self.anchorDate = anchorDate
         self.currentDayLogs = currentDayLogs
-        self.cachedDayLogs = cachedDayLogs
         self.imageStorageService = imageStorageService
+        _cachedDayLogs = cachedDayLogs
 
         let initialDays = Array(FoodStoryDayBuilder.makeDays(
             anchorDate: anchorDate,
             currentDayLogs: currentDayLogs,
-            cachedDayLogs: cachedDayLogs
+            cachedDayLogs: cachedDayLogs.wrappedValue
         ).reversed())
         _selectedID = State(initialValue: initialDays.last?.id)
     }
