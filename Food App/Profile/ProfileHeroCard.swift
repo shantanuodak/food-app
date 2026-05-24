@@ -177,9 +177,14 @@ struct ProfileHeroCard: View {
             }
 
             summaryChips
-                .padding(.top, 10)
+                .padding(.top, 12)
         }
-        .padding(16)
+        // 2026-05-24: extra bottom padding so the chips don't crowd the
+        // card edge — the previous 16pt left them feeling pinned to the
+        // bottom and the user perceived them as missing.
+        .padding(.horizontal, 16)
+        .padding(.top, 16)
+        .padding(.bottom, 22)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
     }
 
@@ -220,11 +225,15 @@ struct ProfileHeroCard: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 6)
-        .background(.ultraThinMaterial, in: Capsule())
+        // 2026-05-24: ultraThinMaterial blended too far into the dark
+        // image overlay below the gradient — chips read as invisible
+        // against the darkened bottom of the card. Solid semi-opaque
+        // white tint guarantees visibility on any image.
+        .background(Color.white.opacity(0.18), in: Capsule())
         .overlay(
-            Capsule().stroke(.white.opacity(0.22), lineWidth: 1)
+            Capsule().stroke(.white.opacity(0.32), lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.18), radius: 2, y: 1)
+        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
     }
 
     private var editPill: some View {

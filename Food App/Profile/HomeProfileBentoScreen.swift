@@ -965,7 +965,7 @@ private struct SavedMealsTile: View {
             SavedMealsScreen()
         } label: {
             HStack(alignment: .center, spacing: 14) {
-                Image(systemName: "bookmark.fill")
+                Image(systemName: "bookmark")
                     .font(.system(size: 22, weight: .semibold))
                     .foregroundStyle(BentoTokens.orange700)
                     .frame(width: 42, height: 42, alignment: .center)
@@ -1094,7 +1094,7 @@ private struct BadgeTile: View {
     }
 
     private var trophyIcon: some View {
-        Image(systemName: "trophy.fill")
+        Image(systemName: "trophy")
             .font(.system(size: 22, weight: .semibold))
             .foregroundStyle(BentoTokens.orange700)
             .frame(width: 38, height: 38, alignment: .leading)
@@ -1119,7 +1119,7 @@ private struct NotificationReminderTile: View {
                 // testers can reach the settings regardless of toggle state.
                 Button(action: onOpenSettings) {
                     VStack(alignment: .leading, spacing: 0) {
-                        Image(systemName: "bell.badge.fill")
+                        Image(systemName: "bell.badge")
                             .font(.system(size: 22, weight: .semibold))
                             .foregroundStyle(BentoTokens.orange700)
                             .frame(width: 38, height: 38, alignment: .leading)
