@@ -164,7 +164,8 @@ final class AuthService {
                     return
                 }
                 if isInvalidSessionRecoveryError(error) {
-                    await clearStoredSession()
+                    NSLog("[Auth] restoreSession second-attempt refresh failed (recoverable error: %@)", String(describing: error))
+                    await clearStoredSession(from: "restoreSessionIfPossible.secondAttemptRefreshFailed")
                 }
             }
         }
@@ -236,7 +237,7 @@ final class AuthService {
 
         if sessionNeedsRefresh(storedSession) {
             guard let refreshToken = nonEmpty(storedSession.refreshToken) else {
-                await clearStoredSession()
+                await clearStoredSession(from: "validAccessToken.refreshTokenMissing")
                 return nil
             }
 
@@ -245,7 +246,8 @@ final class AuthService {
                 return refreshedSession.accessToken
             } catch {
                 if isInvalidSessionRecoveryError(error) {
-                    await clearStoredSession()
+                    NSLog("[Auth] validAccessToken refresh failed (recoverable error: %@)", String(describing: error))
+                    await clearStoredSession(from: "validAccessToken.refreshFailedRecoverable")
                     return nil
                 }
                 throw error
@@ -265,7 +267,7 @@ final class AuthService {
         }
 
         guard let refreshToken = nonEmpty(storedSession.refreshToken) else {
-            await clearStoredSession()
+            await clearStoredSession(from: "refreshSessionIfNeeded.refreshTokenMissing")
             return nil
         }
 
@@ -273,7 +275,8 @@ final class AuthService {
             return try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
         } catch {
             if isInvalidSessionRecoveryError(error) {
-                await clearStoredSession()
+                NSLog("[Auth] refreshSessionIfNeeded failed (recoverable error: %@)", String(describing: error))
+                await clearStoredSession(from: "refreshSessionIfNeeded.refreshFailedRecoverable")
                 return nil
             }
             throw error
@@ -283,7 +286,7 @@ final class AuthService {
     func handleUnauthorizedAndAttemptRecovery() async -> Bool {
         guard let storedSession = sessionStore.session,
               let refreshToken = nonEmpty(storedSession.refreshToken) else {
-            await clearStoredSession()
+            await clearStoredSession(from: "handleUnauthorizedAndAttemptRecovery.refreshTokenMissing")
             return false
         }
 
@@ -292,7 +295,8 @@ final class AuthService {
             return true
         } catch {
             if isInvalidSessionRecoveryError(error) {
-                await clearStoredSession()
+                NSLog("[Auth] handleUnauthorizedAndAttemptRecovery refresh failed (recoverable error: %@)", String(describing: error))
+                await clearStoredSession(from: "handleUnauthorizedAndAttemptRecovery.refreshFailedRecoverable")
             }
             return false
         }
@@ -697,7 +701,13 @@ final class AuthService {
             message.contains("revoked")
     }
 
-    private func clearStoredSession() async {
+    // 2026-05-24: every clearStoredSession call now identifies its origin
+    // so device logs can tell us exactly which path fired the bounce. If
+    // the user reports another logout, pull device logs via Console.app
+    // (connect device → filter `[Auth] cleared`) and the prefix will say
+    // which catch handler ran.
+    private func clearStoredSession(from origin: String) async {
+        NSLog("[Auth] cleared session from %@", origin)
         await MainActor.run {
             sessionStore.clear()
         }
@@ -771,9 +781,24 @@ final class AuthService {
             throw AuthServiceError.missingSupabaseSDK
         }
 
-        let session = try await supabaseClient.auth.refreshSession(refreshToken: refreshToken)
-        let authSession = makeAuthSession(from: session, provider: metadata.provider, existing: metadata)
-        return try await persistRecoveredSession(authSession)
+        // Log the LAST 8 chars of the refresh token going in. If two
+        // refreshes ever land here with the same suffix, single-flight
+        // is broken. If a refresh succeeds and the next one fails with
+        // "already used" using a DIFFERENT suffix, that proves Supabase
+        // rotated the token and we caught it correctly.
+        let tokenTail = String(refreshToken.suffix(8))
+        NSLog("[Auth] performSupabaseRefresh start (tokenTail=%@)", tokenTail)
+
+        do {
+            let session = try await supabaseClient.auth.refreshSession(refreshToken: refreshToken)
+            let newTokenTail = String(session.refreshToken.suffix(8))
+            NSLog("[Auth] performSupabaseRefresh OK (oldTail=%@ newTail=%@)", tokenTail, newTokenTail)
+            let authSession = makeAuthSession(from: session, provider: metadata.provider, existing: metadata)
+            return try await persistRecoveredSession(authSession)
+        } catch {
+            NSLog("[Auth] performSupabaseRefresh FAILED (tokenTail=%@ error=%@)", tokenTail, String(describing: error))
+            throw error
+        }
     }
 
     private func makeAuthSession(from session: Session, provider: AccountProvider, existing: AuthSession) -> AuthSession {
@@ -1090,17 +1115,27 @@ actor RefreshCoordinator {
 
     func acquireOrJoin(_ start: () -> Task<AuthSession, Error>) -> (task: Task<AuthSession, Error>, id: UUID) {
         if let existing = inflightTask, let id = inflightID, !existing.isCancelled {
+            // Joining a refresh that's already running. If we see lots of
+            // these in the logs right before a successful refresh, the
+            // single-flight is doing its job — that's exactly the race
+            // we were trying to close.
+            NSLog("[Auth] RefreshCoordinator JOIN inflight (id=%@)", id.uuidString)
             return (existing, id)
         }
         let new = start()
         let id = UUID()
         inflightTask = new
         inflightID = id
+        NSLog("[Auth] RefreshCoordinator START new refresh (id=%@)", id.uuidString)
         return (new, id)
     }
 
     func release(id: UUID) {
-        guard inflightID == id else { return }
+        guard inflightID == id else {
+            NSLog("[Auth] RefreshCoordinator release IGNORED (stale id=%@)", id.uuidString)
+            return
+        }
+        NSLog("[Auth] RefreshCoordinator RELEASE (id=%@)", id.uuidString)
         inflightTask = nil
         inflightID = nil
     }
