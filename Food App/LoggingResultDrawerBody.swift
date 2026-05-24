@@ -96,7 +96,7 @@ struct LoggingResultDrawerBody: View {
     // MARK: - Calorie hero — Large Title
 
     private var calorieHero: some View {
-        VStack(alignment: .leading, spacing: 2) {
+        HStack(alignment: .bottom) {
             HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text("\(Int(totals.calories.rounded()))")
                     .font(.system(size: mode == .photoReview ? 42 : 44, weight: .heavy, design: .rounded))
@@ -106,9 +106,30 @@ struct LoggingResultDrawerBody: View {
                     .font(.system(size: 19, weight: .semibold, design: .rounded))
                     .foregroundStyle(kDrawerMuted)
             }
+
+            Spacer()
+
+            if let bucket = mealTrustBucket {
+                TrustBars(bucket: bucket)
+                    .padding(.bottom, 8)
+            }
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
+    }
+
+    /// Worst-case confidence across all parsed items — one shaky item
+    /// shouldn't get hidden by three confident ones. Filters out
+    /// unresolved placeholders (their `matchConfidence` is meaningless
+    /// since the row never got parsed) and items with zero/missing
+    /// confidence so they don't pull the whole meal down to .lessSure.
+    private var mealTrustBucket: TrustBucket? {
+        let confidences = items
+            .filter { !$0.isUnresolvedPlaceholder }
+            .map(\.matchConfidence)
+            .filter { $0 > 0 }
+        guard let minimum = confidences.min() else { return nil }
+        return TrustBucket(confidence: minimum)
     }
 
     // MARK: - Macro chips — three categories, distinct palette
@@ -703,5 +724,66 @@ struct LoggingResultThoughtProcessCard: View {
         )
         .padding(.horizontal, 20)
         .padding(.top, 14)
+    }
+}
+
+// MARK: - Trust signal (signal-strength-style dots)
+
+/// Three-bucket confidence indicator shown on the right side of the
+/// calorie hero in the drawer. Avoids the false-precision tax of a
+/// numeric confidence score — LLM confidence isn't well-calibrated
+/// enough to render a percentage honestly. Three discrete buckets
+/// match what the data can actually distinguish.
+private enum TrustBucket {
+    case confident      // 3 dots
+    case approximate    // 2 dots
+    case lessSure       // 1 dot
+
+    init(confidence: Double) {
+        switch confidence {
+        case 0.80...:     self = .confident
+        case 0.55..<0.80: self = .approximate
+        default:          self = .lessSure
+        }
+    }
+
+    var label: String {
+        switch self {
+        case .confident:   return "Confident"
+        case .approximate: return "Approximate"
+        case .lessSure:    return "Less sure"
+        }
+    }
+
+    var filledDots: Int {
+        switch self {
+        case .confident:   return 3
+        case .approximate: return 2
+        case .lessSure:    return 1
+        }
+    }
+}
+
+/// Three small dots stacked horizontally over a tiny label. Cellular
+/// signal-strength metaphor — universally understood "how strong is
+/// this thing" without claiming a precise number.
+private struct TrustBars: View {
+    let bucket: TrustBucket
+
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 4) {
+            HStack(spacing: 3) {
+                ForEach(0..<3, id: \.self) { i in
+                    Circle()
+                        .fill(i < bucket.filledDots ? kDrawerInk : kDrawerInk.opacity(0.18))
+                        .frame(width: 6, height: 6)
+                }
+            }
+            Text(bucket.label)
+                .font(.system(size: 11, weight: .semibold, design: .rounded))
+                .foregroundStyle(kDrawerMuted)
+        }
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Estimate confidence: \(bucket.label)"))
     }
 }
