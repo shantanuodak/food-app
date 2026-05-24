@@ -87,6 +87,10 @@ function shouldClarifyItem(item: ParsedItem): boolean {
     return false;
   }
 
+  if (item.needsClarification === true) {
+    return true;
+  }
+
   const hasInvalidCoreValue =
     asFiniteNonNegative(item.quantity) === null ||
     asFiniteNonNegative(item.grams) === null ||

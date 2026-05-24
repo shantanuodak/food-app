@@ -33,6 +33,7 @@ enum ChartPalette {
 
     // Hero card accents (used as 1pt strokes over Material)
     static let calorieAccent: Color = Color.green
+    static let hydrationAccent: Color = Color.cyan
     static let weightAccent: Color  = Color.blue
     static let stepsAccent: Color   = Color.orange
 }
@@ -81,6 +82,15 @@ struct NutritionChartPoint: Identifiable {
     let date: Date
     let consumed: Double
     let target: Double
+    let hasLogs: Bool
+
+    var id: Date { date }
+}
+
+struct HydrationChartPoint: Identifiable {
+    let date: Date
+    let totalMl: Double
+    let goalMl: Double?
     let hasLogs: Bool
 
     var id: Date { date }

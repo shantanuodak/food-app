@@ -54,6 +54,8 @@ struct RowCalorieDetails: Identifiable {
     let imageRef: String?
     let loggedAt: String?
     let inputKind: String?
+    var savedMealId: String? = nil
+    var savedMealName: String? = nil
 }
 
 struct PreparedImagePayload {

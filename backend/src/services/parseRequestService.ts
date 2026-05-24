@@ -5,7 +5,7 @@ import type { ParseResult } from './deterministicParser.js';
 
 // Note: 'fatsecret' and 'alias' values may exist in old DB rows but are no longer
 // produced by the live parse pipeline. The type stays union-permissive for read paths.
-export type ParsePrimaryRoute = 'cache' | 'alias' | 'fatsecret' | 'gemini' | 'unresolved';
+export type ParsePrimaryRoute = 'cache' | 'alias' | 'fatsecret' | 'gemini' | 'unresolved' | 'barcode' | 'label';
 
 export type ParseRequestRecord = {
   requestId: string;

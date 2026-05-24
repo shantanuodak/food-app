@@ -270,7 +270,7 @@ struct HM01LogComposerSection: View {
                 rows[index].text = newValue
                 let isEmpty = newValue.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
 
-                if isEmpty && !wasEmpty && oldRow.serverLogId != nil {
+                if isEmpty && !wasEmpty && (oldRow.serverLogId != nil || oldRow.hydrationLogId != nil) {
                     onServerBackedRowCleared(oldRow)
                     return
                 }
@@ -287,6 +287,11 @@ struct HM01LogComposerSection: View {
                     rows[index].normalizedTextAtParse = nil
                     rows[index].imagePreviewData = nil
                     rows[index].imageRef = nil
+                    rows[index].hydrationAmountMl = nil
+                    rows[index].hydrationInputAmount = nil
+                    rows[index].hydrationInputUnit = nil
+                    rows[index].hydrationConfidence = nil
+                    rows[index].hydrationLogId = nil
                     return
                 }
 
@@ -301,6 +306,7 @@ struct HM01LogComposerSection: View {
                 if !isEmpty,
                    !wasEmpty,
                    !rows[index].parsedItems.isEmpty,
+                   !rows[index].isHydration,
                    !rows[index].isLoading,
                    let edit = detectQuantityOnlyEdit(oldText: oldText, newText: newValue) {
                     let scaled = rows[index].parsedItems.map {
@@ -415,6 +421,7 @@ struct HM01LogComposerSection: View {
     @ViewBuilder
     private func trailingCaloriesView(for row: HomeLogRow) -> some View {
         let showCalories = !row.isLoading && !row.isQueued && !row.isUnresolved && !row.isFailed && row.calories != nil
+        let showHydration = !row.isLoading && !row.isQueued && !row.isUnresolved && !row.isFailed && row.hydrationAmountMl != nil
 
         ZStack(alignment: .trailing) {
             if row.isLoading {
@@ -437,9 +444,14 @@ struct HM01LogComposerSection: View {
             if let calories = row.calories {
                 calorieButton(for: row, calories: calories, showCalories: showCalories)
             }
+
+            if showHydration {
+                hydrationButton(for: row)
+            }
         }
         .animation(.easeInOut(duration: 0.15), value: row.parsePhase)
         .animation(.easeInOut(duration: 0.2), value: row.calories)
+        .animation(.easeInOut(duration: 0.2), value: row.hydrationAmountMl)
     }
 
     @ViewBuilder
@@ -487,5 +499,27 @@ struct HM01LogComposerSection: View {
         .opacity(showCalories ? 1 : 0)
 
         button
+    }
+
+    @ViewBuilder
+    private func hydrationButton(for row: HomeLogRow) -> some View {
+        let label = row.hydrationDisplayLabel ?? "Water"
+        Button {
+            AppHaptics.lightImpact()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "drop.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                Text(label)
+                    .font(.system(size: 17, weight: .semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
+            }
+            .foregroundStyle(Color.cyan)
+            .frame(maxWidth: .infinity, alignment: .trailing)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("\(label) water logged"))
     }
 }

@@ -74,6 +74,7 @@ enum FoodNotificationCategory {
 enum FoodNotificationActionHandler {
     static func handle(_ response: UNNotificationResponse) async -> Bool {
         let userInfo = response.notification.request.content.userInfo
+        recordInteractionIfPossible(userInfo: userInfo, actionIdentifier: response.actionIdentifier)
         let fallbackDestination = (userInfo["destination"] as? String)
             .flatMap(FoodNotificationDestination.init(rawValue:))
         let destination: FoodNotificationDestination?
@@ -99,6 +100,45 @@ enum FoodNotificationActionHandler {
             route(to: destination)
         }
         return true
+    }
+
+    private static func recordInteractionIfPossible(userInfo: [AnyHashable: Any], actionIdentifier: String) {
+        guard let deliveryKey = userInfo["deliveryKey"] as? String,
+              let templateKey = userInfo["templateKey"] as? String,
+              let destinationRaw = userInfo["destination"] as? String,
+              let destination = FoodNotificationDestination(rawValue: destinationRaw) else {
+            return
+        }
+
+        let eventType: String
+        switch actionIdentifier {
+        case UNNotificationDefaultActionIdentifier:
+            eventType = "opened"
+        case FoodNotificationAction.snooze:
+            eventType = "snoozed"
+        default:
+            eventType = "action_tapped"
+        }
+
+        let recordedActionIdentifier: String?
+        if actionIdentifier == UNNotificationDefaultActionIdentifier {
+            recordedActionIdentifier = nil
+        } else {
+            recordedActionIdentifier = actionIdentifier
+        }
+
+        let request = NotificationEventRequest(
+            deliveryKey: deliveryKey,
+            templateKey: templateKey,
+            destination: destination.rawValue,
+            eventType: eventType,
+            actionIdentifier: recordedActionIdentifier
+        )
+
+        Task(priority: .utility) {
+            let apiClient = LiveAPIClientFactory.make()
+            _ = try? await apiClient.recordNotificationEvent(request)
+        }
     }
 
     @MainActor

@@ -105,6 +105,14 @@ struct NotificationPreferencePayload: Decodable {
     let user_id: String?
 }
 
+struct NotificationEventRequest: Encodable {
+    let deliveryKey: String
+    let templateKey: String
+    let destination: String
+    let eventType: String
+    let actionIdentifier: String?
+}
+
 struct OnboardingRequest: Encodable {
     let goal: GoalOption
     let dietPreference: String
@@ -454,6 +462,133 @@ struct SaveLogResponse: Decodable {
     let logId: String
     let status: String
     let healthSync: HealthSyncResponse?
+}
+
+enum HydrationSource: String, Codable, Hashable {
+    case text
+    case voice
+    case quickAdd = "quick_add"
+    case manual
+}
+
+struct HydrationParseRequest: Encodable {
+    let text: String
+}
+
+struct HydrationParseResponse: Decodable, Equatable {
+    let status: String
+    let rawText: String
+    let normalizedText: String
+    let amountMl: Double?
+    let inputAmount: Double?
+    let inputUnit: String?
+    let confidence: Double
+    let reasonCodes: [String]
+    let suggestions: [HydrationSuggestion]
+
+    var isMatched: Bool { status == "matched" && amountMl != nil }
+    var needsAmount: Bool { status == "needs_amount" }
+}
+
+struct HydrationSuggestion: Decodable, Equatable, Hashable {
+    let amountMl: Double
+    let label: String
+}
+
+struct HydrationGoalRequest: Encodable {
+    let dailyGoalMl: Int
+}
+
+struct HydrationGoalResponse: Decodable, Equatable {
+    let goal: HydrationGoal?
+}
+
+struct HydrationGoal: Decodable, Equatable, Hashable {
+    let dailyGoalMl: Int
+    let createdAt: String
+    let updatedAt: String
+}
+
+struct DeleteHydrationGoalResponse: Decodable, Equatable {
+    let status: String
+}
+
+struct HydrationLogRequest: Encodable {
+    let loggedAt: String
+    let rawText: String
+    let amountMl: Double
+    let inputAmount: Double?
+    let inputUnit: String?
+    let source: HydrationSource
+    let confidence: Double
+}
+
+struct HydrationLogResponse: Decodable, Equatable {
+    let log: HydrationLog
+}
+
+struct HydrationLog: Decodable, Identifiable, Equatable, Hashable {
+    let id: String
+    let loggedAt: String
+    let rawText: String
+    let amountMl: Double
+    let inputAmount: Double?
+    let inputUnit: String?
+    let source: HydrationSource
+    let confidence: Double
+    let createdAt: String
+    let updatedAt: String
+}
+
+struct DeleteHydrationLogResponse: Decodable, Equatable {
+    let logId: String
+    let status: String
+}
+
+struct HydrationDaySummaryResponse: Decodable, Equatable {
+    let date: String
+    let timezone: String
+    let totalMl: Double
+    let goalMl: Double?
+    let remainingMl: Double?
+    let percent: Double?
+    let hasLogs: Bool
+    let logsCount: Int
+}
+
+struct HydrationDayLogsResponse: Decodable, Equatable {
+    let date: String
+    let timezone: String
+    let logs: [HydrationLog]
+}
+
+struct HydrationProgressResponse: Decodable, Equatable {
+    let from: String
+    let to: String
+    let timezone: String
+    let goalMl: Double?
+    let days: [HydrationProgressDay]
+    let weeklyDelta: HydrationWeeklyDelta
+}
+
+struct HydrationProgressDay: Decodable, Identifiable, Equatable, Hashable {
+    let date: String
+    let timezone: String
+    let totalMl: Double
+    let goalMl: Double?
+    let remainingMl: Double?
+    let percent: Double?
+    let hasLogs: Bool
+    let logsCount: Int
+
+    var id: String { date }
+}
+
+struct HydrationWeeklyDelta: Decodable, Equatable, Hashable {
+    let currentAvgMl: Double
+    let previousAvgMl: Double
+    let deltaMl: Double
+    let deltaPct: Double?
 }
 
 struct SavedMealsResponse: Decodable {

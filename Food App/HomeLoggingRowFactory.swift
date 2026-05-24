@@ -57,6 +57,7 @@ enum HomeLoggingRowFactory {
     nonisolated static func makeSavedRow(from entry: DayLogEntry) -> HomeLogRow {
         let items = entry.items.map(parsedFoodItem(from:))
         let stableID = UUID(uuidString: entry.id) ?? UUID(uuid: stableUUID(from: entry.id))
+        let savedMealMarker = LoggedSavedMealStore.marker(for: entry.id)
         let displayText: String
         if HomeLoggingRowFactory.normalizedInputKind(entry.inputKind, fallback: "text").hasPrefix("image") &&
             entry.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -82,7 +83,44 @@ enum HomeLoggingRowFactory {
             isSaved: true,
             savedAt: nil,
             serverLogId: entry.id,
-            serverLoggedAt: entry.loggedAt
+            serverLoggedAt: entry.loggedAt,
+            savedMealId: savedMealMarker?.savedMealId,
+            savedMealName: savedMealMarker?.savedMealName
+        )
+    }
+
+    nonisolated static func makeHydrationSavedRow(from log: HydrationLog) -> HomeLogRow {
+        let stableID = UUID(uuidString: log.id) ?? UUID(uuid: stableUUID(from: log.id))
+        let displayText = log.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? HydrationDisplayText.longLabel(
+                amountMl: log.amountMl,
+                inputAmount: log.inputAmount,
+                inputUnit: log.inputUnit
+            )
+            : log.rawText
+
+        return HomeLogRow(
+            id: stableID,
+            text: displayText,
+            calories: nil,
+            calorieRangeText: nil,
+            isApproximate: false,
+            parsePhase: .idle,
+            parsedItem: nil,
+            parsedItems: [],
+            editableItemIndices: [],
+            normalizedTextAtParse: HomeLoggingTextMatch.normalizedRowText(displayText),
+            imagePreviewData: nil,
+            imageRef: nil,
+            isSaved: true,
+            savedAt: nil,
+            hydrationAmountMl: log.amountMl,
+            hydrationInputAmount: log.inputAmount,
+            hydrationInputUnit: log.inputUnit,
+            hydrationConfidence: log.confidence,
+            hydrationLogId: log.id,
+            serverLogId: nil,
+            serverLoggedAt: log.loggedAt
         )
     }
 

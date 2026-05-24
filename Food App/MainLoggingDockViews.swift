@@ -26,7 +26,7 @@ struct MainLoggingBottomDock: View {
                 HStack(spacing: 12) {
                     bottomDockButton(
                         systemImage: "camera.fill",
-                        color: Color(red: 0.380, green: 0.333, blue: 0.961),
+                        color: Color(red: 0.265, green: 0.224, blue: 0.835),
                         accessibilityLabel: "Open camera"
                     ) {
                         NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
@@ -34,7 +34,7 @@ struct MainLoggingBottomDock: View {
 
                     bottomDockButton(
                         systemImage: "mic.fill",
-                        color: Color(red: 0.796, green: 0.188, blue: 0.878),
+                        color: Color(red: 0.655, green: 0.114, blue: 0.745),
                         accessibilityLabel: "Voice input"
                     ) {
                         NotificationCenter.default.post(name: .openVoiceFromTabBar, object: nil)
@@ -234,14 +234,14 @@ struct MainLoggingBottomDock: View {
                     .fill(color.opacity(0.12))
                     .overlay(
                         Circle()
-                            .stroke(color.opacity(0.20), lineWidth: 1)
+                            .stroke(color.opacity(0.26), lineWidth: 1)
                     )
                     .frame(width: 48, height: 48)
 
                 Image(systemName: systemImage)
-                    .font(.system(size: 16, weight: .bold))
+                    .font(.system(size: 17, weight: .black))
                     .foregroundStyle(color)
-                    .shadow(color: color.opacity(0.18), radius: 2, y: 1)
+                    .shadow(color: color.opacity(0.24), radius: 2, y: 1)
             }
             .frame(width: 60, height: 60)
             .contentShape(Rectangle())

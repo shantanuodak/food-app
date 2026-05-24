@@ -67,6 +67,13 @@ struct HomeLogRow: Identifiable, Equatable {
     /// "2" and the client-side math rescaled the macros). Distinct from the
     /// reveal shimmer: faster, purely confirmatory, fires on *every* update.
     var showCalorieUpdateShimmer: Bool = false
+    /// Deterministic hydration parse data. Hydration rows intentionally do not
+    /// carry food parser items or calories; they are persisted to hydration_logs.
+    var hydrationAmountMl: Double? = nil
+    var hydrationInputAmount: Double? = nil
+    var hydrationInputUnit: String? = nil
+    var hydrationConfidence: Double? = nil
+    var hydrationLogId: String? = nil
     /// Server-side `food_logs.id` for rows that were loaded from the backend.
     /// Used to branch the save path between POST (new) and PATCH (edit) so
     /// editing a saved row doesn't create a duplicate entry.
@@ -75,6 +82,11 @@ struct HomeLogRow: Identifiable, Equatable {
     /// un-save → edit → PATCH so cache invalidation targets the correct day
     /// (not the day the user happens to be viewing now).
     var serverLoggedAt: String? = nil
+    /// Saved-meal provenance for logs created via the Saved Meals surface.
+    /// This drives the selected "Saved" state in row details so the user
+    /// can't accidentally save the same logged saved meal again.
+    var savedMealId: String? = nil
+    var savedMealName: String? = nil
     /// Optimistic delete marker used to avoid refocusing a row while it is being
     /// removed from the backend.
     var isDeleting: Bool = false
@@ -95,7 +107,25 @@ struct HomeLogRow: Identifiable, Equatable {
             imageRef: nil,
             isSaved: false,
             savedAt: nil,
+            hydrationAmountMl: nil,
+            hydrationInputAmount: nil,
+            hydrationInputUnit: nil,
+            hydrationConfidence: nil,
+            hydrationLogId: nil,
             serverLogId: nil
+        )
+    }
+
+    var isHydration: Bool {
+        hydrationAmountMl != nil
+    }
+
+    var hydrationDisplayLabel: String? {
+        guard let amountMl = hydrationAmountMl else { return nil }
+        return HydrationDisplayText.shortLabel(
+            amountMl: amountMl,
+            inputAmount: hydrationInputAmount,
+            inputUnit: hydrationInputUnit
         )
     }
 
@@ -217,6 +247,107 @@ struct HomeLogRow: Identifiable, Equatable {
         }
 
         return .unknown
+    }
+}
+
+struct LoggedSavedMealMarker: Codable, Equatable, Sendable {
+    let savedMealId: String
+    let savedMealName: String
+}
+
+enum LoggedSavedMealStore {
+    nonisolated private static let key = "app.saved_meal.logged_markers.v1"
+
+    nonisolated static func marker(for logId: String, defaults: UserDefaults = .standard) -> LoggedSavedMealMarker? {
+        load(defaults: defaults)[logId]
+    }
+
+    nonisolated static func save(logId: String, meal: SavedMeal, defaults: UserDefaults = .standard) {
+        save(logId: logId, savedMealId: meal.id, savedMealName: meal.name, defaults: defaults)
+    }
+
+    nonisolated static func save(
+        logId: String,
+        savedMealId: String,
+        savedMealName: String,
+        defaults: UserDefaults = .standard
+    ) {
+        var markers = load(defaults: defaults)
+        markers[logId] = LoggedSavedMealMarker(savedMealId: savedMealId, savedMealName: savedMealName)
+        persist(markers, defaults: defaults)
+    }
+
+    nonisolated static func remove(logId: String, defaults: UserDefaults = .standard) {
+        var markers = load(defaults: defaults)
+        markers.removeValue(forKey: logId)
+        persist(markers, defaults: defaults)
+    }
+
+    nonisolated private static func load(defaults: UserDefaults) -> [String: LoggedSavedMealMarker] {
+        guard let data = defaults.data(forKey: key),
+              let decoded = try? JSONDecoder().decode([String: LoggedSavedMealMarker].self, from: data) else {
+            return [:]
+        }
+        return decoded
+    }
+
+    nonisolated private static func persist(_ markers: [String: LoggedSavedMealMarker], defaults: UserDefaults) {
+        guard let data = try? JSONEncoder().encode(markers) else { return }
+        defaults.set(data, forKey: key)
+    }
+}
+
+enum HydrationDisplayText {
+    nonisolated static func shortLabel(
+        amountMl: Double,
+        inputAmount: Double? = nil,
+        inputUnit: String? = nil
+    ) -> String {
+        if let inputAmount, let unit = normalizedUnitLabel(inputUnit), inputAmount > 0 {
+            return "\(formatAmount(inputAmount)) \(unit)"
+        }
+
+        if amountMl >= 1000 {
+            let liters = amountMl / 1000
+            return "\(formatAmount(liters)) L"
+        }
+        return "\(Int(amountMl.rounded())) ml"
+    }
+
+    nonisolated static func longLabel(
+        amountMl: Double,
+        inputAmount: Double? = nil,
+        inputUnit: String? = nil
+    ) -> String {
+        "\(shortLabel(amountMl: amountMl, inputAmount: inputAmount, inputUnit: inputUnit)) water"
+    }
+
+    nonisolated private static func normalizedUnitLabel(_ rawUnit: String?) -> String? {
+        guard let rawUnit else { return nil }
+        let normalized = rawUnit.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        switch normalized {
+        case "ml", "milliliter", "milliliters", "millilitre", "millilitres":
+            return "ml"
+        case "l", "liter", "liters", "litre", "litres":
+            return "L"
+        case "oz", "fl oz", "fluid ounce", "fluid ounces", "ounce", "ounces":
+            return "oz"
+        case "cup", "cups":
+            return inputCupLabel(rawUnit: normalized)
+        default:
+            return nil
+        }
+    }
+
+    nonisolated private static func inputCupLabel(rawUnit: String) -> String {
+        rawUnit == "cup" ? "cup" : "cups"
+    }
+
+    nonisolated private static func formatAmount(_ amount: Double) -> String {
+        if abs(amount.rounded() - amount) < 0.01 {
+            return "\(Int(amount.rounded()))"
+        }
+        return String(format: "%.1f", amount)
     }
 }
 

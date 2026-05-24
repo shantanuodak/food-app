@@ -17,6 +17,7 @@ const requiredColumns: RequiredColumn[] = [
   { table: 'notification_preferences', column: 'reminders_enabled', migration: '0023_notification_system.sql' },
   { table: 'notification_templates', column: 'template_key', migration: '0023_notification_system.sql' },
   { table: 'notification_deliveries', column: 'delivery_key', migration: '0023_notification_system.sql' },
+  { table: 'notification_events', column: 'delivery_key', migration: '0036_notification_events.sql' },
   { table: 'saved_meal_collections', column: 'user_id', migration: '0030_saved_meals.sql' },
   { table: 'saved_meals', column: 'meal_payload_json', migration: '0030_saved_meals.sql' }
 ];

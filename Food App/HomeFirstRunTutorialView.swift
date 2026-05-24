@@ -44,15 +44,14 @@ extension View {
 
 extension MainLoggingShellView {
     func autoPresentHomeTutorialIfNeeded() {
-        guard !hasEvaluatedAutoHomeTutorialPresentation else { return }
-        hasEvaluatedAutoHomeTutorialPresentation = true
-
+        guard appStore.isSessionRestored else { return }
         guard appStore.isOnboardingComplete else { return }
-        guard !UserDefaults.standard.bool(forKey: homeTutorialShownKey) else { return }
+        guard !hasEvaluatedAutoHomeTutorialPresentation else { return }
+        guard !hasSeenHomeTutorial else { return }
         guard !isHomeTutorialPresented else { return }
         guard selectedCameraSource == nil, !isQuickCameraCaptureActive, !isVoiceOverlayPresented else { return }
 
-        UserDefaults.standard.set(true, forKey: homeTutorialShownKey)
+        hasEvaluatedAutoHomeTutorialPresentation = true
         startHomeTutorialDebug()
     }
 
@@ -97,13 +96,15 @@ extension MainLoggingShellView {
         // day-swipe flag in UserDefaults is permanent so it won't fire.
         let reachedDone = homeTutorialStep == .progress
 
+        markHomeTutorialSeen()
+
         withAnimation(.easeOut(duration: 0.22)) {
             isHomeTutorialPresented = false
         }
         homeTutorialStep = .composer
 
         guard reachedDone else { return }
-        guard !UserDefaults.standard.bool(forKey: daySwipeTutorialShownKey) else { return }
+        guard !hasSeenDaySwipeTutorial else { return }
 
         // Tiny delay so the tutorial card finishes fading before the
         // day-swipe overlay's backdrop fades in. Both transitions are
@@ -116,7 +117,7 @@ extension MainLoggingShellView {
     }
 
     func finishDaySwipeTutorial() {
-        UserDefaults.standard.set(true, forKey: daySwipeTutorialShownKey)
+        markDaySwipeTutorialSeen()
         withAnimation(.easeOut(duration: 0.32)) {
             isDaySwipeTutorialPresented = false
         }
@@ -125,11 +126,51 @@ extension MainLoggingShellView {
         // is what teaches them how to phrase entries (portion, brand,
         // count, etc.) so the first real logs land accurate. Gated by a
         // separate UserDefaults flag so we never repeat.
-        guard !UserDefaults.standard.bool(forKey: postTutorialLoggingTipsShownKey) else { return }
-        UserDefaults.standard.set(true, forKey: postTutorialLoggingTipsShownKey)
+        guard !hasSeenPostTutorialLoggingTips else { return }
+        markPostTutorialLoggingTipsSeen()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) {
             isLoggingTipsPresented = true
         }
+    }
+
+    var hasSeenHomeTutorial: Bool {
+        defaults.bool(forKey: scopedTutorialDefaultsKey(homeTutorialShownKey))
+    }
+
+    var hasSeenDaySwipeTutorial: Bool {
+        defaults.bool(forKey: scopedTutorialDefaultsKey(daySwipeTutorialShownKey))
+    }
+
+    var hasSeenPostTutorialLoggingTips: Bool {
+        defaults.bool(forKey: scopedTutorialDefaultsKey(postTutorialLoggingTipsShownKey))
+    }
+
+    func markHomeTutorialSeen() {
+        defaults.set(true, forKey: scopedTutorialDefaultsKey(homeTutorialShownKey))
+    }
+
+    func markDaySwipeTutorialSeen() {
+        defaults.set(true, forKey: scopedTutorialDefaultsKey(daySwipeTutorialShownKey))
+    }
+
+    func markPostTutorialLoggingTipsSeen() {
+        defaults.set(true, forKey: scopedTutorialDefaultsKey(postTutorialLoggingTipsShownKey))
+    }
+
+    func scopedTutorialDefaultsKey(_ baseKey: String) -> String {
+        let session = appStore.authSessionStore.session
+
+        if let userID = session?.userID?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !userID.isEmpty {
+            return "\(baseKey).user.\(userID)"
+        }
+
+        if let email = session?.email?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+           !email.isEmpty {
+            return "\(baseKey).email.\(email)"
+        }
+
+        return "\(baseKey).local"
     }
 }
 
@@ -141,10 +182,11 @@ struct HomeCoachCardTutorialOverlay: View {
     @Binding var isPresented: Bool
     @Binding var step: HomeCoachCardTutorialStep
     let onFinish: () -> Void
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         ZStack {
-            Color.black.opacity(0.20)
+            Color.black.opacity(colorScheme == .dark ? 0.46 : 0.20)
                 .ignoresSafeArea()
 
             VStack {
@@ -168,11 +210,11 @@ struct HomeCoachCardTutorialOverlay: View {
                         .font(.system(size: 11, weight: .black, design: .rounded))
                         .tracking(1.2)
                         .textCase(.uppercase)
-                        .foregroundStyle(Color(red: 0.83, green: 0.40, blue: 0.11))
+                        .foregroundStyle(AppColor.brandOrangeDeep)
 
                     Text(title)
                         .font(.system(size: 24, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.15, green: 0.12, blue: 0.10))
+                        .foregroundStyle(AppColor.textPrimary)
                 }
 
                 Spacer(minLength: 8)
@@ -182,9 +224,13 @@ struct HomeCoachCardTutorialOverlay: View {
                 } label: {
                     Image(systemName: "xmark")
                         .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color(red: 0.43, green: 0.38, blue: 0.33))
+                        .foregroundStyle(AppColor.textSecondary)
                         .frame(width: 32, height: 32)
-                        .background(Color.black.opacity(0.055), in: Circle())
+                        .background(AppColor.surfaceChip, in: Circle())
+                        .overlay(
+                            Circle()
+                                .stroke(AppColor.borderHairline, lineWidth: 1)
+                        )
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(Text("Close tutorial"))
@@ -193,7 +239,7 @@ struct HomeCoachCardTutorialOverlay: View {
             Text(message)
                 .font(.system(size: 15, weight: .medium, design: .rounded))
                 .lineSpacing(3)
-                .foregroundStyle(Color(red: 0.42, green: 0.37, blue: 0.33))
+                .foregroundStyle(AppColor.textSecondary)
 
             featurePreview
 
@@ -204,13 +250,13 @@ struct HomeCoachCardTutorialOverlay: View {
         .padding(20)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(Color(red: 0.995, green: 0.989, blue: 0.980))
+                .fill(AppColor.surfaceWarm)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color(red: 0.95, green: 0.90, blue: 0.83), lineWidth: 1)
+                .stroke(AppColor.borderSubtle, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.14), radius: 20, y: 10)
+        .shadow(color: AppColor.shadow, radius: 20, y: 10)
     }
 
     private var featurePreview: some View {
@@ -220,11 +266,11 @@ struct HomeCoachCardTutorialOverlay: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(previewTitle)
                     .font(.system(size: 15, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.18, green: 0.14, blue: 0.12))
+                    .foregroundStyle(AppColor.textPrimary)
 
                 Text(previewMessage)
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.53, green: 0.47, blue: 0.42))
+                    .foregroundStyle(AppColor.textSecondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -275,7 +321,7 @@ struct HomeCoachCardTutorialOverlay: View {
         HStack(spacing: 6) {
             ForEach(HomeCoachCardTutorialStep.allDisplaySteps, id: \.self) { candidate in
                 Capsule(style: .continuous)
-                    .fill(candidate == step ? Color(red: 0.18, green: 0.14, blue: 0.12) : Color.black.opacity(0.10))
+                    .fill(candidate == step ? AppColor.textPrimary : AppColor.borderSubtle)
                     .frame(width: candidate == step ? 22 : 7, height: 7)
                     .animation(.easeOut(duration: 0.18), value: step)
             }
@@ -339,8 +385,8 @@ struct HomeCoachCardTutorialOverlay: View {
         case .composer:
             return LinearGradient(
                 colors: [
-                    Color(red: 1.0, green: 0.963, blue: 0.918),
-                    Color(red: 0.996, green: 0.985, blue: 0.962)
+                    AppColor.brandOrangeSoft,
+                    AppColor.surfaceChip
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -348,8 +394,11 @@ struct HomeCoachCardTutorialOverlay: View {
         case .camera:
             return LinearGradient(
                 colors: [
-                    Color(red: 0.963, green: 0.969, blue: 1.0),
-                    Color(red: 0.986, green: 0.989, blue: 1.0)
+                    adaptiveColor(
+                        light: UIColor(red: 0.925, green: 0.940, blue: 1.000, alpha: 1.0),
+                        dark: UIColor(red: 0.090, green: 0.115, blue: 0.245, alpha: 1.0)
+                    ),
+                    AppColor.surfaceChip
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -357,8 +406,11 @@ struct HomeCoachCardTutorialOverlay: View {
         case .progress:
             return LinearGradient(
                 colors: [
-                    Color(red: 0.962, green: 0.985, blue: 0.955),
-                    Color(red: 0.989, green: 0.996, blue: 0.985)
+                    adaptiveColor(
+                        light: UIColor(red: 0.920, green: 0.976, blue: 0.905, alpha: 1.0),
+                        dark: UIColor(red: 0.070, green: 0.180, blue: 0.100, alpha: 1.0)
+                    ),
+                    AppColor.surfaceChip
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
@@ -368,25 +420,33 @@ struct HomeCoachCardTutorialOverlay: View {
 
     private var previewBadgeBackground: Color {
         switch step {
-        case .composer: return Color(red: 0.996, green: 0.864, blue: 0.694)
-        case .camera: return Color(red: 0.835, green: 0.878, blue: 1.0)
-        case .progress: return Color(red: 0.812, green: 0.930, blue: 0.815)
+        case .composer: return AppColor.brandOrangeSoft
+        case .camera:
+            return adaptiveColor(
+                light: UIColor(red: 0.835, green: 0.878, blue: 1.000, alpha: 1.0),
+                dark: UIColor(red: 0.145, green: 0.180, blue: 0.360, alpha: 1.0)
+            )
+        case .progress:
+            return adaptiveColor(
+                light: UIColor(red: 0.812, green: 0.930, blue: 0.815, alpha: 1.0),
+                dark: UIColor(red: 0.120, green: 0.265, blue: 0.150, alpha: 1.0)
+            )
         }
     }
 
     private var previewIconColor: Color {
         switch step {
-        case .composer: return Color(red: 0.86, green: 0.42, blue: 0.12)
-        case .camera: return Color(red: 0.25, green: 0.37, blue: 0.86)
-        case .progress: return Color(red: 0.18, green: 0.54, blue: 0.28)
+        case .composer: return AppColor.brandOrangeDeep
+        case .camera: return AppColor.macroProtein
+        case .progress: return AppColor.success
         }
     }
 
     private var previewBorderColor: Color {
         switch step {
-        case .composer: return Color(red: 0.964, green: 0.844, blue: 0.713)
-        case .camera: return Color(red: 0.833, green: 0.879, blue: 0.993)
-        case .progress: return Color(red: 0.818, green: 0.921, blue: 0.821)
+        case .composer: return AppColor.borderSubtle
+        case .camera: return AppColor.macroProtein.opacity(colorScheme == .dark ? 0.32 : 0.22)
+        case .progress: return AppColor.success.opacity(colorScheme == .dark ? 0.32 : 0.22)
         }
     }
 
@@ -405,15 +465,21 @@ struct HomeCoachCardTutorialOverlay: View {
                 .font(.system(size: 14, weight: .bold, design: .rounded))
                 .frame(maxWidth: .infinity)
                 .frame(height: 46)
-                .foregroundStyle(style == .primary ? Color.white : Color(red: 0.22, green: 0.18, blue: 0.15))
+                .foregroundStyle(style == .primary ? AppColor.textInverse : AppColor.textPrimary)
                 .background(
                     style == .primary
-                    ? AnyShapeStyle(Color(red: 0.93, green: 0.46, blue: 0.12))
-                    : AnyShapeStyle(Color.black.opacity(0.06)),
+                    ? AnyShapeStyle(AppColor.brandOrangeDeep)
+                    : AnyShapeStyle(AppColor.surfaceChip),
                     in: Capsule(style: .continuous)
                 )
         }
         .buttonStyle(.plain)
+    }
+
+    private func adaptiveColor(light: UIColor, dark: UIColor) -> Color {
+        Color(uiColor: UIColor { trait in
+            trait.userInterfaceStyle == .dark ? dark : light
+        })
     }
 }
 

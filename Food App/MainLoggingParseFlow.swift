@@ -190,6 +190,10 @@ extension MainLoggingShellView {
         }
 
         do {
+            if await handleHydrationParseIfNeeded(text: text, snapshot: snapshot) {
+                return
+            }
+
             let response: ParseLogResponse
             let durationMs: Double
             if let cachedResponse = parseCoordinator.cachedResponse(
@@ -347,6 +351,322 @@ extension MainLoggingShellView {
             if hasSaveableRowsPending {
                 scheduleAutoSave()
             }
+        }
+    }
+
+    @MainActor
+    func handleHydrationParseIfNeeded(
+        text: String,
+        snapshot: InFlightParseSnapshot
+    ) async -> Bool {
+        guard shouldAttemptHydrationParse(text) else { return false }
+
+        do {
+            let response = try await appStore.apiClient.parseHydration(
+                HydrationParseRequest(text: text)
+            )
+
+            guard response.isMatched || response.needsAmount else {
+                return false
+            }
+
+            guard hydrationTargetRowIsCurrent(rowID: snapshot.activeRowID, sentText: text) else {
+                return true
+            }
+
+            if response.isMatched, let amountMl = response.amountMl {
+                let existingHydrationLogId = inputRows.first(where: { $0.id == snapshot.activeRowID })?.hydrationLogId
+                applyHydrationParseResult(
+                    rowID: snapshot.activeRowID,
+                    rawText: response.rawText.isEmpty ? text : response.rawText,
+                    amountMl: amountMl,
+                    inputAmount: response.inputAmount,
+                    inputUnit: response.inputUnit,
+                    confidence: response.confidence,
+                    hydrationLogId: existingHydrationLogId
+                )
+                await saveHydrationLogForRow(
+                    rowID: snapshot.activeRowID,
+                    existingLogId: existingHydrationLogId,
+                    rawText: response.rawText.isEmpty ? text : response.rawText,
+                    loggedAt: snapshot.loggedAt,
+                    amountMl: amountMl,
+                    inputAmount: response.inputAmount,
+                    inputUnit: response.inputUnit,
+                    confidence: response.confidence
+                )
+                return true
+            }
+
+            if response.needsAmount {
+                markHydrationRowNeedsAmount(
+                    rowID: snapshot.activeRowID,
+                    rawText: response.rawText.isEmpty ? text : response.rawText
+                )
+                hydrationAmountPrompt = HydrationAmountPromptPresentation(
+                    rowID: snapshot.activeRowID,
+                    rawText: response.rawText.isEmpty ? text : response.rawText,
+                    loggedAt: snapshot.loggedAt,
+                    suggestions: response.suggestions
+                )
+                parseInfoMessage = nil
+                parseError = nil
+                return true
+            }
+        } catch {
+            // Hydration parsing is an opportunistic deterministic lane. If it
+            // is unavailable, fall through to the existing nutrition parser so
+            // food logging keeps working.
+            return false
+        }
+
+        return false
+    }
+
+    func shouldAttemptHydrationParse(_ rawText: String) -> Bool {
+        let normalized = rawText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard !normalized.isEmpty else { return false }
+
+        let tokens = normalized
+            .split { !$0.isLetter && !$0.isNumber }
+            .map(String.init)
+
+        let waterTokens: Set<String> = [
+            "water", "waters", "h2o", "aqua",
+            "seltzer", "sparkling", "hydration"
+        ]
+
+        return tokens.contains { waterTokens.contains($0) }
+    }
+
+    func hydrationTargetRowIsCurrent(rowID: UUID, sentText: String) -> Bool {
+        guard let currentRow = inputRows.first(where: { $0.id == rowID }) else {
+            return false
+        }
+
+        let normalizedSent = HomeLoggingTextMatch.normalizedRowText(sentText)
+        let normalizedCurrent = HomeLoggingTextMatch.normalizedRowText(currentRow.text)
+        return !normalizedSent.isEmpty && normalizedSent == normalizedCurrent
+    }
+
+    @MainActor
+    func applyHydrationParseResult(
+        rowID: UUID,
+        rawText: String,
+        amountMl: Double,
+        inputAmount: Double?,
+        inputUnit: String?,
+        confidence: Double,
+        hydrationLogId: String? = nil,
+        loggedAt: String? = nil
+    ) {
+        guard let index = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
+        let displayText = inputRows[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? rawText
+            : inputRows[index].text
+
+        inputRows[index].text = displayText
+        inputRows[index].calories = nil
+        inputRows[index].calorieRangeText = nil
+        inputRows[index].isApproximate = false
+        inputRows[index].parsedItem = nil
+        inputRows[index].parsedItems = []
+        inputRows[index].editableItemIndices = []
+        inputRows[index].normalizedTextAtParse = HomeLoggingTextMatch.normalizedRowText(displayText)
+        inputRows[index].hydrationAmountMl = amountMl
+        inputRows[index].hydrationInputAmount = inputAmount
+        inputRows[index].hydrationInputUnit = inputUnit
+        inputRows[index].hydrationConfidence = confidence
+        inputRows[index].hydrationLogId = hydrationLogId
+        inputRows[index].serverLoggedAt = loggedAt ?? inputRows[index].serverLoggedAt
+        inputRows[index].clearParsePhase()
+        parseCoordinator.removeSnapshot(rowID: rowID)
+        editableItems = activeParseSnapshots
+            .flatMap { $0.rowItems }
+            .map(EditableParsedItem.init(apiItem:))
+        parseResult = nil
+    }
+
+    @MainActor
+    func markHydrationRowNeedsAmount(rowID: UUID, rawText: String) {
+        guard let index = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
+        let displayText = inputRows[index].text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? rawText
+            : inputRows[index].text
+        inputRows[index].text = displayText
+        inputRows[index].calories = nil
+        inputRows[index].calorieRangeText = nil
+        inputRows[index].isApproximate = false
+        inputRows[index].parsedItem = nil
+        inputRows[index].parsedItems = []
+        inputRows[index].editableItemIndices = []
+        inputRows[index].hydrationAmountMl = nil
+        inputRows[index].hydrationInputAmount = nil
+        inputRows[index].hydrationInputUnit = nil
+        inputRows[index].hydrationConfidence = nil
+        inputRows[index].hydrationLogId = nil
+        inputRows[index].normalizedTextAtParse = HomeLoggingTextMatch.normalizedRowText(displayText)
+        inputRows[index].clearParsePhase()
+        parseCoordinator.removeSnapshot(rowID: rowID)
+    }
+
+    @MainActor
+    func confirmHydrationAmount(
+        prompt: HydrationAmountPromptPresentation,
+        suggestion: HydrationSuggestion
+    ) {
+        hydrationAmountPrompt = nil
+        let existingHydrationLogId = inputRows.first(where: { $0.id == prompt.rowID })?.hydrationLogId
+        applyHydrationParseResult(
+            rowID: prompt.rowID,
+            rawText: prompt.rawText,
+            amountMl: suggestion.amountMl,
+            inputAmount: suggestion.amountMl,
+            inputUnit: "ml",
+            confidence: 0.80,
+            hydrationLogId: existingHydrationLogId
+        )
+
+        Task { @MainActor in
+            await saveHydrationLogForRow(
+                rowID: prompt.rowID,
+                existingLogId: existingHydrationLogId,
+                rawText: prompt.rawText,
+                loggedAt: prompt.loggedAt,
+                amountMl: suggestion.amountMl,
+                inputAmount: suggestion.amountMl,
+                inputUnit: "ml",
+                confidence: 0.80
+            )
+        }
+    }
+
+    func hydrationSourceForCurrentInput() -> HydrationSource {
+        switch normalizedInputKind(latestParseInputKind, fallback: "text") {
+        case "voice":
+            return .voice
+        case "manual":
+            return .manual
+        default:
+            return .text
+        }
+    }
+
+    @MainActor
+    func evaluateHydrationGoalPromptIfNeeded() {
+        guard appStore.isSessionRestored else { return }
+        guard !hasEvaluatedHydrationGoalPrompt else { return }
+        guard !defaults.bool(forKey: hydrationGoalPromptDismissedKey) else { return }
+        hasEvaluatedHydrationGoalPrompt = true
+
+        Task { @MainActor in
+            do {
+                let response = try await appStore.apiClient.getHydrationGoal()
+                guard response.goal == nil else { return }
+                try? await Task.sleep(nanoseconds: 1_200_000_000)
+                guard !Task.isCancelled else { return }
+                guard !isHomeTutorialPresented,
+                      !isDaySwipeTutorialPresented,
+                      !isCalendarPresented,
+                      !isProfilePresented,
+                      !isNutritionSummaryPresented,
+                      !isDetailsDrawerPresented,
+                      !isLoggingTipsPresented,
+                      !isLoggingTipsPromptPresented,
+                      hydrationAmountPrompt == nil else { return }
+                isHydrationGoalPromptPresented = true
+            } catch {
+                handleAuthFailureIfNeeded(error)
+            }
+        }
+    }
+
+    @MainActor
+    func saveHydrationGoal(_ dailyGoalMl: Int) {
+        guard !isSavingHydrationGoal else { return }
+        isSavingHydrationGoal = true
+
+        Task { @MainActor in
+            defer { isSavingHydrationGoal = false }
+            do {
+                _ = try await appStore.apiClient.updateHydrationGoal(
+                    HydrationGoalRequest(dailyGoalMl: dailyGoalMl)
+                )
+                defaults.set(true, forKey: hydrationGoalPromptDismissedKey)
+                isHydrationGoalPromptPresented = false
+                NotificationCenter.default.post(
+                    name: .nutritionProgressDidChange,
+                    object: nil,
+                    userInfo: ["savedDay": summaryDateString]
+                )
+            } catch {
+                handleAuthFailureIfNeeded(error)
+                saveError = userFriendlySaveError(error)
+            }
+        }
+    }
+
+    @MainActor
+    func saveHydrationLogForRow(
+        rowID: UUID,
+        existingLogId: String? = nil,
+        rawText: String,
+        loggedAt: String,
+        amountMl: Double,
+        inputAmount: Double?,
+        inputUnit: String?,
+        confidence: Double
+    ) async {
+        guard appStore.isNetworkReachable else {
+            saveError = L10n.noNetworkSave
+            return
+        }
+
+        let request = HydrationLogRequest(
+            loggedAt: loggedAt,
+            rawText: rawText,
+            amountMl: amountMl,
+            inputAmount: inputAmount,
+            inputUnit: inputUnit,
+            source: hydrationSourceForCurrentInput(),
+            confidence: confidence
+        )
+
+        do {
+            let response: HydrationLogResponse
+            if let existingLogId {
+                response = try await appStore.apiClient.patchHydrationLog(id: existingLogId, request: request)
+            } else {
+                response = try await appStore.apiClient.saveHydrationLog(request)
+            }
+            guard let index = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
+            inputRows[index].hydrationLogId = response.log.id
+            inputRows[index].serverLoggedAt = response.log.loggedAt
+            inputRows[index].isSaved = true
+            inputRows[index].clearParsePhase()
+            saveError = nil
+            appStore.setError(nil)
+
+            if inputRows.allSatisfy({ $0.isSaved }) {
+                inputRows.append(.empty())
+            }
+
+            let savedDay = HomeLoggingDateUtils.summaryDayString(
+                fromLoggedAt: response.log.loggedAt,
+                fallback: summaryDateString
+            )
+            NotificationCenter.default.post(
+                name: .nutritionProgressDidChange,
+                object: nil,
+                userInfo: ["savedDay": savedDay]
+            )
+        } catch is CancellationError {
+            return
+        } catch {
+            handleAuthFailureIfNeeded(error)
+            saveError = userFriendlySaveError(error)
         }
     }
 
@@ -666,6 +986,11 @@ extension MainLoggingShellView {
             inputRows[rowIndex].parsedItems = []
             inputRows[rowIndex].editableItemIndices = []
             inputRows[rowIndex].normalizedTextAtParse = nil
+            inputRows[rowIndex].hydrationAmountMl = nil
+            inputRows[rowIndex].hydrationInputAmount = nil
+            inputRows[rowIndex].hydrationInputUnit = nil
+            inputRows[rowIndex].hydrationConfidence = nil
+            inputRows[rowIndex].hydrationLogId = nil
         }
         var mappedCaloriesByRow: [Int: Int] = [:]
         var mappedItemsByRow: [Int: ParsedFoodItem] = [:]
@@ -783,6 +1108,11 @@ extension MainLoggingShellView {
                 inputRows[rowIndex].parsedItems = mappedItemsByRow[rowIndex].map { [$0] } ?? []
                 inputRows[rowIndex].editableItemIndices = mappedItemOffsetsByRow[rowIndex].map { [$0] } ?? []
                 inputRows[rowIndex].normalizedTextAtParse = HomeLoggingTextMatch.normalizedRowText(inputRows[rowIndex].text)
+                inputRows[rowIndex].hydrationAmountMl = nil
+                inputRows[rowIndex].hydrationInputAmount = nil
+                inputRows[rowIndex].hydrationInputUnit = nil
+                inputRows[rowIndex].hydrationConfidence = nil
+                inputRows[rowIndex].hydrationLogId = nil
             }
         }
 
@@ -811,6 +1141,11 @@ extension MainLoggingShellView {
                 inputRows[onlyRowIndex].parsedItems = response.items
                 inputRows[onlyRowIndex].editableItemIndices = Array(response.items.indices)
                 inputRows[onlyRowIndex].normalizedTextAtParse = HomeLoggingTextMatch.normalizedRowText(inputRows[onlyRowIndex].text)
+                inputRows[onlyRowIndex].hydrationAmountMl = nil
+                inputRows[onlyRowIndex].hydrationInputAmount = nil
+                inputRows[onlyRowIndex].hydrationInputUnit = nil
+                inputRows[onlyRowIndex].hydrationConfidence = nil
+                inputRows[onlyRowIndex].hydrationLogId = nil
             }
         }
     }

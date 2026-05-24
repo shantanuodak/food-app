@@ -11,6 +11,7 @@ import onboardingRoutes from './routes/onboarding.js';
 import userRoutes from './routes/users.js';
 import parseRoutes from './routes/parse.js';
 import logsRoutes from './routes/logs.js';
+import hydrationRoutes from './routes/hydration.js';
 import rewardsRoutes from './routes/rewards.js';
 import savedMealsRoutes from './routes/savedMeals.js';
 import internalMetricsRoutes from './routes/internalMetrics.js';
@@ -209,6 +210,7 @@ export function createApp() {
   app.use('/v1/users', authRequired, userRoutes);
   app.use('/v1/logs/parse', authRequired, parseRoutes);
   app.use('/v1/logs', authRequired, logsRoutes);
+  app.use('/v1/hydration', authRequired, hydrationRoutes);
   app.use('/v1/rewards', authRequired, rewardsRoutes);
   app.use('/v1/saved-meals', authRequired, savedMealsRoutes);
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);

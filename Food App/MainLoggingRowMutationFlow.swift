@@ -36,6 +36,9 @@ extension MainLoggingShellView {
         invalidateDayCache(for: summaryDateString)
         refreshDaySummary()
         refreshDayLogs()
+        Task { @MainActor in
+            await loadHydrationDayLogs(skipCache: true)
+        }
     }
 
     func refreshNutritionStateAfterProgressChange(_ notification: Notification) {
@@ -48,6 +51,9 @@ extension MainLoggingShellView {
         guard savedDay == summaryDateString else { return }
         refreshDaySummary()
         refreshDayLogs()
+        Task { @MainActor in
+            await loadHydrationDayLogs(skipCache: true)
+        }
     }
 
     func handleSavedMealDidLog(_ notification: Notification) {
@@ -61,6 +67,7 @@ extension MainLoggingShellView {
         let savedDay = (notification.userInfo?["savedDay"] as? String) ??
             HomeLoggingDateUtils.summaryDayString(fromLoggedAt: loggedAt)
         let optimisticEntry = HomeLoggingRowFactory.makeDayLogEntry(from: meal, logId: logId, loggedAt: loggedAt)
+        LoggedSavedMealStore.save(logId: logId, meal: meal, defaults: defaults)
         invalidateDayCache(for: savedDay)
 
         if savedDay == summaryDateString {
@@ -93,6 +100,11 @@ extension MainLoggingShellView {
     }
 
     func handleServerBackedRowCleared(_ row: HomeLogRow) {
+        if row.hydrationLogId != nil {
+            handleServerBackedHydrationRowCleared(row)
+            return
+        }
+
         guard let deleteContext = serverBackedDeleteContext(for: row) else { return }
         let serverLogId = deleteContext.serverLogId
 
@@ -135,6 +147,57 @@ extension MainLoggingShellView {
             await deleteServerBackedRow(
                 row: restoredRow,
                 serverLogId: serverLogId,
+                savedDay: savedDay,
+                originalIndex: originalIndex
+            )
+        }
+        pendingDeleteTasks[row.id] = task
+    }
+
+    func handleServerBackedHydrationRowCleared(_ row: HomeLogRow) {
+        guard let hydrationLogId = row.hydrationLogId else { return }
+        let savedDay = HomeLoggingDateUtils.summaryDayString(
+            fromLoggedAt: row.serverLoggedAt ?? summaryDateString,
+            fallback: summaryDateString
+        )
+
+        isNoteEditorFocused = false
+        activeEditingRowID = nil
+        NotificationCenter.default.post(name: .dismissKeyboardFromTabBar, object: nil)
+        UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+
+        clearTransientWorkForDeletedRow(rowID: row.id)
+        locallyDeletedPendingRowIDs.remove(row.id)
+        pendingDeleteTasks[row.id]?.cancel()
+
+        let originalIndex = inputRows.firstIndex(where: { $0.id == row.id }) ?? inputRows.count
+        var restoredRow = row
+        restoredRow.hydrationLogId = hydrationLogId
+        restoredRow.serverLoggedAt = restoredRow.serverLoggedAt ?? savedDay
+        restoredRow.isSaved = true
+        restoredRow.parsePhase = .idle
+        restoredRow.isDeleting = false
+
+        if let index = inputRows.firstIndex(where: { $0.id == row.id }) {
+            inputRows[index] = restoredRow
+            inputRows[index].isDeleting = true
+        }
+
+        removeDeletedHydrationLogFromVisibleDayLogs(logId: hydrationLogId, dateString: savedDay)
+        saveError = nil
+
+        let task = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 180_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.12)) {
+                inputRows.removeAll { $0.id == row.id }
+                if inputRows.allSatisfy({ $0.isSaved }) {
+                    inputRows.append(.empty())
+                }
+            }
+            await deleteServerBackedHydrationRow(
+                row: restoredRow,
+                hydrationLogId: hydrationLogId,
                 savedDay: savedDay,
                 originalIndex: originalIndex
             )
@@ -202,6 +265,7 @@ extension MainLoggingShellView {
 
         do {
             let response = try await appStore.apiClient.deleteLog(id: serverLogId)
+            LoggedSavedMealStore.remove(logId: serverLogId, defaults: defaults)
             await deleteSavedLogFromAppleHealthIfEnabled(row: row, healthSync: response.healthSync)
             await refreshDayAfterMutation(savedDay)
         } catch is CancellationError {
@@ -239,6 +303,60 @@ extension MainLoggingShellView {
         }
     }
 
+    func removeDeletedHydrationLogFromVisibleDayLogs(logId: String, dateString: String) {
+        guard summaryDateString == dateString else { return }
+        if let existing = hydrationDayLogs, existing.date == dateString {
+            hydrationDayLogs = HydrationDayLogsResponse(
+                date: existing.date,
+                timezone: existing.timezone,
+                logs: existing.logs.filter { $0.id != logId }
+            )
+        }
+        if let cached = dayCacheHydrationLogs[dateString] {
+            dayCacheHydrationLogs[dateString] = HydrationDayLogsResponse(
+                date: cached.date,
+                timezone: cached.timezone,
+                logs: cached.logs.filter { $0.id != logId }
+            )
+        }
+    }
+
+    func deleteServerBackedHydrationRow(
+        row: HomeLogRow,
+        hydrationLogId: String,
+        savedDay: String,
+        originalIndex: Int
+    ) async {
+        defer { pendingDeleteTasks[row.id] = nil }
+
+        guard appStore.isNetworkReachable else {
+            restoreDeletedRow(row, at: originalIndex)
+            saveError = L10n.noNetworkSave
+            return
+        }
+
+        do {
+            _ = try await appStore.apiClient.deleteHydrationLog(id: hydrationLogId)
+            await refreshHydrationDayAfterMutation(savedDay)
+        } catch is CancellationError {
+            return
+        } catch {
+            handleAuthFailureIfNeeded(error)
+            restoreDeletedRow(row, at: originalIndex)
+            saveError = userFriendlySaveError(error)
+        }
+    }
+
+    func refreshHydrationDayAfterMutation(_ dateString: String) async {
+        dayCacheHydrationLogs.removeValue(forKey: dateString)
+        await loadHydrationDayLogs(forcedDate: dateString, skipCache: true)
+        NotificationCenter.default.post(
+            name: .nutritionProgressDidChange,
+            object: nil,
+            userInfo: ["savedDay": dateString]
+        )
+    }
+
     func refreshDayAfterMutation(
         _ dateString: String,
         postNutritionNotification: Bool = true,
@@ -272,6 +390,9 @@ extension MainLoggingShellView {
               let cached = loadDayLogsFromCache(date: dateString),
               cached.date == dateString else { return }
         applyVisibleDayLogs(cached)
+        if let cachedHydration = dayCacheHydrationLogs[dateString], cachedHydration.date == dateString {
+            applyVisibleHydrationDayLogs(cachedHydration)
+        }
     }
 
     func applyVisibleDayLogs(_ response: DayLogsResponse) {
@@ -282,6 +403,7 @@ extension MainLoggingShellView {
 
     func showLoadingStateForUncachedDay(_ dateString: String) {
         dayLogs = DayLogsResponse(date: dateString, timezone: TimeZone.current.identifier, logs: [])
+        hydrationDayLogs = HydrationDayLogsResponse(date: dateString, timezone: TimeZone.current.identifier, logs: [])
         daySummary = nil
         daySummaryError = nil
         inputRows = [.empty()]
@@ -298,6 +420,7 @@ extension MainLoggingShellView {
         initialHomeBootstrapTask?.cancel()
         initialHomeBootstrapTask = Task { @MainActor in
             await loadDayLogs(skipCache: true)
+            await loadHydrationDayLogs(skipCache: true)
             guard !Task.isCancelled else { return }
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             guard !Task.isCancelled else { return }
@@ -320,6 +443,9 @@ extension MainLoggingShellView {
         guard appStore.isSessionRestored else { return }
         refreshDaySummary()
         refreshDayLogs()
+        Task { @MainActor in
+            await loadHydrationDayLogs(skipCache: true)
+        }
         scheduleSecondaryHomePreloads(force: true)
     }
 }

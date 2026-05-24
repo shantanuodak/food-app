@@ -38,6 +38,9 @@ struct ProgressSectionView: View {
     @State var progressResponse: ProgressResponse?
     @State var isLoadingProgress = false
     @State var progressError: String?
+    @State var hydrationProgressResponse: HydrationProgressResponse?
+    @State var isLoadingHydrationProgress = false
+    @State var hydrationProgressError: String?
 
     @State var weightSamples: [BodyMassSample] = []
     @State var isLoadingWeight = false
@@ -49,6 +52,7 @@ struct ProgressSectionView: View {
     @State var stepsError: String?
 
     @State var selectedCalorieDate: Date?
+    @State var selectedHydrationDate: Date?
     @State var selectedWeightDate: Date?
     @State var selectedStepsDate: Date?
     @State var preferredUnits: UnitsOption = .imperial
@@ -74,6 +78,7 @@ struct ProgressSectionView: View {
 
                     rangePicker
                     caloriesHeroCard
+                    hydrationCard
                     macroAdherenceCard
                     weightTrendCard
                     stepsCard
@@ -88,7 +93,11 @@ struct ProgressSectionView: View {
                 await appStore.waitForProgressChartsPreload(range: selectedRange)
                 if !hydrateFromCachedProgressSnapshot() {
                     await refreshAllData(reason: "initial")
+                } else {
+                    await refreshHydrationData()
                 }
+            } else {
+                await refreshHydrationData()
             }
         }
         .onChange(of: selectedRange) { _, _ in
@@ -98,7 +107,11 @@ struct ProgressSectionView: View {
                     await appStore.waitForProgressChartsPreload(range: selectedRange)
                     if !hydrateFromCachedProgressSnapshot() {
                         await refreshAllData(reason: "range_change")
+                    } else {
+                        await refreshHydrationData()
                     }
+                } else {
+                    await refreshHydrationData()
                 }
             }
         }
@@ -107,12 +120,17 @@ struct ProgressSectionView: View {
                 Task {
                     if !hydrateFromCachedProgressSnapshot() {
                         await refreshAllData(reason: "foreground")
+                    } else {
+                        await refreshHydrationData()
                     }
                 }
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .nutritionProgressDidChange)) { _ in
-            Task { await refreshNutritionData() }
+            Task {
+                await refreshNutritionData()
+                await refreshHydrationData()
+            }
         }
     }
 

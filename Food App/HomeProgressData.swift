@@ -77,6 +77,27 @@ extension ProgressSectionView {
         return nearestPoint(for: selectedCalorieDate, in: aggregateForRange(caloriePoints))
     }
 
+    var hydrationPoints: [HydrationChartPoint] {
+        guard let hydrationProgressResponse else { return [] }
+        return hydrationProgressResponse.days.compactMap { day in
+            guard let date = Self.apiDayFormatter.date(from: day.date) else {
+                return nil
+            }
+            return HydrationChartPoint(
+                date: date,
+                totalMl: day.totalMl,
+                goalMl: day.goalMl,
+                hasLogs: day.hasLogs
+            )
+        }
+        .sorted { $0.date < $1.date }
+    }
+
+    var selectedHydrationPoint: HydrationChartPoint? {
+        guard let selectedHydrationDate else { return nil }
+        return nearestPoint(for: selectedHydrationDate, in: aggregateHydrationForRange(hydrationPoints))
+    }
+
     /// Bucket raw daily points into the resolution that fits the
     /// selected range. Without this, 6M (180 daily bars across ~280pt)
     /// renders sub-pixel-thin bars that disappear, and Y (365 bars) is
@@ -114,6 +135,37 @@ extension ProgressSectionView {
                 date: bucketStart,
                 consumed: avgConsumed,
                 target: avgTarget,
+                hasLogs: !logged.isEmpty
+            )
+        }
+        .sorted { $0.date < $1.date }
+    }
+
+    func aggregateHydrationForRange(_ points: [HydrationChartPoint]) -> [HydrationChartPoint] {
+        let bucketComponent: Calendar.Component? = {
+            switch selectedRange {
+            case .week, .month: return nil
+            case .sixMonths:    return .weekOfYear
+            case .year:         return .month
+            }
+        }()
+
+        guard let component = bucketComponent else { return points }
+
+        let calendar = Calendar.current
+        let groups = Dictionary(grouping: points) { point -> Date in
+            calendar.dateInterval(of: component, for: point.date)?.start ?? point.date
+        }
+
+        return groups.map { bucketStart, group -> HydrationChartPoint in
+            let logged = group.filter { $0.hasLogs }
+            let avgTotal = logged.isEmpty ? 0 : logged.reduce(0.0) { $0 + $1.totalMl } / Double(logged.count)
+            let goalValues = group.compactMap(\.goalMl)
+            let avgGoal = goalValues.isEmpty ? nil : goalValues.reduce(0.0, +) / Double(goalValues.count)
+            return HydrationChartPoint(
+                date: bucketStart,
+                totalMl: avgTotal,
+                goalMl: avgGoal,
                 hasLogs: !logged.isEmpty
             )
         }
@@ -286,10 +338,18 @@ extension ProgressSectionView {
         )
     }
 
+    func hydrationScale(for points: [HydrationChartPoint]) -> ChartScale {
+        makePositiveScale(
+            values: points.flatMap { [$0.totalMl, $0.goalMl ?? 0] },
+            minimumUpperBound: 1000
+        )
+    }
+
     @MainActor
     func refreshAllData(reason _: String) async {
         preferredUnits = currentPreferredUnits()
         await refreshNutritionData()
+        await refreshHydrationData()
         await refreshWeightData()
         await refreshStepsData()
     }
@@ -316,6 +376,9 @@ extension ProgressSectionView {
 
         if let last = caloriePoints.last {
             selectedCalorieDate = last.date
+        }
+        if selectedHydrationDate == nil, let last = hydrationPoints.last {
+            selectedHydrationDate = last.date
         }
         if let last = weightDisplayPoints.last {
             selectedWeightDate = last.date
@@ -350,6 +413,33 @@ extension ProgressSectionView {
         } catch {
             progressResponse = nil
             progressError = userFriendlyProgressError(error)
+        }
+    }
+
+    @MainActor
+    func refreshHydrationData() async {
+        guard appStore.configuration.progressFeatureEnabled else { return }
+
+        isLoadingHydrationProgress = true
+        hydrationProgressError = nil
+        defer { isLoadingHydrationProgress = false }
+
+        do {
+            let bounds = selectedDateBounds()
+            let response = try await appStore.apiClient.getHydrationProgress(
+                from: bounds.from,
+                to: bounds.to,
+                timezone: TimeZone.current.identifier
+            )
+            hydrationProgressResponse = response
+            if let last = hydrationPoints.last {
+                selectedHydrationDate = last.date
+            } else {
+                selectedHydrationDate = nil
+            }
+        } catch {
+            hydrationProgressResponse = nil
+            hydrationProgressError = userFriendlyProgressError(error)
         }
     }
 
@@ -503,6 +593,13 @@ extension ProgressSectionView {
         return Self.calorieAverageFormatter.string(from: NSNumber(value: avg)) ?? "\(Int(avg))"
     }
 
+    var dailyAverageWaterLabel: String {
+        let logged = hydrationPoints.filter { $0.hasLogs }
+        guard !logged.isEmpty else { return "—" }
+        let avg = logged.reduce(0.0) { $0 + $1.totalMl } / Double(logged.count)
+        return formatHydrationAmount(avg)
+    }
+
     var dateRangeText: String {
         let bounds = selectedDateBounds()
         return "\(Self.rangeBoundFormatter.string(from: bounds.startDate)) – \(Self.rangeBoundFormatter.string(from: bounds.endDate))"
@@ -510,6 +607,10 @@ extension ProgressSectionView {
 
     func formatOneDecimal(_ value: Double) -> String {
         String(format: "%.1f", value)
+    }
+
+    func formatHydrationAmount(_ amountMl: Double) -> String {
+        HydrationDisplayText.shortLabel(amountMl: amountMl)
     }
 
     func makePositiveScale(values: [Double], minimumUpperBound: Double) -> ChartScale {

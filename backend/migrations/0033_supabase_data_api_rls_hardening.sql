@@ -5,14 +5,27 @@
 -- writes go through the backend. Keep public-schema tables protected if they
 -- are reachable through Supabase's generated REST/GraphQL APIs.
 
-REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
-REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon, authenticated;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'anon') THEN
+    REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM anon;
+    REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM anon;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      REVOKE ALL ON TABLES FROM anon;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      REVOKE ALL ON SEQUENCES FROM anon;
+  END IF;
 
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  REVOKE ALL ON TABLES FROM anon, authenticated;
-
-ALTER DEFAULT PRIVILEGES IN SCHEMA public
-  REVOKE ALL ON SEQUENCES FROM anon, authenticated;
+  IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'authenticated') THEN
+    REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM authenticated;
+    REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      REVOKE ALL ON TABLES FROM authenticated;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      REVOKE ALL ON SEQUENCES FROM authenticated;
+  END IF;
+END
+$$;
 
 ALTER TABLE benchmark_cases ENABLE ROW LEVEL SECURITY;
 ALTER TABLE benchmark_public_snapshots ENABLE ROW LEVEL SECURITY;

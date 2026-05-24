@@ -6,6 +6,15 @@ import UIKit
 struct SaveMealDraftPresentation: Identifiable {
     let id = UUID()
     let request: SaveLogRequest
+    let sourceRowID: UUID?
+}
+
+struct HydrationAmountPromptPresentation: Identifiable {
+    let id = UUID()
+    let rowID: UUID
+    let rawText: String
+    let loggedAt: String
+    let suggestions: [HydrationSuggestion]
 }
 
 struct MainLoggingShellView: View {
@@ -59,6 +68,8 @@ struct MainLoggingShellView: View {
     @State var daySummaryError: String?
     @State var dayLogs: DayLogsResponse?
     @State var isLoadingDayLogs = false
+    @State var hydrationDayLogs: HydrationDayLogsResponse?
+    @State var isLoadingHydrationDayLogs = false
     /// Per-saved-log-id dismissal state for `HomeMealInsightCard`.
     /// Persisted in UserDefaults so dismissals survive app launches and day swipes.
     @State var dismissedInsightLogIds: Set<String> = RecentFlaggedMealCard.loadDismissedLogIds()
@@ -68,6 +79,7 @@ struct MainLoggingShellView: View {
     /// In-memory cache for adjacent days — keyed by "yyyy-MM-dd" date string.
     @State var dayCacheSummary: [String: DaySummaryResponse] = [:]
     @State var dayCacheLogs: [String: DayLogsResponse] = [:]
+    @State var dayCacheHydrationLogs: [String: HydrationDayLogsResponse] = [:]
     @State var prefetchTask: Task<Void, Never>?
     @State var initialHomeBootstrapTask: Task<Void, Never>?
     @State var secondaryHomePreloadTask: Task<Void, Never>?
@@ -93,6 +105,10 @@ struct MainLoggingShellView: View {
     @State var inputMode: HomeInputMode = .text
     @State var detailsDrawerMode: DetailsDrawerMode = .full
     @State var saveMealDraft: SaveMealDraftPresentation?
+    @State var hydrationAmountPrompt: HydrationAmountPromptPresentation?
+    @State var isHydrationGoalPromptPresented = false
+    @State var hasEvaluatedHydrationGoalPrompt = false
+    @State var isSavingHydrationGoal = false
     @State var selectedRowDetails: RowCalorieDetails?
     @State var rowDetailsPendingDeleteID: UUID?
     @State var isRowDetailsDeleteConfirmationPresented = false
@@ -168,6 +184,7 @@ struct MainLoggingShellView: View {
 
     @State var autoSavedParseIDs: Set<String> = []
     let homeTutorialShownKey = "home.first_run_tutorial.shown.v1"
+    let hydrationGoalPromptDismissedKey = "home.hydration_goal_prompt.dismissed.v1"
     let autoSaveDelayNs: UInt64 = 1_500_000_000
     let saveAttemptTelemetry = SaveAttemptTelemetry.shared
 

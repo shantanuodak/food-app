@@ -69,6 +69,9 @@ extension MainLoggingShellView {
             } else {
                 showLoadingStateForUncachedDay(dateStr)
             }
+            if let cachedHydration = dayCacheHydrationLogs[dateStr], cachedHydration.date == dateStr {
+                applyVisibleHydrationDayLogs(cachedHydration)
+            }
             if let cachedSummary = dayCacheSummary[dateStr] {
                 daySummary = cachedSummary
                 daySummaryError = nil
@@ -104,6 +107,9 @@ extension MainLoggingShellView {
             applyVisibleDayLogs(diskLogs)
         } else {
             showLoadingStateForUncachedDay(dateStr)
+        }
+        if let cachedHydration = dayCacheHydrationLogs[dateStr], cachedHydration.date == dateStr {
+            applyVisibleHydrationDayLogs(cachedHydration)
         }
         if let cachedSummary = dayCacheSummary[dateStr] {
             daySummary = cachedSummary
@@ -154,6 +160,7 @@ extension MainLoggingShellView {
             // background draft on day-change creates a duplicate food_log.
             // Guard with serverLogId in addition to isSaved.
             guard row.serverLogId == nil else { return nil }
+            guard row.hydrationLogId == nil, row.hydrationAmountMl == nil else { return nil }
             guard !snapshotRowIDs.contains(row.id) else { return nil }
 
             let text = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -183,6 +190,7 @@ extension MainLoggingShellView {
             // and we don't want to re-render it as a "preserved draft" on
             // return either (the server will already restore it).
             guard row.serverLogId == nil else { return nil }
+            guard row.hydrationLogId == nil, row.hydrationAmountMl == nil else { return nil }
             let text = row.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else { return nil }
 

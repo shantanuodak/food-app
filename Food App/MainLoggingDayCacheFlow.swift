@@ -32,7 +32,12 @@ extension MainLoggingShellView {
                 dayLogs = cached
                 syncInputRowsFromDayLogs(cached.logs, for: cached.date)
             }
+            if let cachedHydration = dayCacheHydrationLogs[dateToLoad], cachedHydration.date == dateToLoad {
+                hydrationDayLogs = cachedHydration
+                syncInputRowsFromDayLogs(dayLogs?.logs ?? [], for: cachedHydration.date)
+            }
             await loadDayLogs(skipCache: true)
+            await loadHydrationDayLogs(skipCache: true)
         }
     }
 
@@ -140,6 +145,46 @@ extension MainLoggingShellView {
         }
     }
 
+    func loadHydrationDayLogs(forcedDate: String? = nil, isRetry: Bool = false, skipCache: Bool = false) async {
+        let dateToLoad = forcedDate ?? summaryDateString
+
+        if !skipCache, let cached = dayCacheHydrationLogs[dateToLoad], cached.date == dateToLoad {
+            guard summaryDateString == dateToLoad || forcedDate != nil else { return }
+            applyVisibleHydrationDayLogs(cached)
+            return
+        }
+
+        isLoadingHydrationDayLogs = true
+        defer { isLoadingHydrationDayLogs = false }
+
+        guard appStore.isNetworkReachable else { return }
+
+        do {
+            let response = try await appStore.apiClient.getHydrationDayLogs(date: dateToLoad)
+            guard response.date == dateToLoad else { return }
+
+            if summaryDateString == dateToLoad || forcedDate != nil {
+                applyVisibleHydrationDayLogs(response)
+            } else {
+                dayCacheHydrationLogs[dateToLoad] = response
+            }
+        } catch is CancellationError {
+            // ignore
+        } catch {
+            handleAuthFailureIfNeeded(error)
+            if !isRetry && isTransientLoadError(error) {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                await loadHydrationDayLogs(forcedDate: forcedDate, isRetry: true, skipCache: skipCache)
+            }
+        }
+    }
+
+    func applyVisibleHydrationDayLogs(_ response: HydrationDayLogsResponse) {
+        hydrationDayLogs = response
+        dayCacheHydrationLogs[response.date] = response
+        syncInputRowsFromDayLogs(dayLogs?.logs ?? [], for: response.date)
+    }
+
     // MARK: - Day Logs Disk Cache
 
     func persistDayLogsToCache(_ response: DayLogsResponse, date: String) {
@@ -244,23 +289,31 @@ extension MainLoggingShellView {
 
     func syncInputRowsFromDayLogs(_ entries: [DayLogEntry], for dateString: String) {
         reconcilePendingSaveQueue(with: entries, for: dateString)
+        let hydrationEntries = hydrationDayLogs?.date == dateString ? (hydrationDayLogs?.logs ?? []) : []
         let currentActiveRows = inputRows.filter { !$0.isSaved }
         let shouldKeepActiveRows = draftDayString() == dateString || (draftLoggedAt == nil && dateString == summaryDateString)
         let activeServerLogIds = shouldKeepActiveRows
             ? Set(currentActiveRows.compactMap(\.serverLogId))
             : []
+        let activeHydrationLogIds = shouldKeepActiveRows
+            ? Set(currentActiveRows.compactMap(\.hydrationLogId))
+            : []
         let currentSavedRowOrder: [String: Int] = Dictionary(
             uniqueKeysWithValues: inputRows.enumerated().compactMap { index, row in
-                row.serverLogId.map { ($0, index) }
+                rowStableSyncKey(row).map { ($0, index) }
             }
         )
-        let savedRows: [HomeLogRow] = entries
+        let foodRows: [HomeLogRow] = entries
             .filter { !activeServerLogIds.contains($0.id) }
             .map(HomeLoggingRowFactory.makeSavedRow)
+        let hydrationRows: [HomeLogRow] = hydrationEntries
+            .filter { !activeHydrationLogIds.contains($0.id) }
+            .map(HomeLoggingRowFactory.makeHydrationSavedRow)
+        let savedRows = foodRows + hydrationRows
         let orderedSavedRows = savedRows.enumerated()
             .sorted { lhs, rhs in
-                let lhsOrder = lhs.element.serverLogId.flatMap { currentSavedRowOrder[$0] }
-                let rhsOrder = rhs.element.serverLogId.flatMap { currentSavedRowOrder[$0] }
+                let lhsOrder = rowStableSyncKey(lhs.element).flatMap { currentSavedRowOrder[$0] }
+                let rhsOrder = rowStableSyncKey(rhs.element).flatMap { currentSavedRowOrder[$0] }
 
                 switch (lhsOrder, rhsOrder) {
                 case let (lhs?, rhs?):
@@ -270,6 +323,11 @@ extension MainLoggingShellView {
                 case (nil, _?):
                     return false
                 case (nil, nil):
+                    let lhsDate = rowLoggedAtDate(lhs.element)
+                    let rhsDate = rowLoggedAtDate(rhs.element)
+                    if lhsDate != rhsDate {
+                        return lhsDate > rhsDate
+                    }
                     return lhs.offset < rhs.offset
                 }
             }
@@ -309,29 +367,48 @@ extension MainLoggingShellView {
             [
                 row.id.uuidString,
                 row.serverLogId ?? "",
+                row.hydrationLogId ?? "",
                 HomeLoggingTextMatch.normalizedRowText(row.text),
                 row.calories.map(String.init) ?? "",
+                row.hydrationAmountMl.map { String(format: "%.1f", $0) } ?? "",
                 row.isSaved ? "saved" : "draft"
             ].joined(separator: "|")
         }
         .joined(separator: "\n")
     }
 
+    func rowStableSyncKey(_ row: HomeLogRow) -> String? {
+        if let serverLogId = row.serverLogId {
+            return "food:\(serverLogId)"
+        }
+        if let hydrationLogId = row.hydrationLogId {
+            return "hydration:\(hydrationLogId)"
+        }
+        return nil
+    }
+
+    func rowLoggedAtDate(_ row: HomeLogRow) -> Date {
+        guard let loggedAt = row.serverLoggedAt else { return .distantPast }
+        return HomeLoggingDateUtils.loggedAtFormatter.date(from: loggedAt) ??
+            ISO8601DateFormatter().date(from: loggedAt) ??
+            .distantPast
+    }
+
     func mergeRowsPreservingVisibleOrder(
         currentRows: [HomeLogRow],
         candidateRows: [HomeLogRow]
     ) -> [HomeLogRow] {
-        var remainingByServerLogId: [String: HomeLogRow] = [:]
+        var remainingByStableId: [String: HomeLogRow] = [:]
         var remainingByRowId: [UUID: HomeLogRow] = [:]
         var candidateOrder: [String] = []
 
         for row in candidateRows {
-            if let serverLogId = row.serverLogId {
-                let key = "server:\(serverLogId)"
-                if remainingByServerLogId[serverLogId] == nil {
+            if let stableKey = rowStableSyncKey(row) {
+                let key = "stable:\(stableKey)"
+                if remainingByStableId[stableKey] == nil {
                     candidateOrder.append(key)
                 }
-                remainingByServerLogId[serverLogId] = row
+                remainingByStableId[stableKey] = row
             } else {
                 let key = "row:\(row.id.uuidString)"
                 if remainingByRowId[row.id] == nil {
@@ -345,15 +422,15 @@ extension MainLoggingShellView {
         var usedKeys = Set<String>()
 
         func appendIfUnused(_ row: HomeLogRow) {
-            let key = row.serverLogId.map { "server:\($0)" } ?? "row:\(row.id.uuidString)"
+            let key = rowStableSyncKey(row).map { "stable:\($0)" } ?? "row:\(row.id.uuidString)"
             guard !usedKeys.contains(key) else { return }
             output.append(row)
             usedKeys.insert(key)
         }
 
         for current in currentRows {
-            if let serverLogId = current.serverLogId,
-               let replacement = remainingByServerLogId.removeValue(forKey: serverLogId) {
+            if let stableKey = rowStableSyncKey(current),
+               let replacement = remainingByStableId.removeValue(forKey: stableKey) {
                 appendIfUnused(replacement)
                 continue
             }
@@ -364,9 +441,9 @@ extension MainLoggingShellView {
         }
 
         for key in candidateOrder where !usedKeys.contains(key) {
-            if key.hasPrefix("server:") {
-                let serverLogId = String(key.dropFirst("server:".count))
-                if let row = remainingByServerLogId.removeValue(forKey: serverLogId) {
+            if key.hasPrefix("stable:") {
+                let stableKey = String(key.dropFirst("stable:".count))
+                if let row = remainingByStableId.removeValue(forKey: stableKey) {
                     appendIfUnused(row)
                 }
             } else if key.hasPrefix("row:") {
@@ -512,6 +589,7 @@ extension MainLoggingShellView {
     func invalidateDayCache(for dateString: String) {
         dayCacheSummary.removeValue(forKey: dateString)
         dayCacheLogs.removeValue(forKey: dateString)
+        dayCacheHydrationLogs.removeValue(forKey: dateString)
         removeDaySummaryCacheEntry(date: dateString)
         removeDayLogsCacheEntry(date: dateString)
     }

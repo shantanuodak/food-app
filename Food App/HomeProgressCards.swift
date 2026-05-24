@@ -207,6 +207,158 @@ extension ProgressSectionView {
         )
     }
 
+    var hydrationCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Label("Water", systemImage: "drop.fill")
+                    .font(.headline)
+                    .foregroundStyle(ChartPalette.hydrationAccent)
+                Spacer()
+                if isLoadingHydrationProgress {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            if let hydrationProgressError {
+                Text(hydrationProgressError)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            } else if hydrationPoints.isEmpty {
+                Text("No water logs for this range yet.")
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            } else {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("DAILY AVERAGE")
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .tracking(0.5)
+                    HStack(alignment: .firstTextBaseline, spacing: 4) {
+                        Text(dailyAverageWaterLabel)
+                            .font(.system(size: 34, weight: .semibold))
+                            .foregroundStyle(.primary)
+                        Text("water")
+                            .font(.title3)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(dateRangeText)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                let displayedPoints = aggregateHydrationForRange(hydrationPoints)
+                let bars = displayedPoints.filter { $0.hasLogs }
+                let scale = hydrationScale(for: displayedPoints)
+
+                if bars.isEmpty {
+                    HStack {
+                        Spacer()
+                        Text("No logs in this range")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                    }
+                    .frame(height: 220)
+                } else {
+                    Chart {
+                        ForEach(bars) { point in
+                            BarMark(
+                                x: .value("Date", point.date),
+                                y: .value("Water", scale.clamp(point.totalMl)),
+                                width: .fixed(calorieBarWidth)
+                            )
+                            .foregroundStyle(ChartPalette.hydrationAccent.gradient)
+                            .cornerRadius(2)
+                        }
+
+                        ForEach(displayedPoints.compactMap { point -> HydrationChartPoint? in
+                            point.goalMl == nil ? nil : point
+                        }) { point in
+                            LineMark(
+                                x: .value("Date", point.date),
+                                y: .value("Goal", scale.clamp(point.goalMl ?? 0))
+                            )
+                            .foregroundStyle(ChartPalette.targetLine)
+                            .lineStyle(StrokeStyle(lineWidth: 1.2, dash: [4, 4]))
+                            .interpolationMethod(.linear)
+                        }
+
+                        if let selected = selectedHydrationPoint {
+                            RuleMark(x: .value("Selected", selected.date))
+                                .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                                .foregroundStyle(ChartPalette.scrubLine)
+                                .annotation(
+                                    position: .top,
+                                    spacing: 12,
+                                    overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                                ) {
+                                    let goalText = selected.goalMl.map { " / \(formatHydrationAmount($0))" } ?? ""
+                                    tooltipBubble(
+                                        title: Self.dayLabelFormatter.string(from: selected.date),
+                                        value: "\(formatHydrationAmount(selected.totalMl))\(goalText)"
+                                    )
+                                }
+                        }
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: chartXAxisStride) { value in
+                            AxisGridLine().foregroundStyle(ChartPalette.gridLine)
+                            AxisValueLabel {
+                                if let date = value.as(Date.self) {
+                                    Text(chartXAxisLabel(for: date))
+                                }
+                            }
+                        }
+                    }
+                    .chartYAxis {
+                        AxisMarks(position: .trailing) { value in
+                            AxisGridLine().foregroundStyle(ChartPalette.gridLine)
+                            AxisValueLabel {
+                                if let number = value.as(Double.self) {
+                                    Text(formatHydrationAmount(number))
+                                }
+                            }
+                        }
+                    }
+                    .chartYScale(domain: scale.minY ... scale.maxY)
+                    .chartXScale(domain: chartXDomain(dates: displayedPoints.map(\.date)) ?? Date()...Date())
+                    .frame(height: 220)
+                    .chartOverlay { proxy in
+                        GeometryReader { geometry in
+                            Rectangle()
+                                .fill(Color.clear)
+                                .contentShape(Rectangle())
+                                .gesture(
+                                    DragGesture(minimumDistance: 0)
+                                        .onChanged { value in
+                                            selectClosestDate(
+                                                from: value.location,
+                                                proxy: proxy,
+                                                geometry: geometry,
+                                                sourceDates: aggregateHydrationForRange(hydrationPoints).map(\.date),
+                                                selectedDate: &selectedHydrationDate,
+                                                hapticID: "progress.hydration"
+                                            )
+                                        }
+                                )
+                        }
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.regularMaterial)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .stroke(ChartPalette.hydrationAccent.opacity(0.25), lineWidth: 0.5)
+                )
+        )
+    }
+
     func macroSubChart(for metric: MacroMetric) -> some View {
         let points = macroPoints(for: metric)
         // Headlines (consumed / target avg) are computed from raw daily

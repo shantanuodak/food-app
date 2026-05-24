@@ -32,18 +32,20 @@ extension MainLoggingShellView {
         saveMealDraft = nil
         isDetailsDrawerPresented = false
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            saveMealDraft = SaveMealDraftPresentation(request: draft)
+            saveMealDraft = SaveMealDraftPresentation(request: draft, sourceRowID: nil)
         }
     }
 
     @ViewBuilder
     func rowCalorieDetailsSheet(_ details: RowCalorieDetails) -> some View {
         let liveDetails = liveRowCalorieDetails(for: details.id, fallback: details)
+        let isSavedMealSelected = liveDetails.savedMealId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
         MainLoggingRowCalorieDetailsSheet(
             details: liveDetails,
             isDeleteDisabled: isRowDetailsDeleteDisabled(rowID: liveDetails.id),
             isDeleteConfirmationPresented: $isRowDetailsDeleteConfirmationPresented,
-            isSaveMealEnabled: buildSaveDraftRequest(for: liveDetails) != nil,
+            isSaveMealEnabled: !isSavedMealSelected && buildSaveDraftRequest(for: liveDetails) != nil,
+            isSavedMealSelected: isSavedMealSelected,
             onSaveMeal: {
                 presentSaveMealSheet(for: liveDetails)
             },
@@ -78,11 +80,24 @@ extension MainLoggingShellView {
         saveMealDraft = nil
         selectedRowDetails = nil
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            saveMealDraft = SaveMealDraftPresentation(request: draft)
+            saveMealDraft = SaveMealDraftPresentation(request: draft, sourceRowID: details.id)
+        }
+    }
+
+    func markRowAsSavedMeal(rowID: UUID, meal: SavedMeal) {
+        guard let rowIndex = inputRows.firstIndex(where: { $0.id == rowID }) else { return }
+        inputRows[rowIndex].savedMealId = meal.id
+        inputRows[rowIndex].savedMealName = meal.name
+        if let serverLogId = inputRows[rowIndex].serverLogId {
+            LoggedSavedMealStore.save(logId: serverLogId, meal: meal, defaults: defaults)
         }
     }
 
     func buildSaveDraftRequest(for details: RowCalorieDetails) -> SaveLogRequest? {
+        if details.savedMealId?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
+            return nil
+        }
+
         let sourceItems = details.parsedItems
         guard !sourceItems.isEmpty else { return nil }
 
@@ -305,7 +320,9 @@ extension MainLoggingShellView {
             imagePreviewData: row.imagePreviewData,
             imageRef: row.imageRef,
             loggedAt: row.serverLoggedAt,
-            inputKind: row.imageRef == nil ? "text" : "image"
+            inputKind: row.imageRef == nil ? "text" : "image",
+            savedMealId: row.savedMealId,
+            savedMealName: row.savedMealName
         )
     }
 

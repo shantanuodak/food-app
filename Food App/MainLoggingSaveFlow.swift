@@ -974,6 +974,18 @@ extension MainLoggingShellView {
         inputRows[index].serverLogId = logId
         inputRows[index].serverLoggedAt = loggedAt
         inputRows[index].parsePhase = .idle
+        if let savedMealId = inputRows[index].savedMealId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !savedMealId.isEmpty {
+            let trimmedSavedMealName = inputRows[index].savedMealName?
+                .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let savedMealName = trimmedSavedMealName.isEmpty ? inputRows[index].text : trimmedSavedMealName
+            LoggedSavedMealStore.save(
+                logId: logId,
+                savedMealId: savedMealId,
+                savedMealName: savedMealName,
+                defaults: defaults
+            )
+        }
         if inputRows[index].imageRef == nil {
             inputRows[index].imageRef = imageRef
         }

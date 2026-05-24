@@ -2849,6 +2849,13 @@
         </div>
         <div id="notification-run-status" class="text-muted" style="margin-top:12px;"></div>
 
+        <div class="grid-4" id="notification-stat-cards" style="margin-top:16px;">
+          <div class="stat-card"><div class="stat-label">Sent (7d)</div><div class="stat-value" id="notification-stat-sent">—</div></div>
+          <div class="stat-card"><div class="stat-label">Opened (7d)</div><div class="stat-value" id="notification-stat-opened">—</div></div>
+          <div class="stat-card"><div class="stat-label">Open rate</div><div class="stat-value" id="notification-stat-open-rate">—</div></div>
+          <div class="stat-card"><div class="stat-label">CTR</div><div class="stat-value" id="notification-stat-ctr">—</div></div>
+        </div>
+
         <div class="card" style="margin-top:16px;">
           <input id="notification-template-key" type="hidden" />
           <div class="grid-4" style="margin-bottom:12px;">
@@ -2902,6 +2909,9 @@
               <tr>
                 <th>Template</th>
                 <th>Kind</th>
+                <th>Sent</th>
+                <th>Opened</th>
+                <th>CTR</th>
                 <th>Copy</th>
                 <th>Destination</th>
                 <th>Status</th>
@@ -2910,7 +2920,7 @@
               </tr>
             </thead>
             <tbody id="notifications-tbody">
-              <tr><td colspan="7" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>
+              <tr><td colspan="10" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>
             </tbody>
           </table>
         </div>
@@ -2926,6 +2936,7 @@
 /* ====================================================================== */
 let API_KEY = sessionStorage.getItem('metricsKey') || '';
 const BASE = '/v1/internal/dashboard';
+let notificationStatsByTemplate = new Map();
 
 function submitKey() {
   const val = document.getElementById('key-input').value.trim();
@@ -5504,25 +5515,43 @@ async function saveRoadmapItem() {
 async function loadNotificationTemplates() {
   const tbody = document.getElementById('notifications-tbody');
   try {
-    tbody.innerHTML = '<tr><td colspan="7" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
-    const data = await api('/notifications/templates');
-    notificationTemplates = Array.isArray(data.templates) ? data.templates : [];
+    tbody.innerHTML = '<tr><td colspan="10" class="text-muted" style="padding:24px;text-align:center;">Loading…</td></tr>';
+    const [templateData, statsData] = await Promise.all([
+      api('/notifications/templates'),
+      api('/notifications/stats?days=7')
+    ]);
+    notificationStatsByTemplate = new Map(
+      (Array.isArray(statsData.templates) ? statsData.templates : []).map(item => [item.templateKey, item])
+    );
+    renderNotificationStats(statsData);
+    notificationTemplates = Array.isArray(templateData.templates) ? templateData.templates : [];
     renderNotificationTemplates();
   } catch (e) {
-    tbody.innerHTML = `<tr><td colspan="7" class="text-red" style="padding:16px">${escHtml(e.message)}</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="10" class="text-red" style="padding:16px">${escHtml(e.message)}</td></tr>`;
   }
+}
+
+function renderNotificationStats(data) {
+  const totals = data && data.totals ? data.totals : {};
+  document.getElementById('notification-stat-sent').textContent = fmt(totals.sent);
+  document.getElementById('notification-stat-opened').textContent = fmt(totals.opened);
+  document.getElementById('notification-stat-open-rate').textContent = fmtPct(totals.openRate);
+  document.getElementById('notification-stat-ctr').textContent = fmtPct(totals.ctr);
 }
 
 function renderNotificationTemplates() {
   const tbody = document.getElementById('notifications-tbody');
   if (!notificationTemplates.length) {
-    tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="icon">🔔</div>No notification templates found.</div></td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="icon">🔔</div>No notification templates found.</div></td></tr>';
     return;
   }
   tbody.innerHTML = notificationTemplates.map(item => `
     <tr>
       <td class="mono">${escHtml(item.templateKey)}</td>
       <td><span class="badge badge-blue">${escHtml(item.kind)}</span></td>
+      <td class="mono">${fmt(notificationStatsByTemplate.get(item.templateKey)?.sent)}</td>
+      <td class="mono">${fmt(notificationStatsByTemplate.get(item.templateKey)?.opened)}</td>
+      <td class="mono">${fmtPct(notificationStatsByTemplate.get(item.templateKey)?.ctr)}</td>
       <td style="max-width:520px;">
         <strong>${escHtml(item.title)}</strong>
         <div class="text-muted" style="margin-top:4px;">${escHtml(item.body)}</div>
@@ -5607,6 +5636,7 @@ function escHtml(str) {
   if (!str) return '';
   return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+
 </script>
 </body>
 </html>

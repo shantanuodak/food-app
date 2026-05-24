@@ -213,7 +213,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
 
   beforeEach(async () => {
     await pool.query(
-      'TRUNCATE TABLE save_attempts, food_log_items, food_logs, onboarding_profiles, users, user_feedback, admin_feature_flags, parse_cache, parse_requests, log_save_idempotency, ai_cost_events RESTART IDENTITY CASCADE'
+      'TRUNCATE TABLE save_attempts, hydration_logs, hydration_preferences, food_log_items, food_logs, onboarding_profiles, users, user_feedback, admin_feature_flags, parse_cache, parse_requests, log_save_idempotency, ai_cost_events RESTART IDENTITY CASCADE'
     );
 
     await pool.query(
@@ -555,7 +555,8 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
         allergies: [],
         units: 'imperial',
         activityLevel: 'moderate',
-        timezone: 'UTC'
+        timezone: 'UTC',
+        overwriteExisting: true
       });
 
     expect(response.status).toBe(200);
@@ -623,7 +624,8 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
         allergies: [],
         units: 'imperial',
         activityLevel: 'moderate',
-        timezone: 'UTC'
+        timezone: 'UTC',
+        overwriteExisting: true
       });
 
     expect(onboardingImperial.status).toBe(200);
@@ -853,6 +855,102 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     expect(atRiskProgress.status).toBe(200);
     expect(atRiskProgress.body.streaks.currentDays).toBe(2);
     expect(atRiskProgress.body.streaks.longestDays).toBe(2);
+  });
+
+  test('hydration flow parses, saves, summarizes, and charts water separately from food logs', async () => {
+    const onboarding = await request(app)
+      .post('/v1/onboarding')
+      .set(authHeader)
+      .send({
+        goal: 'maintain',
+        dietPreference: 'none',
+        allergies: [],
+        units: 'imperial',
+        activityLevel: 'moderate',
+        timezone: 'America/Los_Angeles'
+      });
+
+    expect(onboarding.status).toBe(200);
+
+    const goal = await request(app)
+      .put('/v1/hydration/goal')
+      .set(authHeader)
+      .send({ dailyGoalMl: 2500 });
+
+    expect(goal.status).toBe(200);
+    expect(goal.body.goal.dailyGoalMl).toBe(2500);
+
+    const parse = await request(app)
+      .post('/v1/hydration/parse')
+      .set(authHeader)
+      .send({ text: '16 oz water' });
+
+    expect(parse.status).toBe(200);
+    expect(parse.body).toMatchObject({
+      status: 'matched',
+      amountMl: 473,
+      inputAmount: 16,
+      inputUnit: 'fl_oz'
+    });
+
+    const save = await request(app)
+      .post('/v1/hydration/logs')
+      .set(authHeader)
+      .send({
+        loggedAt: '2026-02-20T18:00:00.000Z',
+        rawText: '16 oz water',
+        amountMl: parse.body.amountMl,
+        inputAmount: parse.body.inputAmount,
+        inputUnit: parse.body.inputUnit,
+        source: 'text',
+        confidence: parse.body.confidence
+      });
+
+    expect(save.status).toBe(201);
+    expect(save.body.log.amountMl).toBe(473);
+
+    const summary = await request(app)
+      .get('/v1/hydration/day-summary')
+      .set(authHeader)
+      .query({ date: '2026-02-20' });
+
+    expect(summary.status).toBe(200);
+    expect(summary.body).toMatchObject({
+      date: '2026-02-20',
+      timezone: 'America/Los_Angeles',
+      totalMl: 473,
+      goalMl: 2500,
+      remainingMl: 2027,
+      hasLogs: true,
+      logsCount: 1
+    });
+
+    const dayLogs = await request(app)
+      .get('/v1/hydration/day-logs')
+      .set(authHeader)
+      .query({ date: '2026-02-20' });
+
+    expect(dayLogs.status).toBe(200);
+    expect(dayLogs.body.logs).toHaveLength(1);
+    expect(dayLogs.body.logs[0].rawText).toBe('16 oz water');
+
+    const progress = await request(app)
+      .get('/v1/hydration/progress')
+      .set(authHeader)
+      .query({ from: '2026-02-19', to: '2026-02-21' });
+
+    expect(progress.status).toBe(200);
+    expect(progress.body.goalMl).toBe(2500);
+    expect(progress.body.days).toHaveLength(3);
+    expect(progress.body.days.find((day: { date: string }) => day.date === '2026-02-20').totalMl).toBe(473);
+
+    const foodSummary = await request(app)
+      .get('/v1/logs/day-summary')
+      .set(authHeader)
+      .query({ date: '2026-02-20' });
+
+    expect(foodSummary.status).toBe(200);
+    expect(foodSummary.body.totals.calories).toBe(0);
   });
 
   test('streak endpoint returns current streak, status, and food-count intensity levels', async () => {

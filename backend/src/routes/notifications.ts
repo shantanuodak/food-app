@@ -4,7 +4,9 @@ import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import {
   deactivateNotificationDevice,
+  getNotificationStats,
   listNotificationTemplates,
+  recordNotificationEvent,
   registerNotificationDevice,
   runNotificationSweep,
   updateNotificationTemplate,
@@ -52,6 +54,14 @@ const preferenceSchema = z.object({
   discoveryEnabled: z.boolean().optional()
 });
 
+const eventSchema = z.object({
+  deliveryKey: z.string().trim().min(1).max(160),
+  templateKey: z.string().trim().min(1).max(80),
+  destination: z.enum(['voice', 'text', 'camera', 'streaks', 'reminders', 'home']),
+  eventType: z.enum(['opened', 'action_tapped', 'snoozed']),
+  actionIdentifier: z.string().trim().max(120).optional().nullable()
+});
+
 const templateSchema = z.object({
   kind: z.enum(['meal', 'engagement', 'discovery']),
   title: z.string().trim().min(1).max(120),
@@ -95,6 +105,17 @@ userRouter.put('/preferences', async (req, res, next) => {
   }
 });
 
+userRouter.post('/events', async (req, res, next) => {
+  try {
+    const auth = res.locals.auth as { userId: string } | undefined;
+    if (!auth?.userId) throw new ApiError(401, 'UNAUTHORIZED', 'Authentication required');
+    const outcome = await recordNotificationEvent(auth.userId, eventSchema.parse(req.body));
+    res.status(202).json(outcome);
+  } catch (err) {
+    next(err);
+  }
+});
+
 export const adminRouter = Router();
 
 adminRouter.get('/templates', async (req, res, next) => {
@@ -129,6 +150,19 @@ adminRouter.post('/run', async (req, res, next) => {
     }
     const summary = await runNotificationSweep(now);
     res.status(200).json({ summary });
+  } catch (err) {
+    next(err);
+  }
+});
+
+adminRouter.get('/stats', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const days = typeof req.query.days === 'string' ? Number(req.query.days) : 7;
+    if (!Number.isFinite(days)) {
+      throw new ApiError(400, 'INVALID_DAYS', 'days must be numeric');
+    }
+    res.status(200).json(await getNotificationStats(days));
   } catch (err) {
     next(err);
   }

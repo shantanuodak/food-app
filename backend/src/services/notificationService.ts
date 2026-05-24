@@ -44,6 +44,16 @@ export type NotificationTemplateInput = {
   isEnabled: boolean;
 };
 
+export type NotificationEventType = 'opened' | 'action_tapped' | 'snoozed';
+
+export type NotificationEventInput = {
+  deliveryKey: string;
+  templateKey: string;
+  destination: NotificationDestination;
+  eventType: NotificationEventType;
+  actionIdentifier?: string | null;
+};
+
 type TemplateRow = {
   template_key: string;
   kind: NotificationKind;
@@ -82,6 +92,22 @@ type DeviceRow = {
 
 type CandidateRow = PreferenceRow & {
   last_log_at: Date | null;
+};
+
+type DeliveryLookupRow = {
+  id: string;
+  template_key: string;
+  destination: NotificationDestination;
+};
+
+type NotificationStatsRow = {
+  template_key: string;
+  kind: NotificationKind;
+  sent_count: string;
+  opened_count: string;
+  action_tapped_count: string;
+  snoozed_count: string;
+  engaged_count: string;
 };
 
 type ApnsResult = { apnsId?: string | null; error?: string | null };
@@ -128,6 +154,10 @@ function normalizeTime(value: string): string {
   const match = value.match(/^(\d{1,2}):(\d{2})$/);
   if (!match) return value;
   return `${match[1]!.padStart(2, '0')}:${match[2]}`;
+}
+
+function normalizeActionIdentifier(value: string | null | undefined): string {
+  return (value || '').trim().slice(0, 120);
 }
 
 function localParts(date: Date, timezone: string): { date: string; minutes: number } {
@@ -436,6 +466,132 @@ export async function updateNotificationTemplate(templateKey: string, input: Not
     [templateKey, input.kind, input.title, input.body, input.destination, input.isEnabled]
   );
   return result.rows[0] ? mapTemplate(result.rows[0]) : null;
+}
+
+export async function recordNotificationEvent(userId: string, input: NotificationEventInput) {
+  const actionIdentifier = normalizeActionIdentifier(input.actionIdentifier);
+  const delivery = await pool.query<DeliveryLookupRow>(
+    `
+    SELECT id, template_key, destination
+    FROM notification_deliveries
+    WHERE user_id = $1
+      AND delivery_key = $2
+    LIMIT 1
+    `,
+    [userId, input.deliveryKey]
+  );
+
+  const row = delivery.rows[0];
+  if (!row) {
+    return { status: 'ignored' as const, reason: 'DELIVERY_NOT_FOUND' as const };
+  }
+
+  if (row.template_key !== input.templateKey || row.destination !== input.destination) {
+    return { status: 'ignored' as const, reason: 'DELIVERY_METADATA_MISMATCH' as const };
+  }
+
+  await pool.query(
+    `
+    INSERT INTO notification_events (
+      user_id, delivery_id, template_key, delivery_key, destination, event_type, action_identifier
+    )
+    VALUES ($1,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT (user_id, delivery_key, event_type, action_identifier) DO NOTHING
+    `,
+    [
+      userId,
+      row.id,
+      row.template_key,
+      input.deliveryKey,
+      row.destination,
+      input.eventType,
+      actionIdentifier
+    ]
+  );
+
+  return { status: 'recorded' as const };
+}
+
+export async function getNotificationStats(days = 7) {
+  const cappedDays = Math.max(1, Math.min(Number.isFinite(days) ? Math.floor(days) : 7, 90));
+  const result = await pool.query<NotificationStatsRow>(
+    `
+    WITH sent AS (
+      SELECT
+        d.template_key,
+        COUNT(*)::int AS sent_count
+      FROM notification_deliveries d
+      WHERE d.status = 'sent'
+        AND d.created_at >= NOW() - ($1::int * INTERVAL '1 day')
+      GROUP BY d.template_key
+    ),
+    events AS (
+      SELECT
+        e.template_key,
+        COUNT(DISTINCT CASE WHEN e.event_type = 'opened' THEN e.delivery_key END)::int AS opened_count,
+        COUNT(DISTINCT CASE WHEN e.event_type = 'action_tapped' THEN e.delivery_key END)::int AS action_tapped_count,
+        COUNT(DISTINCT CASE WHEN e.event_type = 'snoozed' THEN e.delivery_key END)::int AS snoozed_count,
+        COUNT(DISTINCT CASE WHEN e.event_type IN ('opened', 'action_tapped') THEN e.delivery_key END)::int AS engaged_count
+      FROM notification_events e
+      WHERE e.created_at >= NOW() - ($1::int * INTERVAL '1 day')
+      GROUP BY e.template_key
+    )
+    SELECT
+      t.template_key,
+      t.kind,
+      COALESCE(s.sent_count, 0)::text AS sent_count,
+      COALESCE(e.opened_count, 0)::text AS opened_count,
+      COALESCE(e.action_tapped_count, 0)::text AS action_tapped_count,
+      COALESCE(e.snoozed_count, 0)::text AS snoozed_count,
+      COALESCE(e.engaged_count, 0)::text AS engaged_count
+    FROM notification_templates t
+    LEFT JOIN sent s ON s.template_key = t.template_key
+    LEFT JOIN events e ON e.template_key = t.template_key
+    ORDER BY t.kind, t.template_key
+    `,
+    [cappedDays]
+  );
+
+  const templates = result.rows.map((row) => {
+    const sent = Number(row.sent_count) || 0;
+    const opened = Number(row.opened_count) || 0;
+    const actionTapped = Number(row.action_tapped_count) || 0;
+    const snoozed = Number(row.snoozed_count) || 0;
+    const engaged = Number(row.engaged_count) || 0;
+    return {
+      templateKey: row.template_key,
+      kind: row.kind,
+      sent,
+      opened,
+      actionTapped,
+      snoozed,
+      engaged,
+      openRate: sent > 0 ? opened / sent : 0,
+      ctr: sent > 0 ? engaged / sent : 0
+    };
+  });
+
+  const totals = templates.reduce(
+    (acc, item) => {
+      acc.sent += item.sent;
+      acc.opened += item.opened;
+      acc.actionTapped += item.actionTapped;
+      acc.snoozed += item.snoozed;
+      acc.engaged += item.engaged;
+      return acc;
+    },
+    { sent: 0, opened: 0, actionTapped: 0, snoozed: 0, engaged: 0 }
+  );
+
+  return {
+    days: cappedDays,
+    totals: {
+      ...totals,
+      openRate: totals.sent > 0 ? totals.opened / totals.sent : 0,
+      ctr: totals.sent > 0 ? totals.engaged / totals.sent : 0
+    },
+    templates
+  };
 }
 
 async function hasLoggedBetween(userId: string, localDate: string, start: string, end: string, timezone: string): Promise<boolean> {

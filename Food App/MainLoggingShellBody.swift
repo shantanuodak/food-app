@@ -237,6 +237,7 @@ extension MainLoggingShellView {
                     handleVoiceModeTapped()
                 }
                 autoPresentHomeTutorialIfNeeded()
+                evaluateHydrationGoalPromptIfNeeded()
             }
             .onChange(of: appStore.isSessionRestored) { _, ready in
                 guard ready else { return }
@@ -244,6 +245,7 @@ extension MainLoggingShellView {
                 bootstrapAuthenticatedHomeIfNeeded()
                 scheduleSecondaryHomePreloads()
                 autoPresentHomeTutorialIfNeeded()
+                evaluateHydrationGoalPromptIfNeeded()
             }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
@@ -335,12 +337,44 @@ extension MainLoggingShellView {
             }
             .sheet(item: $saveMealDraft) { presentation in
                 SaveMealSheet(draft: presentation.request) { meal in
+                    if let sourceRowID = presentation.sourceRowID {
+                        markRowAsSavedMeal(rowID: sourceRowID, meal: meal)
+                    }
                     saveSuccessMessage = nil
                     presentCelebration(title: "Saved", subtitle: meal.name, style: .saved)
                 }
                 .environmentObject(appStore)
                 .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
+            }
+            .sheet(item: $hydrationAmountPrompt) { prompt in
+                HydrationAmountPromptSheet(
+                    prompt: prompt,
+                    onSelect: { suggestion in
+                        confirmHydrationAmount(prompt: prompt, suggestion: suggestion)
+                    },
+                    onCancel: {
+                        hydrationAmountPrompt = nil
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(AppDrawerSurface.gradient)
+            }
+            .sheet(isPresented: $isHydrationGoalPromptPresented) {
+                HydrationGoalPromptSheet(
+                    isSaving: isSavingHydrationGoal,
+                    onSelect: { goalMl in
+                        saveHydrationGoal(goalMl)
+                    },
+                    onSkip: {
+                        defaults.set(true, forKey: hydrationGoalPromptDismissedKey)
+                        isHydrationGoalPromptPresented = false
+                    }
+                )
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+                .presentationBackground(AppDrawerSurface.gradient)
             }
             .sheet(isPresented: $isImagePickerPresented) {
                 HomeImagePicker(

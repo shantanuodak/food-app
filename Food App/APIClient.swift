@@ -297,6 +297,48 @@ final class APIClient {
         )
     }
 
+    func parseHydration(_ requestBody: HydrationParseRequest) async throws -> HydrationParseResponse {
+        try await request(path: "/v1/hydration/parse", method: "POST", body: requestBody, requiresAuth: true)
+    }
+
+    func getHydrationGoal() async throws -> HydrationGoalResponse {
+        try await request(path: "/v1/hydration/goal", method: "GET", requiresAuth: true)
+    }
+
+    @discardableResult
+    func updateHydrationGoal(_ requestBody: HydrationGoalRequest) async throws -> HydrationGoalResponse {
+        try await request(path: "/v1/hydration/goal", method: "PUT", body: requestBody, requiresAuth: true)
+    }
+
+    @discardableResult
+    func deleteHydrationGoal() async throws -> DeleteHydrationGoalResponse {
+        try await request(path: "/v1/hydration/goal", method: "DELETE", requiresAuth: true)
+    }
+
+    @discardableResult
+    func saveHydrationLog(_ requestBody: HydrationLogRequest) async throws -> HydrationLogResponse {
+        try await request(path: "/v1/hydration/logs", method: "POST", body: requestBody, requiresAuth: true)
+    }
+
+    @discardableResult
+    func patchHydrationLog(id: String, request requestBody: HydrationLogRequest) async throws -> HydrationLogResponse {
+        try await request(
+            path: "/v1/hydration/logs/\(id)",
+            method: "PATCH",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
+    @discardableResult
+    func deleteHydrationLog(id: String) async throws -> DeleteHydrationLogResponse {
+        try await request(
+            path: "/v1/hydration/logs/\(id)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+    }
+
     /// Updates an existing food_log in place — used for in-row edits (the
     /// quantity fast path) so we don't create duplicate entries on the
     /// backend. Parse references in the body are optional: required only
@@ -360,6 +402,11 @@ final class APIClient {
         try await request(path: "/v1/notifications/preferences", method: "PUT", body: requestBody, requiresAuth: true)
     }
 
+    @discardableResult
+    func recordNotificationEvent(_ requestBody: NotificationEventRequest) async throws -> AcceptedResponse {
+        try await request(path: "/v1/notifications/events", method: "POST", body: requestBody, requiresAuth: true)
+    }
+
     func getDaySummary(date: String, timezone: String = TimeZone.current.identifier) async throws -> DaySummaryResponse {
         try await request(path: "/v1/logs/day-summary", method: "GET", queryItems: [
             URLQueryItem(name: "date", value: date),
@@ -369,6 +416,20 @@ final class APIClient {
 
     func getDayLogs(date: String, timezone: String = TimeZone.current.identifier) async throws -> DayLogsResponse {
         try await request(path: "/v1/logs/day-logs", method: "GET", queryItems: [
+            URLQueryItem(name: "date", value: date),
+            URLQueryItem(name: "tz", value: timezone)
+        ], requiresAuth: true)
+    }
+
+    func getHydrationDaySummary(date: String, timezone: String = TimeZone.current.identifier) async throws -> HydrationDaySummaryResponse {
+        try await request(path: "/v1/hydration/day-summary", method: "GET", queryItems: [
+            URLQueryItem(name: "date", value: date),
+            URLQueryItem(name: "tz", value: timezone)
+        ], requiresAuth: true)
+    }
+
+    func getHydrationDayLogs(date: String, timezone: String = TimeZone.current.identifier) async throws -> HydrationDayLogsResponse {
+        try await request(path: "/v1/hydration/day-logs", method: "GET", queryItems: [
             URLQueryItem(name: "date", value: date),
             URLQueryItem(name: "tz", value: timezone)
         ], requiresAuth: true)
@@ -388,6 +449,19 @@ final class APIClient {
     func getProgress(from: String, to: String, timezone: String) async throws -> ProgressResponse {
         try await request(
             path: "/v1/logs/progress",
+            method: "GET",
+            queryItems: [
+                URLQueryItem(name: "from", value: from),
+                URLQueryItem(name: "to", value: to),
+                URLQueryItem(name: "tz", value: timezone)
+            ],
+            requiresAuth: true
+        )
+    }
+
+    func getHydrationProgress(from: String, to: String, timezone: String) async throws -> HydrationProgressResponse {
+        try await request(
+            path: "/v1/hydration/progress",
             method: "GET",
             queryItems: [
                 URLQueryItem(name: "from", value: from),
@@ -647,7 +721,14 @@ final class APIClient {
         case "/v1/logs/parse/label":
             return RequestTimeout.parseLabel
         // These endpoints are hit at launch and after onboarding — allow time for cold starts.
-        case "/v1/onboarding", "/v1/logs/day-summary", "/v1/logs/day-logs", "/v1/logs/day-range":
+        case "/v1/onboarding",
+             "/v1/logs/day-summary",
+             "/v1/logs/day-logs",
+             "/v1/logs/day-range",
+             "/v1/hydration/goal",
+             "/v1/hydration/day-summary",
+             "/v1/hydration/day-logs",
+             "/v1/hydration/progress":
             return RequestTimeout.coldStart
         default:
             return RequestTimeout.default

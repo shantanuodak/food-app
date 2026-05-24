@@ -109,11 +109,180 @@ struct MainLoggingManualAddDrawerContent: View {
     }
 }
 
+struct HydrationAmountPromptSheet: View {
+    let prompt: HydrationAmountPromptPresentation
+    let onSelect: (HydrationSuggestion) -> Void
+    let onCancel: () -> Void
+
+    private var suggestions: [HydrationSuggestion] {
+        if !prompt.suggestions.isEmpty {
+            return prompt.suggestions
+        }
+        return [
+            HydrationSuggestion(amountMl: 250, label: "250 ml"),
+            HydrationSuggestion(amountMl: 500, label: "500 ml"),
+            HydrationSuggestion(amountMl: 750, label: "750 ml")
+        ]
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            AppDrawerHeader(onClose: onCancel) {
+                Text("How much water?")
+                    .font(.custom("InstrumentSerif-Regular", size: 28))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [
+                                Color.cyan,
+                                Color.blue
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    Image(systemName: "drop.fill")
+                        .font(.system(size: 28, weight: .semibold))
+                        .foregroundStyle(Color.cyan)
+                        .frame(width: 48, height: 48)
+                        .background(Color.cyan.opacity(0.12), in: Circle())
+
+                    Text(prompt.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Water" : prompt.rawText)
+                        .font(.headline)
+                        .lineLimit(2)
+                }
+
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 12)], spacing: 12) {
+                    ForEach(suggestions, id: \.self) { suggestion in
+                        Button {
+                            AppHaptics.selection()
+                            onSelect(suggestion)
+                        } label: {
+                            VStack(spacing: 6) {
+                                Text(suggestion.label)
+                                    .font(.system(size: 20, weight: .semibold))
+                                Text(HydrationDisplayText.shortLabel(amountMl: suggestion.amountMl))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 78)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(Color.cyan.opacity(0.22), lineWidth: 0.8)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 24)
+
+            Spacer(minLength: 0)
+        }
+        .background(AppDrawerSurface.gradient.ignoresSafeArea())
+    }
+}
+
+struct HydrationGoalPromptSheet: View {
+    let isSaving: Bool
+    let onSelect: (Int) -> Void
+    let onSkip: () -> Void
+
+    private let goalOptions: [(ml: Int, title: String, subtitle: String)] = [
+        (2000, "2 L", "About 8 cups"),
+        (2500, "2.5 L", "A steady target"),
+        (3000, "3 L", "More active days")
+    ]
+
+    var body: some View {
+        VStack(spacing: 0) {
+            AppDrawerHeader(onClose: onSkip) {
+                Text("Water goal")
+                    .font(.custom("InstrumentSerif-Regular", size: 28))
+                    .foregroundStyle(
+                        LinearGradient(
+                            colors: [Color.cyan, Color.blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    Image(systemName: "drop.circle.fill")
+                        .font(.system(size: 32, weight: .semibold))
+                        .foregroundStyle(Color.cyan)
+                        .frame(width: 52, height: 52)
+                        .background(Color.cyan.opacity(0.12), in: Circle())
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("What do you want to drink each day?")
+                            .font(.headline)
+                        Text("This becomes the line on your water chart.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                HStack(spacing: 10) {
+                    ForEach(goalOptions.indices, id: \.self) { index in
+                        let option = goalOptions[index]
+                        Button {
+                            AppHaptics.selection()
+                            onSelect(option.ml)
+                        } label: {
+                            VStack(spacing: 6) {
+                                Text(option.title)
+                                    .font(.system(size: 21, weight: .semibold))
+                                Text(option.subtitle)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.center)
+                                    .lineLimit(2)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 92)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .overlay {
+                                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                    .stroke(Color.cyan.opacity(0.22), lineWidth: 0.8)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(isSaving)
+                    }
+                }
+
+                if isSaving {
+                    ProgressView()
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 4)
+                }
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 18)
+            .padding(.bottom, 24)
+
+            Spacer(minLength: 0)
+        }
+        .background(AppDrawerSurface.gradient.ignoresSafeArea())
+    }
+}
+
 struct MainLoggingRowCalorieDetailsSheet: View {
     let details: RowCalorieDetails
     let isDeleteDisabled: Bool
     @Binding var isDeleteConfirmationPresented: Bool
     let isSaveMealEnabled: Bool
+    let isSavedMealSelected: Bool
     let onSaveMeal: () -> Void
     let onDeleteTapped: () -> Void
     let onConfirmDelete: () -> Void
@@ -164,10 +333,7 @@ struct MainLoggingRowCalorieDetailsSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button(action: onSaveMeal) {
-                        Label("Save meal", systemImage: "bookmark")
-                    }
-                    .disabled(!isSaveMealEnabled)
+                    saveMealToolbarControl
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(L10n.doneButton, action: onDone)
@@ -197,6 +363,22 @@ struct MainLoggingRowCalorieDetailsSheet: View {
             carbs: details.carbs ?? 0,
             fat: details.fat ?? 0
         )
+    }
+
+    @ViewBuilder
+    private var saveMealToolbarControl: some View {
+        if isSavedMealSelected {
+            Label("Saved", systemImage: "bookmark.fill")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(AppColor.brandOrangeDeep)
+                .accessibilityAddTraits(.isSelected)
+                .accessibilityHint(Text("This logged meal is already in your saved meals."))
+        } else {
+            Button(action: onSaveMeal) {
+                Label("Save meal", systemImage: "bookmark")
+            }
+            .disabled(!isSaveMealEnabled)
+        }
     }
 
     @ViewBuilder
