@@ -79,6 +79,14 @@ final class AuthService {
     #endif
     @MainActor private var appleSignInDelegate: AppleSignInDelegate?
 
+    /// Single-flight refresh coordinator. Ensures at most one in-flight
+    /// `supabaseClient.auth.refreshSession(refreshToken:)` exists at any
+    /// time across the four refresh entry points (validAccessToken,
+    /// refreshSessionIfNeeded, handleUnauthorizedAndAttemptRecovery,
+    /// restoreSessionIfPossible). Concurrent callers `await` the same
+    /// task and share the result.
+    private let refreshCoordinator = RefreshCoordinator()
+
     init(
         sessionStore: AuthSessionStore,
         fallbackToken: String?,
@@ -714,7 +722,48 @@ final class AuthService {
         return try await persistRecoveredSession(authSession)
     }
 
+    // 2026-05-24: refreshSupabaseSession is the SINGLE-FLIGHT entry point —
+    // every caller goes through the in-flight coordinator below so parallel
+    // refreshes can't fight over the same refresh token. (Tanmay's logout
+    // 2026-05-22 + shantanuodak1993 2026-05-24 root cause: two callers each
+    // started their own refresh with the same token; Supabase rotated the
+    // token for the first one's success, the second one's request used the
+    // now-retired token and hit "Refresh Token Already Used", whose catch
+    // handler cleared the session and bounced the user to sign-in.)
+    //
+    // Yesterday's detach-on-timeout fix in runWithStartupTimeout closed the
+    // "structured cancellation kills the refresh" angle. This single-flight
+    // closes the "five cold-launch API calls all try to refresh at once"
+    // angle. Both fixes are needed.
     private func refreshSupabaseSession(
+        refreshToken: String,
+        metadata: AuthSession
+    ) async throws -> AuthSession {
+        let (task, taskID) = await refreshCoordinator.acquireOrJoin {
+            Task<AuthSession, Error> { [weak self] in
+                guard let self else { throw AuthServiceError.missingSupabaseSDK }
+                return try await self.performSupabaseRefresh(
+                    refreshToken: refreshToken,
+                    metadata: metadata
+                )
+            }
+        }
+
+        let outcome: Result<AuthSession, Error>
+        do {
+            let value = try await task.value
+            outcome = .success(value)
+        } catch {
+            outcome = .failure(error)
+        }
+        await refreshCoordinator.release(id: taskID)
+        switch outcome {
+        case .success(let session): return session
+        case .failure(let error): throw error
+        }
+    }
+
+    private func performSupabaseRefresh(
         refreshToken: String,
         metadata: AuthSession
     ) async throws -> AuthSession {
@@ -1017,5 +1066,42 @@ private final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDele
         guard let continuation else { return }
         self.continuation = nil
         continuation.resume(throwing: AuthServiceError.appleSignInFailed(error.localizedDescription))
+    }
+}
+
+// MARK: - Single-flight refresh coordinator
+
+/// Serializes Supabase refresh calls so multiple parallel callers share
+/// one in-flight `auth.refreshSession(refreshToken:)`. Eliminates the
+/// "two refreshes with the same refresh token, one rotates, the other
+/// hits 'already used'" race that was clearing the session and
+/// bouncing users to sign-in on cold launches.
+///
+/// Pattern: caller passes a closure that builds the task. If a task is
+/// already in flight, return that one and discard the new closure. The
+/// caller awaits the shared task value.
+///
+/// Identity is by UUID so the release call only clears the slot when
+/// it's the same task that originally claimed it — protects against
+/// a stale release from a previous cycle nuking a fresh task.
+actor RefreshCoordinator {
+    private var inflightTask: Task<AuthSession, Error>?
+    private var inflightID: UUID?
+
+    func acquireOrJoin(_ start: () -> Task<AuthSession, Error>) -> (task: Task<AuthSession, Error>, id: UUID) {
+        if let existing = inflightTask, let id = inflightID, !existing.isCancelled {
+            return (existing, id)
+        }
+        let new = start()
+        let id = UUID()
+        inflightTask = new
+        inflightID = id
+        return (new, id)
+    }
+
+    func release(id: UUID) {
+        guard inflightID == id else { return }
+        inflightTask = nil
+        inflightID = nil
     }
 }

@@ -27,6 +27,7 @@ struct HomeProfileScreen: View {
     @State private var isGreetingPlaygroundPresented = false
     @State private var isSignOutConfirmationPresented = false
     @State private var bodyMetricEditorSheet: BodyMetricEditorSheet?
+    @AppStorage(AppearancePreference.storageKey) private var appearanceRaw: String = AppearancePreference.system.rawValue
 
     // Bug 2 (2026-05-22): editable display name. Pre-fills from the server
     // (`GET /v1/users/me`) on appear, with the Apple/JWT-derived name as a
@@ -481,6 +482,7 @@ struct HomeProfileScreen: View {
         }
     }
 
+    @ViewBuilder
     private var accountSection: some View {
         Section("Account") {
             LabeledContent {
@@ -510,6 +512,30 @@ struct HomeProfileScreen: View {
             } message: {
                 Text("This clears this device's session and returns you to sign in. Your saved food logs stay in your account.")
             }
+        }
+
+        appearanceSection
+    }
+
+    private var appearanceSection: some View {
+        // SwiftUI doesn't have a `Section(_:content:footer:)` overload —
+        // mixing the string-title initializer with a `footer:` trailing
+        // closure makes the compiler match the wrong init. Use the
+        // explicit header/footer form (same pattern as adminSection,
+        // bodySection, etc. elsewhere in this file).
+        Section {
+            Picker(selection: $appearanceRaw) {
+                ForEach(AppearancePreference.allCases) { option in
+                    Text(option.label).tag(option.rawValue)
+                }
+            } label: {
+                Label("Theme", systemImage: "circle.lefthalf.filled")
+            }
+            .pickerStyle(.menu)
+        } header: {
+            Text("Appearance")
+        } footer: {
+            Text("\"System\" follows the device setting. Light and Dark override it for this app only.")
         }
     }
 
