@@ -72,37 +72,45 @@ struct ProfileHeroCard: View {
 
     var body: some View {
         Button(action: onEdit) {
-            ZStack {
-                landscapeBackdrop
-                    .offset(
-                        x: parallaxEnabled ? -tilt.roll * backgroundShiftPoints : 0,
-                        y: parallaxEnabled ? -tilt.pitch * backgroundShiftPoints : 0
-                    )
-
-                darkOverlay
-                content
-                editPill
-            }
-            .frame(maxWidth: .infinity)
-            .frame(height: 180)
-            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.18), radius: 18, y: 10)
-            .rotation3DEffect(
-                .degrees(parallaxEnabled ? -cardTiltDegrees * tilt.roll : 0),
-                axis: (x: 0, y: 1, z: 0),
-                perspective: cardPerspective
-            )
-            .rotation3DEffect(
-                .degrees(parallaxEnabled ? cardTiltDegrees * tilt.pitch : 0),
-                axis: (x: 1, y: 0, z: 0),
-                perspective: cardPerspective
-            )
-            .animation(.easeOut(duration: 0.20), value: tilt.roll)
-            .animation(.easeOut(duration: 0.20), value: tilt.pitch)
+            // 2026-05-24: use a Color.clear size anchor + overlay instead
+            // of ZStack. The previous ZStack-with-frame approach let the
+            // .aspectRatio(.fill) image grow the card past 180pt because
+            // SwiftUI sized the ZStack to its largest child first, then
+            // tried to apply the height frame after. Color.clear at a
+            // fixed frame is the only child contributing to layout — the
+            // image + overlay + content all sit in an overlay, so they
+            // can't push the card taller.
+            Color.clear
+                .frame(maxWidth: .infinity)
+                .frame(height: 200)
+                .overlay {
+                    landscapeBackdrop
+                        .offset(
+                            x: parallaxEnabled ? -tilt.roll * backgroundShiftPoints : 0,
+                            y: parallaxEnabled ? -tilt.pitch * backgroundShiftPoints : 0
+                        )
+                }
+                .overlay { darkOverlay }
+                .overlay { content }
+                .overlay(alignment: .topTrailing) { editPill }
+                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.18), radius: 18, y: 10)
+                .rotation3DEffect(
+                    .degrees(parallaxEnabled ? -cardTiltDegrees * tilt.roll : 0),
+                    axis: (x: 0, y: 1, z: 0),
+                    perspective: cardPerspective
+                )
+                .rotation3DEffect(
+                    .degrees(parallaxEnabled ? cardTiltDegrees * tilt.pitch : 0),
+                    axis: (x: 1, y: 0, z: 0),
+                    perspective: cardPerspective
+                )
+                .animation(.easeOut(duration: 0.20), value: tilt.roll)
+                .animation(.easeOut(duration: 0.20), value: tilt.pitch)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
@@ -125,9 +133,12 @@ struct ProfileHeroCard: View {
         Image(timeOfDayImageName)
             .resizable()
             .aspectRatio(contentMode: .fill)
-            // Over-fill so the tilt shift never reveals the card bg
-            // underneath. 1.12× also gives the image a touch of zoom for
-            // the parallax to play against.
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .clipped()
+            // 2026-05-24: clipped() ensures the .aspectRatio(.fill)
+            // overflow doesn't leak past the card frame. 1.12× zoom
+            // gives the image a touch of headroom for the parallax
+            // translation to play against.
             .scaleEffect(1.12)
     }
 
@@ -237,25 +248,20 @@ struct ProfileHeroCard: View {
     }
 
     private var editPill: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                Spacer()
-                HStack(spacing: 4) {
-                    Text("Edit")
-                        .font(.system(size: 11, weight: .semibold))
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 10, weight: .bold))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(.ultraThinMaterial, in: Capsule())
-                .overlay(
-                    Capsule().stroke(.white.opacity(0.25), lineWidth: 1)
-                )
-            }
-            Spacer()
+        HStack(spacing: 4) {
+            Text("Edit")
+                .font(.system(size: 11, weight: .semibold))
+            Image(systemName: "chevron.right")
+                .font(.system(size: 10, weight: .bold))
         }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(Color.white.opacity(0.18), in: Capsule())
+        .overlay(
+            Capsule().stroke(.white.opacity(0.32), lineWidth: 1)
+        )
+        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
         .padding(12)
     }
 }
