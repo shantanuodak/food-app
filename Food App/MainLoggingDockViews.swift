@@ -12,6 +12,10 @@ struct MainLoggingBottomDock: View {
     @Binding var isProgressChartsPresented: Bool
     @Binding var isSavedMealsPresented: Bool
 
+    private let dockHitSize: CGFloat = 60
+    private let dockCircleSize: CGFloat = 44
+    private let dockIconSize: CGFloat = 16
+
     var body: some View {
         VStack(spacing: 10) {
             if shouldShowSyncExceptionPill {
@@ -26,8 +30,7 @@ struct MainLoggingBottomDock: View {
                 HStack(spacing: 12) {
                     bottomDockButton(
                         systemImage: "camera.fill",
-                        color: Color(red: 0.265, green: 0.224, blue: 0.835),
-                        tintStrength: 0.8,
+                        color: Color(red: 0.360, green: 0.322, blue: 0.980),
                         accessibilityLabel: "Open camera"
                     ) {
                         NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
@@ -35,8 +38,7 @@ struct MainLoggingBottomDock: View {
 
                     bottomDockButton(
                         systemImage: "mic.fill",
-                        color: Color(red: 0.655, green: 0.114, blue: 0.745),
-                        tintStrength: 0.8,
+                        color: Color(red: 0.760, green: 0.168, blue: 0.860),
                         accessibilityLabel: "Voice input"
                     ) {
                         NotificationCenter.default.post(name: .openVoiceFromTabBar, object: nil)
@@ -52,7 +54,7 @@ struct MainLoggingBottomDock: View {
                 HStack(spacing: 12) {
                     bottomDockButton(
                         systemImage: "bookmark.fill",
-                        color: Color(red: 0.902, green: 0.361, blue: 0.102),
+                        color: Color(red: 0.950, green: 0.340, blue: 0.100),
                         accessibilityLabel: "Open saved meals"
                     ) {
                         // Saved meals lives in MainLoggingShellView; route via
@@ -64,7 +66,7 @@ struct MainLoggingBottomDock: View {
 
                     bottomDockButton(
                         systemImage: "chart.line.uptrend.xyaxis",
-                        color: Color(red: 0.95, green: 0.47, blue: 0.11),
+                        color: Color(red: 1.000, green: 0.520, blue: 0.120),
                         accessibilityLabel: "Open progress charts"
                     ) {
                         isProgressChartsPresented = true
@@ -109,7 +111,7 @@ struct MainLoggingBottomDock: View {
             AppHaptics.lightImpact()
             NotificationCenter.default.post(name: .openStreaksFromNotification, object: nil)
         } label: {
-            ZStack(alignment: .bottomTrailing) {
+            ZStack(alignment: .topTrailing) {
                 trophyStreakIcon
 
                 if isLoadingFoodLogStreak && currentFoodLogStreak == nil {
@@ -118,19 +120,22 @@ struct MainLoggingBottomDock: View {
                         .padding(8)
                         .allowsHitTesting(false)
                 } else {
-                    // 2026-05-24: bumped badge to 26pt + 13pt font so the
-                    // two-digit streak (e.g. "31") has breathing room.
-                    // Pushed off the trophy's bottom-right with an outward
-                    // offset so the number sits beside the trophy like a
-                    // notification badge instead of overlapping the cup.
                     Text("\(currentFoodLogStreak ?? 0)")
-                        .font(.system(size: 13, weight: .bold, design: .rounded))
+                        .font(.system(size: 11, weight: .black, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(.primary)
-                        .padding(.horizontal, 6)
-                        .frame(minWidth: 26, minHeight: 26)
-                        .background(.regularMaterial, in: Circle())
-                        .offset(x: 6, y: 6)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 5)
+                        .frame(minWidth: 23, minHeight: 23)
+                        .background(
+                            Circle()
+                                .fill(Color.black.opacity(0.86))
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(0.18), lineWidth: 1)
+                                )
+                        )
+                        .shadow(color: Color.black.opacity(0.34), radius: 4, y: 2)
+                        .offset(x: 3, y: 2)
                         .allowsHitTesting(false)
                 }
             }
@@ -157,8 +162,7 @@ struct MainLoggingBottomDock: View {
                 Color(red: 1.0, green: 0.68, blue: 0.12)
             ],
             glowColor: Color.yellow,
-            badgeSize: 48,
-            iconSize: 18
+            iconSize: 17
         )
     }
 
@@ -166,7 +170,6 @@ struct MainLoggingBottomDock: View {
         systemImage: String,
         gradientColors: [Color],
         glowColor: Color,
-        badgeSize: CGFloat = 48,
         iconSize: CGFloat = 16
     ) -> some View {
         ZStack {
@@ -178,12 +181,13 @@ struct MainLoggingBottomDock: View {
                         endPoint: .bottomTrailing
                     )
                 )
-                .shadow(color: glowColor.opacity(0.35), radius: 10, y: 4)
+                .overlay(
+                    Circle()
+                        .stroke(Color.white.opacity(0.24), lineWidth: 1)
+                )
+                .shadow(color: glowColor.opacity(0.24), radius: 8, y: 3)
+                .shadow(color: glowColor.opacity(0.12), radius: 14, y: 3)
 
-            // 2026-05-24: was a white-on-gold gradient which read as
-            // low-contrast and faded in dark mode. Switched to a deep
-            // bronze/brown gradient so the trophy reads like an aged
-            // metal embossed on the gold disc.
             Image(systemName: systemImage)
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(
@@ -202,7 +206,7 @@ struct MainLoggingBottomDock: View {
                 .fill(
                     LinearGradient(
                         colors: [
-                            .white.opacity(0.28),
+                            .white.opacity(0.22),
                             .clear
                         ],
                         startPoint: .topLeading,
@@ -211,8 +215,8 @@ struct MainLoggingBottomDock: View {
                 )
                 .allowsHitTesting(false)
         }
-        .frame(width: badgeSize, height: badgeSize)
-        .frame(width: 60, height: 60)
+        .frame(width: dockCircleSize, height: dockCircleSize)
+        .frame(width: dockHitSize, height: dockHitSize)
     }
 
     private func bottomDockButton(
@@ -228,27 +232,31 @@ struct MainLoggingBottomDock: View {
             AppHaptics.lightImpact()
             action()
         }) {
-            // 2026-05-24: single tinted circle restored so the tap target
-            // is visible — previous version had two stacked layers
-            // (ultraThinMaterial shell + lens) that read as a heavy gray
-            // disc in dark mode. This is one Circle, fill keyed to the
-            // icon color at low opacity so it adapts to both modes
-            // without a material or shadow.
             ZStack {
                 Circle()
-                    .fill(color.opacity(0.12 * adjustedTintStrength))
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                color.opacity(0.20 * adjustedTintStrength),
+                                color.opacity(0.09 * adjustedTintStrength)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
                     .overlay(
                         Circle()
-                            .stroke(color.opacity(0.26 * adjustedTintStrength), lineWidth: 1)
+                            .stroke(color.opacity(0.34 * adjustedTintStrength), lineWidth: 1)
                     )
-                    .frame(width: 48, height: 48)
+                    .shadow(color: color.opacity(0.12 * adjustedTintStrength), radius: 7, y: 3)
+                    .frame(width: dockCircleSize, height: dockCircleSize)
 
                 Image(systemName: systemImage)
-                    .font(.system(size: 17, weight: .black))
+                    .font(.system(size: dockIconSize, weight: .bold))
                     .foregroundStyle(color.opacity(adjustedTintStrength))
-                    .shadow(color: color.opacity(0.24 * adjustedTintStrength), radius: 2, y: 1)
+                    .shadow(color: color.opacity(0.18 * adjustedTintStrength), radius: 2, y: 1)
             }
-            .frame(width: 60, height: 60)
+            .frame(width: dockHitSize, height: dockHitSize)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

@@ -1,6 +1,7 @@
 import SwiftUI
 import UIKit
 import AVFoundation
+import CoreImage
 
 struct HomeFoodStoryDrawerView: View {
     @Environment(\.dismiss) private var dismiss
@@ -16,6 +17,9 @@ struct HomeFoodStoryDrawerView: View {
     @State private var selectedBackgroundsByDay: [String: FoodStoryBackgroundOption] = [:]
     @State private var selectedVideosByDay: [String: FoodStoryVideoOption] = [:]
     @State private var selectedMediaByDay: [String: FoodStoryMediaKind] = [:]
+    @State private var shareFile: FoodStoryShareFile?
+    @State private var isPreparingShare = false
+    @State private var shareErrorMessage: String?
 
     init(
         anchorDate: Date,
@@ -71,6 +75,18 @@ struct HomeFoodStoryDrawerView: View {
         }
         .preferredColorScheme(.dark)
         .presentationBackground(Color.black)
+        .sheet(item: $shareFile) { file in
+            FoodStoryActivityView(activityItems: [file.url])
+                .presentationDetents([.medium, .large])
+                .presentationDragIndicator(.visible)
+        }
+        .alert("Could not prepare story", isPresented: shareErrorBinding) {
+            Button("OK", role: .cancel) {
+                shareErrorMessage = nil
+            }
+        } message: {
+            Text(shareErrorMessage ?? "Please try again.")
+        }
         .animation(.smooth(duration: reduceMotion ? 0.0 : 0.28), value: selectedDay.id)
         .onAppear {
             if selectedID == nil {
@@ -271,19 +287,75 @@ struct HomeFoodStoryDrawerView: View {
     }
 
     private var shareButton: some View {
-        ShareLink(item: selectedDay.shareText) {
-            Label("Share with friends", systemImage: "square.and.arrow.up.fill")
-                .font(.system(size: 16, weight: .black, design: .rounded))
-                .foregroundStyle(Color(.displayP3, red: 0.055, green: 0.067, blue: 0.061))
-                .frame(maxWidth: .infinity)
-                .frame(height: 52)
-                .background(FoodStoryTheme.cardOnImage, in: Capsule())
-                .overlay {
-                    Capsule().stroke(Color.white.opacity(0.56), lineWidth: 1)
+        Button(action: prepareShare) {
+            HStack(spacing: 10) {
+                if isPreparingShare {
+                    ProgressView()
+                        .tint(Color(.displayP3, red: 0.055, green: 0.067, blue: 0.061))
+                        .scaleEffect(0.82)
+                } else {
+                    Image(systemName: "square.and.arrow.up.fill")
+                        .font(.system(size: 15, weight: .black, design: .rounded))
                 }
-                .shadow(color: Color.black.opacity(0.24), radius: 18, y: 10)
+
+                Text(isPreparingShare ? "Preparing story" : "Share with friends")
+                    .font(.system(size: 16, weight: .black, design: .rounded))
+            }
+            .foregroundStyle(Color(.displayP3, red: 0.055, green: 0.067, blue: 0.061))
+            .frame(maxWidth: .infinity)
+            .frame(height: 52)
+            .background(FoodStoryTheme.cardOnImage, in: Capsule())
+            .overlay {
+                Capsule().stroke(Color.white.opacity(0.56), lineWidth: 1)
+            }
+            .shadow(color: Color.black.opacity(0.24), radius: 18, y: 10)
         }
-        .simultaneousGesture(TapGesture().onEnded { AppHaptics.selection() })
+        .buttonStyle(.plain)
+        .disabled(isPreparingShare)
+    }
+
+    private var shareErrorBinding: Binding<Bool> {
+        Binding(
+            get: { shareErrorMessage != nil },
+            set: { isPresented in
+                if !isPresented {
+                    shareErrorMessage = nil
+                }
+            }
+        )
+    }
+
+    private func prepareShare() {
+        guard !isPreparingShare else { return }
+
+        AppHaptics.selection()
+        isPreparingShare = true
+
+        let day = selectedDay
+        let shareKind: FoodStoryShareKind = mediaKind(for: day) == .video ? .storyVideo : .storyImage
+        let selectedBackground = background(for: day)
+        let selectedVideo = video(for: day)
+
+        Task {
+            do {
+                let url = try await FoodStoryShareExporter.exportStoryMedia(
+                    day: day,
+                    shareKind: shareKind,
+                    background: selectedBackground,
+                    video: selectedVideo,
+                    imageStorageService: imageStorageService
+                )
+                await MainActor.run {
+                    shareFile = FoodStoryShareFile(url: url)
+                    isPreparingShare = false
+                }
+            } catch {
+                await MainActor.run {
+                    shareErrorMessage = error.localizedDescription
+                    isPreparingShare = false
+                }
+            }
+        }
     }
 
     private func advanceStory() {
@@ -309,6 +381,817 @@ struct HomeFoodStoryDrawerView: View {
 
     private func mediaKind(for day: FoodStoryDay) -> FoodStoryMediaKind {
         selectedMediaByDay[day.id] ?? .background
+    }
+}
+
+private struct FoodStoryShareFile: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private enum FoodStoryShareKind {
+    case storyImage
+    case storyVideo
+}
+
+private struct FoodStoryActivityView: UIViewControllerRepresentable {
+    let activityItems: [Any]
+
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
+    }
+
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
+}
+
+private enum FoodStoryShareExportError: LocalizedError {
+    case renderFailed
+    case encodingFailed
+    case missingVideo
+    case missingVideoTrack
+    case missingVideoFrames
+    case missingVideoWriter
+    case videoRenderFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .renderFailed:
+            return "The story image could not be rendered."
+        case .encodingFailed:
+            return "The story image could not be saved."
+        case .missingVideo:
+            return "The selected story video could not be found."
+        case .missingVideoTrack:
+            return "The selected story video does not contain a playable video track."
+        case .missingVideoFrames:
+            return "The selected story video did not produce any video frames."
+        case .missingVideoWriter:
+            return "The story video could not be prepared for saving."
+        case let .videoRenderFailed(message):
+            return "The story video could not be prepared. \(message)"
+        }
+    }
+}
+
+private enum FoodStoryShareExporter {
+    private static let exportSize = CGSize(width: 360, height: 640)
+    private static let exportScale: CGFloat = 3
+    private static let storyVideoRenderSize = CGSize(width: 720, height: 1280)
+    private static let storyVideoScale: CGFloat = 2
+    private static let maxStoryVideoDuration = CMTime(seconds: 7, preferredTimescale: 600)
+    private static let minimumStoryFrameDuration = CMTime(value: 1, timescale: 30)
+
+    static func exportStoryMedia(
+        day: FoodStoryDay,
+        shareKind: FoodStoryShareKind,
+        background: FoodStoryBackgroundOption,
+        video: FoodStoryVideoOption,
+        imageStorageService: ImageStorageService
+    ) async throws -> URL {
+        switch shareKind {
+        case .storyVideo:
+            return try await exportStoryVideo(
+                day: day,
+                video: video,
+                imageStorageService: imageStorageService
+            )
+        case .storyImage:
+            return try await exportStoryImage(
+                day: day,
+                background: background,
+                imageStorageService: imageStorageService
+            )
+        }
+    }
+
+    private static func exportStoryImage(
+        day: FoodStoryDay,
+        background: FoodStoryBackgroundOption,
+        imageStorageService: ImageStorageService
+    ) async throws -> URL {
+        let mealImages = await loadMealImages(for: day, imageStorageService: imageStorageService)
+        let image = try await MainActor.run {
+            try renderStoryImage(day: day, background: background, mealImages: mealImages)
+        }
+        guard let data = image.jpegData(compressionQuality: 0.92) else {
+            throw FoodStoryShareExportError.encodingFailed
+        }
+
+        let url = try makeOutputURL(dayID: day.id, suffix: nil, fileExtension: "jpg")
+        try data.write(to: url, options: .atomic)
+        return url
+    }
+
+    @MainActor
+    private static func renderStoryImage(
+        day: FoodStoryDay,
+        background: FoodStoryBackgroundOption,
+        mealImages: [String: UIImage]
+    ) throws -> UIImage {
+        let canvas = FoodStoryExportCanvas(
+            day: day,
+            backgroundAssetName: background.assetName,
+            backgroundImage: nil,
+            mealImages: mealImages
+        )
+        .frame(width: exportSize.width, height: exportSize.height)
+
+        let renderer = ImageRenderer(content: canvas)
+        renderer.scale = exportScale
+        renderer.proposedSize = ProposedViewSize(width: exportSize.width, height: exportSize.height)
+
+        guard let image = renderer.uiImage else {
+            throw FoodStoryShareExportError.renderFailed
+        }
+        return image
+    }
+
+    private static func exportStoryVideo(
+        day: FoodStoryDay,
+        video: FoodStoryVideoOption,
+        imageStorageService: ImageStorageService
+    ) async throws -> URL {
+        guard let sourceURL = video.bundleURL else {
+            throw FoodStoryShareExportError.missingVideo
+        }
+
+        let mealImages = await loadMealImages(for: day, imageStorageService: imageStorageService)
+        let overlayData = try await MainActor.run {
+            let overlay = try renderStoryVideoOverlay(day: day, mealImages: mealImages)
+            guard let data = overlay.pngData() else {
+                throw FoodStoryShareExportError.encodingFailed
+            }
+            return data
+        }
+
+        let outputURL = try makeOutputURL(dayID: day.id, suffix: "story", fileExtension: "mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+        return try await renderStoryVideo(
+            sourceURL: sourceURL,
+            outputURL: outputURL,
+            overlayData: overlayData
+        )
+    }
+
+    @MainActor
+    private static func renderStoryVideoOverlay(
+        day: FoodStoryDay,
+        mealImages: [String: UIImage]
+    ) throws -> UIImage {
+        let canvas = FoodStoryVideoOverlayCanvas(day: day, mealImages: mealImages)
+            .frame(width: exportSize.width, height: exportSize.height)
+
+        let renderer = ImageRenderer(content: canvas)
+        renderer.scale = storyVideoScale
+        renderer.proposedSize = ProposedViewSize(width: exportSize.width, height: exportSize.height)
+        renderer.isOpaque = false
+
+        guard let image = renderer.uiImage else {
+            throw FoodStoryShareExportError.renderFailed
+        }
+        return image
+    }
+
+    private static func renderStoryVideo(
+        sourceURL: URL,
+        outputURL: URL,
+        overlayData: Data
+    ) async throws -> URL {
+        let sourceAsset = AVURLAsset(url: sourceURL)
+        let videoTracks = try await sourceAsset.loadTracks(withMediaType: .video)
+        guard let sourceTrack = videoTracks.first else {
+            throw FoodStoryShareExportError.missingVideoTrack
+        }
+
+        let duration = try await sourceAsset.load(.duration)
+        let preferredTransform = try await sourceTrack.load(.preferredTransform)
+        let exportDuration = CMTimeMinimum(duration, maxStoryVideoDuration)
+        let timeRange = CMTimeRange(start: .zero, duration: exportDuration)
+
+        let reader = try AVAssetReader(asset: sourceAsset)
+        reader.timeRange = timeRange
+
+        let readerOutput = AVAssetReaderTrackOutput(
+            track: sourceTrack,
+            outputSettings: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+            ]
+        )
+        readerOutput.alwaysCopiesSampleData = false
+        guard reader.canAdd(readerOutput) else {
+            throw FoodStoryShareExportError.videoRenderFailed("The video track could not be read.")
+        }
+        reader.add(readerOutput)
+
+        let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+        let videoInput = AVAssetWriterInput(
+            mediaType: .video,
+            outputSettings: [
+                AVVideoCodecKey: AVVideoCodecType.h264,
+                AVVideoWidthKey: Int(storyVideoRenderSize.width),
+                AVVideoHeightKey: Int(storyVideoRenderSize.height),
+                AVVideoCompressionPropertiesKey: [
+                    AVVideoAverageBitRateKey: 5_000_000,
+                    AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel
+                ]
+            ]
+        )
+        videoInput.expectsMediaDataInRealTime = false
+
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: videoInput,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: Int(storyVideoRenderSize.width),
+                kCVPixelBufferHeightKey as String: Int(storyVideoRenderSize.height),
+                kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+            ]
+        )
+
+        guard writer.canAdd(videoInput) else {
+            throw FoodStoryShareExportError.missingVideoWriter
+        }
+        writer.add(videoInput)
+
+        guard reader.startReading() else {
+            throw FoodStoryShareExportError.videoRenderFailed(reader.error?.localizedDescription ?? "Reader could not start.")
+        }
+        guard writer.startWriting() else {
+            throw FoodStoryShareExportError.videoRenderFailed(writer.error?.localizedDescription ?? "Writer could not start.")
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        guard let pixelBufferPool = adaptor.pixelBufferPool else {
+            throw FoodStoryShareExportError.missingVideoWriter
+        }
+        guard let overlayImage = CIImage(data: overlayData) else {
+            throw FoodStoryShareExportError.renderFailed
+        }
+
+        let colorSpace = CGColorSpace(name: CGColorSpace.displayP3) ?? CGColorSpaceCreateDeviceRGB()
+        let ciContext = CIContext(options: [
+            .workingColorSpace: colorSpace,
+            .outputColorSpace: colorSpace
+        ])
+        let overlay = scaleOverlay(overlayImage, to: storyVideoRenderSize)
+
+        var firstSampleTime: CMTime?
+        var lastWrittenTime: CMTime?
+        var appendedFrames = 0
+
+        while reader.status == .reading,
+              let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+            let sampleTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let baseTime = firstSampleTime ?? sampleTime
+            firstSampleTime = baseTime
+            let relativeTime = CMTimeSubtract(sampleTime, baseTime)
+
+            if CMTimeCompare(relativeTime, exportDuration) > 0 {
+                break
+            }
+            if let lastWrittenTime,
+               CMTimeCompare(CMTimeSubtract(relativeTime, lastWrittenTime), minimumStoryFrameDuration) < 0 {
+                continue
+            }
+            guard let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+                continue
+            }
+
+            while !videoInput.isReadyForMoreMediaData {
+                try Task.checkCancellation()
+                try await Task.sleep(nanoseconds: 2_000_000)
+            }
+
+            var outputBuffer: CVPixelBuffer?
+            let pixelBufferStatus = CVPixelBufferPoolCreatePixelBuffer(nil, pixelBufferPool, &outputBuffer)
+            guard pixelBufferStatus == kCVReturnSuccess, let outputBuffer else {
+                throw FoodStoryShareExportError.missingVideoWriter
+            }
+
+            let sourceImage = CIImage(cvPixelBuffer: imageBuffer)
+            let normalizedSource = normalizeVideoFrame(sourceImage, preferredTransform: preferredTransform)
+            let background = fillFrame(normalizedSource, size: storyVideoRenderSize)
+            let composited = overlay.composited(over: background)
+
+            ciContext.render(
+                composited,
+                to: outputBuffer,
+                bounds: CGRect(origin: .zero, size: storyVideoRenderSize),
+                colorSpace: colorSpace
+            )
+
+            guard adaptor.append(outputBuffer, withPresentationTime: relativeTime) else {
+                throw FoodStoryShareExportError.videoRenderFailed(writer.error?.localizedDescription ?? "Frame append failed.")
+            }
+
+            lastWrittenTime = relativeTime
+            appendedFrames += 1
+        }
+
+        guard appendedFrames > 0 else {
+            throw FoodStoryShareExportError.missingVideoFrames
+        }
+
+        if reader.status == .failed {
+            throw FoodStoryShareExportError.videoRenderFailed(reader.error?.localizedDescription ?? "Reader failed.")
+        }
+        if reader.status == .reading {
+            reader.cancelReading()
+        }
+
+        videoInput.markAsFinished()
+        try await finishWriting(writer)
+        return outputURL
+    }
+
+    private static func normalizeVideoFrame(
+        _ image: CIImage,
+        preferredTransform: CGAffineTransform
+    ) -> CIImage {
+        let transformed = image.transformed(by: preferredTransform)
+        return transformed.transformed(
+            by: CGAffineTransform(
+                translationX: -transformed.extent.origin.x,
+                y: -transformed.extent.origin.y
+            )
+        )
+    }
+
+    private static func fillFrame(_ image: CIImage, size: CGSize) -> CIImage {
+        let extent = image.extent
+        let scale = max(size.width / extent.width, size.height / extent.height)
+        let scaled = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let cropRect = CGRect(
+            x: scaled.extent.midX - size.width / 2,
+            y: scaled.extent.midY - size.height / 2,
+            width: size.width,
+            height: size.height
+        )
+
+        return scaled
+            .cropped(to: cropRect)
+            .transformed(by: CGAffineTransform(translationX: -cropRect.origin.x, y: -cropRect.origin.y))
+    }
+
+    private static func scaleOverlay(_ image: CIImage, to size: CGSize) -> CIImage {
+        let extent = image.extent
+        guard extent.width > 0, extent.height > 0 else {
+            return image
+        }
+
+        return image.transformed(
+            by: CGAffineTransform(
+                scaleX: size.width / extent.width,
+                y: size.height / extent.height
+            )
+        )
+    }
+
+    private static func finishWriting(_ writer: AVAssetWriter) async throws {
+        await writer.finishWriting()
+        if writer.status != .completed {
+            throw FoodStoryShareExportError.videoRenderFailed(
+                writer.error?.localizedDescription ?? "Writer did not finish."
+            )
+        }
+    }
+
+    private static func makeOutputURL(dayID: String, suffix: String?, fileExtension: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("FoodStoryShares", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+
+        let safeDayID = dayID.replacingOccurrences(of: "/", with: "-")
+        let nameParts = ["food-story", safeDayID, suffix, UUID().uuidString].compactMap { $0 }
+        return directory
+            .appendingPathComponent(nameParts.joined(separator: "-"))
+            .appendingPathExtension(fileExtension)
+    }
+
+    private static func loadMealImages(
+        for day: FoodStoryDay,
+        imageStorageService: ImageStorageService
+    ) async -> [String: UIImage] {
+        var images: [String: UIImage] = [:]
+        for meal in day.meals.prefix(4) {
+            guard let imageRef = meal.trimmedImageRef, images[imageRef] == nil else {
+                continue
+            }
+            guard let data = try? await imageStorageService.fetchJPEG(at: imageRef),
+                  let image = UIImage(data: data) else {
+                continue
+            }
+            images[imageRef] = image
+        }
+        return images
+    }
+}
+
+private struct FoodStoryExportCanvas: View {
+    let day: FoodStoryDay
+    let backgroundAssetName: String
+    let backgroundImage: UIImage?
+    let mealImages: [String: UIImage]
+
+    var body: some View {
+        ZStack {
+            FoodStoryStaticBackdrop(day: day)
+
+            exportBackground
+                .opacity(0.34)
+                .blur(radius: 18)
+                .overlay(Color.black.opacity(0.24))
+                .ignoresSafeArea()
+
+            VStack(spacing: 14) {
+                VStack(spacing: 2) {
+                    Text(day.dateTitle)
+                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                        .foregroundStyle(FoodStoryTheme.primaryText)
+                        .monospacedDigit()
+
+                    Text(day.weekdayTitle == "Today" ? "Today" : day.weekdayTitle)
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .foregroundStyle(FoodStoryTheme.secondaryText)
+                }
+                .shadow(color: Color.black.opacity(0.36), radius: 12, y: 5)
+
+                FoodStoryExportShareCard(
+                    day: day,
+                    backgroundAssetName: backgroundAssetName,
+                    backgroundImage: backgroundImage,
+                    mealImages: mealImages
+                )
+                .frame(width: 316, height: 486)
+
+                Text("Food App")
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .foregroundStyle(FoodStoryTheme.secondaryText.opacity(0.82))
+                    .tracking(0.8)
+            }
+            .padding(.top, 34)
+            .padding(.bottom, 28)
+        }
+        .frame(width: 360, height: 640)
+        .clipped()
+    }
+
+    @ViewBuilder
+    private var exportBackground: some View {
+        if let backgroundImage {
+            Image(uiImage: backgroundImage)
+                .resizable()
+                .scaledToFill()
+        } else {
+            Image(backgroundAssetName)
+                .resizable()
+                .scaledToFill()
+        }
+    }
+}
+
+private struct FoodStoryVideoOverlayCanvas: View {
+    let day: FoodStoryDay
+    let mealImages: [String: UIImage]
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [
+                    Color.black.opacity(0.28),
+                    Color.black.opacity(0.08),
+                    Color.black.opacity(0.48)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            VStack(spacing: 14) {
+                VStack(spacing: 2) {
+                    Text(day.dateTitle)
+                        .font(.system(size: 28, weight: .heavy, design: .rounded))
+                        .foregroundStyle(FoodStoryTheme.primaryText)
+                        .monospacedDigit()
+
+                    Text(day.weekdayTitle == "Today" ? "Today" : day.weekdayTitle)
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .foregroundStyle(FoodStoryTheme.secondaryText)
+                }
+                .shadow(color: Color.black.opacity(0.40), radius: 12, y: 5)
+
+                FoodStoryVideoOverlayShareCard(day: day, mealImages: mealImages)
+                    .frame(width: 316, height: 486)
+
+                Text("Food App")
+                    .font(.system(size: 12, weight: .black, design: .rounded))
+                    .foregroundStyle(FoodStoryTheme.primaryText.opacity(0.80))
+                    .tracking(0.8)
+            }
+            .padding(.top, 34)
+            .padding(.bottom, 28)
+        }
+        .frame(width: 360, height: 640)
+        .clipped()
+    }
+}
+
+private struct FoodStoryVideoOverlayShareCard: View {
+    let day: FoodStoryDay
+    let mealImages: [String: UIImage]
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                RoundedRectangle(cornerRadius: 30, style: .continuous)
+                    .fill(Color.black.opacity(0.10))
+                    .overlay(cardScrim)
+
+                VStack(alignment: .leading, spacing: 13) {
+                    HStack(alignment: .top) {
+                        FoodStoryAppMark()
+
+                        Spacer(minLength: 12)
+
+                        FoodStoryCalorieBadge(calories: day.calories)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(day.caption)
+                            .font(.custom("InstrumentSerif-Regular", size: 35))
+                            .foregroundStyle(FoodStoryTheme.cardOnImage)
+                            .lineSpacing(-3)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.80)
+
+                        Text(day.summary)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(FoodStoryTheme.cardOnImageMuted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                    }
+                    .shadow(color: Color.black.opacity(0.38), radius: 14, y: 5)
+
+                    FoodStoryExportMealCloud(meals: day.meals, mealImages: mealImages)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(20)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.32), lineWidth: 1.1)
+        }
+        .overlay {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.black.opacity(0.18), lineWidth: 3)
+                .blur(radius: 2)
+                .opacity(0.34)
+        }
+        .shadow(color: Color.black.opacity(0.36), radius: 28, y: 20)
+        .compositingGroup()
+    }
+
+    private var cardScrim: some View {
+        LinearGradient(
+            colors: [
+                Color.black.opacity(0.08),
+                Color.black.opacity(0.20),
+                Color.black.opacity(0.62)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+private struct FoodStoryExportShareCard: View {
+    let day: FoodStoryDay
+    let backgroundAssetName: String
+    let backgroundImage: UIImage?
+    let mealImages: [String: UIImage]
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .topLeading) {
+                cardBackground
+                    .frame(width: proxy.size.width, height: proxy.size.height)
+                    .clipped()
+                    .overlay(cardScrim)
+
+                VStack(alignment: .leading, spacing: 13) {
+                    HStack(alignment: .top) {
+                        FoodStoryAppMark()
+
+                        Spacer(minLength: 12)
+
+                        FoodStoryCalorieBadge(calories: day.calories)
+                    }
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(day.caption)
+                            .font(.custom("InstrumentSerif-Regular", size: 35))
+                            .foregroundStyle(FoodStoryTheme.cardOnImage)
+                            .lineSpacing(-3)
+                            .lineLimit(2)
+                            .minimumScaleFactor(0.80)
+
+                        Text(day.summary)
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .foregroundStyle(FoodStoryTheme.cardOnImageMuted)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.82)
+                    }
+                    .shadow(color: Color.black.opacity(0.35), radius: 14, y: 5)
+
+                    FoodStoryExportMealCloud(meals: day.meals, mealImages: mealImages)
+
+                    Spacer(minLength: 0)
+                }
+                .padding(20)
+                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .topLeading)
+            }
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 30, style: .continuous)
+                .stroke(Color.white.opacity(0.30), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.32), radius: 28, y: 20)
+        .compositingGroup()
+    }
+
+    @ViewBuilder
+    private var cardBackground: some View {
+        if let backgroundImage {
+            Image(uiImage: backgroundImage)
+                .resizable()
+                .scaledToFill()
+        } else {
+            Image(backgroundAssetName)
+                .resizable()
+                .scaledToFill()
+        }
+    }
+
+    private var cardScrim: some View {
+        LinearGradient(
+            colors: [
+                FoodStoryTheme.cardScrimTop,
+                Color.black.opacity(0.34),
+                FoodStoryTheme.cardScrimBottom
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+    }
+}
+
+private struct FoodStoryExportMealCloud: View {
+    let meals: [FoodStoryMeal]
+    let mealImages: [String: UIImage]
+
+    var body: some View {
+        Group {
+            if meals.isEmpty {
+                Text("No food logged yet")
+                    .font(.system(size: 13, weight: .heavy, design: .rounded))
+                    .foregroundStyle(FoodStoryTheme.cardText)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(FoodStoryTheme.cardSurfaceRaised, in: Capsule())
+                    .overlay {
+                        Capsule().stroke(Color.white.opacity(0.42), lineWidth: 1)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                VStack(alignment: .leading, spacing: 9) {
+                    ForEach(Array(visibleMeals.enumerated()), id: \.element.id) { index, meal in
+                        FoodStoryExportMealStickerRow(
+                            meal: meal,
+                            index: index,
+                            mealImages: mealImages
+                        )
+                    }
+
+                    if hiddenMealCount > 0 {
+                        FoodStoryMoreBitesRow(
+                            count: hiddenMealCount,
+                            index: visibleMeals.count,
+                            floatStickers: false
+                        )
+                        .padding(.top, 1)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var visibleMeals: [FoodStoryMeal] {
+        Array(meals.prefix(4))
+    }
+
+    private var hiddenMealCount: Int {
+        max(0, meals.count - visibleMeals.count)
+    }
+}
+
+private struct FoodStoryExportMealStickerRow: View {
+    let meal: FoodStoryMeal
+    let index: Int
+    let mealImages: [String: UIImage]
+
+    var body: some View {
+        HStack(spacing: 0) {
+            if isRightAligned {
+                Spacer(minLength: 26)
+            }
+
+            FoodStoryExportMealSticker(meal: meal, index: index, mealImages: mealImages)
+                .frame(width: isRightAligned ? 232 : 252, alignment: .leading)
+
+            if !isRightAligned {
+                Spacer(minLength: 26)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .rotationEffect(.degrees(isRightAligned ? 1.2 : -1.0))
+    }
+
+    private var isRightAligned: Bool {
+        !index.isMultiple(of: 2)
+    }
+}
+
+private struct FoodStoryExportMealSticker: View {
+    let meal: FoodStoryMeal
+    let index: Int
+    let mealImages: [String: UIImage]
+
+    var body: some View {
+        HStack(spacing: 9) {
+            if let imageRef = meal.trimmedImageRef,
+               let image = mealImages[imageRef] {
+                FoodStoryExportMealThumbnail(image: image)
+            }
+
+            Text(meal.name)
+                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .foregroundStyle(FoodStoryTheme.cardText)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .minimumScaleFactor(0.9)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
+        }
+        .padding(.leading, hasImage ? 8 : 16)
+        .padding(.trailing, 16)
+        .padding(.vertical, hasImage ? 6 : 10)
+        .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+        .background {
+            FoodStoryGlassStickerBackground(tint: chipTint, cornerRadius: 23)
+        }
+        .shadow(color: Color.black.opacity(0.24), radius: 14, y: 8)
+    }
+
+    private var hasImage: Bool {
+        guard let imageRef = meal.trimmedImageRef else { return false }
+        return mealImages[imageRef] != nil
+    }
+
+    private var chipTint: Color {
+        switch index % 4 {
+        case 0: return Color(.displayP3, red: 1.000, green: 0.992, blue: 0.930)
+        case 1: return Color(.displayP3, red: 0.898, green: 0.982, blue: 0.914)
+        case 2: return Color(.displayP3, red: 0.982, green: 0.956, blue: 0.840)
+        default: return Color(.displayP3, red: 0.922, green: 0.962, blue: 1.000)
+        }
+    }
+}
+
+private struct FoodStoryExportMealThumbnail: View {
+    let image: UIImage
+
+    var body: some View {
+        Image(uiImage: image)
+            .resizable()
+            .scaledToFill()
+            .frame(width: 34, height: 34)
+            .clipShape(Circle())
+            .overlay {
+                Circle()
+                    .stroke(Color.white.opacity(0.88), lineWidth: 3)
+            }
+            .overlay {
+                Circle()
+                    .stroke(Color.black.opacity(0.18), lineWidth: 1)
+                    .padding(2)
+            }
+            .shadow(color: Color.black.opacity(0.18), radius: 7, y: 3)
+            .accessibilityHidden(true)
     }
 }
 

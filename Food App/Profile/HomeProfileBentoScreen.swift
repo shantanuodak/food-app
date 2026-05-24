@@ -78,6 +78,10 @@ struct HomeProfileBentoScreen: View {
     @State private var errorMessage: String?
     @State private var isReminderSettingsPresented = false
     @State private var isManageAccountPresented = false
+    @State private var avatarImageData: Data?
+    @State private var isAvatarSourceDialogPresented = false
+    @State private var isAvatarImagePickerPresented = false
+    @State private var avatarImagePickerSourceType: UIImagePickerController.SourceType = .photoLibrary
 
     var body: some View {
         NavigationStack {
@@ -99,7 +103,9 @@ struct HomeProfileBentoScreen: View {
                             bodyLine: profileBodyLine,
                             preferencesCount: profilePreferencesCount,
                             allergiesCount: profileAllergiesCount,
-                            onEdit: { isManageAccountPresented = true }
+                            avatarImageData: avatarImageData,
+                            onEdit: { isManageAccountPresented = true },
+                            onAvatarTapped: { isAvatarSourceDialogPresented = true }
                         )
 
                         if let errorMessage {
@@ -157,12 +163,50 @@ struct HomeProfileBentoScreen: View {
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(24)
             }
+            .confirmationDialog(
+                "Profile picture",
+                isPresented: $isAvatarSourceDialogPresented,
+                titleVisibility: .visible
+            ) {
+                if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                    Button("Take Photo") {
+                        avatarImagePickerSourceType = .camera
+                        isAvatarImagePickerPresented = true
+                    }
+                }
+
+                Button("Choose Photo") {
+                    avatarImagePickerSourceType = .photoLibrary
+                    isAvatarImagePickerPresented = true
+                }
+
+                if avatarImageData != nil {
+                    Button("Remove Photo", role: .destructive) {
+                        removeProfileAvatar()
+                    }
+                }
+
+                Button("Cancel", role: .cancel) {}
+            }
+            .sheet(isPresented: $isAvatarImagePickerPresented) {
+                HomeImagePicker(
+                    sourceType: avatarImagePickerSourceType,
+                    onImagePicked: { image in
+                        saveProfileAvatar(image)
+                    },
+                    onCancel: {}
+                )
+            }
         }
         .environmentObject(draftStore)
         .presentationBackground(AppDrawerSurface.gradient)
         .task {
+            loadProfileAvatar()
             applyCachedSnapshotIfAvailable()
             await loadAll()
+        }
+        .onChange(of: appStore.authSessionStore.session?.userID) { _, _ in
+            loadProfileAvatar()
         }
         .onChange(of: scenePhase) { _, newPhase in
             // Refresh when the user returns to the app — food may have
@@ -177,6 +221,25 @@ struct HomeProfileBentoScreen: View {
             // tile values reflect the new state without waiting for a
             // backgrounding cycle.
             Task { await loadAll() }
+        }
+    }
+
+    private func loadProfileAvatar() {
+        avatarImageData = ProfileAvatarStore.loadAvatarData(userID: appStore.authSessionStore.session?.userID)
+    }
+
+    private func saveProfileAvatar(_ image: UIImage) {
+        if let data = ProfileAvatarStore.saveAvatar(image, userID: appStore.authSessionStore.session?.userID) {
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+                avatarImageData = data
+            }
+        }
+    }
+
+    private func removeProfileAvatar() {
+        ProfileAvatarStore.removeAvatar(userID: appStore.authSessionStore.session?.userID)
+        withAnimation(.spring(response: 0.28, dampingFraction: 0.82)) {
+            avatarImageData = nil
         }
     }
 
@@ -1080,6 +1143,12 @@ private struct BadgeTile: View {
                     .foregroundStyle(BentoTokens.gray500)
                     .lineLimit(1)
             }
+        }
+        .overlay(alignment: .topTrailing) {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(BentoTokens.gray400)
+                .accessibilityHidden(true)
         }
         .bentoTile(
             background: BentoTokens.whiteTileBackground,

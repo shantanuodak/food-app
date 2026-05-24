@@ -22,6 +22,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct ProfileHeroCard: View {
     /// First name from auth session — used to derive the avatar initials
@@ -42,9 +43,11 @@ struct ProfileHeroCard: View {
 
     let preferencesCount: Int
     let allergiesCount: Int
+    let avatarImageData: Data?
 
     /// Fires when the user taps the Edit pill or anywhere on the card.
     let onEdit: () -> Void
+    let onAvatarTapped: () -> Void
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @StateObject private var tilt = DeviceTiltMotion()
@@ -71,50 +74,46 @@ struct ProfileHeroCard: View {
     }
 
     var body: some View {
-        Button(action: onEdit) {
-            // 2026-05-24: use a Color.clear size anchor + overlay instead
-            // of ZStack. The previous ZStack-with-frame approach let the
-            // .aspectRatio(.fill) image grow the card past 180pt because
-            // SwiftUI sized the ZStack to its largest child first, then
-            // tried to apply the height frame after. Color.clear at a
-            // fixed frame is the only child contributing to layout — the
-            // image + overlay + content all sit in an overlay, so they
-            // can't push the card taller.
-            Color.clear
-                .frame(maxWidth: .infinity)
-                .frame(height: 200)
-                .overlay {
-                    landscapeBackdrop
-                        .offset(
-                            x: parallaxEnabled ? -tilt.roll * backgroundShiftPoints : 0,
-                            y: parallaxEnabled ? -tilt.pitch * backgroundShiftPoints : 0
-                        )
-                }
-                .overlay { darkOverlay }
-                .overlay { content }
-                .overlay(alignment: .topTrailing) { editPill }
-                .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                )
-                .shadow(color: Color.black.opacity(0.18), radius: 18, y: 10)
-                .rotation3DEffect(
-                    .degrees(parallaxEnabled ? -cardTiltDegrees * tilt.roll : 0),
-                    axis: (x: 0, y: 1, z: 0),
-                    perspective: cardPerspective
-                )
-                .rotation3DEffect(
-                    .degrees(parallaxEnabled ? cardTiltDegrees * tilt.pitch : 0),
-                    axis: (x: 1, y: 0, z: 0),
-                    perspective: cardPerspective
-                )
-                .animation(.easeOut(duration: 0.20), value: tilt.roll)
-                .animation(.easeOut(duration: 0.20), value: tilt.pitch)
-        }
-        .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("\(displayName). Tap to edit profile."))
+        // 2026-05-24: use a Color.clear size anchor + overlay instead
+        // of ZStack. The previous ZStack-with-frame approach let the
+        // .aspectRatio(.fill) image grow the card past 180pt because
+        // SwiftUI sized the ZStack to its largest child first, then
+        // tried to apply the height frame after. Color.clear at a
+        // fixed frame is the only child contributing to layout — the
+        // image + overlay + content all sit in an overlay, so they
+        // can't push the card taller.
+        Color.clear
+            .frame(maxWidth: .infinity)
+            .frame(height: 200)
+            .overlay {
+                landscapeBackdrop
+                    .offset(
+                        x: parallaxEnabled ? -tilt.roll * backgroundShiftPoints : 0,
+                        y: parallaxEnabled ? -tilt.pitch * backgroundShiftPoints : 0
+                    )
+            }
+            .overlay { darkOverlay }
+            .overlay { content }
+            .overlay(alignment: .topTrailing) { editPill }
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
+            .shadow(color: Color.black.opacity(0.18), radius: 18, y: 10)
+            .rotation3DEffect(
+                .degrees(parallaxEnabled ? -cardTiltDegrees * tilt.roll : 0),
+                axis: (x: 0, y: 1, z: 0),
+                perspective: cardPerspective
+            )
+            .rotation3DEffect(
+                .degrees(parallaxEnabled ? cardTiltDegrees * tilt.pitch : 0),
+                axis: (x: 1, y: 0, z: 0),
+                perspective: cardPerspective
+            )
+            .animation(.easeOut(duration: 0.20), value: tilt.roll)
+            .animation(.easeOut(duration: 0.20), value: tilt.pitch)
+        .accessibilityElement(children: .contain)
         .onAppear { if parallaxEnabled { tilt.start() } }
         .onDisappear { tilt.stop() }
         .onChange(of: reduceMotion) { _, newValue in
@@ -170,21 +169,7 @@ struct ProfileHeroCard: View {
             HStack(alignment: .center, spacing: 12) {
                 avatar
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(displayName)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
-
-                    if !bodyLine.isEmpty {
-                        Text(bodyLine)
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.86))
-                            .lineLimit(1)
-                            .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
-                    }
-                }
+                profileTextBlock
             }
 
             summaryChips
@@ -200,22 +185,82 @@ struct ProfileHeroCard: View {
     }
 
     private var avatar: some View {
-        Text(initials)
-            .font(.custom("InstrumentSerif-Regular", size: 19))
-            .foregroundStyle(.white)
-            .frame(width: 44, height: 44)
-            .background(
-                LinearGradient(
-                    colors: [AppColor.brandOrange, AppColor.brandOrangeDeep],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: Circle()
-            )
-            .overlay(
-                Circle().stroke(.white.opacity(0.40), lineWidth: 2)
-            )
-            .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+        Button {
+            AppHaptics.selection()
+            onAvatarTapped()
+        } label: {
+            avatarFace
+                .overlay(alignment: .bottomTrailing) {
+                    Image(systemName: "camera.fill")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(AppColor.brandOrangeDeep)
+                        .frame(width: 18, height: 18)
+                        .background(.white, in: Circle())
+                        .overlay {
+                            Circle().stroke(.white.opacity(0.80), lineWidth: 1)
+                        }
+                        .offset(x: 3, y: 3)
+                }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Change profile photo"))
+    }
+
+    @ViewBuilder
+    private var avatarFace: some View {
+        if let avatarImageData,
+           let image = UIImage(data: avatarImageData) {
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 44, height: 44)
+                .clipShape(Circle())
+                .overlay(
+                    Circle().stroke(.white.opacity(0.55), lineWidth: 2)
+                )
+                .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+        } else {
+            Text(initials)
+                .font(.custom("InstrumentSerif-Regular", size: 19))
+                .foregroundStyle(.white)
+                .frame(width: 44, height: 44)
+                .background(
+                    LinearGradient(
+                        colors: [AppColor.brandOrange, AppColor.brandOrangeDeep],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: Circle()
+                )
+                .overlay(
+                    Circle().stroke(.white.opacity(0.40), lineWidth: 2)
+                )
+                .shadow(color: .black.opacity(0.35), radius: 4, y: 2)
+        }
+    }
+
+    private var profileTextBlock: some View {
+        Button(action: onEdit) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(displayName)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .shadow(color: .black.opacity(0.4), radius: 2, y: 1)
+
+                if !bodyLine.isEmpty {
+                    Text(bodyLine)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.86))
+                        .lineLimit(1)
+                        .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(Text("Edit profile"))
     }
 
     private var summaryChips: some View {
@@ -248,20 +293,23 @@ struct ProfileHeroCard: View {
     }
 
     private var editPill: some View {
-        HStack(spacing: 4) {
-            Text("Edit")
-                .font(.system(size: 11, weight: .semibold))
-            Image(systemName: "chevron.right")
-                .font(.system(size: 10, weight: .bold))
+        Button(action: onEdit) {
+            HStack(spacing: 4) {
+                Text("Edit")
+                    .font(.system(size: 11, weight: .semibold))
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 10, weight: .bold))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.white.opacity(0.18), in: Capsule())
+            .overlay(
+                Capsule().stroke(.white.opacity(0.32), lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
         }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
-        .background(Color.white.opacity(0.18), in: Capsule())
-        .overlay(
-            Capsule().stroke(.white.opacity(0.32), lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+        .buttonStyle(.plain)
         .padding(12)
     }
 }

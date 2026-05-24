@@ -428,6 +428,9 @@ extension MainLoggingShellView {
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
         guard !normalized.isEmpty else { return false }
+        // Multi-line paste/dictation must drain through the row queue; do
+        // not let one water token reroute the whole batch into hydration.
+        guard normalized.rangeOfCharacter(from: .newlines) == nil else { return false }
 
         let tokens = normalized
             .split { !$0.isLetter && !$0.isNumber }

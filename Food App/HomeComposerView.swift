@@ -268,6 +268,10 @@ struct HM01LogComposerSection: View {
                 guard rows[index].text != newValue else { return }
 
                 let oldRow = rows[index]
+                if splitMultilineBatchIfNeeded(newValue, at: index, preserving: oldRow) {
+                    return
+                }
+
                 let oldText = oldRow.text
                 let wasEmpty = oldText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                 rows[index].text = newValue
@@ -348,6 +352,52 @@ struct HM01LogComposerSection: View {
                 }
             }
         )
+    }
+
+    private func splitMultilineBatchIfNeeded(_ value: String, at index: Int, preserving oldRow: HomeLogRow) -> Bool {
+        guard value.rangeOfCharacter(from: .newlines) != nil else { return false }
+        guard oldRow.serverLogId == nil, oldRow.hydrationLogId == nil else { return false }
+
+        let parts = value
+            .components(separatedBy: .newlines)
+            .map { String($0.prefix(500)) }
+        guard parts.count > 1 else { return false }
+        guard parts.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else {
+            return false
+        }
+
+        var replacementRows: [HomeLogRow] = []
+        var firstRow = oldRow
+        resetDraftRow(&firstRow, text: parts[0])
+        replacementRows.append(firstRow)
+
+        for part in parts.dropFirst() {
+            var row = HomeLogRow.empty()
+            resetDraftRow(&row, text: part)
+            replacementRows.append(row)
+        }
+
+        rows.replaceSubrange(index...index, with: replacementRows)
+        return true
+    }
+
+    private func resetDraftRow(_ row: inout HomeLogRow, text: String) {
+        row.text = text
+        row.calories = nil
+        row.calorieRangeText = nil
+        row.isApproximate = false
+        row.clearParsePhase()
+        row.parsedItem = nil
+        row.parsedItems = []
+        row.editableItemIndices = []
+        row.normalizedTextAtParse = nil
+        row.imagePreviewData = nil
+        row.imageRef = nil
+        row.hydrationAmountMl = nil
+        row.hydrationInputAmount = nil
+        row.hydrationInputUnit = nil
+        row.hydrationConfidence = nil
+        row.hydrationLogId = nil
     }
 
     private func indexForRowID(_ rowID: UUID) -> Int? {

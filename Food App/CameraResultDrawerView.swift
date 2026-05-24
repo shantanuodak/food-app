@@ -492,10 +492,10 @@ struct CameraResultDrawerView: View {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("Add a note to refine")
                         .font(.system(size: 15, weight: .bold, design: .rounded))
-                        .foregroundStyle(Color(red: 0.141, green: 0.098, blue: 0.078))
+                        .foregroundStyle(AppColor.textPrimary)
                     Text("Tell us anything the camera missed — portion size, cooking method, brand.")
                         .font(.system(size: 12, weight: .medium, design: .rounded))
-                        .foregroundStyle(Color(red: 0.467, green: 0.416, blue: 0.380))
+                        .foregroundStyle(AppColor.textSecondary)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(2)
                         .fixedSize(horizontal: false, vertical: true)
@@ -506,11 +506,14 @@ struct CameraResultDrawerView: View {
             .buttonStyle(.plain)
 
             TextField(
-                "e.g. 2 slices, homemade, with chutney",
+                "",
                 text: $contextNote,
+                prompt: Text("e.g. 2 slices, homemade, with chutney")
+                    .foregroundStyle(AppColor.textMuted),
                 axis: .vertical
             )
             .font(.system(size: 15, weight: .medium))
+            .foregroundStyle(AppColor.textPrimary)
             .lineLimit(1...3)
             .textInputAutocapitalization(.sentences)
             .disableAutocorrection(false)
@@ -519,14 +522,14 @@ struct CameraResultDrawerView: View {
             .padding(.vertical, 12)
             .background(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .fill(.white)
+                    .fill(AppColor.surfaceWarm)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .stroke(
                         isContextNoteFocused
-                            ? Color(red: 0.902, green: 0.361, blue: 0.102).opacity(0.55)
-                            : Color.black.opacity(0.08),
+                            ? AppColor.brandOrangeDeep.opacity(0.55)
+                            : AppColor.borderHairline,
                         lineWidth: isContextNoteFocused ? 1.5 : 1
                     )
             )
@@ -570,13 +573,13 @@ struct CameraResultDrawerView: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .fill(.white)
+                .fill(AppColor.surfaceChip)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.10), lineWidth: 1)
+                .stroke(AppColor.borderSubtle, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.04), radius: 12, y: 6)
+        .shadow(color: AppColor.shadow.opacity(0.45), radius: 10, y: 4)
     }
 
     private func seedEditablePhotoItemsIfNeeded(_ items: [ParsedFoodItem], force: Bool) {

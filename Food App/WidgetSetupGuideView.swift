@@ -124,7 +124,7 @@ struct WidgetSetupGuideView: View {
                     Capsule()
                         .stroke(WidgetGuideTokens.border, lineWidth: 1)
                 }
-                .shadow(color: .black.opacity(0.06), radius: 16, y: 8)
+                .shadow(color: WidgetGuideTokens.shadow, radius: 16, y: 8)
 
             VStack(alignment: .leading, spacing: 0) {
                 Text("Set it once. ")
@@ -165,7 +165,7 @@ struct WidgetSetupGuideView: View {
                     .padding(.vertical, 13)
                     .background(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
-                            .fill(selectedMode == mode ? mode.tint : .white.opacity(0.62))
+                            .fill(selectedMode == mode ? mode.tint : WidgetGuideTokens.cardSurface)
                     )
                     .overlay {
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -269,7 +269,7 @@ struct WidgetSetupGuideView: View {
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(.white.opacity(0.74))
+                .fill(WidgetGuideTokens.cardSurface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 28, style: .continuous)
                         .stroke(WidgetGuideTokens.border, lineWidth: 1)
@@ -341,11 +341,13 @@ private enum WidgetGuideTokens {
         endPoint: .trailing
     )
 
+    // Keep the inner scroll canvas in sync with the drawer/screen surface
+    // instead of pinning the widget guide to a light cream gradient.
     static let screenBackground = LinearGradient(
         colors: [
-            Color(red: 0.965, green: 0.886, blue: 0.792),
-            Color(red: 1.000, green: 0.976, blue: 0.941),
-            Color(red: 0.941, green: 0.930, blue: 0.992)
+            AppColor.surfaceWarm,
+            AppColor.surfaceWarm,
+            AppColor.surfaceWarm
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
@@ -395,7 +397,7 @@ private struct WidgetPreviewStrip: View {
         .padding(14)
         .background(
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(.white.opacity(0.62))
+                .fill(WidgetGuideTokens.cardSurface)
                 .overlay {
                     RoundedRectangle(cornerRadius: 30, style: .continuous)
                         .stroke(WidgetGuideTokens.border, lineWidth: 1)
