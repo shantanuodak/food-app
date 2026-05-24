@@ -161,7 +161,7 @@ struct BadgesTrophyCaseView: View {
             .foregroundStyle(BadgeTokens.orange)
         }
         .padding(12)
-        .background(Color.white.opacity(0.8), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(AppColor.surfaceChip, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func badgeSection(category: BadgeDefinition.Category, badges: [BadgeState]) -> some View {
@@ -289,7 +289,7 @@ private struct BadgeHeroCard: View {
                             .font(.system(size: 15, weight: .bold))
                             .foregroundStyle(BadgeTokens.orange)
                             .frame(width: 36, height: 36)
-                            .background(Color.white.opacity(0.72), in: Circle())
+                            .background(AppColor.surface, in: Circle())
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel("Share badge")
@@ -344,19 +344,13 @@ private struct BadgeHeroCard: View {
         .padding(18)
         .background(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white, Color(red: 1.0, green: 0.965, blue: 0.885)],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
+                .fill(AppColor.surfaceChip)
         )
         .overlay(
             RoundedRectangle(cornerRadius: 28, style: .continuous)
-                .stroke(Color.white.opacity(0.95), lineWidth: 1)
+                .stroke(AppColor.borderSubtle, lineWidth: 1)
         )
-        .shadow(color: Color.black.opacity(0.06), radius: 18, y: 10)
+        .shadow(color: AppColor.shadow, radius: 18, y: 10)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Badges. \(data.earnedCount) of \(data.totalCount) badges earned. \(data.title). \(data.subtitle).")
     }
@@ -374,7 +368,7 @@ private struct BadgeHeroCard: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.vertical, 10)
         .padding(.horizontal, 12)
-        .background(Color.white.opacity(0.68), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .background(AppColor.surface, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 }
 
@@ -485,36 +479,18 @@ private struct BadgeCard: View {
     }
 
     private var cardFill: AnyShapeStyle {
-        if state.isEarned {
-            return AnyShapeStyle(Color.white.opacity(0.86))
-        }
-        return AnyShapeStyle(
-            LinearGradient(
-                colors: [
-                    Color(red: 1.0, green: 0.992, blue: 0.972),
-                    Color(red: 0.972, green: 0.972, blue: 0.958)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        // 2026-05-24: earned and locked both render on AppColor.surfaceChip
+        // so the grid stays consistent with the hero card in dark mode.
+        // Light-mode gradient look is gone — kept the design hierarchy via
+        // stroke + statusFill instead.
+        AnyShapeStyle(AppColor.surfaceChip)
     }
 
     private var cardStroke: AnyShapeStyle {
         if state.isEarned {
             return AnyShapeStyle(BadgeTokens.amber.opacity(0.28))
         }
-        return AnyShapeStyle(
-            LinearGradient(
-                colors: [
-                    Color.white.opacity(0.96),
-                    BadgeTokens.amber.opacity(0.12),
-                    Color.black.opacity(0.055)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        )
+        return AnyShapeStyle(AppColor.borderSubtle)
     }
 
     private var statusFill: Color {
@@ -946,13 +922,17 @@ private struct BadgeCelebrationSeededRandomGenerator: RandomNumberGenerator {
 }
 
 private enum BadgeTokens {
-    static let canvas = Color(uiColor: .systemGroupedBackground)
-    static let ink = Color(red: 0.129, green: 0.145, blue: 0.161)
-    static let muted = Color(red: 0.525, green: 0.557, blue: 0.588)
-    static let gray100 = Color(red: 0.945, green: 0.953, blue: 0.961)
-    static let gray200 = Color(red: 0.914, green: 0.925, blue: 0.937)
-    static let amber = Color(red: 0.961, green: 0.647, blue: 0.141)
-    static let orange = Color(red: 0.902, green: 0.361, blue: 0.102)
+    // 2026-05-24: forwarded to AppColor so the trophy case adapts to
+    // dark mode like the rest of the app. Tier gradients below stay
+    // hardcoded — they're brand-medal colors and should look the same
+    // in both modes.
+    static let canvas = AppColor.background
+    static let ink = AppColor.textPrimary
+    static let muted = AppColor.textSecondary
+    static let gray100 = AppColor.gray100
+    static let gray200 = AppColor.gray200
+    static let amber = AppColor.warning
+    static let orange = AppColor.brandOrangeDeep
 
     static let bronzeGradient = LinearGradient(colors: [Color(red: 0.86, green: 0.50, blue: 0.27), Color(red: 0.62, green: 0.32, blue: 0.16)], startPoint: .topLeading, endPoint: .bottomTrailing)
     static let silverGradient = LinearGradient(colors: [Color(red: 0.82, green: 0.87, blue: 0.91), Color(red: 0.48, green: 0.55, blue: 0.62)], startPoint: .topLeading, endPoint: .bottomTrailing)

@@ -25,10 +25,11 @@ enum ChartPalette {
     static let scrubLine: Color  = Color.primary.opacity(0.4)
     static let targetLine: Color = Color.secondary.opacity(0.7)
 
-    // Macros
+    // Macros (2026-05-24: fat moved from red → purple so it no longer
+    // reads as a warning color on nutrition surfaces; matches AppColor.macroFat).
     static let protein = Color(red: 0.19, green: 0.72, blue: 0.98)
     static let carbs   = Color(red: 0.99, green: 0.64, blue: 0.22)
-    static let fat     = Color(red: 0.98, green: 0.38, blue: 0.36)
+    static let fat     = AppColor.macroFat
 
     // Hero card accents (used as 1pt strokes over Material)
     static let calorieAccent: Color = Color.green

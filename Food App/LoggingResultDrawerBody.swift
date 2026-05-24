@@ -1,21 +1,41 @@
 import SwiftUI
 import Foundation
 
-// Drawer chip palette (Phase C, 2026-05-22; re-tuned 2026-05-23 to match
-// the Apple-Health-style charts the user already has in Insights — blue
-// for protein, orange for carbs, red for fat. The earlier violet/green/red
-// drawer-only palette diverged from the chart, so totals on the drawer
-// didn't visually agree with the histogram below them.
+// Drawer chip palette. Macro inks stay saturated across modes for chart
+// alignment (blue protein / orange carbs / red fat). Backgrounds and
+// neutral text adapt to dark mode — the original cream/brown ink and
+// pastel chip bgs all became unreadable once the drawer surface flipped
+// to neutral dark on 2026-05-24.
 private let kDrawerProteinInk = Color(red: 0.000, green: 0.478, blue: 1.000)
-private let kDrawerProteinBg = Color(red: 0.870, green: 0.940, blue: 1.000)
+private let kDrawerProteinBg = Color(uiColor: UIColor { trait in
+    trait.userInterfaceStyle == .dark
+        ? UIColor(red: 0.000, green: 0.478, blue: 1.000, alpha: 0.18)
+        : UIColor(red: 0.870, green: 0.940, blue: 1.000, alpha: 1.0)
+})
 private let kDrawerCarbsInk = Color(red: 0.961, green: 0.486, blue: 0.078)
-private let kDrawerCarbsBg = Color(red: 1.000, green: 0.929, blue: 0.871)
-private let kDrawerFatInk = Color(red: 0.937, green: 0.267, blue: 0.267)
-private let kDrawerFatBg = Color(red: 1.000, green: 0.894, blue: 0.894)
+private let kDrawerCarbsBg = Color(uiColor: UIColor { trait in
+    trait.userInterfaceStyle == .dark
+        ? UIColor(red: 0.961, green: 0.486, blue: 0.078, alpha: 0.18)
+        : UIColor(red: 1.000, green: 0.929, blue: 0.871, alpha: 1.0)
+})
+private let kDrawerFatInk = AppColor.macroFat
+private let kDrawerFatBg = Color(uiColor: UIColor { trait in
+    trait.userInterfaceStyle == .dark
+        ? UIColor(red: 0.647, green: 0.396, blue: 0.918, alpha: 0.22)
+        : UIColor(red: 0.937, green: 0.886, blue: 1.000, alpha: 1.0)
+})
 
 private let kDrawerBrandOrange = Color(red: 0.902, green: 0.361, blue: 0.102)
-private let kDrawerInk = Color(red: 0.141, green: 0.098, blue: 0.078)
-private let kDrawerMuted = Color(red: 0.467, green: 0.416, blue: 0.380)
+private let kDrawerInk = AppColor.textPrimary
+private let kDrawerMuted = AppColor.textSecondary
+/// Used for small chips (quantity/unit pills) AND larger detected-item
+/// cards. Light → pure white. Dark → solid mid-charcoal that lifts off
+/// the dark drawer surface (~5% brightness delta over surfaceWarm).
+private let kDrawerChipFill = Color(uiColor: UIColor { trait in
+    trait.userInterfaceStyle == .dark
+        ? UIColor(white: 0.157, alpha: 1.0)
+        : UIColor.white
+})
 
 enum LoggingResultDrawerMode {
     case textDetails
@@ -318,10 +338,10 @@ private struct DrawerItemRow: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.white)
+                .fill(kDrawerChipFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.10), lineWidth: 1)
+                        .stroke(AppColor.borderSubtle, lineWidth: 1)
                 )
         )
         .animation(.spring(response: 0.30, dampingFraction: 0.84), value: expandedPicker)
@@ -359,7 +379,7 @@ private struct DrawerItemRow: View {
             .frame(height: 32)
             .background(
                 Capsule(style: .continuous)
-                    .fill(.white)
+                    .fill(kDrawerChipFill)
                     .overlay(
                         Capsule(style: .continuous)
                             .stroke(kDrawerBrandOrange.opacity(0.32), lineWidth: 1)
@@ -390,7 +410,7 @@ private struct DrawerItemRow: View {
             .frame(height: 32)
             .background(
                 Capsule(style: .continuous)
-                    .fill(.white)
+                    .fill(kDrawerChipFill)
                     .overlay(
                         Capsule(style: .continuous)
                             .stroke(kDrawerBrandOrange.opacity(0.32), lineWidth: 1)
@@ -716,10 +736,10 @@ struct LoggingResultThoughtProcessCard: View {
         .padding(16)
         .background(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(.white)
+                .fill(kDrawerChipFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .stroke(Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.10), lineWidth: 1)
+                        .stroke(AppColor.borderSubtle, lineWidth: 1)
                 )
         )
         .padding(.horizontal, 20)

@@ -91,7 +91,17 @@ struct HomeProfileBentoScreen: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 16) {
-                        identityRow
+                        ProfileHeroCard(
+                            firstName: appStore.authSessionStore.session?.firstName,
+                            lastName: appStore.authSessionStore.session?.lastName,
+                            displayName: displayName,
+                            email: appStore.authSessionStore.session?.email,
+                            bodyLine: profileBodyLine,
+                            preferencesCount: profilePreferencesCount,
+                            allergiesCount: profileAllergiesCount,
+                            onEdit: { isManageAccountPresented = true }
+                        )
+
                         if let errorMessage {
                             errorBanner(errorMessage)
                         }
@@ -103,10 +113,6 @@ struct HomeProfileBentoScreen: View {
                         // dashboard, without doubling up the calorie hero
                         // on every glance.
                         SavedMealsTile()
-                        HStack(alignment: .top, spacing: 12) {
-                            LoggingTipsTile()
-                            WidgetSetupTile()
-                        }
                         HStack(alignment: .top, spacing: 12) {
                             NavigationLink {
                                 BadgesTrophyCaseView(currentStreakDays: streakDays)
@@ -120,6 +126,10 @@ struct HomeProfileBentoScreen: View {
                                 isEnabled: reminderEnabledBinding,
                                 onOpenSettings: { isReminderSettingsPresented = true }
                             )
+                        }
+                        HStack(alignment: .top, spacing: 12) {
+                            LoggingTipsTile()
+                            WidgetSetupTile()
                         }
                         DietTile(diet: dietData)
                     }
@@ -199,15 +209,74 @@ struct HomeProfileBentoScreen: View {
     /// `firstName`; until the backend exposes a full-name field we show
     /// just that, falling back to the email local-part if no firstName.
     private var displayName: String {
-        if let first = appStore.authSessionStore.session?.firstName,
-           !first.trimmingCharacters(in: .whitespaces).isEmpty {
-            return first
+        let session = appStore.authSessionStore.session
+        let first = session?.firstName?.trimmingCharacters(in: .whitespaces) ?? ""
+        let last  = session?.lastName?.trimmingCharacters(in: .whitespaces) ?? ""
+
+        if !first.isEmpty && !last.isEmpty {
+            return "\(first) \(last)"
         }
-        if let email = appStore.authSessionStore.session?.email,
-           let local = email.split(separator: "@").first {
+        if !first.isEmpty { return first }
+        if let email = session?.email, let local = email.split(separator: "@").first {
             return String(local).capitalized
         }
         return "Your Profile"
+    }
+
+    /// One-line summary of body details for the ProfileHeroCard. Skips
+    /// any fields the profile response doesn't have so the line never
+    /// shows orphan separators. Empty string means "no body data yet" —
+    /// the card hides the line instead of rendering an empty row.
+    private var profileBodyLine: String {
+        guard let profile else { return "" }
+        var parts: [String] = []
+
+        if let age = profile.age { parts.append("\(age)") }
+        if let sexRaw = profile.sex?.trimmingCharacters(in: .whitespaces),
+           !sexRaw.isEmpty {
+            parts.append(sexRaw.capitalized)
+        }
+        if let cm = profile.heightCm, cm > 0 {
+            parts.append(formattedHeight(cm: cm, units: profile.units))
+        }
+        if let kg = profile.weightKg, kg > 0 {
+            parts.append(formattedWeight(kg: kg, units: profile.units))
+        }
+
+        return parts.joined(separator: " · ")
+    }
+
+    private var profilePreferencesCount: Int {
+        guard let raw = profile?.dietPreference else { return 0 }
+        let trimmed = raw.trimmingCharacters(in: .whitespaces)
+        if trimmed.isEmpty || trimmed.lowercased() == "none" { return 0 }
+        return trimmed
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+            .count
+    }
+
+    private var profileAllergiesCount: Int {
+        profile?.allergies.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count ?? 0
+    }
+
+    private func formattedHeight(cm: Double, units: UnitsOption) -> String {
+        if units == .metric {
+            return "\(Int(cm.rounded())) cm"
+        }
+        let totalInches = cm / 2.54
+        let feet = Int(totalInches / 12)
+        let inches = Int(totalInches.rounded()) - feet * 12
+        return "\(feet)'\(inches)\""
+    }
+
+    private func formattedWeight(kg: Double, units: UnitsOption) -> String {
+        if units == .metric {
+            return "\(Int(kg.rounded())) kg"
+        }
+        let lb = kg * 2.20462
+        return "\(Int(lb.rounded())) lb"
     }
 
     private func errorBanner(_ message: String) -> some View {
@@ -878,15 +947,10 @@ private struct LoggingTipsTile: View {
     }
 
     private var iconStack: some View {
-        ZStack {
-            Circle()
-                .fill(BentoTokens.warmIconGradient)
-            Image(systemName: "sparkle.magnifyingglass")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.white)
-        }
-        .frame(width: 42, height: 42)
-        .shadow(color: BentoTokens.orange700.opacity(0.12), radius: 8, y: 4)
+        Image(systemName: "sparkle.magnifyingglass")
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(BentoTokens.orange700)
+            .frame(width: 42, height: 42, alignment: .leading)
     }
 }
 
@@ -901,16 +965,11 @@ private struct SavedMealsTile: View {
             SavedMealsScreen()
         } label: {
             HStack(alignment: .center, spacing: 14) {
-                ZStack {
-                    Circle()
-                        .fill(BentoTokens.warmIconGradient)
-                    Image(systemName: "bookmark.fill")
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(.white)
-                }
-                .frame(width: 42, height: 42)
-                .shadow(color: BentoTokens.orange700.opacity(0.12), radius: 8, y: 4)
-                .accessibilityHidden(true)
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(BentoTokens.orange700)
+                    .frame(width: 42, height: 42, alignment: .center)
+                    .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: 7) {
                     Text("Saved Meals")
@@ -921,12 +980,6 @@ private struct SavedMealsTile: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(BentoTokens.gray700)
                         .lineLimit(2)
-
-                    HStack(spacing: 6) {
-                        savedMealChip("Favorites")
-                        savedMealChip("Collections")
-                        savedMealChip("Repeat meals")
-                    }
                 }
 
                 Spacer(minLength: 0)
@@ -936,19 +989,6 @@ private struct SavedMealsTile: View {
             .accessibilityLabel("Saved Meals. Keep repeat meals ready without retyping.")
             .accessibilityHint("Opens saved meals")
         }
-    }
-
-    private func savedMealChip(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 10, weight: .bold))
-            .foregroundStyle(BentoTokens.orange700)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 5)
-            .background(BentoTokens.savedMealChipBackground, in: Capsule())
-            .overlay {
-                Capsule()
-                    .stroke(BentoTokens.savedMealChipBorder, lineWidth: 0.75)
-            }
     }
 }
 
@@ -987,15 +1027,10 @@ private struct WidgetSetupTile: View {
     }
 
     private var widgetStack: some View {
-        ZStack {
-            Circle()
-                .fill(BentoTokens.warmIconGradient)
-            Image(systemName: "rectangle.stack.badge.plus")
-                .font(.system(size: 18, weight: .bold))
-                .foregroundStyle(.white)
-        }
-        .frame(width: 42, height: 42)
-        .shadow(color: BentoTokens.orange700.opacity(0.14), radius: 8, y: 4)
+        Image(systemName: "rectangle.stack.badge.plus")
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(BentoTokens.orange700)
+            .frame(width: 42, height: 42, alignment: .leading)
     }
 }
 
@@ -1005,34 +1040,50 @@ private struct BadgeTile: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .center, spacing: 8) {
+        // 2026-05-24: re-laid out to match LoggingTips/Widgets/Reminders
+        // tiles — icon at top, then left-aligned title and subtitle below.
+        // The streak number moved to a right-side column with a larger
+        // font so it reads as the headline data point on the tile.
+        HStack(alignment: .top, spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
                 trophyIcon
+                    .padding(.bottom, 12)
                     .accessibilityHidden(true)
+
                 Text("Badges")
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(BentoTokens.gray900)
                     .lineLimit(1)
                     .minimumScaleFactor(0.82)
+
+                Text(badgeTitle)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(BentoTokens.gray700)
+                    .lineLimit(3)
+                    .minimumScaleFactor(0.82)
+                    .padding(.top, 6)
+
+                Spacer(minLength: 0)
             }
-            .padding(.bottom, 8)
-            Text("\(days)")
-                .font(.system(size: 44, weight: .heavy))
-                .foregroundStyle(BentoTokens.brandGradient)
-                .contentTransition(reduceMotion ? .identity : .numericText())
-            Text("day streak")
-                .font(.system(size: 12, weight: .regular))
-                .foregroundStyle(BentoTokens.gray500)
-                .padding(.top, 6)
-            Text(badgeTitle)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(BentoTokens.orange700)
-                .lineLimit(2)
-                .minimumScaleFactor(0.82)
-                .padding(.top, 4)
+
             Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(days)")
+                    .font(.system(size: 52, weight: .heavy))
+                    .foregroundStyle(BentoTokens.brandGradient)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.5)
+                    .contentTransition(reduceMotion ? .identity : .numericText())
+
+                Text("day streak")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(BentoTokens.gray500)
+                    .lineLimit(1)
+            }
         }
-        .frame(maxWidth: .infinity, minHeight: 146, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: 146, alignment: .topLeading)
         .bentoTile(
             background: BentoTokens.whiteTileBackground,
             border: BentoTokens.whiteTileBorder
@@ -1046,15 +1097,10 @@ private struct BadgeTile: View {
     }
 
     private var trophyIcon: some View {
-        ZStack {
-            Circle()
-                .fill(BentoTokens.warmIconGradient)
-            Image(systemName: "trophy.fill")
-                .font(.system(size: 19, weight: .bold))
-                .foregroundStyle(.white)
-        }
-        .frame(width: 38, height: 38)
-        .shadow(color: BentoTokens.orange700.opacity(0.14), radius: 6, y: 3)
+        Image(systemName: "trophy.fill")
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(BentoTokens.orange700)
+            .frame(width: 38, height: 38, alignment: .leading)
     }
 }
 
@@ -1076,17 +1122,12 @@ private struct NotificationReminderTile: View {
                 // testers can reach the settings regardless of toggle state.
                 Button(action: onOpenSettings) {
                     VStack(alignment: .leading, spacing: 0) {
-                        ZStack {
-                            Circle()
-                                .fill(BentoTokens.warmIconGradient)
-                            Image(systemName: "bell.badge.fill")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundStyle(.white)
-                        }
-                        .frame(width: 38, height: 38)
-                        .shadow(color: BentoTokens.orange700.opacity(0.14), radius: 6, y: 3)
-                        .padding(.bottom, 12)
-                        .accessibilityHidden(true)
+                        Image(systemName: "bell.badge.fill")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(BentoTokens.orange700)
+                            .frame(width: 38, height: 38, alignment: .leading)
+                            .padding(.bottom, 12)
+                            .accessibilityHidden(true)
 
                         Text("Reminders")
                             .font(.system(size: 18, weight: .bold))
@@ -1178,15 +1219,10 @@ private struct DietTile: View {
     }
 
     private var iconCircle: some View {
-        ZStack {
-            BentoTokens.warmIconGradient
-            Image(systemName: "fork.knife")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(.white)
-        }
-        .frame(width: 40, height: 40)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .shadow(color: BentoTokens.green700.opacity(0.25), radius: 4, y: 2)
+        Image(systemName: "fork.knife")
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundStyle(BentoTokens.orange700)
+            .frame(width: 40, height: 40, alignment: .leading)
     }
 
     private func statRow(name: String, value: String, isPlaceholder: Bool) -> some View {
@@ -1487,45 +1523,47 @@ private struct BentoPressScaleStyle: ButtonStyle {
 
 // MARK: - Tokens
 
-/// Color + gradient palette for the bento dashboard. Mirrors the HTML
-/// prototype's palette so visual debugging between the two stays simple.
+/// Color + gradient palette for the bento dashboard. After the 2026-05-24
+/// dark-mode pass this is a thin façade over `AppColor`; keep new tile
+/// chrome going through `AppColor` directly rather than adding more
+/// aliases here.
 private enum BentoTokens {
     // Brand orange
-    static let orange500 = Color(red: 1.00, green: 0.624, blue: 0.200)
-    static let orange700 = Color(red: 0.902, green: 0.361, blue: 0.102)
+    static let orange500 = AppColor.brandOrange
+    static let orange700 = AppColor.brandOrangeDeep
     static let orangeSoft = Color(red: 0.986, green: 0.742, blue: 0.471)
 
     // Macros
-    static let protein = Color(red: 0.227, green: 0.659, blue: 0.969)
-    static let carbs   = Color(red: 0.961, green: 0.647, blue: 0.141)
-    static let fat     = Color(red: 0.937, green: 0.267, blue: 0.267)
+    static let protein = AppColor.macroProtein
+    static let carbs   = AppColor.macroCarbs
+    static let fat     = AppColor.macroFat
 
     // Body / Diet accents (saturated for icon circles)
-    static let blue500  = Color(red: 0.227, green: 0.659, blue: 0.969)
+    static let blue500  = AppColor.macroProtein
     static let blue700  = Color(red: 0.047, green: 0.388, blue: 0.690)
-    static let green500 = Color(red: 0.227, green: 0.812, blue: 0.416)
+    static let green500 = AppColor.success
     static let green700 = Color(red: 0.102, green: 0.490, blue: 0.227)
 
     // Surfaces
-    static let canvas   = Color(uiColor: .systemGroupedBackground)
-    static let profileCanvas = Color(red: 0.994, green: 0.985, blue: 0.973)
-    static let warningSurface = Color(red: 1.0, green: 0.954, blue: 0.915)
-    static let whiteTileBackground = Color.white
-    static let whiteTileBorder = Color(red: 0.918, green: 0.902, blue: 0.878)
-    static let savedMealChipBackground = Color(red: 1.0, green: 0.974, blue: 0.946)
-    static let savedMealChipBorder = Color(red: 0.949, green: 0.816, blue: 0.667)
+    static let canvas   = AppColor.background
+    static let profileCanvas = AppColor.surfaceWarm
+    static let warningSurface = AppColor.surfaceWarning
+    static let whiteTileBackground = AppColor.surface
+    static let whiteTileBorder = AppColor.borderHairline
+    static let savedMealChipBackground = AppColor.surfaceChip
+    static let savedMealChipBorder = AppColor.borderSubtle
 
-    // Grays (mirror HTML --gray-*)
-    static let gray100 = Color(red: 0.945, green: 0.953, blue: 0.961)
-    static let gray200 = Color(red: 0.914, green: 0.925, blue: 0.937)
-    static let gray400 = Color(red: 0.678, green: 0.710, blue: 0.741)
-    static let gray500 = Color(red: 0.525, green: 0.557, blue: 0.588)
-    static let gray700 = Color(red: 0.286, green: 0.314, blue: 0.341)
-    static let gray900 = Color(red: 0.129, green: 0.145, blue: 0.161)
+    // Grays — forwarded to AppColor so dark mode flips them too.
+    static let gray100 = AppColor.gray100
+    static let gray200 = AppColor.gray200
+    static let gray400 = AppColor.gray400
+    static let gray500 = AppColor.gray500
+    static let gray700 = AppColor.gray700
+    static let gray900 = AppColor.gray900
 
     // Gradients
     static let brandGradient = LinearGradient(
-        colors: [orange500, orange700],
+        colors: [AppColor.brandOrange, AppColor.brandOrangeDeep],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -1537,7 +1575,7 @@ private enum BentoTokens {
     )
 
     static let warmIconGradient = LinearGradient(
-        colors: [orange500, orange700],
+        colors: [AppColor.brandOrange, AppColor.brandOrangeDeep],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -1548,39 +1586,31 @@ private enum BentoTokens {
         endPoint: .bottomTrailing
     )
 
-    // 2026-05-22: bento restraint pass (Phase F, Item 6). The previous build
-    // gave each section family its own pastel gradient (warm cream for body,
-    // saved-meal yellow, cool blue for diet, soft green for elsewhere) which
-    // collectively felt loud. All tile chrome now resolves to a single warm
-    // cream surface with a quiet warm border. Color stays reserved for KPIs,
-    // action affordances, the streak ring tile, and the per-tile icon
-    // gradients (those small icon chips are tuned by `warmIconGradient` /
-    // `coolIconGradient`). To revert the restraint pass, restore the
-    // original gradient values from git history.
-    private static let unifiedCardTop = Color(red: 0.998, green: 0.985, blue: 0.965)
-    private static let unifiedCardBottom = Color(red: 0.995, green: 0.972, blue: 0.935)
-    private static let unifiedBorder = Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.10)
+    // 2026-05-22: bento restraint pass (Phase F, Item 6). All tile chrome
+    // resolves to the warm-cream `surfaceWarm` token + the warm `borderSubtle`
+    // hairline. Color stays reserved for KPIs, action affordances, the
+    // streak ring tile, and the per-tile icon gradients. To restore the
+    // pre-restraint family-specific gradients, see git history.
+    static let warmCardTop = AppColor.surfaceWarm
+    static let warmCardBottom = AppColor.surfaceWarm
+    static let warmBorder = AppColor.borderSubtle
 
-    static let warmCardTop = unifiedCardTop
-    static let warmCardBottom = unifiedCardBottom
-    static let warmBorder = unifiedBorder
+    static let savedCardTop = AppColor.surfaceWarm
+    static let savedCardBottom = AppColor.surfaceWarm
+    static let savedBorder = AppColor.borderSubtle
 
-    static let savedCardTop = unifiedCardTop
-    static let savedCardBottom = unifiedCardBottom
-    static let savedBorder = unifiedBorder
+    static let coolCardTop = AppColor.surfaceWarm
+    static let coolCardBottom = AppColor.surfaceWarm
+    static let coolBorder = AppColor.borderSubtle
 
-    static let coolCardTop = unifiedCardTop
-    static let coolCardBottom = unifiedCardBottom
-    static let coolBorder = unifiedBorder
-
-    static let greenCardTop = unifiedCardTop
-    static let greenCardBottom = unifiedCardBottom
-    static let greenBorder = unifiedBorder
+    static let greenCardTop = AppColor.surfaceWarm
+    static let greenCardBottom = AppColor.surfaceWarm
+    static let greenBorder = AppColor.borderSubtle
 
     /// Vertical orange→deep-orange for chart bars (matches the prototype
     /// trend chart bars which fade darker top-to-bottom).
     static let brandGradientLinear = LinearGradient(
-        colors: [orange500, orange700],
+        colors: [AppColor.brandOrange, AppColor.brandOrangeDeep],
         startPoint: .top,
         endPoint: .bottom
     )

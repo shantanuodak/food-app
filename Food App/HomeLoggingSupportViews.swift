@@ -244,11 +244,17 @@ struct AppDrawerHeader<Title: View>: View {
 /// and (optionally) `.background(AppDrawerSurface.gradient)` underneath the
 /// drawer body if a non-scrollable region needs to opt in.
 enum AppDrawerSurface {
+    /// Warm cream gradient in light, neutral dark in dark (2026-05-24:
+    /// dropped the dark warm-brown variant — clashed with brand orange).
+    /// All three stops resolve through `AppColor.surfaceWarm` so the
+    /// gradient is effectively a solid adaptive color; we keep the
+    /// LinearGradient wrapper so call sites that pass it to
+    /// `.presentationBackground` keep the same type.
     static let gradient = LinearGradient(
         colors: [
-            Color(red: 0.995, green: 0.983, blue: 0.968),
-            Color(red: 0.988, green: 0.972, blue: 0.952),
-            Color(red: 0.982, green: 0.961, blue: 0.936)
+            AppColor.surfaceWarm,
+            AppColor.surfaceWarm,
+            AppColor.surfaceWarm
         ],
         startPoint: .top,
         endPoint: .bottom

@@ -118,7 +118,8 @@ struct VisualQARootView: View {
                     isListening: true,
                     audioLevel: 0.62,
                     phase: .listening,
-                    onCancel: {}
+                    onCancel: {},
+                    onStop: {}
                 )
             }
         case "home/voice/processing":
@@ -128,7 +129,8 @@ struct VisualQARootView: View {
                     isListening: false,
                     audioLevel: 0.18,
                     phase: .handoff,
-                    onCancel: {}
+                    onCancel: {},
+                    onStop: {}
                 )
             }
         case "home/camera/permission-denied":

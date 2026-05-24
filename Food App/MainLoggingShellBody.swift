@@ -154,6 +154,12 @@ extension MainLoggingShellView {
                 .presentationBackground(.clear)
             }
             .padding()
+            // 2026-05-24: subtle top→bottom darkening so the home shell
+            // doesn't read as a flat OLED void in dark mode. Light mode
+            // resolves to solid systemBackground (no visible gradient).
+            // Must come AFTER `.padding()` so the gradient extends to
+            // the screen edges instead of sitting inside the 16pt margin.
+            .background(AppColor.shellBackground.ignoresSafeArea())
             .overlay(alignment: .top) {
                 if let activeCelebration {
                     FoodAppCelebrationOverlay(celebration: activeCelebration)

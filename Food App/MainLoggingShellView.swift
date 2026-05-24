@@ -255,11 +255,32 @@ struct FoodAppCelebration: Identifiable {
 
 struct FoodAppCelebrationOverlay: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
 
     let celebration: FoodAppCelebration
 
     @State private var messageVisible = false
     @State private var confettiDropped = false
+
+    /// White halo only makes sense on light backgrounds. In dark mode we
+    /// fade it to the celebration's tint color so the glow still reads as
+    /// "burst of light" without showing up as a literal white blob.
+    /// 2026-05-24: pre-multiplied to ~32% so the downstream `.opacity()`
+    /// modifiers don't stack into a saturated orange wash. The user
+    /// reported the prior full-tint version as too intense.
+    private var celebrationHaloColor: Color {
+        colorScheme == .dark
+            ? celebration.style.tint.opacity(0.32)
+            : .white
+    }
+
+    /// Subtitle pill needs to lift off the dark drawer in dark mode without
+    /// becoming a white slab.
+    private var celebrationPillFill: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.10)
+            : Color.white.opacity(0.72)
+    }
 
     var body: some View {
         ZStack {
@@ -324,20 +345,20 @@ struct FoodAppCelebrationOverlay: View {
 
             Text(celebration.title)
                 .font(OnboardingTypography.instrumentSerif(style: .regular, size: 72))
-                .foregroundStyle(Color(red: 0.129, green: 0.145, blue: 0.161))
+                .foregroundStyle(AppColor.textPrimary)
                 .minimumScaleFactor(0.82)
-                .shadow(color: .white.opacity(0.95), radius: 12, y: 2)
+                .shadow(color: celebrationHaloColor.opacity(0.95), radius: 12, y: 2)
                 .shadow(color: celebration.style.tint.opacity(0.18), radius: 18, y: 10)
 
             if let subtitle = celebration.subtitle, !subtitle.isEmpty {
                 Text(subtitle)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Color(red: 0.525, green: 0.557, blue: 0.588))
+                    .foregroundStyle(AppColor.textSecondary)
                     .lineLimit(2)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 16)
                     .padding(.vertical, 9)
-                    .background(.white.opacity(0.72), in: Capsule())
+                    .background(celebrationPillFill, in: Capsule())
                     .shadow(color: Color.black.opacity(0.04), radius: 10, y: 4)
             }
         }
@@ -347,8 +368,8 @@ struct FoodAppCelebrationOverlay: View {
         .background(
             RadialGradient(
                 colors: [
-                    Color.white.opacity(0.78),
-                    Color.white.opacity(0.32),
+                    celebrationHaloColor.opacity(0.78),
+                    celebrationHaloColor.opacity(0.32),
                     .clear
                 ],
                 center: .center,

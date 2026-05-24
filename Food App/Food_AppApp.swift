@@ -14,11 +14,12 @@ import GoogleSignIn
 @main
 struct Food_AppApp: App {
     @UIApplicationDelegateAdaptor(FoodAppDelegate.self) private var appDelegate
+    @AppStorage(AppearancePreference.storageKey) private var appearanceRaw: String = AppearancePreference.system.rawValue
 
     var body: some Scene {
         WindowGroup {
             RootBootstrapView()
-                .preferredColorScheme(.light)
+                .preferredColorScheme(AppearancePreference(rawValue: appearanceRaw)?.colorScheme)
                 .onOpenURL { url in
                     if QuickCameraLaunchStore.handle(url: url) {
                         return

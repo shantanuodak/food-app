@@ -69,13 +69,17 @@ enum OnboardingGlassTheme {
         light: UIColor(red: 0.79, green: 0.84, blue: 0.90, alpha: 0.55),
         dark: UIColor(white: 1.0, alpha: 0.14)
     )
+    // 2026-05-24: dark variants flattened to near-black neutral so the
+    // "almost there" / ready screen matches the main app shell (the user
+    // flagged the prior cool blue-tint dark gradient as off-brand vs the
+    // pure-black home screen). Light variants unchanged.
     static let backgroundStart = adaptiveColor(
         light: UIColor(red: 0.97, green: 0.98, blue: 0.995, alpha: 1.0),
-        dark: UIColor(red: 0.05, green: 0.08, blue: 0.11, alpha: 1.0)
+        dark: UIColor(white: 0.02, alpha: 1.0)
     )
     static let backgroundEnd = adaptiveColor(
         light: UIColor(red: 0.90, green: 0.94, blue: 0.98, alpha: 1.0),
-        dark: UIColor(red: 0.02, green: 0.03, blue: 0.05, alpha: 1.0)
+        dark: UIColor.black
     )
     static let dotOverlay = adaptiveColor(
         light: UIColor(red: 0.09, green: 0.12, blue: 0.18, alpha: 0.08),
@@ -93,17 +97,21 @@ enum OnboardingGlassTheme {
     // follows in a separate pass. See `docs/UI_COMPONENTS.md` →
     // "Onboarding refresh — in progress".
 
-    /// Warm off-white (light) / soft charcoal (dark). Replaces
-    /// `OnboardingAnimatedBackground` on screens migrated to the new direction.
+    /// Warm off-white (light) / pure-black (dark). Replaces
+    /// `OnboardingAnimatedBackground` on screens migrated to the new
+    /// direction. 2026-05-24: dark variant was a warm charcoal
+    /// (#161512 — R>G>B) that read as brownish vs the pure-black home
+    /// screen the user wanted to match. Flattened to black.
     static let neutralBackground = adaptiveColor(
         light: UIColor(red: 0.98, green: 0.97, blue: 0.95, alpha: 1.0),  // #FAF7F2
-        dark: UIColor(red: 0.086, green: 0.082, blue: 0.071, alpha: 1.0)  // #161512
+        dark: UIColor.black
     )
 
     /// Card and button surface; sits on top of `neutralBackground`.
+    /// 2026-05-24: dark variant neutralized (was a warm #1F1E1A).
     static let neutralSurface = adaptiveColor(
         light: UIColor.white,
-        dark: UIColor(red: 0.122, green: 0.118, blue: 0.102, alpha: 1.0)  // #1F1E1A
+        dark: UIColor(white: 0.110, alpha: 1.0)
     )
 
     /// Single accent for the new direction. Replaces the gradient pair

@@ -1,30 +1,26 @@
 import SwiftUI
 
 private enum SavedMealsTokens {
-    static let orange = Color(red: 0.902, green: 0.361, blue: 0.102)
+    static let orange = AppColor.brandOrangeDeep
     static let orangeDeep = Color(red: 0.725, green: 0.306, blue: 0.071)
-    static let orangeSoft = Color(red: 1.0, green: 0.941, blue: 0.878)
-    static let orangeWash = Color(red: 0.992, green: 0.970, blue: 0.947)
-    static let ink = Color(red: 0.129, green: 0.145, blue: 0.161)
-    static let muted = Color(red: 0.525, green: 0.557, blue: 0.588)
-    static let border = Color(red: 0.925, green: 0.855, blue: 0.792)
-    static let hairline = Color(red: 0.902, green: 0.867, blue: 0.827)
-    static let shadow = Color.black.opacity(0.055)
-    static let cardBackground = Color.white.opacity(0.94)
-    static let cardTint = Color(red: 0.989, green: 0.977, blue: 0.962)
+    static let orangeSoft = AppColor.brandOrangeSoft
+    static let orangeWash = AppColor.surfaceWarm
+    static let ink = AppColor.textPrimary
+    static let muted = AppColor.textSecondary
+    static let border = AppColor.borderHairline
+    static let hairline = AppColor.borderHairline
+    static let shadow = AppColor.shadow
+    static let cardBackground = AppColor.surface
+    static let cardTint = AppColor.surfaceWarm
 
     static let brandGradient = LinearGradient(
-        colors: [Color(red: 1.00, green: 0.62, blue: 0.20), orange],
+        colors: [AppColor.brandOrange, AppColor.brandOrangeDeep],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
     static let screenBackground = LinearGradient(
-        colors: [
-            Color(red: 0.995, green: 0.983, blue: 0.968),
-            Color(red: 0.988, green: 0.972, blue: 0.952),
-            Color(red: 0.982, green: 0.961, blue: 0.936)
-        ],
+        colors: [AppColor.surfaceWarm, AppColor.surfaceWarm, AppColor.surfaceWarm],
         startPoint: .top,
         endPoint: .bottom
     )
@@ -372,7 +368,7 @@ struct SavedMealsScreen: View {
         HStack(spacing: 10) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(SavedMealsTokens.orangeDeep.opacity(0.72))
+                .foregroundStyle(SavedMealsTokens.muted)
             TextField("Search Saved Meals", text: $searchText)
                 .textInputAutocapitalization(.never)
                 .autocorrectionDisabled()
@@ -473,6 +469,14 @@ struct SavedMealsScreen: View {
                !response.collections.contains(where: { $0.id == selectedCollectionId }) {
                 self.selectedCollectionId = nil
             }
+        } catch is CancellationError {
+            // 2026-05-24: pull-to-refresh while the initial `.task` is
+            // still in flight cancels the prior request — that surfaces
+            // as a CancellationError here. Treat it as a no-op so the
+            // "Couldn't load saved meals" error card doesn't flash for
+            // a request that was simply superseded.
+        } catch let urlError as URLError where urlError.code == .cancelled {
+            // Same situation when the cancellation comes through URLSession.
         } catch {
             errorMessage = (error as? LocalizedError)?.errorDescription ?? "Please try again."
         }
@@ -579,11 +583,11 @@ struct SavedMealsScreen: View {
             HStack(spacing: 8) {
                 Text("\(count)")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(isSelected ? .white : SavedMealsTokens.orangeDeep)
+                    .foregroundStyle(isSelected ? .white : SavedMealsTokens.muted)
                     .frame(width: 24, height: 24)
                     .background(
                         Circle()
-                            .fill(isSelected ? SavedMealsTokens.orange : SavedMealsTokens.orangeSoft)
+                            .fill(isSelected ? SavedMealsTokens.orange : AppColor.surfaceChip)
                     )
 
                 Text(title)
@@ -623,10 +627,10 @@ private struct SavedMealRow: View {
                 Spacer()
                 Text("\(Int(meal.totals.calories.rounded())) kcal")
                     .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(SavedMealsTokens.orangeDeep)
+                    .foregroundStyle(SavedMealsTokens.ink)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 6)
-                    .background(SavedMealsTokens.orangeSoft, in: Capsule())
+                    .background(AppColor.surfaceChip, in: Capsule())
 
                 Menu {
                     Button(role: .destructive, action: onDeleteRequest) {
@@ -637,7 +641,7 @@ private struct SavedMealRow: View {
                         .font(.system(size: 15, weight: .bold))
                         .foregroundStyle(SavedMealsTokens.muted)
                         .frame(width: 34, height: 34)
-                        .background(.white.opacity(0.72), in: Circle())
+                        .background(AppColor.surfaceChip, in: Circle())
                         .overlay {
                             Circle()
                                 .stroke(SavedMealsTokens.hairline, lineWidth: 1)
@@ -705,10 +709,10 @@ private struct SavedMealRow: View {
             Text(text)
         }
         .font(.system(size: 11, weight: .semibold))
-        .foregroundStyle(SavedMealsTokens.orangeDeep.opacity(0.86))
+        .foregroundStyle(SavedMealsTokens.muted)
         .padding(.horizontal, 9)
         .padding(.vertical, 6)
-        .background(SavedMealsTokens.orangeWash, in: Capsule())
+        .background(AppColor.surfaceChip, in: Capsule())
     }
 }
 

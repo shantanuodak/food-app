@@ -116,13 +116,19 @@ struct MainLoggingBottomDock: View {
                         .padding(8)
                         .allowsHitTesting(false)
                 } else {
+                    // 2026-05-24: bumped badge to 26pt + 13pt font so the
+                    // two-digit streak (e.g. "31") has breathing room.
+                    // Pushed off the trophy's bottom-right with an outward
+                    // offset so the number sits beside the trophy like a
+                    // notification badge instead of overlapping the cup.
                     Text("\(currentFoodLogStreak ?? 0)")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .font(.system(size: 13, weight: .bold, design: .rounded))
                         .monospacedDigit()
                         .foregroundStyle(.primary)
-                        .frame(minWidth: 20, minHeight: 20)
+                        .padding(.horizontal, 6)
+                        .frame(minWidth: 26, minHeight: 26)
                         .background(.regularMaterial, in: Circle())
-                        .padding(8)
+                        .offset(x: 6, y: 6)
                         .allowsHitTesting(false)
                 }
             }
@@ -172,16 +178,23 @@ struct MainLoggingBottomDock: View {
                 )
                 .shadow(color: glowColor.opacity(0.35), radius: 10, y: 4)
 
+            // 2026-05-24: was a white-on-gold gradient which read as
+            // low-contrast and faded in dark mode. Switched to a deep
+            // bronze/brown gradient so the trophy reads like an aged
+            // metal embossed on the gold disc.
             Image(systemName: systemImage)
                 .font(.system(size: iconSize, weight: .bold))
                 .foregroundStyle(
                     LinearGradient(
-                        colors: [.white, Color(red: 1.0, green: 0.96, blue: 0.72)],
+                        colors: [
+                            Color(red: 0.45, green: 0.24, blue: 0.02),
+                            Color(red: 0.30, green: 0.16, blue: 0.01)
+                        ],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
-                .shadow(color: glowColor.opacity(0.28), radius: 2, y: 1)
+                .shadow(color: .white.opacity(0.35), radius: 1, y: -0.5)
 
             Circle()
                 .fill(
@@ -210,60 +223,31 @@ struct MainLoggingBottomDock: View {
             AppHaptics.lightImpact()
             action()
         }) {
+            // 2026-05-24: single tinted circle restored so the tap target
+            // is visible — previous version had two stacked layers
+            // (ultraThinMaterial shell + lens) that read as a heavy gray
+            // disc in dark mode. This is one Circle, fill keyed to the
+            // icon color at low opacity so it adapts to both modes
+            // without a material or shadow.
             ZStack {
-                dockIconLens(color: color)
+                Circle()
+                    .fill(color.opacity(0.12))
+                    .overlay(
+                        Circle()
+                            .stroke(color.opacity(0.20), lineWidth: 1)
+                    )
+                    .frame(width: 48, height: 48)
 
                 Image(systemName: systemImage)
                     .font(.system(size: 16, weight: .bold))
                     .foregroundStyle(color)
                     .shadow(color: color.opacity(0.18), radius: 2, y: 1)
             }
-                .frame(width: 48, height: 48)
-                .frame(width: 60, height: 60)
-                .background(dockButtonShell)
+            .frame(width: 60, height: 60)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(Text(accessibilityLabel))
-    }
-
-    private var dockButtonShell: some View {
-        Circle()
-            .fill(.ultraThinMaterial)
-            .shadow(color: Color.black.opacity(0.06), radius: 12, y: 5)
-    }
-
-    @ViewBuilder
-    private func dockIconLens(color: Color) -> some View {
-        Circle()
-            .fill(Color.white.opacity(0.04))
-            .overlay(alignment: .topLeading) {
-                Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                .white.opacity(0.34),
-                                .clear
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 22, height: 22)
-                    .offset(x: 7, y: 7)
-            }
-            .modifier(DockIconLiquidGlassTint(color: color))
-            .allowsHitTesting(false)
-    }
-}
-
-private struct DockIconLiquidGlassTint: ViewModifier {
-    let color: Color
-
-    @ViewBuilder
-    func body(content: Content) -> some View {
-        content
-            .background(color.opacity(0.08), in: Circle())
-            .background(.ultraThinMaterial, in: Circle())
     }
 }
 

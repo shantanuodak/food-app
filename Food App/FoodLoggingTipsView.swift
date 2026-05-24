@@ -127,11 +127,15 @@ private enum FoodLoggingTipsTokens {
         endPoint: .trailing
     )
 
+    // 2026-05-24: was a hardcoded warm-cream three-stop gradient that
+    // stayed cream even in dark mode (sat on top of the now-dark drawer
+    // surface as a light slab). Routed through `AppColor.surfaceWarm` so
+    // the inner scroll content matches the outer drawer chrome.
     static let screenBackground = LinearGradient(
         colors: [
-            Color(red: 0.965, green: 0.886, blue: 0.792),
-            Color(red: 1.000, green: 0.976, blue: 0.941),
-            Color(red: 0.957, green: 0.918, blue: 0.875)
+            AppColor.surfaceWarm,
+            AppColor.surfaceWarm,
+            AppColor.surfaceWarm
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing

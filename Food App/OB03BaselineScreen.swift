@@ -37,6 +37,8 @@ struct OB03BaselineScreen: View {
     let onBack: () -> Void
     let onContinue: () -> Void
 
+    @Environment(\.colorScheme) private var colorScheme
+
     private var isMetric: Bool {
         (draft.units ?? .metric) == .metric
     }
@@ -442,7 +444,7 @@ struct OB03BaselineScreen: View {
                     .background(
                         ZStack {
                             RoundedRectangle(cornerRadius: 18, style: .continuous)
-                                .fill(Color.white)
+                                .fill(colorScheme == .dark ? Color.white.opacity(0.07) : Color.white)
 
                             if isSelected {
                                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -453,12 +455,12 @@ struct OB03BaselineScreen: View {
                     .overlay(
                         RoundedRectangle(cornerRadius: 18, style: .continuous)
                             .stroke(
-                                isSelected ? theme.accent : OnboardingGlassTheme.panelStroke,
+                                isSelected ? theme.accent : (colorScheme == .dark ? Color.white.opacity(0.10) : Color.black.opacity(0.08)),
                                 lineWidth: isSelected ? 2 : 1
                             )
                     )
                     .shadow(
-                        color: isSelected ? theme.accent.opacity(0.15) : OnboardingGlassTheme.buttonShadow.opacity(0.3),
+                        color: isSelected ? theme.accent.opacity(0.15) : Color.black.opacity(0.03),
                         radius: isSelected ? 10 : 3,
                         y: isSelected ? 3 : 1
                     )

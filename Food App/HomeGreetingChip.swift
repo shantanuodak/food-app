@@ -7,8 +7,10 @@ import SwiftUI
 /// The view now:
 ///   - Resolves a time-of-day-aware animation via `GreetingAnimationResolver`
 ///   - Renders the selected animation in a 24×24 frame
-///   - Greets with a slot-aware prefix ("Good morning", "Hey", "Evening",
-///     "Good night", "Nice")
+///   - Shows the user's first name — the animation icon already conveys
+///     time of day, so the "Good morning, " prefix was redundant chrome.
+///     Dropped 2026-05-24 because long names + the right-side date pill
+///     ("Yesterday", "2 days ago") were forcing the chip to truncate.
 ///   - Shimmers the name once on first render then every ~10s
 ///   - Trails a small chevron to signal "opens a sheet"
 struct HomeGreetingChip: View {
@@ -27,7 +29,7 @@ struct HomeGreetingChip: View {
             date: Date(),
             hasMilestone: hasMilestone
         )
-        let nameLine = greetingLine(prefix: resolved.slot.greetingPrefix, firstName: firstName)
+        let nameLine = displayLabel(firstName: firstName)
 
         return HStack(spacing: 6) {
             GreetingAnimationView(animation: resolved.animation)
@@ -45,6 +47,12 @@ struct HomeGreetingChip: View {
         // LiquidGlassCapsuleButtonStyle (14h × 8v padding + glassy capsule),
         // which matches the date chip on the right. Don't add vertical
         // padding here — the button style handles spacing.
+        //
+        // 2026-05-24: explicit contentShape so the whole capsule is
+        // tappable. Without it, taps in the gaps between the animation
+        // view / text / chevron sometimes missed the button — the user
+        // reported the profile drawer opening unreliably.
+        .contentShape(Capsule())
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("\(nameLine). Opens profile."))
     }
@@ -55,11 +63,8 @@ struct HomeGreetingChip: View {
             : Color.primary.opacity(0.85)
     }
 
-    private func greetingLine(prefix: String, firstName: String?) -> String {
-        if let name = firstName, !name.isEmpty {
-            return "\(prefix), \(name)"
-        }
-        // Slot-aware fallback when we don't have a first name.
-        return prefix == "Hey" ? "Hey there" : prefix
+    private func displayLabel(firstName: String?) -> String {
+        let trimmed = firstName?.trimmingCharacters(in: .whitespaces) ?? ""
+        return trimmed.isEmpty ? "Welcome" : trimmed
     }
 }

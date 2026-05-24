@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Profile Card — Image + Parallax Mockup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --brand-orange:        #ff9f33;
+      --brand-orange-deep:   #e65c1a;
+    }
+
+    .theme-light {
+      --bg:            #f6f3ee;
+      --tile-bg:       #fff;
+      --tile-border:   rgba(47, 39, 31, 0.10);
+      --text-primary:  #1f1d1a;
+      --text-secondary:#6b6b6b;
+      --text-muted:    #9a9a9a;
+      --shadow:        0 1px 2px rgba(0,0,0,0.04), 0 4px 12px rgba(60,40,20,0.04);
+    }
+    .theme-dark {
+      --bg:            #050505;
+      --tile-bg:       #1c1c1c;
+      --tile-border:   rgba(255, 255, 255, 0.08);
+      --text-primary:  #f5f5f7;
+      --text-secondary:#a8a8a8;
+      --text-muted:    #7a7a7a;
+      --shadow:        0 1px 2px rgba(0,0,0,0.3), 0 8px 24px rgba(0,0,0,0.35);
+    }
+
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; font-family: 'Inter', system-ui, sans-serif; }
+    body { background: #d8d4cc; padding: 32px 16px 64px; }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+
+    .phone {
+      background: var(--bg);
+      border-radius: 36px;
+      padding: 24px 18px;
+      box-shadow: 0 30px 60px rgba(0,0,0,0.18);
+      min-height: 540px;
+      perspective: 1200px;
+    }
+
+    .phone-label {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      text-align: center;
+      margin-bottom: 12px;
+    }
+
+    /* ============ Profile Card (image-driven) ============ */
+
+    .profile-card {
+      position: relative;
+      border-radius: 24px;
+      overflow: hidden;
+      cursor: pointer;
+      box-shadow:
+        0 1px 2px rgba(0,0,0,0.10),
+        0 18px 36px rgba(0,0,0,0.22);
+      transform-style: preserve-3d;
+      transition: transform 0.25s ease-out;
+      will-change: transform;
+      aspect-ratio: 16 / 9;
+      min-height: 180px;
+    }
+
+    /* Background image — sits behind everything */
+    .profile-bg {
+      position: absolute;
+      inset: -6%;
+      background-size: cover;
+      background-position: center;
+      transition: transform 0.25s ease-out;
+      will-change: transform;
+    }
+
+    /* Dark gradient overlay — needed for text contrast over any image */
+    .profile-overlay {
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(
+          180deg,
+          rgba(0,0,0,0.10) 0%,
+          rgba(0,0,0,0.35) 45%,
+          rgba(0,0,0,0.78) 100%
+        );
+    }
+
+    /* Top-right edit pill */
+    .profile-edit {
+      position: absolute;
+      top: 12px;
+      right: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #fff;
+      background: rgba(255,255,255,0.18);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.25);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    /* Foreground content — sits in front of the image */
+    .profile-content {
+      position: absolute;
+      inset: 0;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      color: #fff;
+      transform: translateZ(40px); /* lifts content for parallax depth */
+    }
+
+    .profile-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .avatar {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--brand-orange), var(--brand-orange-deep));
+      color: #fff;
+      font-family: 'Instrument Serif', serif;
+      font-size: 19px;
+      letter-spacing: 0.02em;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+      flex-shrink: 0;
+      border: 2px solid rgba(255,255,255,0.4);
+    }
+
+    .name {
+      font-size: 18px;
+      font-weight: 700;
+      line-height: 1.1;
+      letter-spacing: -0.01em;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+    }
+
+    .body-line {
+      font-size: 12px;
+      font-weight: 500;
+      color: rgba(255,255,255,0.85);
+      margin-top: 3px;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    }
+    .body-line .dot {
+      opacity: 0.6;
+      margin: 0 5px;
+    }
+
+    /* Dietary + allergy summary chips — frosted glass, count-only.
+       Whole-card tap (or top-right Edit pill) opens the unified body +
+       preferences editor. In SwiftUI these will be Capsule().fill(.ultraThinMaterial). */
+    .summary-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .summary-chip {
+      display: inline-flex;
+      align-items: baseline;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 600;
+      color: rgba(255,255,255,0.92);
+      background: rgba(255,255,255,0.16);
+      backdrop-filter: blur(14px) saturate(140%);
+      -webkit-backdrop-filter: blur(14px) saturate(140%);
+      padding: 6px 11px;
+      border-radius: 999px;
+      border: 1px solid rgba(255,255,255,0.22);
+      box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+      letter-spacing: -0.01em;
+      line-height: 1.1;
+    }
+
+    .summary-chip .count {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    /* ============ Saved Meals Tile (unchanged) ============ */
+
+    .saved-meals-tile {
+      background: var(--tile-bg);
+      border: 1px solid var(--tile-border);
+      border-radius: 22px;
+      padding: 14px 16px;
+      box-shadow: var(--shadow);
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      margin-top: 12px;
+    }
+
+    .saved-meals-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--brand-orange), var(--brand-orange-deep));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 18px;
+      box-shadow: 0 2px 6px rgba(230, 92, 26, 0.25);
+      flex-shrink: 0;
+    }
+
+    .saved-meals-title {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text-primary);
+    }
+    .saved-meals-sub {
+      font-size: 12px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* ============ Variant picker ============ */
+
+    .variant-row {
+      max-width: 980px;
+      margin: 0 auto 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      justify-content: center;
+      font-size: 12px;
+      color: #666;
+    }
+    .variant-row button {
+      font: inherit;
+      padding: 6px 12px;
+      border-radius: 999px;
+      border: 1px solid rgba(0,0,0,0.12);
+      background: #fff;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .variant-row button.active {
+      background: #1f1d1a;
+      color: #fff;
+      border-color: #1f1d1a;
+    }
+
+    .hint {
+      max-width: 980px;
+      margin: 18px auto 0;
+      text-align: center;
+      font-size: 12px;
+      color: #555;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="variant-row">
+    <span>Background:</span>
+    <button data-img="mountain" class="active">Mountain</button>
+    <button data-img="forest">Forest</button>
+    <button data-img="sunset">Sunset</button>
+    <button data-img="abstract">Abstract</button>
+  </div>
+
+  <div class="compare-grid">
+
+    <!-- LIGHT -->
+    <div class="phone theme-light">
+      <div class="phone-label">Light mode</div>
+
+      <div class="profile-card" data-tilt>
+        <div class="profile-bg" data-bg></div>
+        <div class="profile-overlay"></div>
+
+        <div class="profile-edit">
+          <span>Edit</span>
+          <span>›</span>
+        </div>
+
+        <div class="profile-content">
+          <div class="profile-row">
+            <div class="avatar">SO</div>
+            <div>
+              <div class="name">Shantanu Odak</div>
+              <div class="body-line">
+                32<span class="dot">·</span>Male<span class="dot">·</span>5'10"<span class="dot">·</span>175 lb
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-row">
+            <span class="summary-chip"><span class="count">3</span>Preferences</span>
+            <span class="summary-chip"><span class="count">2</span>Allergies</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="saved-meals-tile">
+        <div class="saved-meals-icon">🍱</div>
+        <div>
+          <div class="saved-meals-title">Saved meals</div>
+          <div class="saved-meals-sub">18 recipes · 3 collections</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- DARK -->
+    <div class="phone theme-dark">
+      <div class="phone-label">Dark mode</div>
+
+      <div class="profile-card" data-tilt>
+        <div class="profile-bg" data-bg></div>
+        <div class="profile-overlay"></div>
+
+        <div class="profile-edit">
+          <span>Edit</span>
+          <span>›</span>
+        </div>
+
+        <div class="profile-content">
+          <div class="profile-row">
+            <div class="avatar">SO</div>
+            <div>
+              <div class="name">Shantanu Odak</div>
+              <div class="body-line">
+                32<span class="dot">·</span>Male<span class="dot">·</span>5'10"<span class="dot">·</span>175 lb
+              </div>
+            </div>
+          </div>
+
+          <div class="summary-row">
+            <span class="summary-chip"><span class="count">3</span>Preferences</span>
+            <span class="summary-chip"><span class="count">2</span>Allergies</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="saved-meals-tile">
+        <div class="saved-meals-icon">🍱</div>
+        <div>
+          <div class="saved-meals-title">Saved meals</div>
+          <div class="saved-meals-sub">18 recipes · 3 collections</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <p class="hint">
+    Move your mouse over a card to see the 3D tilt parallax — the SwiftUI version uses <code>CMMotionManager</code> roll/pitch instead of mouse position. Click a background to switch images.
+  </p>
+
+  <script>
+    // ---- Image sources (Unsplash CDN) ----
+    // Reverted to the first selection — user preferred these. High-res
+    // (w=1600, q=85) so the card stays crisp at @3x on iPhone.
+    const IMAGES = {
+      mountain: 'https://images.unsplash.com/photo-1454496522488-7a8e488e8606?w=1600&q=85&auto=format&fit=crop',
+      forest:   'https://images.unsplash.com/photo-1448375240586-882707db888b?w=1600&q=85&auto=format&fit=crop',
+      sunset:   'https://images.unsplash.com/photo-1500627964684-141351970a7f?w=1600&q=85&auto=format&fit=crop',
+      abstract: 'https://images.unsplash.com/photo-1557672172-298e090bd0f1?w=1600&q=85&auto=format&fit=crop'
+    };
+
+    function setBackground(key) {
+      const url = IMAGES[key];
+      document.querySelectorAll('[data-bg]').forEach(el => {
+        el.style.backgroundImage = `url('${url}')`;
+      });
+      document.querySelectorAll('.variant-row button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.img === key);
+      });
+    }
+
+    document.querySelectorAll('.variant-row button').forEach(btn => {
+      btn.addEventListener('click', () => setBackground(btn.dataset.img));
+    });
+
+    setBackground('mountain');
+
+    // ---- Mouse-driven 3D tilt (mimics CoreMotion roll/pitch) ----
+    // Max ±10° on each axis to match the SwiftUI implementation.
+    const MAX_TILT = 10;
+    const BG_SHIFT = 14; // pt the image translates within its over-frame
+
+    document.querySelectorAll('[data-tilt]').forEach(card => {
+      const bg = card.querySelector('[data-bg]');
+
+      card.addEventListener('mousemove', (e) => {
+        const rect = card.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) - 0.5;  // -0.5 ... 0.5
+        const y = ((e.clientY - rect.top) / rect.height) - 0.5;
+
+        const rotY =  x * MAX_TILT * 2; // roll
+        const rotX = -y * MAX_TILT * 2; // pitch (inverted)
+
+        card.style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+        if (bg) {
+          bg.style.transform = `translate(${-x * BG_SHIFT}px, ${-y * BG_SHIFT}px) scale(1.06)`;
+        }
+      });
+
+      card.addEventListener('mouseleave', () => {
+        card.style.transform = '';
+        if (bg) bg.style.transform = '';
+      });
+    });
+  </script>
+</body>
+</html>
