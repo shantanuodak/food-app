@@ -48,6 +48,7 @@ extension MainLoggingShellView {
             firstName: loggedInFirstName,
             dateTitle: todayPillTitle,
             colorScheme: colorScheme,
+            isFoodStoryPresented: $isFoodStoryPresented,
             isProfilePresented: $isProfilePresented,
             isCalendarPresented: $isCalendarPresented
         )
@@ -112,6 +113,9 @@ extension MainLoggingShellView {
                 return true
             },
             onCaloriesTapped: { row in
+                presentRowDetails(for: row)
+            },
+            onHydrationTapped: { row in
                 presentRowDetails(for: row)
             },
             onFocusedRowChanged: { rowID in

@@ -27,6 +27,7 @@ struct MainLoggingBottomDock: View {
                     bottomDockButton(
                         systemImage: "camera.fill",
                         color: Color(red: 0.265, green: 0.224, blue: 0.835),
+                        tintStrength: 0.8,
                         accessibilityLabel: "Open camera"
                     ) {
                         NotificationCenter.default.post(name: .openCameraFromTabBar, object: nil)
@@ -35,6 +36,7 @@ struct MainLoggingBottomDock: View {
                     bottomDockButton(
                         systemImage: "mic.fill",
                         color: Color(red: 0.655, green: 0.114, blue: 0.745),
+                        tintStrength: 0.8,
                         accessibilityLabel: "Voice input"
                     ) {
                         NotificationCenter.default.post(name: .openVoiceFromTabBar, object: nil)
@@ -216,10 +218,13 @@ struct MainLoggingBottomDock: View {
     private func bottomDockButton(
         systemImage: String,
         color: Color,
+        tintStrength: Double = 1.0,
         accessibilityLabel: String,
         action: @escaping () -> Void
     ) -> some View {
-        Button(action: {
+        let adjustedTintStrength = min(max(tintStrength, 0), 1)
+
+        return Button(action: {
             AppHaptics.lightImpact()
             action()
         }) {
@@ -231,17 +236,17 @@ struct MainLoggingBottomDock: View {
             // without a material or shadow.
             ZStack {
                 Circle()
-                    .fill(color.opacity(0.12))
+                    .fill(color.opacity(0.12 * adjustedTintStrength))
                     .overlay(
                         Circle()
-                            .stroke(color.opacity(0.26), lineWidth: 1)
+                            .stroke(color.opacity(0.26 * adjustedTintStrength), lineWidth: 1)
                     )
                     .frame(width: 48, height: 48)
 
                 Image(systemName: systemImage)
                     .font(.system(size: 17, weight: .black))
-                    .foregroundStyle(color)
-                    .shadow(color: color.opacity(0.24), radius: 2, y: 1)
+                    .foregroundStyle(color.opacity(adjustedTintStrength))
+                    .shadow(color: color.opacity(0.24 * adjustedTintStrength), radius: 2, y: 1)
             }
             .frame(width: 60, height: 60)
             .contentShape(Rectangle())
@@ -255,6 +260,7 @@ struct MainLoggingTopHeaderStrip: View {
     let firstName: String?
     let dateTitle: String
     let colorScheme: ColorScheme
+    @Binding var isFoodStoryPresented: Bool
     @Binding var isProfilePresented: Bool
     @Binding var isCalendarPresented: Bool
 
@@ -284,6 +290,16 @@ struct MainLoggingTopHeaderStrip: View {
 
             Spacer(minLength: 0)
 
+            Button {
+                AppHaptics.lightImpact()
+                isFoodStoryPresented = true
+            } label: {
+                FoodStoryHeaderPreviewIcon()
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(Text("Open food story"))
+
             // Tutorial entry point. Filled play triangle on a rich
             // orange-to-pink gradient so it reads as the "watch a quick
             // intro" affordance — playful but on-brand. 3D Y-axis wobble
@@ -295,7 +311,7 @@ struct MainLoggingTopHeaderStrip: View {
                 isTutorialPresented = true
             } label: {
                 Image(systemName: "play.fill")
-                    .font(.system(size: 18, weight: .black, design: .rounded))
+                    .font(.system(size: 21, weight: .black, design: .rounded))
                     .foregroundStyle(
                         LinearGradient(
                             colors: [
@@ -307,9 +323,9 @@ struct MainLoggingTopHeaderStrip: View {
                             endPoint: .bottomTrailing
                         )
                     )
-                    .shadow(color: Color(red: 0.90, green: 0.36, blue: 0.10).opacity(0.32), radius: 6, y: 3)
-                    .shadow(color: Color(red: 1.00, green: 0.62, blue: 0.20).opacity(0.22), radius: 3, y: 1)
-                    .frame(width: 30, height: 30)
+                    .shadow(color: Color(red: 0.90, green: 0.36, blue: 0.10).opacity(0.36), radius: 7, y: 3)
+                    .shadow(color: Color(red: 1.00, green: 0.62, blue: 0.20).opacity(0.24), radius: 4, y: 1)
+                    .frame(width: 38, height: 38)
                     .contentShape(Rectangle())
                     .rotation3DEffect(
                         .degrees(helpIconWobble ? 22 : -22),
@@ -362,6 +378,48 @@ struct MainLoggingTopHeaderStrip: View {
                 helpIconWobble = true
             }
         }
+    }
+}
+
+private struct FoodStoryHeaderPreviewIcon: View {
+    private let assets = [
+        "ProfileBgMorning",
+        "ProfileBgAfternoon",
+        "ProfileBgEvening"
+    ]
+
+    var body: some View {
+        iconFrame
+        .frame(width: 42, height: 38)
+        .contentShape(Rectangle())
+    }
+
+    private var iconFrame: some View {
+        ZStack {
+            storyCard(assetName: assets[0], width: 19, height: 27, cornerRadius: 6)
+                .rotationEffect(.degrees(-8))
+                .offset(x: -10, y: 2)
+
+            storyCard(assetName: assets[2], width: 19, height: 27, cornerRadius: 6)
+                .rotationEffect(.degrees(9))
+                .offset(x: 10, y: 2)
+
+            storyCard(assetName: assets[1], width: 22, height: 30, cornerRadius: 7)
+                .offset(y: -2)
+        }
+    }
+
+    private func storyCard(assetName: String, width: CGFloat, height: CGFloat, cornerRadius: CGFloat) -> some View {
+        Image(assetName)
+            .resizable()
+            .scaledToFill()
+            .frame(width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .stroke(Color.white.opacity(0.52), lineWidth: 0.8)
+            }
+            .shadow(color: Color.black.opacity(0.22), radius: 4, y: 2)
     }
 }
 

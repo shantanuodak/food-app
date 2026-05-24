@@ -871,6 +871,9 @@ struct BadgesTotals: Decodable, Equatable {
     let highConfidenceItems: Int
     let healthActiveDays: Int
     let healthStepDays10k: Int
+    var hydrationLogs: Int? = nil
+    var hydrationGoalDays: Int? = nil
+    var hydrationTotalMl: Int? = nil
 }
 
 struct AdminFeatureFlags: Codable {

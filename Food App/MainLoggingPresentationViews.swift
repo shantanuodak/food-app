@@ -1,4 +1,5 @@
 import SwiftUI
+import Foundation
 import UIKit
 
 struct MainLoggingCalendarSheet: View {
@@ -109,20 +110,87 @@ struct MainLoggingManualAddDrawerContent: View {
     }
 }
 
+struct HydrationServingOption: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let subtitle: String
+    let amountMl: Double
+    let inputAmount: Double?
+    let inputUnit: String?
+    let rawText: String
+
+    static let common: [HydrationServingOption] = [
+        HydrationServingOption(
+            id: "ml-250",
+            title: "250 ml",
+            subtitle: "8.5 fl oz",
+            amountMl: 250,
+            inputAmount: 250,
+            inputUnit: "ml",
+            rawText: "250 ml water"
+        ),
+        HydrationServingOption(
+            id: "ml-500",
+            title: "500 ml",
+            subtitle: "16.9 fl oz",
+            amountMl: 500,
+            inputAmount: 500,
+            inputUnit: "ml",
+            rawText: "500 ml water"
+        ),
+        HydrationServingOption(
+            id: "ml-750",
+            title: "750 ml",
+            subtitle: "25.4 fl oz",
+            amountMl: 750,
+            inputAmount: 750,
+            inputUnit: "ml",
+            rawText: "750 ml water"
+        ),
+        HydrationServingOption(
+            id: "liter-1000",
+            title: "1 L",
+            subtitle: "33.8 fl oz",
+            amountMl: 1000,
+            inputAmount: 1,
+            inputUnit: "l",
+            rawText: "1 liter of water"
+        )
+    ]
+
+    static func from(suggestion: HydrationSuggestion, index: Int) -> HydrationServingOption {
+        if let option = common.first(where: { abs($0.amountMl - suggestion.amountMl) < 0.5 }) {
+            return option
+        }
+
+        return HydrationServingOption(
+            id: "suggestion-\(index)-\(Int(suggestion.amountMl.rounded()))",
+            title: HydrationDisplayText.shortLabel(amountMl: suggestion.amountMl),
+            subtitle: "\(String(format: "%.1f", suggestion.amountMl / 29.5735)) fl oz",
+            amountMl: suggestion.amountMl,
+            inputAmount: suggestion.amountMl,
+            inputUnit: "ml",
+            rawText: suggestion.label.lowercased().contains("water")
+                ? suggestion.label
+                : "\(suggestion.label) water"
+        )
+    }
+}
+
 struct HydrationAmountPromptSheet: View {
     let prompt: HydrationAmountPromptPresentation
-    let onSelect: (HydrationSuggestion) -> Void
+    let onSelect: (HydrationServingOption) -> Void
     let onCancel: () -> Void
 
-    private var suggestions: [HydrationSuggestion] {
-        if !prompt.suggestions.isEmpty {
-            return prompt.suggestions
+    private var servingOptions: [HydrationServingOption] {
+        var options = HydrationServingOption.common
+        for (index, suggestion) in prompt.suggestions.enumerated() {
+            let option = HydrationServingOption.from(suggestion: suggestion, index: index)
+            if !options.contains(where: { abs($0.amountMl - option.amountMl) < 0.5 }) {
+                options.append(option)
+            }
         }
-        return [
-            HydrationSuggestion(amountMl: 250, label: "250 ml"),
-            HydrationSuggestion(amountMl: 500, label: "500 ml"),
-            HydrationSuggestion(amountMl: 750, label: "750 ml")
-        ]
+        return options
     }
 
     var body: some View {
@@ -143,30 +211,21 @@ struct HydrationAmountPromptSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 12) {
-                    Image(systemName: "drop.fill")
-                        .font(.system(size: 28, weight: .semibold))
-                        .foregroundStyle(Color.cyan)
-                        .frame(width: 48, height: 48)
-                        .background(Color.cyan.opacity(0.12), in: Circle())
-
-                    Text(prompt.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? "Water" : prompt.rawText)
-                        .font(.headline)
-                        .lineLimit(2)
-                }
-
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 118), spacing: 12)], spacing: 12) {
-                    ForEach(suggestions, id: \.self) { suggestion in
+                    ForEach(servingOptions) { option in
                         Button {
                             AppHaptics.selection()
-                            onSelect(suggestion)
+                            onSelect(option)
                         } label: {
                             VStack(spacing: 6) {
-                                Text(suggestion.label)
+                                Text(option.title)
                                     .font(.system(size: 20, weight: .semibold))
-                                Text(HydrationDisplayText.shortLabel(amountMl: suggestion.amountMl))
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.82)
+                                Text(option.subtitle)
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
+                                    .lineLimit(1)
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 78)
@@ -194,6 +253,7 @@ struct HydrationGoalPromptSheet: View {
     let isSaving: Bool
     let onSelect: (Int) -> Void
     let onSkip: () -> Void
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let goalOptions: [(ml: Int, title: String, subtitle: String)] = [
         (2000, "2 L", "About 8 cups"),
@@ -216,23 +276,21 @@ struct HydrationGoalPromptSheet: View {
             }
 
             VStack(alignment: .leading, spacing: 18) {
-                HStack(spacing: 12) {
-                    Image(systemName: "drop.circle.fill")
-                        .font(.system(size: 32, weight: .semibold))
-                        .foregroundStyle(Color.cyan)
-                        .frame(width: 52, height: 52)
-                        .background(Color.cyan.opacity(0.12), in: Circle())
+                HStack(alignment: .center, spacing: 16) {
+                    HydrationGoalDropletPreview(reduceMotion: reduceMotion)
 
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("What do you want to drink each day?")
-                            .font(.headline)
-                        Text("This becomes the line on your water chart.")
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Pick your daily water goal")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundStyle(.primary)
+                            .fixedSize(horizontal: false, vertical: true)
+                        Text("We'll use it as your progress line.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
                 }
 
-                HStack(spacing: 10) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 126), spacing: 10)], spacing: 10) {
                     ForEach(goalOptions.indices, id: \.self) { index in
                         let option = goalOptions[index]
                         Button {
@@ -250,13 +308,13 @@ struct HydrationGoalPromptSheet: View {
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 92)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .glassyBackground(in: RoundedRectangle(cornerRadius: 14, style: .continuous), tint: Color.cyan.opacity(0.10))
                             .overlay {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                                     .stroke(Color.cyan.opacity(0.22), lineWidth: 0.8)
                             }
                         }
-                        .buttonStyle(.plain)
+                        .buttonStyle(HydrationGoalOptionButtonStyle())
                         .disabled(isSaving)
                     }
                 }
@@ -283,7 +341,14 @@ struct MainLoggingRowCalorieDetailsSheet: View {
     @Binding var isDeleteConfirmationPresented: Bool
     let isSaveMealEnabled: Bool
     let isSavedMealSelected: Bool
+    let hydrationQuickLogSavingOptionIDs: Set<String>
+    let hydrationQuickLogPendingAmountMl: Double
+    let canDeleteLastHydrationLog: Bool
+    let isDeletingLastHydrationLog: Bool
     let onSaveMeal: () -> Void
+    let onHydrationQuickLog: (HydrationServingOption) -> Void
+    let onHydrationGoalTapped: () -> Void
+    let onDeleteLastHydrationLog: () -> Void
     let onDeleteTapped: () -> Void
     let onConfirmDelete: () -> Void
     let onCancelDelete: () -> Void
@@ -300,33 +365,39 @@ struct MainLoggingRowCalorieDetailsSheet: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
-                    headerMedia
+                    if details.isHydration {
+                        hydrationDetailsBody
+                    } else {
+                        headerMedia
 
-                    LoggingResultDrawerBody(
-                        foodName: details.displayName,
-                        totals: totals,
-                        items: details.parsedItems,
-                        thoughtProcess: details.thoughtProcess,
-                        showsThoughtProcess: false,
-                        onItemQuantityChange: onItemQuantityChange,
-                        onRecalculate: nil
-                    )
+                        LoggingResultDrawerBody(
+                            foodName: details.displayName,
+                            totals: totals,
+                            items: details.parsedItems,
+                            thoughtProcess: details.thoughtProcess,
+                            showsThoughtProcess: false,
+                            onItemQuantityChange: onItemQuantityChange,
+                            onRecalculate: nil
+                        )
 
-                    LoggingResultThoughtProcessCard(thoughtProcess: details.thoughtProcess)
-
-                    Button(role: .destructive, action: onDeleteTapped) {
-                        Text("Delete")
-                            .font(.system(size: 16, weight: .semibold))
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 50)
+                        LoggingResultThoughtProcessCard(thoughtProcess: details.thoughtProcess)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.red)
-                    .disabled(isDeleteDisabled)
-                    .accessibilityHint(Text("Deletes this food entry and updates your totals."))
-                    .padding(.horizontal, 20)
-                    .padding(.top, 16)
-                    .padding(.bottom, 36)
+
+                    if !details.isHydration {
+                        Button(role: .destructive, action: onDeleteTapped) {
+                            Text("Delete")
+                                .font(.system(size: 16, weight: .semibold))
+                                .frame(maxWidth: .infinity)
+                                .frame(height: 50)
+                        }
+                        .buttonStyle(.plain)
+                        .foregroundStyle(.red)
+                        .disabled(isDeleteDisabled)
+                        .accessibilityHint(Text("Deletes this food entry and updates your totals."))
+                        .padding(.horizontal, 20)
+                        .padding(.top, 16)
+                        .padding(.bottom, 36)
+                    }
                 }
             }
             .navigationTitle("")
@@ -340,11 +411,11 @@ struct MainLoggingRowCalorieDetailsSheet: View {
                 }
             }
         }
-        .alert("How sure are you that you want to delete this entry?", isPresented: $isDeleteConfirmationPresented) {
+        .alert(details.isHydration ? "Delete this water entry?" : "How sure are you that you want to delete this entry?", isPresented: $isDeleteConfirmationPresented) {
             Button("Delete", role: .destructive, action: onConfirmDelete)
             Button("Cancel", role: .cancel, action: onCancelDelete)
         } message: {
-            Text("This removes the food from your log, updates your calories, and deletes the database row when it has already synced.")
+            Text(details.isHydration ? "This removes the water from your log, updates hydration progress, and deletes the database row when it has already synced." : "This removes the food from your log, updates your calories, and deletes the database row when it has already synced.")
         }
         // V3.1 hotfix v6.2 (2026-05-20): always open fully (.large) instead
         // of the prior 62%-by-default + large-drag-up combo. User feedback
@@ -358,7 +429,7 @@ struct MainLoggingRowCalorieDetailsSheet: View {
 
     private var totals: NutritionTotals {
         NutritionTotals(
-            calories: Double(details.calories),
+            calories: Double(details.calories ?? 0),
             protein: details.protein ?? 0,
             carbs: details.carbs ?? 0,
             fat: details.fat ?? 0
@@ -367,7 +438,9 @@ struct MainLoggingRowCalorieDetailsSheet: View {
 
     @ViewBuilder
     private var saveMealToolbarControl: some View {
-        if isSavedMealSelected {
+        if details.isHydration {
+            EmptyView()
+        } else if isSavedMealSelected {
             Label("Saved", systemImage: "bookmark.fill")
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundStyle(AppColor.brandOrangeDeep)
@@ -379,6 +452,19 @@ struct MainLoggingRowCalorieDetailsSheet: View {
             }
             .disabled(!isSaveMealEnabled)
         }
+    }
+
+    private var hydrationDetailsBody: some View {
+        HydrationDropletDetailsBody(
+            details: details,
+            savingOptionIDs: hydrationQuickLogSavingOptionIDs,
+            pendingQuickLogAmountMl: hydrationQuickLogPendingAmountMl,
+            canDeleteLastLog: canDeleteLastHydrationLog,
+            isDeletingLastLog: isDeletingLastHydrationLog,
+            onQuickLog: onHydrationQuickLog,
+            onGoalTapped: onHydrationGoalTapped,
+            onDeleteLastLog: onDeleteLastHydrationLog
+        )
     }
 
     @ViewBuilder
@@ -417,6 +503,556 @@ struct MainLoggingRowCalorieDetailsSheet: View {
         } else {
             EmptyView()
         }
+    }
+}
+
+private struct HydrationDropletDetailsBody: View {
+    let details: RowCalorieDetails
+    let savingOptionIDs: Set<String>
+    let pendingQuickLogAmountMl: Double
+    let canDeleteLastLog: Bool
+    let isDeletingLastLog: Bool
+    let onQuickLog: (HydrationServingOption) -> Void
+    let onGoalTapped: () -> Void
+    let onDeleteLastLog: () -> Void
+
+    private var totalMl: Double {
+        max(0, details.hydrationDayTotalMl ?? details.hydrationAmountMl ?? 0)
+    }
+
+    private var goalMl: Double? {
+        guard let goal = details.hydrationGoalMl, goal > 0 else { return nil }
+        return goal
+    }
+
+    private var displayedTotalMl: Double {
+        totalMl + pendingQuickLogAmountMl
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack {
+                Spacer(minLength: 0)
+                HydrationLiquidDropletView(
+                    totalMl: displayedTotalMl,
+                    goalMl: goalMl,
+                    isAdding: !savingOptionIDs.isEmpty
+                )
+                Spacer(minLength: 0)
+            }
+
+            HydrationQuickLogPanel(
+                options: HydrationServingOption.common,
+                savingOptionIDs: savingOptionIDs,
+                canDeleteLastLog: canDeleteLastLog,
+                isDeletingLastLog: isDeletingLastLog,
+                onQuickLog: onQuickLog,
+                onDeleteLastLog: onDeleteLastLog
+            )
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 22)
+        .padding(.bottom, 8)
+    }
+}
+
+private struct HydrationQuickLogPanel: View {
+    let options: [HydrationServingOption]
+    let savingOptionIDs: Set<String>
+    let canDeleteLastLog: Bool
+    let isDeletingLastLog: Bool
+    let onQuickLog: (HydrationServingOption) -> Void
+    let onDeleteLastLog: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Log more water")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text("Choose a serving")
+                    .font(.caption.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                ForEach(options) { option in
+                    Button {
+                        AppHaptics.selection()
+                        onQuickLog(option)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(option.title)
+                                .font(.system(size: 15, weight: .bold))
+                                .foregroundStyle(.primary)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.78)
+                            Text(option.subtitle)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+
+                            if savingOptionIDs.contains(option.id) {
+                                ProgressView()
+                                    .controlSize(.mini)
+                                    .padding(.top, 2)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .frame(height: 62)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                        .overlay {
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .stroke(AppColor.borderSubtle, lineWidth: 1)
+                        }
+                    }
+                    .buttonStyle(HydrationGoalOptionButtonStyle())
+                    .accessibilityLabel(Text("Log \(option.title), \(option.subtitle) of water"))
+                }
+            }
+
+            Button(role: .destructive) {
+                AppHaptics.selection()
+                onDeleteLastLog()
+            } label: {
+                HStack(spacing: 10) {
+                    if isDeletingLastLog {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    Text(isDeletingLastLog ? "Deleting last water" : "Delete last water")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .background(Color.red.opacity(canDeleteLastLog ? 0.10 : 0.05), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.red.opacity(canDeleteLastLog ? 0.25 : 0.10), lineWidth: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(canDeleteLastLog ? Color.red : Color.secondary)
+            .disabled(!canDeleteLastLog || isDeletingLastLog)
+            .accessibilityHint(Text("Deletes the most recent water entry for this day."))
+        }
+    }
+}
+
+private struct HydrationLiquidDropletView: View {
+    let totalMl: Double
+    let goalMl: Double?
+    let isAdding: Bool
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.colorScheme) private var colorScheme
+
+    private var progress: Double {
+        if let goalMl, goalMl > 0 {
+            return min(max(totalMl / goalMl, 0.05), 1.0)
+        }
+        return min(max(totalMl / 2500, 0.16), 0.88)
+    }
+
+    private var goalLabel: String {
+        if let goalMl {
+            return "of \(HydrationDisplayText.shortLabel(amountMl: goalMl))"
+        }
+        return "logged today"
+    }
+
+    private var waterGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color(red: 0.58, green: 0.94, blue: 1.00).opacity(colorScheme == .dark ? 0.88 : 0.76),
+                Color(red: 0.16, green: 0.68, blue: 0.98).opacity(colorScheme == .dark ? 0.95 : 0.86),
+                Color(red: 0.02, green: 0.38, blue: 0.86).opacity(colorScheme == .dark ? 0.90 : 0.74)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    private var glassShellGradient: LinearGradient {
+        LinearGradient(
+            colors: [
+                Color.white.opacity(colorScheme == .dark ? 0.18 : 0.86),
+                Color(red: 0.73, green: 0.96, blue: 1.00).opacity(colorScheme == .dark ? 0.10 : 0.34),
+                Color(red: 0.02, green: 0.30, blue: 0.70).opacity(colorScheme == .dark ? 0.16 : 0.08)
+            ],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+            let seconds = context.date.timeIntervalSinceReferenceDate
+            let phase = reduceMotion ? 0 : seconds * 1.05
+            let breathingPulse = reduceMotion ? 1 : 1 + CGFloat(sin(seconds * 0.82)) * 0.007
+            let addPulse: CGFloat = isAdding && !reduceMotion ? 1.018 : 1
+
+            ZStack {
+                dropletGlow
+
+                ZStack {
+                    HydrationDropletShape()
+                        .fill(glassShellGradient)
+
+                    HydrationDropletWaterLayer(
+                        progress: progress,
+                        phase: phase,
+                        reduceMotion: reduceMotion,
+                        waterGradient: waterGradient
+                    )
+
+                    HydrationDropletDepthOverlay(phase: phase)
+
+                    HydrationDropletHighlights(phase: phase)
+
+                    HydrationDropletShape()
+                        .stroke(
+                            LinearGradient(
+                                colors: [
+                                    Color.white.opacity(colorScheme == .dark ? 0.48 : 0.84),
+                                    Color.cyan.opacity(colorScheme == .dark ? 0.26 : 0.34),
+                                    Color.blue.opacity(colorScheme == .dark ? 0.36 : 0.18)
+                                ],
+                                startPoint: .topLeading,
+                                endPoint: .bottomTrailing
+                            ),
+                            lineWidth: 1.1
+                        )
+
+                    VStack(spacing: 5) {
+                        Text(HydrationDisplayText.shortLabel(amountMl: totalMl))
+                            .font(.system(size: 35, weight: .bold))
+                            .monospacedDigit()
+                            .foregroundStyle(Color.white)
+                            .shadow(color: Color.black.opacity(0.20), radius: 8, y: 3)
+                            .minimumScaleFactor(0.75)
+                            .lineLimit(1)
+                        Text(goalLabel)
+                            .font(.subheadline.weight(.semibold))
+                            .foregroundStyle(Color.white.opacity(0.82))
+                            .shadow(color: Color.black.opacity(0.18), radius: 6, y: 2)
+                    }
+                    .padding(.horizontal, 28)
+                    .offset(y: 26)
+                }
+                .clipShape(HydrationDropletShape())
+                .compositingGroup()
+            }
+            .frame(width: 232, height: 294)
+            .scaleEffect(breathingPulse * addPulse)
+            .animation(.spring(response: 0.34, dampingFraction: 0.72), value: totalMl)
+            .animation(.spring(response: 0.22, dampingFraction: 0.70), value: isAdding)
+        }
+        .frame(width: 240, height: 302)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Water logged \(HydrationDisplayText.shortLabel(amountMl: totalMl)) \(goalLabel)"))
+    }
+
+    private var dropletGlow: some View {
+        ZStack {
+            HydrationDropletShape()
+                .fill(Color.cyan.opacity(colorScheme == .dark ? 0.16 : 0.10))
+                .frame(width: 200, height: 254)
+                .blur(radius: 24)
+                .offset(y: 16)
+
+            HydrationDropletShape()
+                .fill(Color.black.opacity(colorScheme == .dark ? 0.24 : 0.08))
+                .frame(width: 190, height: 244)
+                .blur(radius: 18)
+                .offset(y: 22)
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct HydrationDropletWaterLayer: View {
+    let progress: Double
+    let phase: Double
+    let reduceMotion: Bool
+    let waterGradient: LinearGradient
+
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            ZStack {
+                HydrationWaveShape(
+                    progress: progress,
+                    phase: phase,
+                    amplitude: reduceMotion ? 0 : max(3, size.width * 0.022)
+                )
+                .fill(waterGradient)
+
+                HydrationWaveShape(
+                    progress: min(0.98, progress + 0.018),
+                    phase: phase + 1.7,
+                    amplitude: reduceMotion ? 0 : max(1.5, size.width * 0.011)
+                )
+                .fill(Color.white.opacity(colorScheme == .dark ? 0.10 : 0.18))
+
+                Ellipse()
+                    .stroke(Color.white.opacity(colorScheme == .dark ? 0.10 : 0.18), lineWidth: 1)
+                    .frame(width: size.width * 0.68, height: size.height * 0.12)
+                    .offset(x: size.width * 0.06, y: size.height * (0.56 - CGFloat(progress) * 0.46))
+                    .blur(radius: 0.4)
+            }
+            .clipShape(HydrationDropletShape())
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct HydrationGoalDropletPreview: View {
+    let reduceMotion: Bool
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 30.0, paused: reduceMotion)) { context in
+            let seconds = context.date.timeIntervalSinceReferenceDate
+            let phase = reduceMotion ? 0 : seconds * 1.25
+
+            ZStack {
+                HydrationDropletShape()
+                    .fill(.ultraThinMaterial)
+
+                HydrationWaveShape(
+                    progress: 0.62,
+                    phase: phase,
+                    amplitude: reduceMotion ? 0 : 3.2
+                )
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color.cyan.opacity(0.82),
+                            Color.blue.opacity(0.88)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .clipShape(HydrationDropletShape())
+
+                HydrationDropletShape()
+                    .stroke(Color.white.opacity(0.38), lineWidth: 1)
+
+                Image(systemName: "drop.fill")
+                    .font(.system(size: 23, weight: .semibold))
+                    .foregroundStyle(Color.white.opacity(0.90))
+                    .offset(y: 12)
+            }
+            .frame(width: 72, height: 92)
+            .drawingGroup()
+        }
+        .frame(width: 78, height: 98)
+        .accessibilityHidden(true)
+    }
+}
+
+private struct HydrationGoalOptionButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.965 : 1.0)
+            .animation(.spring(response: 0.24, dampingFraction: 0.78), value: configuration.isPressed)
+    }
+}
+
+private struct HydrationDropletDepthOverlay: View {
+    let phase: Double
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let shimmerOffset = CGFloat(sin(phase * 0.7)) * size.width * 0.018
+
+            ZStack {
+                RadialGradient(
+                    colors: [
+                        Color.clear,
+                        Color.black.opacity(colorScheme == .dark ? 0.10 : 0.045),
+                        Color.black.opacity(colorScheme == .dark ? 0.24 : 0.10)
+                    ],
+                    center: UnitPoint(x: 0.58, y: 0.72),
+                    startRadius: size.width * 0.15,
+                    endRadius: size.width * 0.70
+                )
+
+                Ellipse()
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(colorScheme == .dark ? 0.20 : 0.40),
+                                Color.white.opacity(0.02)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        ),
+                        lineWidth: 1
+                    )
+                    .frame(width: size.width * 0.58, height: size.height * 0.15)
+                    .rotationEffect(.degrees(-12))
+                    .offset(x: size.width * 0.09 + shimmerOffset, y: size.height * 0.23)
+                    .blur(radius: 0.5)
+
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(colorScheme == .dark ? 0.12 : 0.22),
+                                Color.white.opacity(0.0)
+                            ],
+                            startPoint: .leading,
+                            endPoint: .trailing
+                        )
+                    )
+                    .frame(width: size.width * 0.46, height: size.height * 0.05)
+                    .rotationEffect(.degrees(-18))
+                    .offset(x: size.width * 0.18 - shimmerOffset, y: size.height * 0.68)
+                    .blur(radius: 2.4)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct HydrationDropletHighlights: View {
+    let phase: Double
+    @Environment(\.colorScheme) private var colorScheme
+
+    init(phase: Double = 0) {
+        self.phase = phase
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            let size = proxy.size
+            let shimmer = CGFloat((sin(phase * 0.82) + 1) * 0.5)
+            ZStack(alignment: .topLeading) {
+                Ellipse()
+                    .stroke(
+                        LinearGradient(
+                            colors: [
+                                Color.white.opacity(colorScheme == .dark ? 0.58 : 0.74),
+                                Color.white.opacity(colorScheme == .dark ? 0.16 : 0.26),
+                                Color.white.opacity(0.0)
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        lineWidth: 4
+                    )
+                    .frame(width: size.width * 0.26, height: size.height * 0.48)
+                    .rotationEffect(.degrees(28))
+                    .offset(x: size.width * (0.24 + shimmer * 0.018), y: size.height * 0.09)
+                    .blur(radius: 0.35)
+
+                Capsule()
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.26 : 0.34))
+                    .frame(width: size.width * 0.055, height: size.height * 0.20)
+                    .rotationEffect(.degrees(29))
+                    .offset(x: size.width * 0.34, y: size.height * 0.15)
+                    .blur(radius: 0.45)
+
+                Ellipse()
+                    .fill(Color.white.opacity(colorScheme == .dark ? 0.16 : 0.23))
+                    .frame(width: size.width * 0.18, height: size.width * 0.10)
+                    .rotationEffect(.degrees(-18))
+                    .offset(x: size.width * 0.52, y: size.height * 0.17)
+                    .blur(radius: 1.2)
+
+                HydrationDropletShape()
+                    .stroke(Color.white.opacity(colorScheme == .dark ? 0.08 : 0.22), lineWidth: 7)
+                    .blur(radius: 3)
+                    .offset(x: -size.width * 0.015, y: -size.height * 0.01)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+private struct HydrationDropletShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        let minX = rect.minX
+        let minY = rect.minY
+        let width = rect.width
+        let height = rect.height
+        let top = CGPoint(x: minX + width * 0.50, y: minY + height * 0.015)
+        let rightShoulder = CGPoint(x: minX + width * 0.95, y: minY + height * 0.58)
+        let bottom = CGPoint(x: minX + width * 0.50, y: minY + height * 0.985)
+        let leftShoulder = CGPoint(x: minX + width * 0.05, y: minY + height * 0.58)
+
+        var path = Path()
+        path.move(to: top)
+        path.addCurve(
+            to: rightShoulder,
+            control1: CGPoint(x: minX + width * 0.70, y: minY + height * 0.16),
+            control2: CGPoint(x: minX + width * 0.96, y: minY + height * 0.36)
+        )
+        path.addCurve(
+            to: bottom,
+            control1: CGPoint(x: minX + width * 0.95, y: minY + height * 0.82),
+            control2: CGPoint(x: minX + width * 0.73, y: minY + height * 0.985)
+        )
+        path.addCurve(
+            to: leftShoulder,
+            control1: CGPoint(x: minX + width * 0.27, y: minY + height * 0.985),
+            control2: CGPoint(x: minX + width * 0.05, y: minY + height * 0.82)
+        )
+        path.addCurve(
+            to: top,
+            control1: CGPoint(x: minX + width * 0.04, y: minY + height * 0.36),
+            control2: CGPoint(x: minX + width * 0.30, y: minY + height * 0.16)
+        )
+        path.closeSubpath()
+        return path
+    }
+}
+
+private struct HydrationWaveShape: Shape {
+    var progress: Double
+    var phase: Double
+    var amplitude: CGFloat
+
+    var animatableData: AnimatablePair<Double, Double> {
+        get { AnimatablePair(progress, phase) }
+        set {
+            progress = newValue.first
+            phase = newValue.second
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        let clampedProgress = min(max(progress, 0.0), 1.0)
+        let baseline = rect.height * CGFloat(1.0 - clampedProgress)
+        let width = max(rect.width, 1)
+        let step = max(width / 56, 2)
+
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX, y: baseline))
+
+        var x = rect.minX
+        while x <= rect.maxX + step {
+            let normalizedX = (x - rect.minX) / width
+            let primary = sin(Double(normalizedX) * 2.0 * .pi + phase)
+            let secondary = sin(Double(normalizedX) * 4.0 * .pi + phase * 0.62)
+            let y = baseline + CGFloat(primary) * amplitude + CGFloat(secondary) * amplitude * 0.18
+            path.addLine(to: CGPoint(x: x, y: y))
+            x += step
+        }
+
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        path.closeSubpath()
+        return path
     }
 }
 

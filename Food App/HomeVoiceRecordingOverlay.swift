@@ -71,6 +71,9 @@ struct VoiceRecordingOverlay: View {
         ZStack(alignment: .bottom) {
             Color.clear
                 .contentShape(Rectangle())
+                .onTapGesture {
+                    onCancel()
+                }
 
             backgroundObscurer
             ambientVoiceWash
@@ -253,41 +256,66 @@ struct VoiceRecordingOverlay: View {
                     .frame(maxWidth: .infinity)
             }
 
-            // 2026-05-23: was "Cancel" (discard). Now "Stop" — ends the
-            // recording and ships the transcript through the parser. Falls
-            // back to onCancel only when callers haven't wired onStop yet.
-            Button(action: {
-                if let onStop {
-                    onStop()
-                } else {
+            HStack(spacing: 10) {
+                voiceActionChip(
+                    systemImage: "checkmark",
+                    title: "Log",
+                    accessibilityLabel: "Log voice recording",
+                    accessibilityHint: "Ends the voice recording and sends the transcript to be parsed."
+                ) {
+                    if let onStop {
+                        onStop()
+                    } else {
+                        onCancel()
+                    }
+                }
+
+                voiceActionChip(
+                    systemImage: "xmark",
+                    title: "Cancel",
+                    accessibilityLabel: "Cancel voice recording",
+                    accessibilityHint: "Closes the voice recorder without logging."
+                ) {
                     onCancel()
                 }
-            }) {
-                HStack(spacing: 6) {
-                    Image(systemName: "stop.fill")
-                        .font(.system(size: 11, weight: .black))
-                    Text("Stop")
-                        .font(.system(size: 14, weight: .semibold, design: .rounded))
-                }
             }
-            .buttonStyle(.plain)
-            .foregroundStyle(.black.opacity(0.78))
-            .padding(.horizontal, 18)
-            .padding(.vertical, 10)
-            .background(.white.opacity(0.34), in: Capsule(style: .continuous))
-            .overlay(
-                Capsule(style: .continuous)
-                    .stroke(.white.opacity(0.32), lineWidth: 1)
-            )
             .opacity(phase == .handoff ? 0 : 1)
-            .accessibilityLabel(Text("Stop recording and send"))
-            .accessibilityHint(Text("Ends the voice recording and sends the transcript to be parsed."))
         }
         .frame(maxWidth: .infinity)
         .padding(.horizontal, 24)
         .padding(.bottom, phase == .handoff ? 104 : 84)
         .scaleEffect(phase == .handoff ? 0.94 : 1)
         .animation(.spring(response: 0.34, dampingFraction: 0.86), value: phase)
+        .contentShape(Rectangle())
+        .onTapGesture { }
+    }
+
+    private func voiceActionChip(
+        systemImage: String,
+        title: String,
+        accessibilityLabel: String,
+        accessibilityHint: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            HStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.system(size: 11, weight: .black))
+                Text(title)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
+            }
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.black.opacity(0.78))
+        .padding(.horizontal, 18)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.34), in: Capsule(style: .continuous))
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(.white.opacity(0.32), lineWidth: 1)
+        )
+        .accessibilityLabel(Text(accessibilityLabel))
+        .accessibilityHint(Text(accessibilityHint))
     }
 
     // MARK: - Silence Timeout

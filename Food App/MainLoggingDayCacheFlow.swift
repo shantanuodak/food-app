@@ -326,7 +326,9 @@ extension MainLoggingShellView {
                     let lhsDate = rowLoggedAtDate(lhs.element)
                     let rhsDate = rowLoggedAtDate(rhs.element)
                     if lhsDate != rhsDate {
-                        return lhsDate > rhsDate
+                        // Home rows read oldest-to-newest; newly logged rows
+                        // belong at the end, not at the top of the day.
+                        return lhsDate < rhsDate
                     }
                     return lhs.offset < rhs.offset
                 }

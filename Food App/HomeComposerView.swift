@@ -10,6 +10,7 @@ struct HM01LogComposerSection: View {
     let minimalStyle: Bool
     let onInputTapped: () -> Bool
     let onCaloriesTapped: (HomeLogRow) -> Void
+    let onHydrationTapped: (HomeLogRow) -> Void
     let onFocusedRowChanged: (UUID?) -> Void
     let onServerBackedRowCleared: (HomeLogRow) -> Void
     let onKeyboardDone: () -> Void
@@ -30,6 +31,7 @@ struct HM01LogComposerSection: View {
         minimalStyle: Bool = false,
         onInputTapped: @escaping () -> Bool,
         onCaloriesTapped: @escaping (HomeLogRow) -> Void = { _ in },
+        onHydrationTapped: @escaping (HomeLogRow) -> Void = { _ in },
         onFocusedRowChanged: @escaping (UUID?) -> Void = { _ in },
         onServerBackedRowCleared: @escaping (HomeLogRow) -> Void = { _ in },
         onKeyboardDone: @escaping () -> Void = {},
@@ -43,6 +45,7 @@ struct HM01LogComposerSection: View {
         self.minimalStyle = minimalStyle
         self.onInputTapped = onInputTapped
         self.onCaloriesTapped = onCaloriesTapped
+        self.onHydrationTapped = onHydrationTapped
         self.onFocusedRowChanged = onFocusedRowChanged
         self.onServerBackedRowCleared = onServerBackedRowCleared
         self.onKeyboardDone = onKeyboardDone
@@ -506,6 +509,7 @@ struct HM01LogComposerSection: View {
         let label = row.hydrationDisplayLabel ?? "Water"
         Button {
             AppHaptics.lightImpact()
+            onHydrationTapped(row)
         } label: {
             HStack(spacing: 6) {
                 Image(systemName: "drop.fill")

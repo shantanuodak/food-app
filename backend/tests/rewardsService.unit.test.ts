@@ -31,14 +31,18 @@ describe('rewardsService.getRewardsSummary', () => {
       manual_override_items: '4',
       high_confidence_items: '25',
       health_active_days: '6',
-      health_step_days_10k: '2'
+      health_step_days_10k: '2',
+      hydration_logs: '8',
+      hydration_goal_days: '3',
+      hydration_total_ml: '6250'
     });
 
     const summary = await service.getRewardsSummary('u1', 'America/New_York');
 
-    expect(query).toHaveBeenCalledWith(expect.stringContaining('WITH log_stats AS'), ['u1']);
+    expect(query).toHaveBeenCalledWith(expect.stringContaining('WITH log_stats AS'), ['u1', 'America/New_York']);
     expect(query.mock.calls[0]?.[0]).toContain('fl.id = fli.food_log_id');
     expect(query.mock.calls[0]?.[0]).toContain("LIKE 'image%'");
+    expect(query.mock.calls[0]?.[0]).toContain('hydration_day_totals AS');
     expect(summary.timezone).toBe('America/New_York');
     expect(summary.generatedAt).toEqual(expect.any(String));
     expect(summary.totals).toEqual({
@@ -53,7 +57,10 @@ describe('rewardsService.getRewardsSummary', () => {
       highConfidenceLogs: 9,
       highConfidenceItems: 25,
       healthActiveDays: 6,
-      healthStepDays10k: 2
+      healthStepDays10k: 2,
+      hydrationLogs: 8,
+      hydrationGoalDays: 3,
+      hydrationTotalMl: 6250
     });
   });
 

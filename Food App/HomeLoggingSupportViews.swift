@@ -37,7 +37,7 @@ struct RowCalorieDetails: Identifiable {
     let id: UUID
     let rowText: String
     let displayName: String
-    let calories: Int
+    let calories: Int?
     let protein: Double?
     let carbs: Double?
     let fat: Double?
@@ -56,6 +56,25 @@ struct RowCalorieDetails: Identifiable {
     let inputKind: String?
     var savedMealId: String? = nil
     var savedMealName: String? = nil
+    var hydrationAmountMl: Double? = nil
+    var hydrationInputAmount: Double? = nil
+    var hydrationInputUnit: String? = nil
+    var hydrationGoalMl: Double? = nil
+    var hydrationDayTotalMl: Double? = nil
+    var hydrationLogsCount: Int? = nil
+
+    var isHydration: Bool {
+        hydrationAmountMl != nil
+    }
+
+    var hydrationDisplayLabel: String? {
+        guard let hydrationAmountMl else { return nil }
+        return HydrationDisplayText.longLabel(
+            amountMl: hydrationAmountMl,
+            inputAmount: hydrationInputAmount,
+            inputUnit: hydrationInputUnit
+        )
+    }
 }
 
 struct PreparedImagePayload {

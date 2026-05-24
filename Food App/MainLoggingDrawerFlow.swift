@@ -46,8 +46,21 @@ extension MainLoggingShellView {
             isDeleteConfirmationPresented: $isRowDetailsDeleteConfirmationPresented,
             isSaveMealEnabled: !isSavedMealSelected && buildSaveDraftRequest(for: liveDetails) != nil,
             isSavedMealSelected: isSavedMealSelected,
+            hydrationQuickLogSavingOptionIDs: Set(hydrationQuickLogSavingCounts.keys),
+            hydrationQuickLogPendingAmountMl: hydrationQuickLogPendingAmountMl,
+            canDeleteLastHydrationLog: latestHydrationDeleteTargetForDrawer(details: liveDetails) != nil,
+            isDeletingLastHydrationLog: isDeletingHydrationFromDrawer,
             onSaveMeal: {
                 presentSaveMealSheet(for: liveDetails)
+            },
+            onHydrationQuickLog: { option in
+                quickLogHydrationFromDrawer(option)
+            },
+            onHydrationGoalTapped: {
+                presentHydrationGoalSheetFromDrawer()
+            },
+            onDeleteLastHydrationLog: {
+                deleteLatestHydrationLogFromDrawer(details: liveDetails)
             },
             onDeleteTapped: {
                 rowDetailsPendingDeleteID = liveDetails.id
@@ -73,6 +86,160 @@ extension MainLoggingShellView {
                 )
             }
         )
+    }
+
+    func hydrationDrawerDateString(for details: RowCalorieDetails) -> String {
+        if let loggedAt = details.loggedAt {
+            return HomeLoggingDateUtils.summaryDayString(fromLoggedAt: loggedAt, fallback: summaryDateString)
+        }
+        return summaryDateString
+    }
+
+    func hydrationLogsForDate(_ dateString: String) -> [HydrationLog] {
+        if let visibleLogs = hydrationDayLogs, visibleLogs.date == dateString {
+            return visibleLogs.logs
+        }
+        return dayCacheHydrationLogs[dateString]?.logs ?? []
+    }
+
+    func latestHydrationDeleteTargetForDrawer(details: RowCalorieDetails) -> String? {
+        let dateString = hydrationDrawerDateString(for: details)
+        var candidates: [(id: String, loggedAt: Date, createdAt: Date, order: Int)] = []
+        var visibleLogIDs = Set<String>()
+
+        for (index, row) in inputRows.enumerated() {
+            guard row.isHydration, let logID = row.hydrationLogId else { continue }
+            let rowDay = HomeLoggingDateUtils.summaryDayString(
+                fromLoggedAt: row.serverLoggedAt ?? dateString,
+                fallback: dateString
+            )
+            guard rowDay == dateString else { continue }
+
+            visibleLogIDs.insert(logID)
+            candidates.append((
+                id: logID,
+                loggedAt: rowLoggedAtDate(row),
+                createdAt: rowLoggedAtDate(row),
+                order: index
+            ))
+        }
+
+        for (index, log) in hydrationLogsForDate(dateString).enumerated() where !visibleLogIDs.contains(log.id) {
+            candidates.append((
+                id: log.id,
+                loggedAt: hydrationLogDate(log.loggedAt),
+                createdAt: hydrationLogDate(log.createdAt),
+                order: inputRows.count + index
+            ))
+        }
+
+        return candidates.max { lhs, rhs in
+            if lhs.loggedAt != rhs.loggedAt {
+                return lhs.loggedAt < rhs.loggedAt
+            }
+
+            if lhs.createdAt != rhs.createdAt {
+                return lhs.createdAt < rhs.createdAt
+            }
+
+            return lhs.order < rhs.order
+        }?.id
+    }
+
+    func latestHydrationRowForDate(_ dateString: String) -> HomeLogRow? {
+        var latestCandidate: (index: Int, row: HomeLogRow)?
+
+        for (index, row) in inputRows.enumerated() {
+            guard row.isHydration, row.hydrationLogId != nil else { continue }
+            let rowDay = HomeLoggingDateUtils.summaryDayString(
+                fromLoggedAt: row.serverLoggedAt ?? dateString,
+                fallback: dateString
+            )
+            guard rowDay == dateString else { continue }
+
+            guard let current = latestCandidate else {
+                latestCandidate = (index, row)
+                continue
+            }
+
+            let rowDate = rowLoggedAtDate(row)
+            let currentDate = rowLoggedAtDate(current.row)
+            if rowDate > currentDate || (rowDate == currentDate && index > current.index) {
+                latestCandidate = (index, row)
+            }
+        }
+
+        return latestCandidate?.row
+    }
+
+    func latestHydrationLog(in logs: [HydrationLog]) -> HydrationLog? {
+        logs.max { lhs, rhs in
+            let lhsLoggedAt = hydrationLogDate(lhs.loggedAt)
+            let rhsLoggedAt = hydrationLogDate(rhs.loggedAt)
+            if lhsLoggedAt != rhsLoggedAt {
+                return lhsLoggedAt < rhsLoggedAt
+            }
+
+            let lhsCreatedAt = hydrationLogDate(lhs.createdAt)
+            let rhsCreatedAt = hydrationLogDate(rhs.createdAt)
+            if lhsCreatedAt != rhsCreatedAt {
+                return lhsCreatedAt < rhsCreatedAt
+            }
+
+            return lhs.id < rhs.id
+        }
+    }
+
+    func hydrationLogDate(_ value: String) -> Date {
+        HomeLoggingDateUtils.loggedAtFormatter.date(from: value) ??
+            ISO8601DateFormatter().date(from: value) ??
+            .distantPast
+    }
+
+    @MainActor
+    func deleteLatestHydrationLogFromDrawer(details: RowCalorieDetails) {
+        guard !isDeletingHydrationFromDrawer else { return }
+        guard appStore.isNetworkReachable else {
+            saveError = L10n.noNetworkSave
+            return
+        }
+
+        let dateString = hydrationDrawerDateString(for: details)
+        guard let targetID = latestHydrationDeleteTargetForDrawer(details: details) else { return }
+
+        isDeletingHydrationFromDrawer = true
+        Task { @MainActor in
+            defer { isDeletingHydrationFromDrawer = false }
+
+            do {
+                _ = try await appStore.apiClient.deleteHydrationLog(id: targetID)
+                saveError = nil
+                appStore.setError(nil)
+                await refreshHydrationDayAfterMutation(dateString)
+
+                if let currentRow = inputRows.first(where: { $0.id == details.id }),
+                   let refreshedDetails = makeRowCalorieDetails(for: currentRow) {
+                    selectedRowDetails = refreshedDetails
+                    return
+                }
+
+                if let nextLog = latestHydrationLog(in: hydrationLogsForDate(dateString)),
+                   let nextRow = inputRows.first(where: { $0.hydrationLogId == nextLog.id }),
+                   let nextDetails = makeRowCalorieDetails(for: nextRow) {
+                    selectedRowDetails = nextDetails
+                } else if let nextRow = latestHydrationRowForDate(dateString),
+                          let nextDetails = makeRowCalorieDetails(for: nextRow) {
+                    selectedRowDetails = nextDetails
+                } else {
+                    selectedRowDetails = nil
+                }
+            } catch is CancellationError {
+                return
+            } catch {
+                handleAuthFailureIfNeeded(error)
+                saveError = userFriendlySaveError(error)
+            }
+        }
     }
 
     func presentSaveMealSheet(for details: RowCalorieDetails) {
@@ -234,7 +401,7 @@ extension MainLoggingShellView {
         selectedRowDetails = nil
         rowDetailsPendingDeleteID = nil
 
-        if serverBackedDeleteContext(for: row) != nil {
+        if row.hydrationLogId != nil || serverBackedDeleteContext(for: row) != nil {
             handleServerBackedRowCleared(row)
         } else {
             removeLocalRowFromDetails(rowID: rowID)
@@ -264,6 +431,67 @@ extension MainLoggingShellView {
     }
 
     func makeRowCalorieDetails(for row: HomeLogRow) -> RowCalorieDetails? {
+        if row.isHydration {
+            let displayName = row.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? (row.hydrationDisplayLabel ?? "Water")
+                : row.text
+            let rowDay = HomeLoggingDateUtils.summaryDayString(
+                fromLoggedAt: row.serverLoggedAt ?? summaryDateString,
+                fallback: summaryDateString
+            )
+            let visibleHydrationRows = inputRows.filter { candidate in
+                guard candidate.isHydration else { return false }
+                let candidateDay = HomeLoggingDateUtils.summaryDayString(
+                    fromLoggedAt: candidate.serverLoggedAt ?? rowDay,
+                    fallback: summaryDateString
+                )
+                return candidateDay == rowDay
+            }
+            let visibleHydrationTotal = visibleHydrationRows.reduce(0.0) { total, candidate in
+                total + (candidate.hydrationAmountMl ?? 0)
+            }
+            let visibleHydrationCount = visibleHydrationRows.filter { $0.hydrationAmountMl != nil }.count
+            let serverHydrationLogs = hydrationDayLogs?.date == rowDay ? (hydrationDayLogs?.logs ?? []) : []
+            let serverHydrationTotal = serverHydrationLogs.reduce(0.0) { total, log in
+                total + log.amountMl
+            }
+            let rowAmount = row.hydrationAmountMl ?? 0
+            let hydrationDayTotal = max(visibleHydrationTotal, serverHydrationTotal, rowAmount)
+            let hydrationLogsCount = max(
+                visibleHydrationCount,
+                serverHydrationLogs.count,
+                row.hydrationAmountMl == nil ? 0 : 1
+            )
+            return RowCalorieDetails(
+                id: row.id,
+                rowText: row.text,
+                displayName: displayName,
+                calories: nil,
+                protein: nil,
+                carbs: nil,
+                fat: nil,
+                parseConfidence: row.hydrationConfidence ?? 1,
+                itemConfidence: row.hydrationConfidence,
+                primaryConfidence: min(max(row.hydrationConfidence ?? 1, 0), 1),
+                hasManualOverride: false,
+                sourceLabel: "Water",
+                thoughtProcess: "",
+                parsedItems: [],
+                manualEditedFields: [],
+                manualOriginalSources: [],
+                imagePreviewData: nil,
+                imageRef: nil,
+                loggedAt: row.serverLoggedAt,
+                inputKind: "hydration",
+                hydrationAmountMl: row.hydrationAmountMl,
+                hydrationInputAmount: row.hydrationInputAmount,
+                hydrationInputUnit: row.hydrationInputUnit,
+                hydrationGoalMl: hydrationGoalMl.map(Double.init),
+                hydrationDayTotalMl: hydrationDayTotal,
+                hydrationLogsCount: hydrationLogsCount
+            )
+        }
+
         guard let calories = row.calories else { return nil }
         guard let rowIndex = inputRows.firstIndex(where: { $0.id == row.id }) else { return nil }
 

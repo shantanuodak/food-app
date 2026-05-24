@@ -117,8 +117,22 @@ extension MainLoggingShellView {
                     isSavedMealsPresented = false
                 }))
                 .environmentObject(appStore)
+                .presentationDetents([.medium])
+                .presentationDragIndicator(.visible)
+            }
+            .sheet(isPresented: $isFoodStoryPresented) {
+                HomeFoodStoryDrawerView(
+                    anchorDate: selectedSummaryDate,
+                    currentDayLogs: dayLogs,
+                    cachedDayLogs: dayCacheLogs,
+                    imageStorageService: appStore.imageStorageService
+                )
                 .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                .presentationCornerRadius(24)
+                .onAppear {
+                    prefetchAdjacentDays(around: selectedSummaryDate, count: 6)
+                }
             }
             .sheet(isPresented: $isProgressChartsPresented) {
                 HomeProgressScreen()
@@ -350,8 +364,8 @@ extension MainLoggingShellView {
             .sheet(item: $hydrationAmountPrompt) { prompt in
                 HydrationAmountPromptSheet(
                     prompt: prompt,
-                    onSelect: { suggestion in
-                        confirmHydrationAmount(prompt: prompt, suggestion: suggestion)
+                    onSelect: { option in
+                        confirmHydrationAmount(prompt: prompt, option: option)
                     },
                     onCancel: {
                         hydrationAmountPrompt = nil
@@ -372,7 +386,7 @@ extension MainLoggingShellView {
                         isHydrationGoalPromptPresented = false
                     }
                 )
-                .presentationDetents([.medium])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(AppDrawerSurface.gradient)
             }
@@ -816,6 +830,7 @@ private struct MainLoggingTipsPromptModifier: ViewModifier {
                 .presentationDetents([.height(360)])
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(24)
+                .presentationBackground(AppDrawerSurface.gradient)
             }
     }
 }

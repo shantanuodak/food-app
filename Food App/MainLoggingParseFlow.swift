@@ -515,16 +515,16 @@ extension MainLoggingShellView {
     @MainActor
     func confirmHydrationAmount(
         prompt: HydrationAmountPromptPresentation,
-        suggestion: HydrationSuggestion
+        option: HydrationServingOption
     ) {
         hydrationAmountPrompt = nil
         let existingHydrationLogId = inputRows.first(where: { $0.id == prompt.rowID })?.hydrationLogId
         applyHydrationParseResult(
             rowID: prompt.rowID,
             rawText: prompt.rawText,
-            amountMl: suggestion.amountMl,
-            inputAmount: suggestion.amountMl,
-            inputUnit: "ml",
+            amountMl: option.amountMl,
+            inputAmount: option.inputAmount ?? option.amountMl,
+            inputUnit: option.inputUnit ?? "ml",
             confidence: 0.80,
             hydrationLogId: existingHydrationLogId
         )
@@ -535,9 +535,9 @@ extension MainLoggingShellView {
                 existingLogId: existingHydrationLogId,
                 rawText: prompt.rawText,
                 loggedAt: prompt.loggedAt,
-                amountMl: suggestion.amountMl,
-                inputAmount: suggestion.amountMl,
-                inputUnit: "ml",
+                amountMl: option.amountMl,
+                inputAmount: option.inputAmount ?? option.amountMl,
+                inputUnit: option.inputUnit ?? "ml",
                 confidence: 0.80
             )
         }
@@ -558,13 +558,15 @@ extension MainLoggingShellView {
     func evaluateHydrationGoalPromptIfNeeded() {
         guard appStore.isSessionRestored else { return }
         guard !hasEvaluatedHydrationGoalPrompt else { return }
-        guard !defaults.bool(forKey: hydrationGoalPromptDismissedKey) else { return }
         hasEvaluatedHydrationGoalPrompt = true
 
         Task { @MainActor in
             do {
                 let response = try await appStore.apiClient.getHydrationGoal()
+                hydrationGoalMl = response.goal?.dailyGoalMl
                 guard response.goal == nil else { return }
+                guard !defaults.bool(forKey: hydrationGoalPromptDismissedKey) else { return }
+                guard hasVisibleHydrationActivity else { return }
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
                 guard !Task.isCancelled else { return }
                 guard !isHomeTutorialPresented,
@@ -583,6 +585,39 @@ extension MainLoggingShellView {
         }
     }
 
+    var hasVisibleHydrationActivity: Bool {
+        if hydrationDayLogs?.logs.isEmpty == false {
+            return true
+        }
+        return inputRows.contains { row in
+            row.hydrationAmountMl != nil || row.hydrationLogId != nil
+        }
+    }
+
+    @MainActor
+    func presentHydrationGoalPromptAfterHydrationLogIfNeeded() async {
+        guard !isHydrationGoalPromptPresented else { return }
+        guard !defaults.bool(forKey: hydrationGoalPromptDismissedKey) else { return }
+        guard hydrationAmountPrompt == nil,
+              !isHomeTutorialPresented,
+              !isDaySwipeTutorialPresented,
+              !isCalendarPresented,
+              !isProfilePresented,
+              !isNutritionSummaryPresented,
+              !isDetailsDrawerPresented,
+              !isLoggingTipsPresented,
+              !isLoggingTipsPromptPresented else { return }
+
+        do {
+            let response = try await appStore.apiClient.getHydrationGoal()
+            hydrationGoalMl = response.goal?.dailyGoalMl
+            guard response.goal == nil else { return }
+            isHydrationGoalPromptPresented = true
+        } catch {
+            handleAuthFailureIfNeeded(error)
+        }
+    }
+
     @MainActor
     func saveHydrationGoal(_ dailyGoalMl: Int) {
         guard !isSavingHydrationGoal else { return }
@@ -594,6 +629,7 @@ extension MainLoggingShellView {
                 _ = try await appStore.apiClient.updateHydrationGoal(
                     HydrationGoalRequest(dailyGoalMl: dailyGoalMl)
                 )
+                hydrationGoalMl = dailyGoalMl
                 defaults.set(true, forKey: hydrationGoalPromptDismissedKey)
                 isHydrationGoalPromptPresented = false
                 NotificationCenter.default.post(
@@ -601,6 +637,66 @@ extension MainLoggingShellView {
                     object: nil,
                     userInfo: ["savedDay": summaryDateString]
                 )
+            } catch {
+                handleAuthFailureIfNeeded(error)
+                saveError = userFriendlySaveError(error)
+            }
+        }
+    }
+
+    @MainActor
+    func presentHydrationGoalSheetFromDrawer() {
+        selectedRowDetails = nil
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.30) {
+            isHydrationGoalPromptPresented = true
+        }
+    }
+
+    @MainActor
+    func quickLogHydrationFromDrawer(_ option: HydrationServingOption) {
+        guard appStore.isNetworkReachable else {
+            saveError = L10n.noNetworkSave
+            return
+        }
+
+        hydrationQuickLogSavingCounts[option.id, default: 0] += 1
+        hydrationQuickLogPendingAmountMl += option.amountMl
+
+        Task { @MainActor in
+            defer {
+                let nextCount = max(0, (hydrationQuickLogSavingCounts[option.id] ?? 1) - 1)
+                if nextCount == 0 {
+                    hydrationQuickLogSavingCounts.removeValue(forKey: option.id)
+                } else {
+                    hydrationQuickLogSavingCounts[option.id] = nextCount
+                }
+                hydrationQuickLogPendingAmountMl = max(0, hydrationQuickLogPendingAmountMl - option.amountMl)
+            }
+
+            let loggedDate = HomeLoggingDateUtils.draftTimestamp(for: selectedSummaryDate)
+            let loggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: loggedDate)
+            let request = HydrationLogRequest(
+                loggedAt: loggedAt,
+                rawText: option.rawText,
+                amountMl: option.amountMl,
+                inputAmount: option.inputAmount,
+                inputUnit: option.inputUnit,
+                source: .quickAdd,
+                confidence: 1
+            )
+
+            do {
+                let response = try await appStore.apiClient.saveHydrationLog(request)
+                saveError = nil
+                appStore.setError(nil)
+
+                let savedDay = HomeLoggingDateUtils.summaryDayString(
+                    fromLoggedAt: response.log.loggedAt,
+                    fallback: summaryDateString
+                )
+                await refreshHydrationDayAfterMutation(savedDay)
+            } catch is CancellationError {
+                return
             } catch {
                 handleAuthFailureIfNeeded(error)
                 saveError = userFriendlySaveError(error)
@@ -662,6 +758,7 @@ extension MainLoggingShellView {
                 object: nil,
                 userInfo: ["savedDay": savedDay]
             )
+            await presentHydrationGoalPromptAfterHydrationLogIfNeeded()
         } catch is CancellationError {
             return
         } catch {

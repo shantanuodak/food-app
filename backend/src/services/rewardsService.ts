@@ -13,6 +13,9 @@ export type RewardsTotals = {
   highConfidenceItems: number;
   healthActiveDays: number;
   healthStepDays10k: number;
+  hydrationLogs: number;
+  hydrationGoalDays: number;
+  hydrationTotalMl: number;
 };
 
 export type RewardsSummary = {
@@ -34,6 +37,9 @@ type RewardsStatsRow = {
   high_confidence_items: string;
   health_active_days: string;
   health_step_days_10k: string;
+  hydration_logs: string;
+  hydration_goal_days: string;
+  hydration_total_ml: string;
 };
 
 function toInt(value: string | number | null | undefined): number {
@@ -85,6 +91,27 @@ export async function getRewardsSummary(userId: string, timezone?: string): Prom
         COUNT(*) FILTER (WHERE steps >= 10000)::bigint AS health_step_days_10k
       FROM health_activity_snapshots
       WHERE user_id = $1
+    ),
+    hydration_day_totals AS (
+      SELECT
+        (logged_at AT TIME ZONE $2)::date AS day,
+        SUM(amount_ml) AS total_ml,
+        COUNT(*)::bigint AS logs_count
+      FROM hydration_logs
+      WHERE user_id = $1
+      GROUP BY (logged_at AT TIME ZONE $2)::date
+    ),
+    hydration_stats AS (
+      SELECT
+        COALESCE(SUM(logs_count), 0)::bigint AS hydration_logs,
+        COALESCE(SUM(total_ml), 0) AS hydration_total_ml,
+        COUNT(*) FILTER (
+          WHERE total_ml >= COALESCE(
+            (SELECT daily_goal_ml FROM hydration_preferences WHERE user_id = $1),
+            2147483647
+          )
+        )::bigint AS hydration_goal_days
+      FROM hydration_day_totals
     )
     SELECT
       log_stats.logs,
@@ -98,10 +125,13 @@ export async function getRewardsSummary(userId: string, timezone?: string): Prom
       item_stats.manual_override_items,
       item_stats.high_confidence_items,
       health_stats.health_active_days,
-      health_stats.health_step_days_10k
-    FROM log_stats, item_stats, health_stats
+      health_stats.health_step_days_10k,
+      hydration_stats.hydration_logs,
+      hydration_stats.hydration_goal_days,
+      hydration_stats.hydration_total_ml
+    FROM log_stats, item_stats, health_stats, hydration_stats
     `,
-    [userId]
+    [userId, normalizedTimezone]
   );
 
   const row = result.rows[0];
@@ -120,7 +150,10 @@ export async function getRewardsSummary(userId: string, timezone?: string): Prom
       highConfidenceLogs: toInt(row?.high_confidence_logs),
       highConfidenceItems: toInt(row?.high_confidence_items),
       healthActiveDays: toInt(row?.health_active_days),
-      healthStepDays10k: toInt(row?.health_step_days_10k)
+      healthStepDays10k: toInt(row?.health_step_days_10k),
+      hydrationLogs: toInt(row?.hydration_logs),
+      hydrationGoalDays: toInt(row?.hydration_goal_days),
+      hydrationTotalMl: toInt(row?.hydration_total_ml)
     }
   };
 }

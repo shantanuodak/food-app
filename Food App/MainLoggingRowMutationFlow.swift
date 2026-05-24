@@ -72,7 +72,7 @@ extension MainLoggingShellView {
 
         if savedDay == summaryDateString {
             let existingLogs = dayLogs?.logs ?? []
-            let mergedLogs = [optimisticEntry] + existingLogs.filter { $0.id != logId }
+            let mergedLogs = existingLogs.filter { $0.id != logId } + [optimisticEntry]
             let response = DayLogsResponse(
                 date: savedDay,
                 timezone: TimeZone.current.identifier,

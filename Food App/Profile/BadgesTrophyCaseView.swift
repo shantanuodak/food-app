@@ -690,6 +690,8 @@ private struct BadgeCelebrationPopup: View {
             return "\(badge.requiredValue) unique food\(badge.requiredValue == 1 ? "" : "s")"
         case .accuracy:
             return "\(badge.requiredValue) trusted nutrition moment\(badge.requiredValue == 1 ? "" : "s")"
+        case .hydration:
+            return "\(badge.requiredValue) water milestone\(badge.requiredValue == 1 ? "" : "s")"
         case .health:
             return "\(badge.requiredValue) synced Health day\(badge.requiredValue == 1 ? "" : "s")"
         }

@@ -7,6 +7,7 @@ struct BadgeDefinition: Identifiable, Equatable {
         case input = "Input mastery"
         case variety = "Variety"
         case accuracy = "Accuracy"
+        case hydration = "Hydration"
         case health = "Health activity"
 
         var id: String { rawValue }
@@ -82,6 +83,8 @@ struct EarnedBadge: Identifiable, Equatable {
             return "\(definition.requiredValue) unique food\(definition.requiredValue == 1 ? "" : "s")"
         case .accuracy:
             return "\(definition.requiredValue) trusted nutrition moment\(definition.requiredValue == 1 ? "" : "s")"
+        case .hydration:
+            return "\(definition.requiredValue) water milestone\(definition.requiredValue == 1 ? "" : "s")"
         case .health:
             return "\(definition.requiredValue) synced Health day\(definition.requiredValue == 1 ? "" : "s")"
         }
@@ -164,6 +167,10 @@ enum BadgeCatalog {
             return totals.highConfidenceItems
         case "careful_reviewer":
             return totals.manualOverrideItems
+        case "hydration_first_drop", "hydration_three_logs":
+            return totals.hydrationLogs ?? 0
+        case "hydration_goal_day":
+            return totals.hydrationGoalDays ?? 0
         case "move_sync", "active_week":
             return totals.healthActiveDays
         case "ten_k_club":
@@ -194,6 +201,9 @@ enum BadgeCatalog {
         BadgeDefinition(id: "clean_parser", category: .accuracy, title: "Clean Parser", subtitle: "Log 20 high-confidence meals.", systemImage: "checkmark.circle.fill", requiredValue: 20, rarity: .silver),
         BadgeDefinition(id: "trusted_matches", category: .accuracy, title: "Trusted Matches", subtitle: "Get 50 high-confidence food matches.", systemImage: "seal.fill", requiredValue: 50, rarity: .silver),
         BadgeDefinition(id: "careful_reviewer", category: .accuracy, title: "Careful Reviewer", subtitle: "Manually refine 10 food items.", systemImage: "pencil.and.outline", requiredValue: 10, rarity: .gold),
+        BadgeDefinition(id: "hydration_first_drop", category: .hydration, title: "First Drop", subtitle: "Log your first water.", systemImage: "drop.fill", requiredValue: 1, rarity: .bronze),
+        BadgeDefinition(id: "hydration_three_logs", category: .hydration, title: "Three Logs", subtitle: "Log water 3 times.", systemImage: "drop.circle.fill", requiredValue: 3, rarity: .silver),
+        BadgeDefinition(id: "hydration_goal_day", category: .hydration, title: "Goal Day", subtitle: "Hit your daily water goal.", systemImage: "target", requiredValue: 1, rarity: .gold),
         BadgeDefinition(id: "move_sync", category: .health, title: "Move Sync", subtitle: "Sync 3 active Health days.", systemImage: "figure.walk.circle.fill", requiredValue: 3, rarity: .bronze),
         BadgeDefinition(id: "active_week", category: .health, title: "Active Week", subtitle: "Sync 7 active Health days.", systemImage: "heart.circle.fill", requiredValue: 7, rarity: .silver),
         BadgeDefinition(id: "ten_k_club", category: .health, title: "Ten-K Club", subtitle: "Reach 10k steps on 3 days.", systemImage: "shoeprints.fill", requiredValue: 3, rarity: .gold)
@@ -265,6 +275,8 @@ enum BadgeCelebrationState {
             categoryWeight = 300
         case .accuracy:
             categoryWeight = 200
+        case .hydration:
+            categoryWeight = 150
         case .health:
             categoryWeight = 100
         }

@@ -107,8 +107,12 @@ struct MainLoggingShellView: View {
     @State var saveMealDraft: SaveMealDraftPresentation?
     @State var hydrationAmountPrompt: HydrationAmountPromptPresentation?
     @State var isHydrationGoalPromptPresented = false
+    @State var hydrationGoalMl: Int?
     @State var hasEvaluatedHydrationGoalPrompt = false
     @State var isSavingHydrationGoal = false
+    @State var hydrationQuickLogSavingCounts: [String: Int] = [:]
+    @State var hydrationQuickLogPendingAmountMl: Double = 0
+    @State var isDeletingHydrationFromDrawer = false
     @State var selectedRowDetails: RowCalorieDetails?
     @State var rowDetailsPendingDeleteID: UUID?
     @State var isRowDetailsDeleteConfirmationPresented = false
@@ -136,6 +140,7 @@ struct MainLoggingShellView: View {
     @State var isNutritionSummaryPresented = false
     @State var isProgressChartsPresented = false
     @State var isSavedMealsPresented = false
+    @State var isFoodStoryPresented = false
     @State var isLoggingTipsPresented = false
     /// Bottom sheet popup that nudges the user toward Logging Tips when a
     /// fresh entry parses with low confidence. Fires at most once per

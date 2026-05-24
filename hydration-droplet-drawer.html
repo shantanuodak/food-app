@@ -1,0 +1,1233 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hydration Droplet Drawer Prototype</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #102033;
+      --muted: #607084;
+      --paper: #f7fbff;
+      --surface: rgba(255, 255, 255, 0.62);
+      --glass: rgba(255, 255, 255, 0.24);
+      --line: rgba(34, 70, 105, 0.16);
+      --aqua: #20bfd4;
+      --aqua-deep: #0a6e87;
+      --mint: #63d9a5;
+      --coral: #f4846b;
+      --violet: #6d72e6;
+      --shadow: 0 24px 80px rgba(36, 77, 115, 0.22);
+      --spring: linear(
+        0, 0.004 1.1%, 0.016 2.2%, 0.062 4.8%, 0.14 7.6%,
+        0.337 13.6%, 0.596 20.9%, 0.74 25%, 0.852 29.5%,
+        0.936 34.2%, 0.991 39.2%, 1.019 44.5%, 1.029 50.1%,
+        1.024 55.9%, 1.013 62.2%, 1.004 69.1%, 1
+      );
+    }
+
+    body.theme-dark {
+      color-scheme: dark;
+      --ink: #e8f3fb;
+      --muted: #91a4b8;
+      --paper: #08121f;
+      --surface: rgba(12, 24, 38, 0.72);
+      --glass: rgba(255, 255, 255, 0.08);
+      --line: rgba(189, 223, 241, 0.16);
+      --aqua: #5ee7f1;
+      --aqua-deep: #8aebf4;
+      --mint: #85e5b5;
+      --coral: #f0a187;
+      --violet: #aeb6ff;
+      --shadow: 0 28px 90px rgba(0, 5, 14, 0.56);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100dvh;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+      background:
+        radial-gradient(circle at 24% 14%, rgba(244, 132, 107, 0.24), transparent 28rem),
+        radial-gradient(circle at 78% 10%, rgba(99, 217, 165, 0.28), transparent 28rem),
+        linear-gradient(135deg, #f8fbff 0%, #eef8fb 42%, #fff7f2 100%);
+      color: var(--ink);
+      overflow-x: hidden;
+      transition: background 360ms ease, color 260ms ease;
+    }
+
+    body.theme-dark {
+      background:
+        radial-gradient(circle at 20% 6%, rgba(94, 231, 241, 0.13), transparent 26rem),
+        radial-gradient(circle at 86% 12%, rgba(174, 182, 255, 0.12), transparent 28rem),
+        linear-gradient(135deg, #050912 0%, #081522 48%, #111827 100%);
+    }
+
+    body {
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    button {
+      font: inherit;
+      color: inherit;
+      border: 0;
+      cursor: pointer;
+      touch-action: manipulation;
+    }
+
+    .stage {
+      width: min(420px, calc(100vw - 24px));
+      height: min(860px, calc(100dvh - 24px));
+      min-height: 720px;
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      border-radius: 44px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.86), rgba(247,251,255,0.72)),
+        radial-gradient(circle at 40% 10%, rgba(32, 191, 212, 0.12), transparent 22rem);
+      box-shadow: var(--shadow);
+      isolation: isolate;
+      transition: background 360ms ease, border-color 360ms ease, box-shadow 360ms ease;
+    }
+
+    .theme-dark .stage {
+      border-color: rgba(197, 229, 244, 0.16);
+      background:
+        linear-gradient(180deg, rgba(17, 30, 47, 0.96), rgba(7, 16, 28, 0.92)),
+        radial-gradient(circle at 48% 8%, rgba(94, 231, 241, 0.11), transparent 23rem);
+    }
+
+    .stage::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.35) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.35) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,0.35), transparent 60%);
+      pointer-events: none;
+    }
+
+    .theme-dark .stage::before {
+      background:
+        linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px),
+        linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px);
+    }
+
+    .status {
+      height: 42px;
+      display: flex;
+      align-items: end;
+      justify-content: space-between;
+      padding: 0 28px 8px;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      position: relative;
+      z-index: 2;
+    }
+
+    .home {
+      position: relative;
+      z-index: 2;
+      padding: 26px 24px 120px;
+      height: calc(100% - 42px);
+    }
+
+    .topbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 34px;
+    }
+
+    .date-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 0 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid var(--line);
+      box-shadow: 0 12px 32px rgba(32, 82, 122, 0.08);
+      font-size: 15px;
+      font-weight: 700;
+      transition: background 260ms ease, border-color 260ms ease, box-shadow 260ms ease;
+    }
+
+    .theme-dark .date-pill {
+      background: rgba(13, 25, 39, 0.68);
+      border-color: rgba(190, 225, 244, 0.14);
+      box-shadow: 0 14px 36px rgba(0, 8, 18, 0.28);
+    }
+
+    .avatar {
+      width: 42px;
+      height: 42px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #122237, #49607a);
+      color: #fff;
+      font-weight: 800;
+      box-shadow: 0 12px 32px rgba(26, 43, 64, 0.18);
+    }
+
+    .theme-dark .avatar {
+      background: linear-gradient(135deg, #eef8ff, #80d9e7);
+      color: #071827;
+      box-shadow: 0 14px 34px rgba(0, 8, 18, 0.42);
+    }
+
+    h1 {
+      margin: 0 0 26px;
+      font-size: 35px;
+      line-height: 1.02;
+      letter-spacing: 0;
+    }
+
+    .log-list {
+      display: grid;
+      gap: 14px;
+    }
+
+    .row {
+      min-height: 54px;
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 14px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid rgba(16, 32, 51, 0.08);
+    }
+
+    .theme-dark .row {
+      border-bottom-color: rgba(220, 238, 250, 0.08);
+    }
+
+    .row-title {
+      min-width: 0;
+      font-size: 19px;
+      line-height: 1.25;
+      font-weight: 560;
+    }
+
+    .metric {
+      min-width: 96px;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 6px;
+      color: var(--muted);
+      background: transparent;
+      font-size: 18px;
+      font-weight: 760;
+    }
+
+    .metric:focus-visible,
+    .droplet:focus-visible,
+    .preset:focus-visible,
+    .chip:focus-visible,
+    .drawer-close:focus-visible {
+      outline: 3px solid rgba(109, 114, 230, 0.45);
+      outline-offset: 4px;
+    }
+
+    .water-metric {
+      color: var(--aqua-deep);
+    }
+
+    .mini-drop {
+      width: 15px;
+      height: 18px;
+      background: linear-gradient(160deg, #67e1ee, #0ea8bd);
+      clip-path: path("M7.5 0 C7.5 0 15 8.1 15 12.4 C15 16 12 18 7.5 18 C3 18 0 16 0 12.4 C0 8.1 7.5 0 7.5 0 Z");
+      box-shadow: inset 4px 4px 8px rgba(255,255,255,0.48), 0 5px 14px rgba(32, 191, 212, 0.24);
+    }
+
+    .dock {
+      position: absolute;
+      left: 18px;
+      right: 18px;
+      bottom: 16px;
+      z-index: 6;
+      min-height: 76px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      padding: 10px;
+      border-radius: 30px;
+      background: rgba(255, 255, 255, 0.54);
+      border: 1px solid rgba(255, 255, 255, 0.64);
+      box-shadow: 0 18px 54px rgba(38, 74, 108, 0.18);
+      backdrop-filter: blur(24px) saturate(1.25);
+      transition: background 260ms ease, border-color 260ms ease, box-shadow 260ms ease;
+    }
+
+    .theme-dark .dock {
+      background: rgba(9, 21, 34, 0.62);
+      border-color: rgba(197, 229, 244, 0.14);
+      box-shadow: 0 18px 54px rgba(0, 7, 16, 0.42);
+    }
+
+    .dock button {
+      min-height: 54px;
+      display: grid;
+      place-items: center;
+      border-radius: 22px;
+      background: transparent;
+      color: #506477;
+      font-size: 19px;
+      transition: transform 190ms var(--spring), background 190ms ease, color 190ms ease;
+    }
+
+    .theme-dark .dock button {
+      color: #93a8bb;
+    }
+
+    .dock button:active {
+      transform: scale(0.92);
+    }
+
+    .dock .active {
+      background: rgba(32, 191, 212, 0.14);
+      color: var(--aqua-deep);
+    }
+
+    .sheet-scrim {
+      position: absolute;
+      inset: 0;
+      z-index: 8;
+      background: rgba(20, 34, 48, 0);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 220ms ease, background 220ms ease;
+    }
+
+    .stage.open .sheet-scrim {
+      opacity: 1;
+      background: rgba(20, 34, 48, 0.15);
+      pointer-events: auto;
+    }
+
+    .theme-dark .stage.open .sheet-scrim {
+      background: rgba(0, 4, 11, 0.38);
+    }
+
+    .drawer {
+      --drawer-y: 100%;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      z-index: 10;
+      min-height: 620px;
+      padding: 12px 20px max(24px, env(safe-area-inset-bottom));
+      border-radius: 42px 42px 0 0;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.72), rgba(237,250,253,0.52)),
+        rgba(255,255,255,0.42);
+      border: 1px solid rgba(255,255,255,0.72);
+      border-bottom: 0;
+      box-shadow: 0 -34px 90px rgba(28, 70, 108, 0.24);
+      backdrop-filter: blur(34px) saturate(1.32);
+      transform: translate3d(0, var(--drawer-y), 0);
+      transition: transform 560ms var(--spring);
+      will-change: transform;
+    }
+
+    .theme-dark .drawer {
+      background:
+        linear-gradient(180deg, rgba(25, 43, 62, 0.72), rgba(7, 18, 31, 0.66)),
+        rgba(10, 20, 33, 0.54);
+      border-color: rgba(218, 242, 252, 0.16);
+      box-shadow: 0 -36px 94px rgba(0, 4, 12, 0.66);
+    }
+
+    .stage.open .drawer {
+      --drawer-y: 0%;
+    }
+
+    .handle {
+      width: 52px;
+      height: 5px;
+      margin: 0 auto 16px;
+      border-radius: 999px;
+      background: rgba(47, 78, 105, 0.22);
+    }
+
+    .theme-dark .handle {
+      background: rgba(212, 237, 249, 0.24);
+    }
+
+    .drawer-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 8px;
+      gap: 12px;
+    }
+
+    .drawer-title {
+      min-width: 0;
+    }
+
+    .eyebrow {
+      margin: 0 0 4px;
+      font-size: 13px;
+      color: var(--aqua-deep);
+      font-weight: 820;
+      letter-spacing: 0.02em;
+      text-transform: uppercase;
+    }
+
+    .drawer-title h2 {
+      margin: 0;
+      font-size: 28px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    .drawer-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .theme-toggle {
+      min-width: 66px;
+      height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.42);
+      border: 1px solid rgba(255,255,255,0.58);
+      color: #315267;
+      font-size: 13px;
+      font-weight: 800;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.58);
+      transition: transform 210ms var(--spring), background 220ms ease, color 220ms ease, border-color 220ms ease;
+    }
+
+    .theme-toggle:active {
+      transform: scale(0.94);
+    }
+
+    .theme-dark .theme-toggle {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(220, 242, 252, 0.16);
+      color: #dff8ff;
+    }
+
+    .drawer-close {
+      width: 46px;
+      height: 46px;
+      display: grid;
+      place-items: center;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.48);
+      border: 1px solid rgba(255,255,255,0.6);
+      color: #365164;
+      transition: transform 180ms var(--spring), background 180ms ease;
+    }
+
+    .theme-dark .drawer-close {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(220, 242, 252, 0.14);
+      color: #dff8ff;
+    }
+
+    .drawer-close:active {
+      transform: scale(0.9);
+    }
+
+    .drop-zone {
+      position: relative;
+      display: grid;
+      place-items: center;
+      padding: 4px 0 16px;
+    }
+
+    .pour-stream {
+      position: absolute;
+      top: 18px;
+      left: 50%;
+      z-index: 3;
+      width: 9px;
+      height: 96px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, rgba(218, 255, 255, 0), rgba(165, 249, 255, 0.78) 28%, rgba(36, 199, 219, 0.94));
+      filter: blur(0.2px);
+      opacity: 0;
+      transform: translateX(-50%) scaleY(0);
+      transform-origin: top center;
+      pointer-events: none;
+      box-shadow: 0 0 20px rgba(70, 224, 238, 0.28);
+    }
+
+    .droplet {
+      --fill: 52%;
+      --liquid-tilt: 0deg;
+      --drop-scale: 1;
+      --sheen-x: 0px;
+      width: min(270px, 72vw);
+      aspect-ratio: 0.82;
+      position: relative;
+      display: grid;
+      place-items: center;
+      background: transparent;
+      transform: translate3d(var(--drag-x, 0px), var(--drag-y, 0px), 0) scale(var(--drop-scale));
+      filter: drop-shadow(0 34px 42px rgba(16, 118, 150, 0.22));
+      user-select: none;
+      touch-action: manipulation;
+      cursor: default;
+      transition: transform 620ms cubic-bezier(.19, 1, .22, 1), filter 300ms ease;
+      will-change: transform;
+    }
+
+    .droplet.pouring {
+      animation: dropSettle 900ms cubic-bezier(.2, .82, .22, 1);
+    }
+
+    .droplet.pouring + .pour-stream,
+    .pour-stream.pouring {
+      animation: pourStream 860ms cubic-bezier(.2, .82, .22, 1);
+    }
+
+    .theme-dark .droplet {
+      filter: drop-shadow(0 36px 46px rgba(0, 7, 16, 0.55)) drop-shadow(0 0 26px rgba(64, 213, 231, 0.12));
+    }
+
+    .drop-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      overflow: visible;
+      pointer-events: none;
+    }
+
+    .liquid-layer {
+      transform-box: fill-box;
+      transform-origin: 50% 100%;
+      transform: translateY(calc(100% - var(--fill))) rotate(var(--liquid-tilt));
+      transition: transform 110ms linear;
+      will-change: transform;
+    }
+
+    .liquid-glow {
+      opacity: 0.36;
+      mix-blend-mode: screen;
+    }
+
+    .surface-line {
+      animation: surfaceDrift 5.8s ease-in-out infinite;
+      transform-origin: 50% 50%;
+    }
+
+    .surface-line.two {
+      animation-duration: 7.2s;
+      animation-direction: reverse;
+      opacity: 0.34;
+    }
+
+    .drop-glass {
+      opacity: 0.9;
+    }
+
+    .theme-dark .drop-glass {
+      opacity: 0.72;
+    }
+
+    .drop-outline {
+      opacity: 0.84;
+    }
+
+    .drop-specular {
+      transform: translateX(var(--sheen-x));
+      transition: transform 420ms cubic-bezier(.19, 1, .22, 1);
+    }
+
+    .drop-content {
+      position: relative;
+      z-index: 2;
+      width: 70%;
+      margin-top: 26%;
+      text-align: center;
+      color: #ffffff;
+      text-shadow: 0 2px 18px rgba(5, 74, 94, 0.44);
+      pointer-events: none;
+    }
+
+    .theme-dark .drop-content {
+      text-shadow: 0 2px 20px rgba(0, 12, 22, 0.64);
+    }
+
+    .amount {
+      font-size: clamp(42px, 14vw, 70px);
+      line-height: 0.92;
+      font-weight: 850;
+      letter-spacing: 0;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .unit {
+      margin-top: 8px;
+      font-size: 15px;
+      font-weight: 760;
+      opacity: 0.94;
+    }
+
+    .goal {
+      margin-top: 11px;
+      font-size: 13px;
+      font-weight: 720;
+      opacity: 0.88;
+    }
+
+    .bubbles {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    .bubble {
+      position: absolute;
+      width: var(--size);
+      height: var(--size);
+      left: var(--left);
+      bottom: var(--bottom);
+      border-radius: 999px;
+      background: rgba(255,255,255,0.38);
+      box-shadow: inset 2px 2px 4px rgba(255,255,255,0.62);
+      opacity: 0;
+      animation: bubbleRise 1350ms cubic-bezier(.16, .84, .42, 1) forwards;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin: 2px 0 16px;
+    }
+
+    .stat {
+      min-height: 78px;
+      padding: 13px 12px;
+      border-radius: 24px;
+      background: rgba(255,255,255,0.42);
+      border: 1px solid rgba(255,255,255,0.56);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.52);
+      transition: background 260ms ease, border-color 260ms ease, box-shadow 260ms ease;
+    }
+
+    .theme-dark .stat {
+      background: rgba(255,255,255,0.07);
+      border-color: rgba(220, 242, 252, 0.13);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.10);
+    }
+
+    .stat-label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+      line-height: 1.15;
+    }
+
+    .stat-value {
+      margin-top: 7px;
+      font-size: 18px;
+      line-height: 1.1;
+      font-weight: 840;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .presets {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .preset,
+    .chip {
+      min-height: 48px;
+      border-radius: 22px;
+      background: rgba(255,255,255,0.5);
+      border: 1px solid rgba(255,255,255,0.62);
+      color: #244a5d;
+      font-weight: 790;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.58), 0 10px 24px rgba(28, 92, 122, 0.08);
+      transition: transform 220ms var(--spring), background 180ms ease, color 180ms ease;
+    }
+
+    .theme-dark .preset,
+    .theme-dark .chip {
+      background: rgba(255,255,255,0.08);
+      border-color: rgba(220, 242, 252, 0.14);
+      color: #d6edf8;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.10), 0 14px 30px rgba(0, 8, 18, 0.24);
+    }
+
+    .preset:active,
+    .chip:active {
+      transform: scale(0.92);
+    }
+
+    .preset.active {
+      background: linear-gradient(135deg, rgba(32,191,212,0.24), rgba(99,217,165,0.18));
+      color: var(--aqua-deep);
+    }
+
+    .theme-dark .preset.active {
+      background: linear-gradient(135deg, rgba(94,231,241,0.20), rgba(133,229,181,0.11));
+      color: #e8fcff;
+    }
+
+    .chip-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+
+    .chip.primary {
+      background: linear-gradient(135deg, rgba(32,191,212,0.92), rgba(99,217,165,0.82));
+      color: white;
+      box-shadow: 0 14px 36px rgba(23, 161, 183, 0.26);
+    }
+
+    .theme-dark .chip.primary {
+      background: linear-gradient(135deg, rgba(39, 187, 213, 0.82), rgba(75, 191, 145, 0.72));
+      color: #f4feff;
+      box-shadow: 0 16px 42px rgba(0, 170, 210, 0.18);
+    }
+
+    .toast {
+      position: absolute;
+      left: 50%;
+      bottom: 108px;
+      z-index: 14;
+      min-height: 48px;
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 0 16px;
+      border-radius: 999px;
+      background: rgba(18, 34, 55, 0.82);
+      color: white;
+      font-weight: 720;
+      box-shadow: 0 16px 42px rgba(15, 35, 55, 0.25);
+      backdrop-filter: blur(18px);
+      opacity: 0;
+      transform: translate(-50%, 16px) scale(0.96);
+      transition: opacity 220ms ease, transform 360ms var(--spring);
+      pointer-events: none;
+      white-space: nowrap;
+    }
+
+    .theme-dark .toast {
+      background: rgba(230, 246, 255, 0.90);
+      color: #071827;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0) scale(1);
+    }
+
+    svg {
+      display: block;
+    }
+
+    @keyframes surfaceDrift {
+      0%, 100% { transform: translateX(-8px) rotate(-0.35deg); }
+      50% { transform: translateX(10px) rotate(0.45deg); }
+    }
+
+    @keyframes pourStream {
+      0% {
+        opacity: 0;
+        transform: translateX(-50%) scaleY(0);
+      }
+      16% {
+        opacity: 0.92;
+      }
+      62% {
+        opacity: 0.84;
+        transform: translateX(-50%) scaleY(1);
+      }
+      100% {
+        opacity: 0;
+        transform: translateX(-50%) scaleY(0.28);
+      }
+    }
+
+    @keyframes dropSettle {
+      0% { transform: translate3d(0, 0, 0) scale(1); }
+      24% { transform: translate3d(0, 3px, 0) scale(1.012); }
+      54% { transform: translate3d(0, -1px, 0) scale(0.996); }
+      100% { transform: translate3d(0, 0, 0) scale(1); }
+    }
+
+    @keyframes bubbleRise {
+      0% {
+        opacity: 0;
+        transform: translateY(0) scale(0.6);
+      }
+      18% {
+        opacity: 0.72;
+      }
+      100% {
+        opacity: 0;
+        transform: translateY(-132px) scale(1.12);
+      }
+    }
+
+    @media (max-height: 760px) {
+      body {
+        padding: 12px;
+      }
+
+      .stage {
+        min-height: 680px;
+      }
+
+      .drawer {
+        min-height: 580px;
+      }
+
+      .droplet {
+        width: min(236px, 66vw);
+      }
+
+      .home {
+        padding-top: 20px;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.001ms !important;
+        animation-iteration-count: 1 !important;
+        scroll-behavior: auto !important;
+        transition-duration: 0.001ms !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="stage open" id="stage">
+    <div class="status" aria-hidden="true">
+      <span>9:41</span>
+      <span>5G 100%</span>
+    </div>
+
+    <section class="home" aria-label="Home log">
+      <div class="topbar">
+        <div class="date-pill">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M7 3v3M17 3v3M4.5 9.5h15M6 5h12a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2Z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          </svg>
+          Today
+        </div>
+        <div class="avatar">S</div>
+      </div>
+
+      <h1>What did you eat today?</h1>
+
+      <div class="log-list">
+        <div class="row">
+          <div class="row-title">2 eggs and toast</div>
+          <button class="metric" type="button" aria-label="Open food details for 310 calories">310 cal</button>
+        </div>
+        <div class="row">
+          <div class="row-title">16 oz water</div>
+          <button class="metric water-metric" type="button" id="waterMetric" aria-label="Open water details for 16 ounces">
+            <span class="mini-drop" aria-hidden="true"></span>
+            <span>16 oz</span>
+          </button>
+        </div>
+        <div class="row">
+          <div class="row-title">Chicken rice bowl</div>
+          <button class="metric" type="button" aria-label="Open food details for 640 calories">640 cal</button>
+        </div>
+        <div class="row">
+          <div class="row-title">Type your food here</div>
+          <button class="metric" type="button" aria-label="Add food">+</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="sheet-scrim" id="scrim"></div>
+
+    <section class="drawer" id="drawer" aria-label="Water drawer">
+      <div class="handle" aria-hidden="true"></div>
+
+      <div class="drawer-head">
+        <div class="drawer-title">
+          <p class="eyebrow">Hydration</p>
+          <h2>Water today</h2>
+        </div>
+        <div class="drawer-actions">
+          <button class="theme-toggle" type="button" id="themeToggle" aria-label="Switch to dark mode">Dark</button>
+          <button class="drawer-close" type="button" id="closeDrawer" aria-label="Close water drawer">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="drop-zone">
+        <div class="pour-stream" id="pourStream" aria-hidden="true"></div>
+        <div class="droplet" id="droplet" role="img" aria-label="Water progress, 1.3 liters logged">
+          <svg class="drop-svg" viewBox="0 0 300 360" aria-hidden="true">
+            <defs>
+              <path id="dropPath" d="M150 10 C150 10 258 124 258 221 C258 300 211 352 150 352 C89 352 42 300 42 221 C42 124 150 10 150 10 Z" />
+              <clipPath id="dropClip">
+                <use href="#dropPath" />
+              </clipPath>
+              <linearGradient id="liquidGradient" x1="80" y1="76" x2="226" y2="342" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#9ff8ff" />
+                <stop offset="0.42" stop-color="#25bfd6" />
+                <stop offset="1" stop-color="#066b91" />
+              </linearGradient>
+              <linearGradient id="glassGradient" x1="72" y1="38" x2="236" y2="322" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#ffffff" stop-opacity="0.94" />
+                <stop offset="0.34" stop-color="#ffffff" stop-opacity="0.30" />
+                <stop offset="0.72" stop-color="#ffffff" stop-opacity="0.08" />
+                <stop offset="1" stop-color="#ffffff" stop-opacity="0.26" />
+              </linearGradient>
+              <linearGradient id="outlineGradient" x1="64" y1="34" x2="236" y2="344" gradientUnits="userSpaceOnUse">
+                <stop offset="0" stop-color="#ffffff" stop-opacity="0.96" />
+                <stop offset="0.46" stop-color="#ffffff" stop-opacity="0.42" />
+                <stop offset="1" stop-color="#086b8b" stop-opacity="0.34" />
+              </linearGradient>
+              <filter id="innerSoftness" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur in="SourceAlpha" stdDeviation="8" result="blur" />
+                <feOffset dx="-8" dy="-10" result="offsetBlur" />
+                <feComposite in="offsetBlur" in2="SourceAlpha" operator="arithmetic" k2="-1" k3="1" result="innerShadow" />
+                <feColorMatrix in="innerShadow" type="matrix" values="1 0 0 0 1  0 1 0 0 1  0 0 1 0 1  0 0 0 0.44 0" />
+                <feComposite in2="SourceGraphic" operator="over" />
+              </filter>
+            </defs>
+            <g clip-path="url(#dropClip)">
+              <use href="#dropPath" fill="#7fb9c8" opacity="0.16" />
+              <use href="#dropPath" fill="url(#glassGradient)" class="drop-glass" />
+              <g class="liquid-layer" id="liquidLayer">
+                <rect x="-28" y="-8" width="356" height="390" fill="url(#liquidGradient)" />
+                <ellipse class="liquid-glow" cx="154" cy="176" rx="122" ry="74" fill="#dffcff" />
+                <path class="surface-line" d="M-36 24 C28 4 80 43 141 22 C202 0 250 28 336 12 L336 76 L-36 76 Z" fill="#e6ffff" fill-opacity="0.70" />
+                <path class="surface-line two" d="M-38 38 C31 14 88 54 150 34 C216 12 266 44 338 24 L338 82 L-38 82 Z" fill="#ffffff" fill-opacity="0.52" />
+              </g>
+              <use href="#dropPath" fill="transparent" filter="url(#innerSoftness)" />
+              <path class="drop-specular" d="M106 62 C84 102 71 150 73 195 C75 241 96 281 128 308" fill="none" stroke="#ffffff" stroke-opacity="0.18" stroke-width="18" stroke-linecap="round" />
+              <path d="M196 48 C224 88 239 132 236 174" fill="none" stroke="#ffffff" stroke-opacity="0.36" stroke-width="15" stroke-linecap="round" />
+              <ellipse cx="104" cy="95" rx="27" ry="11" fill="#ffffff" fill-opacity="0.48" transform="rotate(-34 104 95)" />
+            </g>
+            <use href="#dropPath" class="drop-outline" fill="none" stroke="url(#outlineGradient)" stroke-width="2.8" />
+          </svg>
+          <div class="bubbles" id="bubbles" aria-hidden="true"></div>
+          <div class="drop-content">
+            <div class="amount" id="amount">1.3</div>
+            <div class="unit" id="unit">L logged</div>
+            <div class="goal" id="goal">52% of 2.5 L</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="stats" aria-label="Water stats">
+        <div class="stat">
+          <div class="stat-label">Remaining</div>
+          <div class="stat-value" id="remaining">1.2 L</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Next</div>
+          <div class="stat-value" id="selectedAmount">16 oz</div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">Streak</div>
+          <div class="stat-value">4 days</div>
+        </div>
+      </div>
+
+      <div class="presets" aria-label="Water amount presets">
+        <button class="preset" type="button" data-amount="250">250 ml</button>
+        <button class="preset active" type="button" data-amount="473">16 oz</button>
+        <button class="preset" type="button" data-amount="500">500 ml</button>
+        <button class="preset" type="button" data-amount="750">750 ml</button>
+      </div>
+
+      <div class="chip-row">
+        <button class="chip" type="button" id="deleteWater">Delete last</button>
+        <button class="chip primary" type="button" id="saveWater">Pour 16 oz</button>
+      </div>
+    </section>
+
+    <nav class="dock" aria-label="Home actions">
+      <button type="button" aria-label="Text">
+        <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M5 6h14M5 12h10M5 18h7" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button type="button" aria-label="Voice">
+        <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 14a4 4 0 0 0 4-4V6a4 4 0 1 0-8 0v4a4 4 0 0 0 4 4ZM5 10a7 7 0 0 0 14 0M12 17v4" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/>
+        </svg>
+      </button>
+      <button type="button" aria-label="Camera">
+        <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M4 8a2 2 0 0 1 2-2h2l1.4-2h5.2L16 6h2a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+          <path d="M12 16a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="2.2"/>
+        </svg>
+      </button>
+      <button class="active" type="button" id="dockWater" aria-label="Water">
+        <svg width="23" height="23" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <path d="M12 3.5s6 6.2 6 10.8a6 6 0 0 1-12 0C6 9.7 12 3.5 12 3.5Z" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"/>
+        </svg>
+      </button>
+    </nav>
+
+    <div class="toast" id="toast" role="status" aria-live="polite">Saved water</div>
+  </main>
+
+  <script>
+    const stage = document.getElementById('stage');
+    const scrim = document.getElementById('scrim');
+    const drawer = document.getElementById('drawer');
+    const closeDrawer = document.getElementById('closeDrawer');
+    const themeToggle = document.getElementById('themeToggle');
+    const waterMetric = document.getElementById('waterMetric');
+    const dockWater = document.getElementById('dockWater');
+    const droplet = document.getElementById('droplet');
+    const pourStream = document.getElementById('pourStream');
+    const amount = document.getElementById('amount');
+    const unit = document.getElementById('unit');
+    const goal = document.getElementById('goal');
+    const remaining = document.getElementById('remaining');
+    const selectedAmount = document.getElementById('selectedAmount');
+    const toast = document.getElementById('toast');
+    const bubbles = document.getElementById('bubbles');
+    const presetButtons = Array.from(document.querySelectorAll('.preset'));
+
+    const goalMl = 2500;
+    let totalMl = 1300;
+    let lastMl = 473;
+    let selectedMl = 473;
+    let toastTimer = null;
+    let displayedFill = 52;
+    let targetFill = 52;
+    let fillVelocity = 0;
+    let fillFrame = null;
+
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+
+    function mlLabel(value) {
+      if (value >= 1000) {
+        const liters = value / 1000;
+        return `${Number.isInteger(liters) ? liters.toFixed(0) : liters.toFixed(1)} L`;
+      }
+      return `${Math.round(value)} ml`;
+    }
+
+    function amountLabel(value) {
+      if (Math.abs(value - 473) < 8) return '16 oz';
+      if (Math.abs(value - 237) < 8) return '8 oz';
+      return mlLabel(value);
+    }
+
+    function setTheme(isDark) {
+      document.body.classList.toggle('theme-dark', isDark);
+      themeToggle.textContent = isDark ? 'Light' : 'Dark';
+      themeToggle.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+    }
+
+    function stepFillSpring() {
+      const delta = targetFill - displayedFill;
+      fillVelocity += delta * 0.052;
+      fillVelocity *= 0.74;
+      displayedFill += fillVelocity;
+
+      if (Math.abs(delta) < 0.035 && Math.abs(fillVelocity) < 0.035) {
+        displayedFill = targetFill;
+        fillVelocity = 0;
+        fillFrame = null;
+      } else {
+        fillFrame = requestAnimationFrame(stepFillSpring);
+      }
+
+      droplet.style.setProperty('--fill', `${displayedFill}%`);
+      droplet.style.setProperty('--liquid-tilt', `${clamp(fillVelocity * 0.22, -2.8, 2.8)}deg`);
+      droplet.style.setProperty('--sheen-x', `${clamp(fillVelocity * 0.42, -9, 9)}px`);
+    }
+
+    function setFillTarget(value, immediate = false) {
+      targetFill = value;
+      if (immediate) {
+        displayedFill = value;
+        fillVelocity = 0;
+        droplet.style.setProperty('--fill', `${displayedFill}%`);
+        droplet.style.setProperty('--liquid-tilt', '0deg');
+        droplet.style.setProperty('--sheen-x', '0px');
+        if (fillFrame) cancelAnimationFrame(fillFrame);
+        fillFrame = null;
+        return;
+      }
+      if (!fillFrame) fillFrame = requestAnimationFrame(stepFillSpring);
+    }
+
+    function render(options = {}) {
+      const percent = clamp(totalMl / goalMl, 0, 1);
+      const liters = totalMl / 1000;
+      amount.textContent = liters >= 1 ? liters.toFixed(1) : Math.round(totalMl);
+      unit.textContent = liters >= 1 ? 'L logged' : 'ml logged';
+      goal.textContent = `${Math.round(percent * 100)}% of 2.5 L`;
+      remaining.textContent = mlLabel(Math.max(goalMl - totalMl, 0));
+      selectedAmount.textContent = amountLabel(selectedMl);
+      droplet.setAttribute('aria-label', `Water progress, ${mlLabel(totalMl)} logged, ${Math.round(percent * 100)} percent of goal`);
+      document.getElementById('saveWater').textContent = `Pour ${amountLabel(selectedMl)}`;
+      setFillTarget(Math.max(8, percent * 100), options.immediate === true);
+    }
+
+    function openDrawer() {
+      stage.classList.add('open');
+    }
+
+    function hideDrawer() {
+      stage.classList.remove('open');
+    }
+
+    function pulseDrop() {
+      droplet.style.setProperty('--drop-scale', '1.018');
+      window.setTimeout(() => droplet.style.setProperty('--drop-scale', '1'), 190);
+    }
+
+    function animatePour() {
+      droplet.classList.remove('pouring');
+      pourStream.classList.remove('pouring');
+      void droplet.offsetWidth;
+      droplet.classList.add('pouring');
+      pourStream.classList.add('pouring');
+      window.setTimeout(() => {
+        droplet.classList.remove('pouring');
+        pourStream.classList.remove('pouring');
+      }, 920);
+    }
+
+    function spawnBubbles(count = 5) {
+      const fragment = document.createDocumentFragment();
+      for (let i = 0; i < count; i += 1) {
+        const bubble = document.createElement('span');
+        bubble.className = 'bubble';
+        bubble.style.setProperty('--size', `${4 + Math.random() * 8}px`);
+        bubble.style.setProperty('--left', `${36 + Math.random() * 30}%`);
+        bubble.style.setProperty('--bottom', `${22 + Math.random() * 20}%`);
+        bubble.style.animationDelay = `${i * 70}ms`;
+        fragment.appendChild(bubble);
+      }
+      bubbles.appendChild(fragment);
+      window.setTimeout(() => {
+        bubbles.replaceChildren();
+      }, 1800);
+    }
+
+    function showToast(text) {
+      toast.textContent = text;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = window.setTimeout(() => toast.classList.remove('show'), 1800);
+    }
+
+    function addWater(value) {
+      lastMl = value;
+      totalMl = clamp(totalMl + value, 0, 4200);
+      render();
+      animatePour();
+      pulseDrop();
+      spawnBubbles();
+    }
+
+    function selectAmount(value) {
+      selectedMl = value;
+      presetButtons.forEach((item) => {
+        item.classList.toggle('active', Number(item.dataset.amount || 0) === value);
+      });
+      render();
+      pulseDrop();
+    }
+
+    waterMetric.addEventListener('click', openDrawer);
+    dockWater.addEventListener('click', openDrawer);
+    scrim.addEventListener('click', hideDrawer);
+    closeDrawer.addEventListener('click', hideDrawer);
+    themeToggle.addEventListener('click', () => {
+      setTheme(!document.body.classList.contains('theme-dark'));
+    });
+
+    presetButtons.forEach((button) => {
+      button.addEventListener('click', () => {
+        selectAmount(Number(button.dataset.amount || 250));
+      });
+    });
+
+    document.getElementById('deleteWater').addEventListener('click', () => {
+      totalMl = Math.max(0, totalMl - lastMl);
+      render();
+      pulseDrop();
+      showToast(`Deleted ${amountLabel(lastMl)}`);
+    });
+
+    document.getElementById('saveWater').addEventListener('click', () => {
+      addWater(selectedMl);
+      showToast(`Logged ${amountLabel(selectedMl)}`);
+    });
+
+    drawer.addEventListener('pointerdown', (event) => {
+      if (event.target.closest('button') || event.clientY > drawer.getBoundingClientRect().top + 80) return;
+      drawer.dataset.startY = String(event.clientY);
+      drawer.dataset.dragging = 'true';
+      drawer.style.transition = 'none';
+    });
+
+    drawer.addEventListener('pointermove', (event) => {
+      if (drawer.dataset.dragging !== 'true') return;
+      const startY = Number(drawer.dataset.startY || event.clientY);
+      const dy = Math.max(0, event.clientY - startY);
+      drawer.style.transform = `translate3d(0, ${dy}px, 0)`;
+    });
+
+    function endDrawerDrag(event) {
+      if (drawer.dataset.dragging !== 'true') return;
+      const startY = Number(drawer.dataset.startY || event.clientY);
+      const dy = Math.max(0, event.clientY - startY);
+      drawer.dataset.dragging = 'false';
+      drawer.style.transition = '';
+      drawer.style.transform = '';
+      if (dy > 90) hideDrawer();
+    }
+
+    drawer.addEventListener('pointerup', endDrawerDrag);
+    drawer.addEventListener('pointercancel', endDrawerDrag);
+
+    setTheme(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    render({ immediate: true });
+  </script>
+</body>
+</html>

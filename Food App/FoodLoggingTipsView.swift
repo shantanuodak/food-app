@@ -119,8 +119,8 @@ private enum FoodLoggingTipsTokens {
     static let muted = AppColor.textSecondary
     static let orange = Color(red: 0.941, green: 0.482, blue: 0.133)
     static let orangeDeep = Color(red: 0.725, green: 0.306, blue: 0.071)
-    static let green = Color(red: 0.122, green: 0.561, blue: 0.384)
-    static let red = Color(red: 0.812, green: 0.286, blue: 0.247)
+    static let green = AppColor.success
+    static let red = AppColor.danger
     static let border = AppColor.borderSubtle
     static let shadow = AppColor.shadow
 
@@ -149,13 +149,19 @@ private enum FoodLoggingTipsTokens {
     )
 
     static let needsClueBackground = LinearGradient(
-        colors: [Color(red: 1.000, green: 0.941, blue: 0.925).opacity(0.86), .white.opacity(0.76)],
+        colors: [
+            AppColor.danger.opacity(0.12),
+            AppColor.surfaceChip
+        ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
     static let withClueBackground = LinearGradient(
-        colors: [Color(red: 0.914, green: 0.973, blue: 0.933).opacity(0.88), .white.opacity(0.76)],
+        colors: [
+            AppColor.success.opacity(0.14),
+            AppColor.surfaceChip
+        ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
@@ -190,7 +196,7 @@ private struct FoodLoggingTipsMarqueeView: View {
                 ForEach(Array(doubledClues.enumerated()), id: \.offset) { _, clue in
                     Text(clue.title)
                         .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(red: 0.384, green: 0.267, blue: 0.212))
+                        .foregroundStyle(FoodLoggingTipsTokens.ink.opacity(0.68))
                         .padding(.horizontal, 13)
                         .padding(.vertical, 9)
                         .background(FoodLoggingTipsTokens.cardSurface, in: Capsule())
@@ -273,7 +279,7 @@ private struct FoodLoggingTipsFeaturedCard: View {
 
             Text(text)
                 .font(.system(size: 18, weight: .heavy))
-                .foregroundStyle(style == .withClue ? Color(red: 0.078, green: 0.165, blue: 0.114) : FoodLoggingTipsTokens.ink)
+                .foregroundStyle(FoodLoggingTipsTokens.ink)
                 .lineLimit(3)
                 .minimumScaleFactor(0.84)
                 .fixedSize(horizontal: false, vertical: true)
@@ -691,34 +697,35 @@ struct LoggingTipsPromptExample {
 }
 
 private enum FoodLoggingTipsPromptTokens {
-    static let ink = Color(red: 0.141, green: 0.098, blue: 0.078)
-    static let muted = Color(red: 0.467, green: 0.416, blue: 0.380)
-    static let orangeDeep = Color(red: 0.725, green: 0.306, blue: 0.071)
-    static let redInk = Color(red: 0.812, green: 0.286, blue: 0.247)
-    static let greenInk = Color(red: 0.122, green: 0.561, blue: 0.384)
-    static let border = Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.11)
-    static let shadow = Color(red: 0.376, green: 0.212, blue: 0.078).opacity(0.14)
+    // 2026-05-24: compact clue drawer now uses the shared adaptive app
+    // tokens instead of fixed cream/brown values, so it follows dark mode.
+    static let ink = AppColor.textPrimary
+    static let muted = AppColor.textSecondary
+    static let orangeDeep = AppColor.brandOrangeDeep
+    static let redInk = AppColor.danger
+    static let greenInk = AppColor.success
+    static let border = AppColor.borderSubtle
+    static let shadow = AppColor.shadow
 
     static let brandGradient = LinearGradient(
         colors: [Color(red: 1.00, green: 0.62, blue: 0.20), Color(red: 0.90, green: 0.36, blue: 0.10)],
         startPoint: .leading,
         endPoint: .trailing
     )
-    static let surface = LinearGradient(
+    static let surface = AppDrawerSurface.gradient
+    static let needsClueSurface = LinearGradient(
         colors: [
-            Color(red: 0.984, green: 0.917, blue: 0.835),
-            Color(red: 1.000, green: 0.976, blue: 0.941)
+            AppColor.danger.opacity(0.12),
+            AppColor.surfaceChip
         ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
-    static let needsClueSurface = LinearGradient(
-        colors: [Color(red: 1.000, green: 0.941, blue: 0.925).opacity(0.92), .white.opacity(0.80)],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
     static let withClueSurface = LinearGradient(
-        colors: [Color(red: 0.914, green: 0.973, blue: 0.933).opacity(0.94), .white.opacity(0.80)],
+        colors: [
+            AppColor.success.opacity(0.14),
+            AppColor.surfaceChip
+        ],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
