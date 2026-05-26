@@ -100,6 +100,7 @@ struct MainLoggingShellView: View {
     @FocusState var isNoteEditorFocused: Bool
     @State var flowStartedAt: Date?
     @State var draftLoggedAt: Date?
+    @State var draftMealTag: FoodLogMealTag?
     @State var lastTimeToLogMs: Double?
     @State var lastAutoSavedContentFingerprint: String?
     @State var inputMode: HomeInputMode = .text
@@ -165,6 +166,7 @@ struct MainLoggingShellView: View {
     @State var triggeredBadgeAchievement: EarnedBadge?
     @State var badgeCelebrationCheckTask: Task<Void, Never>?
     @State var lastBadgeCelebrationCheckAt: Date?
+    @State var lastHealthActivityBadgeSyncAt: Date?
     @State var isKeyboardVisible = false
     @State var isSyncInfoPresented = false
     /// Slide direction for day transitions: negative = slide left (going forward), positive = slide right (going back)

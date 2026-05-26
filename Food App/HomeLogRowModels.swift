@@ -31,6 +31,52 @@ enum LoadingRouteHint: String, Hashable {
     case unknown
 }
 
+enum FoodLogMealTag: String, Codable, CaseIterable, Identifiable, Hashable {
+    case breakfast
+    case lunch
+    case dinner
+    case snack
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .breakfast: return "Breakfast"
+        case .lunch: return "Lunch"
+        case .dinner: return "Dinner"
+        case .snack: return "Snack"
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .breakfast: return "sunrise.fill"
+        case .lunch: return "sun.max.fill"
+        case .dinner: return "moon.stars.fill"
+        case .snack: return "sparkle"
+        }
+    }
+
+    static func normalized(_ value: String?) -> FoodLogMealTag? {
+        let normalized = value?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
+        return FoodLogMealTag(rawValue: normalized)
+    }
+
+    static func inferred(from date: Date, calendar: Calendar = .current) -> FoodLogMealTag {
+        let hour = calendar.component(.hour, from: date)
+        switch hour {
+        case 5..<11:
+            return .breakfast
+        case 11..<16:
+            return .lunch
+        case 17..<22:
+            return .dinner
+        default:
+            return .snack
+        }
+    }
+}
+
 enum RowParsePhase: Equatable {
     case idle
     case primed(startedAt: Date)
@@ -82,6 +128,8 @@ struct HomeLogRow: Identifiable, Equatable {
     /// un-save → edit → PATCH so cache invalidation targets the correct day
     /// (not the day the user happens to be viewing now).
     var serverLoggedAt: String? = nil
+    /// Meal tag backed by `food_logs.meal_type` for grouped food context.
+    var mealType: String? = nil
     /// Saved-meal provenance for logs created via the Saved Meals surface.
     /// This drives the selected "Saved" state in row details so the user
     /// can't accidentally save the same logged saved meal again.

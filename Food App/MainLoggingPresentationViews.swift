@@ -39,49 +39,64 @@ struct MainLoggingDetailsDrawer: View {
     let totals: NutritionTotals
     let items: [ParsedFoodItem]
     let isSaveMealEnabled: Bool
+    let loggedAt: Date
+    let mealTag: FoodLogMealTag?
     let onSaveMeal: () -> Void
     let onManualAddBackToText: () -> Void
     let onItemQuantityChange: (Int, Double) -> Void
+    let onMealTagChange: (FoodLogMealTag) -> Void
+    let onLoggedAtChange: (Date) -> Void
     let onRecalculate: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 0) {
-                if isManualAdd {
-                    MainLoggingManualAddDrawerContent(onBackToText: onManualAddBackToText)
-                        .padding()
-                } else if let parseResult {
-                    HStack {
-                        Button(action: onSaveMeal) {
-                            Label("Save meal", systemImage: "bookmark")
-                                .font(.system(size: 14, weight: .semibold))
+        GeometryReader { proxy in
+            ScrollView(.vertical) {
+                VStack(alignment: .leading, spacing: 0) {
+                    if isManualAdd {
+                        MainLoggingManualAddDrawerContent(onBackToText: onManualAddBackToText)
+                            .padding()
+                    } else if let parseResult {
+                        HStack {
+                            Button(action: onSaveMeal) {
+                                Label("Save meal", systemImage: "bookmark")
+                                    .font(.system(size: 14, weight: .semibold))
+                            }
+                            .buttonStyle(.bordered)
+                            .tint(Color(red: 0.902, green: 0.361, blue: 0.102))
+                            .disabled(!isSaveMealEnabled)
+
+                            Spacer()
                         }
-                        .buttonStyle(.bordered)
-                        .tint(Color(red: 0.902, green: 0.361, blue: 0.102))
-                        .disabled(!isSaveMealEnabled)
+                        .padding(.horizontal, 18)
+                        .padding(.top, 18)
+                        .padding(.bottom, 2)
 
-                        Spacer()
+                        LoggingResultDrawerBody(
+                            foodName: MainLoggingDrawerDisplayText.foodName(from: parseResult),
+                            totals: totals,
+                            items: items,
+                            thoughtProcess: MainLoggingDrawerDisplayText.thoughtProcess(for: parseResult),
+                            loggedAt: loggedAt,
+                            mealTag: mealTag,
+                            onItemQuantityChange: onItemQuantityChange,
+                            onMealTagChange: onMealTagChange,
+                            onLoggedAtChange: onLoggedAtChange,
+                            onRecalculate: onRecalculate
+                        )
+                        .padding(.bottom, 44)
+                    } else {
+                        Text(L10n.parseFirstHint)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .padding()
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.top, 18)
-                    .padding(.bottom, 2)
-
-                    LoggingResultDrawerBody(
-                        foodName: MainLoggingDrawerDisplayText.foodName(from: parseResult),
-                        totals: totals,
-                        items: items,
-                        thoughtProcess: MainLoggingDrawerDisplayText.thoughtProcess(for: parseResult),
-                        onItemQuantityChange: onItemQuantityChange,
-                        onRecalculate: onRecalculate
-                    )
-                    .padding(.bottom, 44)
-                } else {
-                    Text(L10n.parseFirstHint)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                        .padding()
                 }
+                .frame(width: proxy.size.width, alignment: .topLeading)
+                .clipped()
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+            .scrollIndicators(.visible, axes: .vertical)
+            .clipped()
         }
         .background(AppDrawerSurface.gradient)
         .presentationBackground(AppDrawerSurface.gradient)
@@ -363,42 +378,51 @@ struct MainLoggingRowCalorieDetailsSheet: View {
 
     var body: some View {
         NavigationStack {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) {
-                    if details.isHydration {
-                        hydrationDetailsBody
-                    } else {
-                        headerMedia
+            GeometryReader { proxy in
+                ScrollView(.vertical) {
+                    VStack(alignment: .leading, spacing: 0) {
+                        if details.isHydration {
+                            hydrationDetailsBody
+                        } else {
+                            headerMedia
 
-                        LoggingResultDrawerBody(
-                            foodName: details.displayName,
-                            totals: totals,
-                            items: details.parsedItems,
-                            thoughtProcess: details.thoughtProcess,
-                            showsThoughtProcess: false,
-                            onItemQuantityChange: onItemQuantityChange,
-                            onRecalculate: nil
-                        )
+                            LoggingResultDrawerBody(
+                                foodName: details.displayName,
+                                totals: totals,
+                                items: details.parsedItems,
+                                thoughtProcess: details.thoughtProcess,
+                                showsThoughtProcess: false,
+                                loggedAt: HomeLoggingDateUtils.date(fromLoggedAt: details.loggedAt) ?? Date(),
+                                mealTag: FoodLogMealTag.normalized(details.mealType),
+                                onItemQuantityChange: onItemQuantityChange,
+                                onRecalculate: nil
+                            )
 
-                        LoggingResultThoughtProcessCard(thoughtProcess: details.thoughtProcess)
-                    }
-
-                    if !details.isHydration {
-                        Button(role: .destructive, action: onDeleteTapped) {
-                            Text("Delete")
-                                .font(.system(size: 16, weight: .semibold))
-                                .frame(maxWidth: .infinity)
-                                .frame(height: 50)
+                            LoggingResultThoughtProcessCard(thoughtProcess: details.thoughtProcess)
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.red)
-                        .disabled(isDeleteDisabled)
-                        .accessibilityHint(Text("Deletes this food entry and updates your totals."))
-                        .padding(.horizontal, 20)
-                        .padding(.top, 16)
-                        .padding(.bottom, 36)
+
+                        if !details.isHydration {
+                            Button(role: .destructive, action: onDeleteTapped) {
+                                Text("Delete")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .frame(maxWidth: .infinity)
+                                    .frame(height: 50)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.red)
+                            .disabled(isDeleteDisabled)
+                            .accessibilityHint(Text("Deletes this food entry and updates your totals."))
+                            .padding(.horizontal, 20)
+                            .padding(.top, 16)
+                            .padding(.bottom, 36)
+                        }
                     }
+                    .frame(width: proxy.size.width, alignment: .topLeading)
+                    .clipped()
                 }
+                .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+                .scrollIndicators(.visible, axes: .vertical)
+                .clipped()
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)

@@ -283,6 +283,16 @@ final class APIClient {
         )
     }
 
+    @discardableResult
+    func recordAuthDiagnosticEvents(_ requestBody: AuthDiagnosticBatchRequest) async throws -> AcceptedResponse {
+        try await request(
+            path: "/v1/auth-diagnostics/events",
+            method: "POST",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
     func escalateParse(_ requestBody: EscalateParseRequest) async throws -> EscalateParseResponse {
         try await request(path: "/v1/logs/parse/escalate", method: "POST", body: requestBody, requiresAuth: true)
     }

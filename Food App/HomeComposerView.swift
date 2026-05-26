@@ -122,7 +122,6 @@ struct HM01LogComposerSection: View {
                                                 setFocusedMinimalRowID(row.id)
                                             } else if focusedMinimalRowID == row.id {
                                                 setFocusedMinimalRowID(nil)
-                                                onKeyboardDone()
                                             }
                                         }
                                     },

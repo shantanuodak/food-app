@@ -120,6 +120,12 @@ final class AppStore: ObservableObject {
             self.selectedChallenge = resolved
         }
 
+        AuthDiagnosticTelemetry.shared.emit(
+            eventName: "app_launch_auth_state",
+            session: sessionStore.session,
+            details: launchAuthDiagnosticDetails(sessionStore: sessionStore)
+        )
+
         networkMonitor.$isReachable
             .receive(on: DispatchQueue.main)
             .sink { [weak self] reachable in
@@ -179,18 +185,48 @@ final class AppStore: ObservableObject {
 
         if sessionStore.session?.refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             Task { [authService, weak self] in
+                AuthDiagnosticTelemetry.shared.emit(
+                    eventName: "session_restore_started",
+                    session: self?.authSessionStore.session,
+                    details: ["path": "refresh_or_set_session"]
+                )
                 await authService.restoreSessionIfPossible()
+                await self?.repairOnboardingCompletionFromBackendIfNeeded()
                 await MainActor.run {
                     self?.isSessionRestored = true
                     self?.scheduleLaunchOnboardingProfileRefreshIfNeeded()
                     self?.syncNotificationsWithBackend()
                 }
+                AuthDiagnosticTelemetry.shared.emit(
+                    eventName: "session_restore_finished",
+                    session: self?.authSessionStore.session,
+                    details: ["hasStoredSessionAfter": String(self?.authSessionStore.session != nil)]
+                )
+                await self?.flushAuthDiagnostics()
             }
         } else {
-            isSessionRestored = true
             if sessionStore.session != nil {
-                scheduleLaunchOnboardingProfileRefreshIfNeeded()
-                syncNotificationsWithBackend()
+                Task { [weak self] in
+                    AuthDiagnosticTelemetry.shared.emit(
+                        eventName: "session_restore_started",
+                        session: self?.authSessionStore.session,
+                        details: ["path": "stored_session_without_refresh_token"]
+                    )
+                    await self?.repairOnboardingCompletionFromBackendIfNeeded()
+                    await MainActor.run {
+                        self?.isSessionRestored = true
+                        self?.scheduleLaunchOnboardingProfileRefreshIfNeeded()
+                        self?.syncNotificationsWithBackend()
+                    }
+                    AuthDiagnosticTelemetry.shared.emit(
+                        eventName: "session_restore_finished",
+                        session: self?.authSessionStore.session,
+                        details: ["hasStoredSessionAfter": String(self?.authSessionStore.session != nil)]
+                    )
+                    await self?.flushAuthDiagnostics()
+                }
+            } else {
+                isSessionRestored = true
             }
         }
     }
@@ -198,6 +234,11 @@ final class AppStore: ObservableObject {
     func markOnboardingComplete() {
         isOnboardingComplete = true
         defaults.set(true, forKey: onboardingKey)
+    }
+
+    func flushAuthDiagnostics() async {
+        guard authSessionStore.session != nil else { return }
+        await AuthDiagnosticTelemetry.shared.flush(apiClient: apiClient)
     }
 
     func resetOnboarding() {
@@ -269,6 +310,48 @@ final class AppStore: ObservableObject {
 
             guard !Task.isCancelled else { return }
             await self.refreshOnboardingCompletionFromBackend()
+        }
+    }
+
+    private func launchAuthDiagnosticDetails(sessionStore: AuthSessionStore) -> [String: String] {
+        let session = sessionStore.session
+        return [
+            "keychainLoadStatus": sessionStore.lastLoadStatus,
+            "hasStoredSession": String(session != nil),
+            "hasRefreshToken": String(session?.refreshToken?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false),
+            "hasAccessToken": String(session?.accessToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false),
+            "localOnboardingComplete": String(isOnboardingComplete),
+            "selectedChallengePresent": String(selectedChallenge != nil)
+        ]
+    }
+
+    private func repairOnboardingCompletionFromBackendIfNeeded() async {
+        guard authSessionStore.session != nil, !isOnboardingComplete else { return }
+        AuthDiagnosticTelemetry.shared.emit(
+            eventName: "onboarding_completion_repair_started",
+            session: authSessionStore.session,
+            details: ["localOnboardingComplete": String(isOnboardingComplete)]
+        )
+        do {
+            let profile = try await apiClient.getOnboardingProfile()
+            let draft = OnboardingDraft(profile: profile, accountProvider: authSessionStore.session?.provider)
+            OnboardingPersistence.save(draft: draft, route: .ready, defaults: defaults)
+            markOnboardingComplete()
+            AuthDiagnosticTelemetry.shared.emit(
+                eventName: "onboarding_completion_repair_succeeded",
+                session: authSessionStore.session,
+                details: ["localOnboardingComplete": String(isOnboardingComplete)]
+            )
+        } catch {
+            let outcome = Self.isNotFound(error) ? "not_found" : "failed"
+            AuthDiagnosticTelemetry.shared.emit(
+                eventName: "onboarding_completion_repair_\(outcome)",
+                session: authSessionStore.session,
+                details: [
+                    "localOnboardingComplete": String(isOnboardingComplete),
+                    "error": error.localizedDescription
+                ]
+            )
         }
     }
 
@@ -805,21 +888,67 @@ final class AppStore: ObservableObject {
         try await healthKitService.fetchStepCountsByDay(from: startDate, to: endDate)
     }
 
-    func refreshHealthActivity() async {
-        guard isHealthSyncEnabled else { return }
+    @discardableResult
+    func refreshHealthActivity() async -> Bool {
+        await syncRecentHealthActivitySnapshots(days: 1)
+    }
+
+    @discardableResult
+    func syncRecentHealthActivitySnapshots(days: Int = 30) async -> Bool {
+        guard isHealthSyncEnabled,
+              healthAuthorizationState == .authorized,
+              isSessionRestored,
+              isNetworkReachable else { return false }
+
         do {
-            let steps = try await healthKitService.fetchTodayStepCount()
-            let energy = try await healthKitService.fetchTodayActiveEnergy()
-            todaySteps = steps
-            todayActiveEnergy = energy
+            let calendar = Calendar.current
+            let dayCount = max(1, days)
+            let today = Date()
+            let endDate = today
+            let startDate = calendar.date(
+                byAdding: .day,
+                value: -(dayCount - 1),
+                to: calendar.startOfDay(for: today)
+            ) ?? calendar.startOfDay(for: today)
+            let stepSamples = try await healthKitService.fetchStepCountsByDay(from: startDate, to: endDate)
+            let todayEnergy = try? await healthKitService.fetchTodayActiveEnergy()
 
             let formatter = DateFormatter()
             formatter.dateFormat = "yyyy-MM-dd"
-            let todayString = formatter.string(from: Date())
-            let request = HealthActivityRequest(date: todayString, steps: steps, activeEnergyKcal: energy)
-            _ = try? await apiClient.postHealthActivity(request)
+            var syncedAnyActiveDay = false
+
+            for sample in stepSamples {
+                let isToday = calendar.isDate(sample.date, inSameDayAs: today)
+                let activeEnergy = isToday ? (todayEnergy ?? 0) : 0
+
+                if isToday {
+                    todaySteps = sample.steps
+                    todayActiveEnergy = activeEnergy
+                }
+
+                guard sample.steps > 0 || activeEnergy > 0 else { continue }
+
+                do {
+                    let request = HealthActivityRequest(
+                        date: formatter.string(from: sample.date),
+                        steps: sample.steps,
+                        activeEnergyKcal: activeEnergy
+                    )
+                    let snapshot = try await apiClient.postHealthActivity(request)
+                    if snapshot.steps > 0 || snapshot.activeEnergyKcal > 0 {
+                        syncedAnyActiveDay = true
+                    }
+                } catch is CancellationError {
+                    return syncedAnyActiveDay
+                } catch {
+                    continue
+                }
+            }
+
+            return syncedAnyActiveDay
         } catch {
             // Silently ignore read failures — card will show stale or zero values
+            return false
         }
     }
 

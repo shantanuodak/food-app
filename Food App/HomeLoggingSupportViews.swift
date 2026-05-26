@@ -53,6 +53,7 @@ struct RowCalorieDetails: Identifiable {
     let imagePreviewData: Data?
     let imageRef: String?
     let loggedAt: String?
+    var mealType: String? = nil
     let inputKind: String?
     var savedMealId: String? = nil
     var savedMealName: String? = nil
@@ -154,6 +155,7 @@ struct LiquidGlassCapsuleButtonStyle: ButtonStyle {
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
             .glassyBackground(in: .capsule)
+            .contentShape(Capsule())
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }

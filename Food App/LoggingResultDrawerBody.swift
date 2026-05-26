@@ -1,29 +1,12 @@
 import SwiftUI
 import Foundation
 
-// Drawer chip palette. Macro inks stay saturated across modes for chart
-// alignment (blue protein / orange carbs / red fat). Backgrounds and
-// neutral text adapt to dark mode — the original cream/brown ink and
-// pastel chip bgs all became unreadable once the drawer surface flipped
-// to neutral dark on 2026-05-24.
+// Drawer palette. Macro inks stay saturated across modes for chart
+// alignment (blue protein / orange carbs / red fat), while neutral
+// surfaces adapt to dark mode.
 private let kDrawerProteinInk = Color(red: 0.000, green: 0.478, blue: 1.000)
-private let kDrawerProteinBg = Color(uiColor: UIColor { trait in
-    trait.userInterfaceStyle == .dark
-        ? UIColor(red: 0.000, green: 0.478, blue: 1.000, alpha: 0.18)
-        : UIColor(red: 0.870, green: 0.940, blue: 1.000, alpha: 1.0)
-})
 private let kDrawerCarbsInk = Color(red: 0.961, green: 0.486, blue: 0.078)
-private let kDrawerCarbsBg = Color(uiColor: UIColor { trait in
-    trait.userInterfaceStyle == .dark
-        ? UIColor(red: 0.961, green: 0.486, blue: 0.078, alpha: 0.18)
-        : UIColor(red: 1.000, green: 0.929, blue: 0.871, alpha: 1.0)
-})
 private let kDrawerFatInk = AppColor.macroFat
-private let kDrawerFatBg = Color(uiColor: UIColor { trait in
-    trait.userInterfaceStyle == .dark
-        ? UIColor(red: 0.647, green: 0.396, blue: 0.918, alpha: 0.22)
-        : UIColor(red: 0.937, green: 0.886, blue: 1.000, alpha: 1.0)
-})
 
 private let kDrawerBrandOrange = Color(red: 0.902, green: 0.361, blue: 0.102)
 private let kDrawerInk = AppColor.textPrimary
@@ -53,8 +36,16 @@ struct LoggingResultDrawerBody: View {
     let thoughtProcess: String
     let mode: LoggingResultDrawerMode
     let showsThoughtProcess: Bool
+    let loggedAt: Date
+    let mealTag: FoodLogMealTag?
+    let onMealTagChange: ((FoodLogMealTag) -> Void)?
+    let onLoggedAtChange: ((Date) -> Void)?
     let onItemQuantityChange: ((Int, Double) -> Void)?
     let onRecalculate: (() -> Void)?
+
+    @State private var selectedMealTag: FoodLogMealTag
+    @State private var selectedLoggedAt: Date
+    @State private var hasManuallySelectedMealTag: Bool
 
     init(
         foodName: String,
@@ -63,7 +54,11 @@ struct LoggingResultDrawerBody: View {
         thoughtProcess: String,
         mode: LoggingResultDrawerMode = .textDetails,
         showsThoughtProcess: Bool = true,
+        loggedAt: Date = Date(),
+        mealTag: FoodLogMealTag? = nil,
         onItemQuantityChange: ((Int, Double) -> Void)?,
+        onMealTagChange: ((FoodLogMealTag) -> Void)? = nil,
+        onLoggedAtChange: ((Date) -> Void)? = nil,
         onRecalculate: (() -> Void)?
     ) {
         self.foodName = foodName
@@ -72,18 +67,26 @@ struct LoggingResultDrawerBody: View {
         self.thoughtProcess = thoughtProcess
         self.mode = mode
         self.showsThoughtProcess = showsThoughtProcess
+        self.loggedAt = min(loggedAt, Date())
+        self.mealTag = mealTag
+        self.onMealTagChange = onMealTagChange
+        self.onLoggedAtChange = onLoggedAtChange
         self.onItemQuantityChange = onItemQuantityChange
         self.onRecalculate = onRecalculate
+
+        let clampedLoggedAt = min(loggedAt, Date())
+        let initialTag = mealTag ?? FoodLogMealTag.inferred(from: clampedLoggedAt)
+        _selectedLoggedAt = State(initialValue: clampedLoggedAt)
+        _selectedMealTag = State(initialValue: initialTag)
+        _hasManuallySelectedMealTag = State(initialValue: mealTag != nil)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if mode == .photoReview {
-                photoSummaryLabel
-            }
             foodNameView
             calorieHero
-            macroCards
+            macroStrip
+            tagSection
             if !items.isEmpty {
                 detectedItemsList
             }
@@ -99,6 +102,17 @@ struct LoggingResultDrawerBody: View {
                 .frame(maxWidth: .infinity)
                 .padding(.top, 12)
             }
+        }
+        .onChange(of: mealTag) { _, newValue in
+            guard let newValue else { return }
+            selectedMealTag = newValue
+            hasManuallySelectedMealTag = true
+        }
+        .onChange(of: loggedAt) { _, newValue in
+            let clamped = min(newValue, Date())
+            selectedLoggedAt = clamped
+            guard mealTag == nil, !hasManuallySelectedMealTag else { return }
+            selectedMealTag = FoodLogMealTag.inferred(from: clamped)
         }
     }
 
@@ -131,11 +145,152 @@ struct LoggingResultDrawerBody: View {
 
             if let bucket = mealTrustBucket {
                 TrustBars(bucket: bucket)
-                    .padding(.bottom, 8)
+                    .padding(.bottom, 7)
             }
         }
         .padding(.horizontal, 20)
         .padding(.top, 8)
+    }
+
+    // MARK: - Tag + time
+
+    private var tagSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Log details")
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .tracking(0.6)
+                .foregroundStyle(kDrawerMuted)
+                .textCase(.uppercase)
+
+            mealTagFlow
+
+            loggedAtCompactControl
+                .padding(.top, 2)
+        }
+        .padding(.horizontal, 20)
+        .padding(.top, 18)
+    }
+
+    private var mealTagFlow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 6) {
+                ForEach(FoodLogMealTag.allCases) { tag in
+                    mealTagButton(tag)
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(spacing: 6) {
+                    ForEach([FoodLogMealTag.breakfast, .lunch]) { tag in
+                        mealTagButton(tag)
+                    }
+                    Spacer(minLength: 0)
+                }
+
+                HStack(spacing: 6) {
+                    ForEach([FoodLogMealTag.dinner, .snack]) { tag in
+                        mealTagButton(tag)
+                    }
+                    Spacer(minLength: 0)
+                }
+            }
+        }
+    }
+
+    private var loggedAtCompactControl: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "clock.fill")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(kDrawerBrandOrange)
+
+            Text("Logged at")
+                .font(.system(size: 12, weight: .semibold, design: .rounded))
+                .foregroundStyle(kDrawerMuted)
+
+            Spacer(minLength: 8)
+
+            ZStack(alignment: .trailing) {
+                DatePicker(
+                    "",
+                    selection: $selectedLoggedAt,
+                    in: ...Date(),
+                    displayedComponents: .hourAndMinute
+                )
+                .labelsHidden()
+                .datePickerStyle(.compact)
+                .tint(kDrawerBrandOrange)
+                .opacity(0.01)
+                .accessibilityHidden(true)
+                .onChange(of: selectedLoggedAt) { _, newValue in
+                    let clamped = min(newValue, Date())
+                    if clamped != newValue {
+                        selectedLoggedAt = clamped
+                        return
+                    }
+                    onLoggedAtChange?(clamped)
+                    if !hasManuallySelectedMealTag {
+                        let inferredTag = FoodLogMealTag.inferred(from: clamped)
+                        selectedMealTag = inferredTag
+                        onMealTagChange?(inferredTag)
+                    }
+                }
+
+                Text(timeFormatter.string(from: selectedLoggedAt))
+                    .font(.system(size: 16, weight: .semibold, design: .rounded))
+                    .foregroundStyle(kDrawerInk)
+                    .monospacedDigit()
+                    .allowsHitTesting(false)
+            }
+        }
+        .padding(.leading, 11)
+        .padding(.trailing, 6)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .background(kDrawerChipFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .stroke(AppColor.borderSubtle, lineWidth: 1)
+        )
+        .accessibilityLabel(Text("Logged at \(timeFormatter.string(from: selectedLoggedAt))"))
+    }
+
+    private var timeFormatter: DateFormatter {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .none
+        formatter.timeStyle = .short
+        return formatter
+    }
+
+    private func mealTagButton(_ tag: FoodLogMealTag) -> some View {
+        let isSelected = selectedMealTag == tag
+        return Button {
+            selectedMealTag = tag
+            hasManuallySelectedMealTag = true
+            onMealTagChange?(tag)
+        } label: {
+            HStack(spacing: 4) {
+                Image(systemName: tag.systemImage)
+                    .font(.system(size: 11, weight: .bold))
+                Text(tag.title)
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(isSelected ? Color.white : kDrawerInk)
+            .frame(minHeight: 36)
+            .padding(.horizontal, 8)
+            .background(
+                isSelected
+                    ? kDrawerBrandOrange
+                    : kDrawerChipFill,
+                in: Capsule(style: .continuous)
+            )
+            .overlay(
+                Capsule(style: .continuous)
+                    .stroke(isSelected ? kDrawerBrandOrange.opacity(0.16) : AppColor.borderSubtle, lineWidth: 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
     /// Worst-case confidence across all parsed items — one shaky item
@@ -152,71 +307,79 @@ struct LoggingResultDrawerBody: View {
         return TrustBucket(confidence: minimum)
     }
 
-    // MARK: - Macro chips — three categories, distinct palette
+    // MARK: - Macro strip — composition first, numbers second
 
-    private var macroCards: some View {
-        HStack(spacing: 8) {
-            macroChip(
-                value: "\(Int(totals.protein.rounded()))g",
-                label: "Protein",
-                ink: kDrawerProteinInk,
-                bg: kDrawerProteinBg
+    private var macroStrip: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            MacroCompositionBar(
+                protein: totals.protein,
+                carbs: totals.carbs,
+                fat: totals.fat
             )
-            macroChip(
-                value: "\(Int(totals.carbs.rounded()))g",
-                label: "Carbs",
-                ink: kDrawerCarbsInk,
-                bg: kDrawerCarbsBg
-            )
-            macroChip(
-                value: "\(Int(totals.fat.rounded()))g",
-                label: "Fat",
-                ink: kDrawerFatInk,
-                bg: kDrawerFatBg
-            )
+
+            HStack(spacing: 8) {
+                macroMetric(
+                    value: "\(Int(totals.protein.rounded()))g",
+                    label: "Protein",
+                    ink: kDrawerProteinInk
+                )
+                macroMetric(
+                    value: "\(Int(totals.carbs.rounded()))g",
+                    label: "Carbs",
+                    ink: kDrawerCarbsInk
+                )
+                macroMetric(
+                    value: "\(Int(totals.fat.rounded()))g",
+                    label: "Fat",
+                    ink: kDrawerFatInk
+                )
+            }
         }
+        .padding(13)
+        .background(kDrawerChipFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(AppColor.borderSubtle, lineWidth: 1)
+        )
         .padding(.horizontal, 20)
         .padding(.top, 18)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Protein \(Int(totals.protein.rounded())) grams, carbs \(Int(totals.carbs.rounded())) grams, fat \(Int(totals.fat.rounded())) grams")
     }
 
     @ViewBuilder
-    private func macroChip(
+    private func macroMetric(
         value: String,
         label: String,
-        ink: Color,
-        bg: Color
+        ink: Color
     ) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(value)
-                .font(.system(size: 20, weight: .heavy, design: .rounded))
-                .foregroundStyle(ink)
-                .monospacedDigit()
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(ink)
+                    .frame(width: 7, height: 7)
+                Text(value)
+                    .font(.system(size: 17, weight: .heavy, design: .rounded))
+                    .foregroundStyle(ink)
+                    .monospacedDigit()
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
             Text(label)
-                .font(.system(size: 11, weight: .bold, design: .rounded))
-                .tracking(0.4)
-                .foregroundStyle(ink.opacity(0.78))
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .tracking(0.35)
+                .foregroundStyle(kDrawerMuted)
                 .textCase(.uppercase)
+                .padding(.leading, 13)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 12)
-        .frame(minHeight: 72)
-        .background(bg, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .stroke(ink.opacity(0.10), lineWidth: 1)
-        )
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("\(label), \(value)")
     }
 
     // MARK: - Detected items
 
     private var detectedItemsList: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Detected items")
+            Text("Items")
                 .font(.system(size: 11, weight: .bold, design: .rounded))
                 .tracking(0.6)
                 .foregroundStyle(kDrawerMuted)
@@ -237,15 +400,55 @@ struct LoggingResultDrawerBody: View {
         }
     }
 
-    private var photoSummaryLabel: some View {
-        Text(items.count == 1 ? "Detected from photo" : "\(items.count) items detected from photo")
-            .font(.system(size: 12, weight: .bold, design: .rounded))
-            .foregroundStyle(kDrawerBrandOrange)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(kDrawerBrandOrange.opacity(0.10), in: Capsule())
-            .padding(.horizontal, 20)
-            .padding(.top, 18)
+}
+
+private struct MacroCompositionBar: View {
+    let protein: Double
+    let carbs: Double
+    let fat: Double
+
+    private struct Segment: Identifiable {
+        let id: String
+        let energy: Double
+        let color: Color
+    }
+
+    private var segments: [Segment] {
+        [
+            Segment(id: "protein", energy: max(0, protein) * 4, color: kDrawerProteinInk),
+            Segment(id: "carbs", energy: max(0, carbs) * 4, color: kDrawerCarbsInk),
+            Segment(id: "fat", energy: max(0, fat) * 9, color: kDrawerFatInk)
+        ]
+        .filter { $0.energy > 0 }
+    }
+
+    private var totalEnergy: Double {
+        segments.reduce(0) { $0 + $1.energy }
+    }
+
+    var body: some View {
+        GeometryReader { proxy in
+            if totalEnergy > 0 {
+                let gap: CGFloat = 3
+                let totalGap = gap * CGFloat(max(segments.count - 1, 0))
+                let availableWidth = max(0, proxy.size.width - totalGap)
+
+                HStack(spacing: gap) {
+                    ForEach(segments) { segment in
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .fill(segment.color)
+                            .frame(width: max(3, availableWidth * CGFloat(segment.energy / totalEnergy)))
+                    }
+                }
+                .clipShape(Capsule(style: .continuous))
+            } else {
+                Capsule(style: .continuous)
+                    .fill(kDrawerMuted.opacity(0.14))
+            }
+        }
+        .frame(height: 8)
+        .background(kDrawerMuted.opacity(0.12), in: Capsule(style: .continuous))
+        .accessibilityHidden(true)
     }
 }
 
@@ -278,11 +481,6 @@ private struct DrawerItemRow: View {
         localUnitOverride ?? ServingUnitOption.bestMatch(for: item.unitNormalized ?? item.unit)
     }
 
-    private var isAtSuggestedDefaults: Bool {
-        localUnitOverride == nil &&
-            abs(currentQuantity - (item.amount ?? item.quantity)) < 0.001
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 14) {
@@ -312,17 +510,6 @@ private struct DrawerItemRow: View {
                         .foregroundStyle(kDrawerMuted)
                         .multilineTextAlignment(.trailing)
                 }
-            }
-
-            if isAtSuggestedDefaults {
-                Text("Suggested")
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .tracking(0.6)
-                    .foregroundStyle(kDrawerBrandOrange.opacity(0.86))
-                    .textCase(.uppercase)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(kDrawerBrandOrange.opacity(0.08), in: Capsule())
             }
 
             switch expandedPicker {
@@ -791,18 +978,25 @@ private struct TrustBars: View {
     let bucket: TrustBucket
 
     var body: some View {
-        VStack(alignment: .trailing, spacing: 4) {
+        HStack(spacing: 7) {
             HStack(spacing: 3) {
                 ForEach(0..<3, id: \.self) { i in
                     Circle()
                         .fill(i < bucket.filledDots ? kDrawerInk : kDrawerInk.opacity(0.18))
-                        .frame(width: 6, height: 6)
+                        .frame(width: 5, height: 5)
                 }
             }
             Text(bucket.label)
                 .font(.system(size: 11, weight: .semibold, design: .rounded))
                 .foregroundStyle(kDrawerMuted)
         }
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .background(kDrawerChipFill, in: Capsule(style: .continuous))
+        .overlay(
+            Capsule(style: .continuous)
+                .stroke(AppColor.borderSubtle, lineWidth: 1)
+        )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel(Text("Estimate confidence: \(bucket.label)"))
     }

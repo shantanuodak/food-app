@@ -24,12 +24,28 @@ struct ContentView: View {
     @ViewBuilder
     private var appContent: some View {
         Group {
-            switch flow.route {
-            case .onboarding:
-                OnboardingView(flow: flow)
-            case .home:
-                HomeTabShellView()
+            if !appStore.isSessionRestored {
+                LaunchSessionRestoringView()
+            } else {
+                switch flow.route {
+                case .onboarding:
+                    OnboardingView(flow: flow)
+                case .home:
+                    HomeTabShellView()
+                }
             }
+        }
+    }
+}
+
+private struct LaunchSessionRestoringView: View {
+    var body: some View {
+        ZStack {
+            Color(.systemBackground)
+                .ignoresSafeArea()
+
+            ProgressView()
+                .controlSize(.large)
         }
     }
 }

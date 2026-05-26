@@ -75,12 +75,7 @@ extension MainLoggingShellView {
             )
             .scrollDismissesKeyboard(.interactively)
             .onTapGesture {
-                guard !presentMindfulPauseIfNeeded(for: .text) else { return }
-                if isKeyboardVisible {
-                    dismissComposerKeyboard()
-                } else {
-                    focusComposerInputFromBackgroundTap()
-                }
+                handleComposerBackgroundTap()
             }
             .navigationTitle("")
             .navigationBarTitleDisplayMode(.inline)
@@ -237,6 +232,7 @@ extension MainLoggingShellView {
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
                 scheduleSecondaryHomePreloads()
+                syncHealthActivityForBadgesIfNeeded()
                 if QuickCameraLaunchStore.consumeLaunchRequest() {
                     guard !presentMindfulPauseIfNeeded(for: .camera(.takePicture, isQuickCapture: true)) else { return }
                     isQuickCameraCaptureActive = true
@@ -258,18 +254,33 @@ extension MainLoggingShellView {
                 hydrateVisibleDayLogsFromDiskIfNeeded()
                 bootstrapAuthenticatedHomeIfNeeded()
                 scheduleSecondaryHomePreloads()
+                syncHealthActivityForBadgesIfNeeded(force: true)
                 autoPresentHomeTutorialIfNeeded()
                 evaluateHydrationGoalPromptIfNeeded()
             }
             .onChange(of: scenePhase) { _, phase in
                 switch phase {
                 case .active:
+                    restorePendingSaveContextIfNeeded()
+                    submitRestoredPendingSaveIfPossible()
                     refreshVisibleDayOnForeground()
+                    syncHealthActivityForBadgesIfNeeded()
+                case .inactive:
+                    flushPendingAutoSaveForSceneTransition()
                 case .background:
+                    flushPendingAutoSaveForSceneTransition()
                     FoodBackgroundRefreshService.shared.scheduleAppRefresh()
                 default:
                     break
                 }
+            }
+            .onChange(of: appStore.isHealthSyncEnabled) { _, enabled in
+                guard enabled else { return }
+                syncHealthActivityForBadgesIfNeeded(force: true)
+            }
+            .onChange(of: appStore.healthAuthorizationState) { _, state in
+                guard state == .authorized else { return }
+                syncHealthActivityForBadgesIfNeeded(force: true)
             }
             .onDisappear {
                 debounceTask?.cancel()
@@ -384,6 +395,7 @@ extension MainLoggingShellView {
                     onSkip: {
                         defaults.set(true, forKey: hydrationGoalPromptDismissedKey)
                         isHydrationGoalPromptPresented = false
+                        scheduleBadgeCelebrationCheckAfterHydrationSave(delayNanoseconds: 500_000_000)
                     }
                 )
                 .presentationDetents([.large])
@@ -659,6 +671,18 @@ extension MainLoggingShellView {
         }
     }
 
+    func flushPendingAutoSaveForSceneTransition() {
+        let backgroundTaskID = UIApplication.shared.beginBackgroundTask(withName: "FoodLogAutosaveFlush") {}
+        Task { @MainActor in
+            defer {
+                if backgroundTaskID != .invalid {
+                    UIApplication.shared.endBackgroundTask(backgroundTaskID)
+                }
+            }
+            await flushPendingAutoSaveIfEligible()
+        }
+    }
+
     /// Voice recording overlay — extracted into its own computed property so
     /// the type-checker on the main body doesn't time out. Driven entirely
     /// by `isVoiceOverlayPresented` and the speech service.
@@ -707,6 +731,10 @@ extension MainLoggingShellView {
         CameraResultDrawerView(
             state: cameraDrawerState,
             parseResult: parseResult,
+            loggedAt: draftLoggedAt ??
+                HomeLoggingDateUtils.date(fromLoggedAt: parseResult?.loggedAt) ??
+                draftTimestampForSelectedDate(),
+            mealTag: draftMealTag,
             contextNote: $cameraDrawerContextNote,
             onLogIt: { editedItems, editedTotals in
                 handleDrawerLogIt(editedItems: editedItems, editedTotals: editedTotals)
@@ -728,6 +756,12 @@ extension MainLoggingShellView {
                     cameraDrawerState = .analyzing(image, nil)
                     Task { await parseAndUpdateDrawer(image, contextNote: cameraDrawerContextNote) }
                 }
+            },
+            onMealTagChange: { tag in
+                draftMealTag = tag
+            },
+            onLoggedAtChange: { date in
+                draftLoggedAt = min(date, Date())
             }
         )
     }

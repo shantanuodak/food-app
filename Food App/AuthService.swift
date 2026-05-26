@@ -109,6 +109,7 @@ final class AuthService {
                 supabaseKey: supabaseAnonKey,
                 options: SupabaseClientOptions(
                     auth: SupabaseClientOptions.AuthOptions(
+                        autoRefreshToken: false,
                         emitLocalSessionAsInitialSession: true
                     )
                 )
@@ -151,6 +152,10 @@ final class AuthService {
         } catch {
             if error is RestoreSessionTimeout {
                 NSLog("[AuthService] Timed out restoring session on launch; continuing with stored token.")
+                AuthDiagnosticTelemetry.shared.emit(
+                    eventName: "session_restore_timeout",
+                    session: storedSession
+                )
                 return
             }
             guard isInvalidSessionRecoveryError(error) else { return }
@@ -161,6 +166,10 @@ final class AuthService {
             } catch {
                 if error is RestoreSessionTimeout {
                     NSLog("[AuthService] Timed out refreshing session on launch; continuing with stored token.")
+                    AuthDiagnosticTelemetry.shared.emit(
+                        eventName: "session_restore_refresh_timeout",
+                        session: storedSession
+                    )
                     return
                 }
                 if isInvalidSessionRecoveryError(error) {
@@ -312,6 +321,10 @@ final class AuthService {
     }
 
     func signOut() {
+        AuthDiagnosticTelemetry.shared.emit(
+            eventName: "user_sign_out",
+            session: sessionStore.session
+        )
         sessionStore.clear()
 #if canImport(GoogleSignIn)
         Task { @MainActor in
@@ -708,6 +721,16 @@ final class AuthService {
     // which catch handler ran.
     private func clearStoredSession(from origin: String) async {
         NSLog("[Auth] cleared session from %@", origin)
+        let session = sessionStore.session
+        AuthDiagnosticTelemetry.shared.emit(
+            eventName: "session_cleared",
+            session: session,
+            details: [
+                "origin": origin,
+                "hasRefreshToken": String(nonEmpty(session?.refreshToken) != nil),
+                "hasAccessToken": String(nonEmpty(session?.accessToken) != nil)
+            ]
+        )
         await MainActor.run {
             sessionStore.clear()
         }
@@ -788,15 +811,31 @@ final class AuthService {
         // rotated the token and we caught it correctly.
         let tokenTail = String(refreshToken.suffix(8))
         NSLog("[Auth] performSupabaseRefresh start (tokenTail=%@)", tokenTail)
+        AuthDiagnosticTelemetry.shared.emit(
+            eventName: "supabase_refresh_started",
+            session: metadata
+        )
 
         do {
             let session = try await supabaseClient.auth.refreshSession(refreshToken: refreshToken)
             let newTokenTail = String(session.refreshToken.suffix(8))
             NSLog("[Auth] performSupabaseRefresh OK (oldTail=%@ newTail=%@)", tokenTail, newTokenTail)
+            AuthDiagnosticTelemetry.shared.emit(
+                eventName: "supabase_refresh_succeeded",
+                session: metadata
+            )
             let authSession = makeAuthSession(from: session, provider: metadata.provider, existing: metadata)
             return try await persistRecoveredSession(authSession)
         } catch {
             NSLog("[Auth] performSupabaseRefresh FAILED (tokenTail=%@ error=%@)", tokenTail, String(describing: error))
+            AuthDiagnosticTelemetry.shared.emit(
+                eventName: "supabase_refresh_failed",
+                session: metadata,
+                details: [
+                    "error": error.localizedDescription,
+                    "recoverable": String(isInvalidSessionRecoveryError(error))
+                ]
+            )
             throw error
         }
     }

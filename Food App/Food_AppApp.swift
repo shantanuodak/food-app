@@ -46,7 +46,7 @@ private struct RootAppContentView: View {
     @State private var postLaunchMaintenanceTask: Task<Void, Never>?
 
     var body: some View {
-        ContentView()
+        rootContent
             .environmentObject(appStore)
             .task {
                 FoodBackgroundRefreshService.shared.appStore = appStore
@@ -76,6 +76,19 @@ private struct RootAppContentView: View {
                     FoodBackgroundRefreshService.shared.scheduleAppRefresh()
                 }
             }
+    }
+
+    @ViewBuilder
+    private var rootContent: some View {
+#if DEBUG
+        if let stateID = VisualQAMode.requestedStateID {
+            VisualQARootView(stateID: stateID)
+        } else {
+            ContentView()
+        }
+#else
+        ContentView()
+#endif
     }
 
     @MainActor

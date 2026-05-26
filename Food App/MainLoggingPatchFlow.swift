@@ -100,6 +100,7 @@ extension MainLoggingShellView {
         let body = PatchLogBody(
             rawText: row.text.trimmingCharacters(in: .whitespacesAndNewlines),
             loggedAt: nil,
+            mealType: row.mealType,
             inputKind: "text",
             imageRef: row.imageRef,
             confidence: row.parsedItem.map { $0.matchConfidence } ?? 0.85,
@@ -172,6 +173,7 @@ extension MainLoggingShellView {
         let patchBody = PatchLogBody(
             rawText: src.rawText,
             loggedAt: nil,
+            mealType: src.mealType,
             inputKind: src.inputKind,
             imageRef: src.imageRef,
             confidence: src.confidence,

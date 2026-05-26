@@ -59,6 +59,24 @@ struct ImageParseAttemptTelemetryRequest: Encodable {
     let metadata: [String: String]?
 }
 
+struct AuthDiagnosticEventRequest: Encodable {
+    let clientEventId: String
+    let eventName: String
+    let occurredAt: String
+    let appLaunchId: String
+    let clientBuild: String?
+    let appVersion: String?
+    let osVersion: String?
+    let deviceModel: String?
+    let provider: String?
+    let userIdHint: String?
+    let metadata: [String: String]
+}
+
+struct AuthDiagnosticBatchRequest: Encodable {
+    let events: [AuthDiagnosticEventRequest]
+}
+
 struct RegisterNotificationDeviceRequest: Encodable {
     let token: String
     let platform: String
@@ -416,6 +434,7 @@ struct SaveLogRequest: Codable {
 struct SaveLogBody: Codable {
     let rawText: String
     let loggedAt: String
+    var mealType: String? = nil
     let inputKind: String?
     let imageRef: String?
     let confidence: Double
@@ -712,6 +731,7 @@ struct PatchLogRequest: Codable {
 struct PatchLogBody: Codable {
     let rawText: String
     let loggedAt: String?
+    var mealType: String? = nil
     let inputKind: String?
     let imageRef: String?
     let confidence: Double
@@ -749,6 +769,7 @@ struct DayLogsResponse: Codable {
 struct DayLogEntry: Codable, Identifiable {
     let id: String
     let loggedAt: String
+    var mealType: String? = nil
     let rawText: String
     let inputKind: String
     let imageRef: String?

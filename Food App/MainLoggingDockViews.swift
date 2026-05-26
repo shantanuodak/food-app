@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import UIKit
 
@@ -357,9 +358,10 @@ struct MainLoggingTopHeaderStrip: View {
         }
         .padding(.horizontal, 10)
         .sheet(isPresented: $isTutorialPresented) {
-            TutorialPlaceholderSheet()
-                .presentationDetents([.medium])
+            TutorialLibrarySheet()
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                .presentationBackground(AppDrawerSurface.gradient)
         }
         .onAppear {
             startHelpIconWobble()
@@ -431,34 +433,277 @@ private struct FoodStoryHeaderPreviewIcon: View {
     }
 }
 
-private struct TutorialPlaceholderSheet: View {
+private struct TutorialLibrarySheet: View {
+    @State private var activeTutorialID: TutorialVideoItem.ID? = TutorialVideoItem.logMeal.id
+
+    private let tutorials: [TutorialVideoItem] = [
+        .logMeal,
+        .viewMealDetails,
+        .logWater
+    ]
+
     var body: some View {
-        VStack(spacing: 18) {
-            Spacer().frame(height: 20)
+        GeometryReader { proxy in
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 18) {
+                    Text("Tutorial")
+                        .font(.system(size: 30, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
 
-            ZStack {
-                Circle()
-                    .fill(Color(red: 1.00, green: 0.78, blue: 0.33).opacity(0.18))
-                    .frame(width: 88, height: 88)
-                Image(systemName: "play.rectangle.fill")
-                    .font(.system(size: 36, weight: .medium))
-                    .foregroundStyle(Color(red: 0.95, green: 0.55, blue: 0.20))
+                    ForEach(tutorials) { tutorial in
+                        TutorialVideoCard(
+                            tutorial: tutorial,
+                            isActive: activeTutorialID == tutorial.id
+                        )
+                    }
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 24)
+                .padding(.bottom, 28)
             }
-
-            VStack(spacing: 8) {
-                Text("Tutorial coming soon")
-                    .font(.system(size: 22, weight: .bold))
-                    .multilineTextAlignment(.center)
-
-                Text("Quick walkthroughs of how to log meals, scan barcodes, and track your goals — coming in a future build.")
-                    .font(.system(size: 15))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 36)
+            .coordinateSpace(name: TutorialScrollSpace.name)
+            .onPreferenceChange(TutorialCardFramePreferenceKey.self) { frames in
+                updateActiveTutorial(from: frames, viewportHeight: proxy.size.height)
             }
-
-            Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(AppDrawerSurface.gradient.ignoresSafeArea())
+        .onDisappear {
+            activeTutorialID = nil
+        }
+    }
+
+    private func updateActiveTutorial(from frames: [TutorialCardFrame], viewportHeight: CGFloat) {
+        let visibleFrames = frames.compactMap { card -> (id: TutorialVideoItem.ID, distance: CGFloat)? in
+            let visibleHeight = min(card.frame.maxY, viewportHeight) - max(card.frame.minY, 0)
+            guard visibleHeight > 80 else { return nil }
+            return (card.id, abs(card.frame.midY - viewportHeight * 0.5))
+        }
+
+        activeTutorialID = visibleFrames.min { $0.distance < $1.distance }?.id ?? TutorialVideoItem.logMeal.id
+    }
+}
+
+private struct TutorialVideoCard: View {
+    let tutorial: TutorialVideoItem
+    let isActive: Bool
+    @State private var player: AVPlayer?
+    @State private var playbackEndObserver: NSObjectProtocol?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text(tutorial.title)
+                .font(.system(size: 30, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+
+            if let player {
+                TutorialPlayerLayerView(player: player)
+                    .aspectRatio(1, contentMode: .fit)
+                    .frame(maxWidth: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 18, style: .continuous)
+                            .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+                    }
+                    .background(Color.black, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            } else if tutorial.bundleURL != nil {
+                idleVideoView
+            } else {
+                missingVideoView
+            }
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(Color.primary.opacity(0.06), lineWidth: 1)
+        }
+        .shadow(color: Color.black.opacity(0.12), radius: 18, y: 10)
+        .background {
+            GeometryReader { proxy in
+                Color.clear.preference(
+                    key: TutorialCardFramePreferenceKey.self,
+                    value: [
+                        TutorialCardFrame(
+                            id: tutorial.id,
+                            frame: proxy.frame(in: .named(TutorialScrollSpace.name))
+                        )
+                    ]
+                )
+            }
+        }
+        .onAppear {
+            playIfActive()
+        }
+        .onChange(of: isActive) { _, newValue in
+            if newValue {
+                playIfActive()
+            } else {
+                stopAndReleasePlayer()
+            }
+        }
+        .onDisappear {
+            stopAndReleasePlayer()
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(Text(tutorial.title))
+    }
+
+    private var idleVideoView: some View {
+        ZStack {
+            Color.black
+
+            Circle()
+                .fill(Color.white.opacity(0.14))
+                .frame(width: 58, height: 58)
+
+            Image(systemName: "play.fill")
+                .font(.system(size: 22, weight: .black, design: .rounded))
+                .foregroundStyle(.white)
+                .offset(x: 2)
+        }
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: .infinity)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private var missingVideoView: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "exclamationmark.triangle.fill")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(Color(red: 0.95, green: 0.55, blue: 0.20))
+
+            Text("Tutorial video unavailable")
+                .font(.system(size: 17, weight: .semibold))
+        }
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 44)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+    }
+
+    private func playIfActive() {
+        guard isActive else { return }
+        loadPlayerIfNeeded()
+        player?.seek(to: .zero)
+        player?.play()
+    }
+
+    private func stopAndReleasePlayer() {
+        player?.pause()
+        if let playbackEndObserver {
+            NotificationCenter.default.removeObserver(playbackEndObserver)
+            self.playbackEndObserver = nil
+        }
+        player = nil
+    }
+
+    private func loadPlayerIfNeeded() {
+        guard player == nil, let url = tutorial.bundleURL else { return }
+
+        let player = AVPlayer(url: url)
+        player.actionAtItemEnd = .none
+        playbackEndObserver = NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: player.currentItem,
+            queue: .main
+        ) { [weak player] _ in
+            player?.seek(to: .zero)
+            player?.play()
+        }
+        self.player = player
+    }
+}
+
+private enum TutorialScrollSpace {
+    static let name = "TutorialScrollSpace"
+}
+
+private struct TutorialCardFrame: Equatable {
+    let id: TutorialVideoItem.ID
+    let frame: CGRect
+}
+
+private struct TutorialCardFramePreferenceKey: PreferenceKey {
+    static let defaultValue: [TutorialCardFrame] = []
+
+    static func reduce(value: inout [TutorialCardFrame], nextValue: () -> [TutorialCardFrame]) {
+        value.append(contentsOf: nextValue())
+    }
+}
+
+private struct TutorialPlayerLayerView: UIViewRepresentable {
+    let player: AVPlayer
+
+    func makeUIView(context: Context) -> TutorialPlayerContainerView {
+        let view = TutorialPlayerContainerView()
+        view.configure(player: player)
+        return view
+    }
+
+    func updateUIView(_ uiView: TutorialPlayerContainerView, context: Context) {
+        uiView.configure(player: player)
+    }
+
+    static func dismantleUIView(_ uiView: TutorialPlayerContainerView, coordinator: ()) {
+        uiView.configure(player: nil)
+    }
+}
+
+private final class TutorialPlayerContainerView: UIView {
+    override class var layerClass: AnyClass {
+        AVPlayerLayer.self
+    }
+
+    private var playerLayer: AVPlayerLayer {
+        layer as! AVPlayerLayer
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        backgroundColor = .black
+        playerLayer.videoGravity = .resizeAspectFill
+    }
+
+    required init?(coder: NSCoder) {
+        nil
+    }
+
+    func configure(player: AVPlayer?) {
+        playerLayer.player = player
+        playerLayer.videoGravity = .resizeAspectFill
+    }
+}
+
+private struct TutorialVideoItem: Identifiable, Hashable {
+    let id: String
+    let title: String
+    let darkResourceName: String
+    let lightResourceName: String?
+
+    static let logMeal = TutorialVideoItem(
+        id: "log-meal",
+        title: "Log meal",
+        darkResourceName: "LogMealDark",
+        lightResourceName: nil
+    )
+
+    static let viewMealDetails = TutorialVideoItem(
+        id: "view-meal-details",
+        title: "View meal details",
+        darkResourceName: "ViewMealDetailsDark",
+        lightResourceName: nil
+    )
+
+    static let logWater = TutorialVideoItem(
+        id: "log-water",
+        title: "Log your water",
+        darkResourceName: "LogWaterDark",
+        lightResourceName: nil
+    )
+
+    var bundleURL: URL? {
+        Bundle.main.url(forResource: darkResourceName, withExtension: "mp4", subdirectory: "Tutorials")
+            ?? Bundle.main.url(forResource: darkResourceName, withExtension: "mp4")
     }
 }

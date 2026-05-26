@@ -1280,6 +1280,88 @@ router.get('/users', async (req, res, next) => {
 });
 
 // ---------------------------------------------------------------------------
+// GET /v1/internal/dashboard/auth-diagnostics
+// Recent client-side auth/session breadcrumbs flushed after re-auth.
+// ---------------------------------------------------------------------------
+
+router.get('/auth-diagnostics', async (req, res, next) => {
+  try {
+    requireInternalKey(req.header('x-internal-metrics-key'));
+    const email = typeof req.query.email === 'string' ? req.query.email.trim().toLowerCase() : '';
+    const limitRaw = typeof req.query.limit === 'string' ? Number(req.query.limit) : 100;
+    const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(Math.round(limitRaw), 1), 500) : 100;
+
+    const params: Array<string | number> = [];
+    let whereClause = '';
+    if (email) {
+      params.push(email);
+      whereClause = `WHERE LOWER(u.email) = $${params.length}`;
+    }
+    params.push(limit);
+
+    const { rows } = await pool.query<{
+      id: string;
+      user_id: string;
+      email: string;
+      event_name: string;
+      occurred_at: Date;
+      created_at: Date;
+      app_launch_id: string | null;
+      client_build: string | null;
+      app_version: string | null;
+      os_version: string | null;
+      device_model: string | null;
+      provider: string | null;
+      user_id_hint: string | null;
+      metadata_json: Record<string, string>;
+    }>(
+      `SELECT
+         ade.id,
+         ade.user_id,
+         u.email,
+         ade.event_name,
+         ade.occurred_at,
+         ade.created_at,
+         ade.app_launch_id,
+         ade.client_build,
+         ade.app_version,
+         ade.os_version,
+         ade.device_model,
+         ade.provider,
+         ade.user_id_hint,
+         ade.metadata_json
+       FROM auth_diagnostic_events ade
+       JOIN users u ON u.id = ade.user_id
+       ${whereClause}
+       ORDER BY ade.occurred_at DESC
+       LIMIT $${params.length}`,
+      params
+    );
+
+    res.json({
+      events: rows.map((row) => ({
+        id: row.id,
+        userId: row.user_id,
+        email: row.email,
+        eventName: row.event_name,
+        occurredAt: row.occurred_at.toISOString(),
+        receivedAt: row.created_at.toISOString(),
+        appLaunchId: row.app_launch_id,
+        clientBuild: row.client_build,
+        appVersion: row.app_version,
+        osVersion: row.os_version,
+        deviceModel: row.device_model,
+        provider: row.provider,
+        userIdHint: row.user_id_hint,
+        metadata: row.metadata_json ?? {}
+      }))
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET /v1/internal/dashboard/cost-breakdown
 // 7-day cost by feature per day
 // ---------------------------------------------------------------------------

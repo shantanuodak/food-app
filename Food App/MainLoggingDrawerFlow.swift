@@ -9,6 +9,8 @@ extension MainLoggingShellView {
             totals: displayedTotals,
             items: displayedDrawerItems,
             isSaveMealEnabled: buildSaveDraftRequest() != nil,
+            loggedAt: draftLoggedAt ?? draftTimestampForSelectedDate(),
+            mealTag: draftMealTag,
             onSaveMeal: {
                 presentSaveMealSheet()
             },
@@ -19,6 +21,12 @@ extension MainLoggingShellView {
             },
             onItemQuantityChange: { itemOffset, quantity in
                 applyActiveParseItemQuantity(itemOffset: itemOffset, quantity: quantity)
+            },
+            onMealTagChange: { tag in
+                draftMealTag = tag
+            },
+            onLoggedAtChange: { date in
+                draftLoggedAt = min(date, Date())
             },
             onRecalculate: {
                 isDetailsDrawerPresented = false
@@ -300,6 +308,9 @@ extension MainLoggingShellView {
         )
 
         let loggedAt = details.loggedAt ?? ISO8601DateFormatter().string(from: Date())
+        let loggedDate = HomeLoggingDateUtils.date(fromLoggedAt: loggedAt) ?? Date()
+        let mealType = FoodLogMealTag.normalized(details.mealType)?.rawValue ??
+            FoodLogMealTag.inferred(from: loggedDate).rawValue
 
         return SaveLogRequest(
             parseRequestId: "row-details-\(details.id.uuidString.lowercased())",
@@ -309,6 +320,7 @@ extension MainLoggingShellView {
                     ? details.displayName
                     : details.rowText,
                 loggedAt: loggedAt,
+                mealType: mealType,
                 inputKind: details.inputKind,
                 imageRef: details.imageRef,
                 confidence: details.primaryConfidence,
@@ -482,6 +494,7 @@ extension MainLoggingShellView {
                 imagePreviewData: nil,
                 imageRef: nil,
                 loggedAt: row.serverLoggedAt,
+                mealType: row.mealType,
                 inputKind: "hydration",
                 hydrationAmountMl: row.hydrationAmountMl,
                 hydrationInputAmount: row.hydrationInputAmount,
@@ -548,6 +561,7 @@ extension MainLoggingShellView {
             imagePreviewData: row.imagePreviewData,
             imageRef: row.imageRef,
             loggedAt: row.serverLoggedAt,
+            mealType: row.mealType,
             inputKind: row.imageRef == nil ? "text" : "image",
             savedMealId: row.savedMealId,
             savedMealName: row.savedMealName

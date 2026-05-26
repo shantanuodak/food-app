@@ -102,10 +102,10 @@ extension MainLoggingShellView {
             // text, and triggers a re-parse — without this, the new pending
             // item starts with serverLogId = nil and the PATCH check in
             // autoSaveIfNeeded misses, falling back to POST and creating a
-            // duplicate food_logs row. (mergeRowsPreservingVisibleOrder can
-            // swap the row's UUID after the first save, so a brand-new
-            // pending item gets created here even though the row itself
-            // already carries its serverLogId.)
+            // duplicate food_logs row. Day-log reconciliation can swap the
+            // row's UUID after the first save, so a brand-new pending item
+            // gets created here even though the row itself already carries
+            // its serverLogId.
             let rowServerLogId = inputRows.first(where: { $0.id == entry.rowID })?.serverLogId
             upsertPendingSaveQueueItem(
                 request: request,
@@ -388,6 +388,10 @@ extension MainLoggingShellView {
             parsedLog: SaveLogBody(
                 rawText: entry.rawText,
                 loggedAt: effectiveLoggedAt,
+                mealType: FoodLogMealTag.normalized(currentRow?.mealType)?.rawValue ??
+                    FoodLogMealTag.inferred(
+                        from: HomeLoggingDateUtils.date(fromLoggedAt: effectiveLoggedAt) ?? Date()
+                    ).rawValue,
                 inputKind: normalizedInputKind(response.inputKind, fallback: "text"),
                 imageRef: nil,
                 confidence: response.confidence,
@@ -459,6 +463,9 @@ extension MainLoggingShellView {
             parsedLog: SaveLogBody(
                 rawText: canonicalParseRawText(response: response, fallbackRawText: draft.text),
                 loggedAt: draft.loggedAt,
+                mealType: FoodLogMealTag.inferred(
+                    from: HomeLoggingDateUtils.date(fromLoggedAt: draft.loggedAt) ?? Date()
+                ).rawValue,
                 inputKind: draft.inputKind,
                 imageRef: nil,
                 confidence: response.confidence,
@@ -548,6 +555,7 @@ extension MainLoggingShellView {
             parsedLog: SaveLogBody(
                 rawText: request.parsedLog.rawText,
                 loggedAt: request.parsedLog.loggedAt,
+                mealType: request.parsedLog.mealType,
                 inputKind: normalizedInputKind(request.parsedLog.inputKind, fallback: latestParseInputKind),
                 imageRef: imageRef,
                 confidence: request.parsedLog.confidence,
@@ -789,6 +797,7 @@ extension MainLoggingShellView {
         if intent == .manual || intent == .retry {
             flowStartedAt = nil
             draftLoggedAt = nil
+            draftMealTag = nil
         }
         if intent != .dateChangeBackground,
            let parsedDate = HomeLoggingDateUtils.summaryRequestFormatter.date(from: savedDay) {
@@ -934,7 +943,13 @@ extension MainLoggingShellView {
 
         if let rowID = queuedItem?.rowID,
            let index = inputRows.firstIndex(where: { $0.id == rowID }) {
-            promoteInputRow(at: index, logId: logId, loggedAt: savedLoggedAt, imageRef: request.parsedLog.imageRef)
+            promoteInputRow(
+                at: index,
+                logId: logId,
+                loggedAt: savedLoggedAt,
+                imageRef: request.parsedLog.imageRef,
+                mealType: request.parsedLog.mealType
+            )
             promotedRowID = rowID
         }
 
@@ -948,7 +963,13 @@ extension MainLoggingShellView {
                 }
                 return !requestText.isEmpty && HomeLoggingTextMatch.normalizedRowText(row.text) == requestText
             }) {
-                promoteInputRow(at: index, logId: logId, loggedAt: savedLoggedAt, imageRef: request.parsedLog.imageRef)
+                promoteInputRow(
+                    at: index,
+                    logId: logId,
+                    loggedAt: savedLoggedAt,
+                    imageRef: request.parsedLog.imageRef,
+                    mealType: request.parsedLog.mealType
+                )
                 promotedRowID = inputRows[index].id
             }
         }
@@ -968,11 +989,12 @@ extension MainLoggingShellView {
         }
     }
 
-    func promoteInputRow(at index: Int, logId: String, loggedAt: String, imageRef: String?) {
+    func promoteInputRow(at index: Int, logId: String, loggedAt: String, imageRef: String?, mealType: String?) {
         guard inputRows.indices.contains(index) else { return }
         inputRows[index].isSaved = true
         inputRows[index].serverLogId = logId
         inputRows[index].serverLoggedAt = loggedAt
+        inputRows[index].mealType = mealType
         inputRows[index].parsePhase = .idle
         if let savedMealId = inputRows[index].savedMealId?.trimmingCharacters(in: .whitespacesAndNewlines),
            !savedMealId.isEmpty {

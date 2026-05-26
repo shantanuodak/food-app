@@ -58,10 +58,14 @@ enum CameraDrawerState {
 struct CameraResultDrawerView: View {
     let state: CameraDrawerState
     let parseResult: ParseLogResponse?
+    let loggedAt: Date
+    let mealTag: FoodLogMealTag?
     @Binding var contextNote: String
     let onLogIt: ([ParsedFoodItem], NutritionTotals) -> Void
     let onDiscard: () -> Void
     let onRetry: () -> Void
+    let onMealTagChange: ((FoodLogMealTag) -> Void)?
+    let onLoggedAtChange: ((Date) -> Void)?
 
     @State private var shimmerPhase: CGFloat = -1
     @State private var analyzePhaseIndex: Int = 0
@@ -85,44 +89,58 @@ struct CameraResultDrawerView: View {
     init(
         state: CameraDrawerState,
         parseResult: ParseLogResponse? = nil,
+        loggedAt: Date = Date(),
+        mealTag: FoodLogMealTag? = nil,
         contextNote: Binding<String>,
         onLogIt: @escaping ([ParsedFoodItem], NutritionTotals) -> Void,
         onDiscard: @escaping () -> Void,
-        onRetry: @escaping () -> Void
+        onRetry: @escaping () -> Void,
+        onMealTagChange: ((FoodLogMealTag) -> Void)? = nil,
+        onLoggedAtChange: ((Date) -> Void)? = nil
     ) {
         self.state = state
         self.parseResult = parseResult
+        self.loggedAt = loggedAt
+        self.mealTag = mealTag
         self._contextNote = contextNote
         self.onLogIt = onLogIt
         self.onDiscard = onDiscard
         self.onRetry = onRetry
+        self.onMealTagChange = onMealTagChange
+        self.onLoggedAtChange = onLoggedAtChange
     }
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 0) {
-                switch state {
-                case .idle:
-                    EmptyView()
-                case .analyzing(let image, let laneHint):
-                    analyzingContent(image: image, laneHint: laneHint)
-                case .parsed(let image, let items, let totals):
-                    parsedContent(image: image, items: items, totals: totals)
-                        .onAppear {
-                            // Always reseed after a fresh analyze -> parsed transition.
-                            // Otherwise a retry that returns the same detected item
-                            // signature can keep stale local edits from the prior pass.
-                            seedEditablePhotoItemsIfNeeded(items, force: true)
-                        }
-                        .onChange(of: itemSignature(items)) { _, _ in
-                            seedEditablePhotoItemsIfNeeded(items, force: true)
-                        }
-                case .error(let message, let image):
-                    errorContent(message: message, image: image)
+        GeometryReader { proxy in
+            ScrollView(.vertical) {
+                VStack(spacing: 0) {
+                    switch state {
+                    case .idle:
+                        EmptyView()
+                    case .analyzing(let image, let laneHint):
+                        analyzingContent(image: image, laneHint: laneHint)
+                    case .parsed(let image, let items, let totals):
+                        parsedContent(image: image, items: items, totals: totals)
+                            .onAppear {
+                                // Always reseed after a fresh analyze -> parsed transition.
+                                // Otherwise a retry that returns the same detected item
+                                // signature can keep stale local edits from the prior pass.
+                                seedEditablePhotoItemsIfNeeded(items, force: true)
+                            }
+                            .onChange(of: itemSignature(items)) { _, _ in
+                                seedEditablePhotoItemsIfNeeded(items, force: true)
+                            }
+                    case .error(let message, let image):
+                        errorContent(message: message, image: image)
+                    }
                 }
+                .frame(width: proxy.size.width, alignment: .top)
+                .clipped()
             }
+            .scrollBounceBehavior(.basedOnSize, axes: .vertical)
+            .scrollIndicators(.visible, axes: .vertical)
+            .clipped()
         }
-        .scrollBounceBehavior(.basedOnSize)
         .background(AppDrawerSurface.gradient)
         .presentationBackground(AppDrawerSurface.gradient)
         .onDisappear {
@@ -382,6 +400,7 @@ struct CameraResultDrawerView: View {
         let displayItems = displayedPhotoItems(fallback: items)
         let displayTotals = editablePhotoItems.isEmpty ? totals : totalsForItems(displayItems)
         let needsReview = reviewRecommended(items: displayItems, parseResult: parseResult)
+        let thoughtProcess = cameraThoughtProcess(items: displayItems, parseResult: parseResult)
 
         return VStack(alignment: .leading, spacing: 0) {
             // Hero image with re-parse + close icons
@@ -432,18 +451,27 @@ struct CameraResultDrawerView: View {
                 foodName: foodDisplayName(items: displayItems),
                 totals: displayTotals,
                 items: displayItems,
-                thoughtProcess: cameraThoughtProcess(items: displayItems, parseResult: parseResult),
+                thoughtProcess: thoughtProcess,
                 mode: .photoReview,
+                showsThoughtProcess: false,
+                loggedAt: loggedAt,
+                mealTag: mealTag,
                 onItemQuantityChange: { itemOffset, quantity in
                     updatePhotoItemQuantity(itemOffset: itemOffset, quantity: quantity, fallbackItems: items)
                 },
+                onMealTagChange: onMealTagChange,
+                onLoggedAtChange: onLoggedAtChange,
                 onRecalculate: nil
             )
 
+            improveEstimateCard
+                .padding(.horizontal, 20)
+                .padding(.top, 14)
+
+            LoggingResultThoughtProcessCard(thoughtProcess: thoughtProcess)
+
             // CTA
             VStack(spacing: 10) {
-                improveEstimateCard
-
                 Button {
                     onLogIt(displayItems, displayTotals)
                 } label: {

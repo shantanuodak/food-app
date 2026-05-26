@@ -31,7 +31,7 @@ struct VisualQARootView: View {
                 nonOnboardingView
             }
         }
-        .preferredColorScheme(.light)
+        .preferredColorScheme(stateID.contains("/dark") ? .dark : .light)
     }
 
     private var onboardingRoute: OnboardingRoute? {
@@ -171,6 +171,29 @@ struct VisualQARootView: View {
             VisualQADrawerShell {
                 MainLoggingRowCalorieDetailsSheet(
                     details: VisualQAFixtures.rowDetails,
+                    isDeleteDisabled: false,
+                    isDeleteConfirmationPresented: .constant(false),
+                    isSaveMealEnabled: true,
+                    isSavedMealSelected: false,
+                    hydrationQuickLogSavingOptionIDs: [],
+                    hydrationQuickLogPendingAmountMl: 0,
+                    canDeleteLastHydrationLog: false,
+                    isDeletingLastHydrationLog: false,
+                    onSaveMeal: {},
+                    onHydrationQuickLog: { _ in },
+                    onHydrationGoalTapped: {},
+                    onDeleteLastHydrationLog: {},
+                    onDeleteTapped: {},
+                    onConfirmDelete: {},
+                    onCancelDelete: {},
+                    onDone: {},
+                    onItemQuantityChange: { _, _ in }
+                )
+            }
+        case "home/details-drawer/no-photo":
+            VisualQADrawerShell {
+                MainLoggingRowCalorieDetailsSheet(
+                    details: VisualQAFixtures.rowDetailsTextOnly,
                     isDeleteDisabled: false,
                     isDeleteConfirmationPresented: .constant(false),
                     isSaveMealEnabled: true,
@@ -640,6 +663,25 @@ private enum VisualQAFixtures {
         )
     ]
 
+    static let masalaToastItems: [ParsedFoodItem] = [
+        ParsedFoodItem(
+            name: "Masala Toast with Sev",
+            quantity: 2,
+            unit: "slice",
+            grams: 120,
+            calories: 320,
+            protein: 8,
+            carbs: 44,
+            fat: 12,
+            nutritionSourceId: "visual-masala-toast",
+            sourceFamily: "visual",
+            matchConfidence: 0.92,
+            amount: 2,
+            unitNormalized: "slice",
+            gramsPerUnit: 60
+        )
+    ]
+
     static let rowDetails = RowCalorieDetails(
         id: UUID(uuidString: "11111111-1111-1111-1111-111111111111") ?? UUID(),
         rowText: "Chicken rice bowl with avocado",
@@ -660,6 +702,29 @@ private enum VisualQAFixtures {
         imagePreviewData: foodImage.pngData(),
         imageRef: nil,
         loggedAt: "2026-05-15T18:00:00Z",
+        inputKind: "text"
+    )
+
+    static let rowDetailsTextOnly = RowCalorieDetails(
+        id: UUID(uuidString: "22222222-2222-2222-2222-222222222222") ?? UUID(),
+        rowText: "Masala Toast with Sev",
+        displayName: "Masala Toast with Sev",
+        calories: 320,
+        protein: 8,
+        carbs: 44,
+        fat: 12,
+        parseConfidence: 0.92,
+        itemConfidence: 0.92,
+        primaryConfidence: 0.92,
+        hasManualOverride: false,
+        sourceLabel: "Food database",
+        thoughtProcess: "Recognized Masala Toast / Sev Toast as Masala Toast with Sev. Matched portion: 2 slices, about 120 g. Calories, protein, carbs, and fat were scaled from the same matched serving.",
+        parsedItems: masalaToastItems,
+        manualEditedFields: [],
+        manualOriginalSources: [],
+        imagePreviewData: nil,
+        imageRef: nil,
+        loggedAt: "2026-05-16T01:07:00Z",
         inputKind: "text"
     )
 

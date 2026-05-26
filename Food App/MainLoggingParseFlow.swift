@@ -66,6 +66,7 @@ extension MainLoggingShellView {
             isEscalating = false
             flowStartedAt = nil
             draftLoggedAt = nil
+            draftMealTag = nil
             lastTimeToLogMs = nil
             lastAutoSavedContentFingerprint = nil
             autoSavedParseIDs = []
@@ -125,7 +126,7 @@ extension MainLoggingShellView {
         // Defer synchronizeParseOwnership to debounce callback
         // Passive typing is too weak a signal to spend on Gemini. Keep parse
         // ownership state current for UI purposes, but wait for an explicit
-        // completion signal (Done, Return/Next, blur, retry/details) to call
+        // completion signal (Done, Return/Next, retry/details) to call
         // triggerParseNow().
     }
 
@@ -640,6 +641,7 @@ extension MainLoggingShellView {
                     object: nil,
                     userInfo: ["savedDay": summaryDateString]
                 )
+                scheduleBadgeCelebrationCheckAfterHydrationSave(delayNanoseconds: 500_000_000)
             } catch {
                 handleAuthFailureIfNeeded(error)
                 saveError = userFriendlySaveError(error)
@@ -698,6 +700,7 @@ extension MainLoggingShellView {
                     fallback: summaryDateString
                 )
                 await refreshHydrationDayAfterMutation(savedDay)
+                scheduleBadgeCelebrationCheckAfterHydrationSave()
             } catch is CancellationError {
                 return
             } catch {
@@ -761,6 +764,7 @@ extension MainLoggingShellView {
                 object: nil,
                 userInfo: ["savedDay": savedDay]
             )
+            scheduleBadgeCelebrationCheckAfterHydrationSave()
             await presentHydrationGoalPromptAfterHydrationLogIfNeeded()
         } catch is CancellationError {
             return
@@ -968,6 +972,7 @@ extension MainLoggingShellView {
         // Reset flow tracking (new day = new flow)
         if flowStartedAt != nil { flowStartedAt = nil }
         if draftLoggedAt != nil { draftLoggedAt = nil }
+        if draftMealTag != nil { draftMealTag = nil }
         if lastTimeToLogMs != nil { lastTimeToLogMs = nil }
         if lastAutoSavedContentFingerprint != nil { lastAutoSavedContentFingerprint = nil }
 

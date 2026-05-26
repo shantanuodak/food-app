@@ -32,6 +32,7 @@ enum AuthSessionStoreError: LocalizedError {
 
 final class AuthSessionStore: ObservableObject {
     @Published private(set) var session: AuthSession?
+    private(set) var lastLoadStatus: String = "not_loaded"
 
     private let serviceName: String
     private let accountName = "auth.session.v1"
@@ -74,17 +75,21 @@ final class AuthSessionStore: ObservableObject {
         let status = SecItemCopyMatching(query as CFDictionary, &item)
 
         if status == errSecItemNotFound {
+            lastLoadStatus = "not_found"
             return nil
         }
 
         guard status == errSecSuccess, let data = item as? Data else {
+            lastLoadStatus = "keychain_status_\(status)"
             return nil
         }
 
         guard let decoded = try? JSONDecoder().decode(AuthSession.self, from: data) else {
+            lastLoadStatus = "decode_failed"
             return nil
         }
 
+        lastLoadStatus = "loaded"
         return decoded
     }
 

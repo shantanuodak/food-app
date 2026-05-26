@@ -18,6 +18,7 @@ extension OnboardingView {
         Task {
             do {
                 _ = try await appStore.authService.signIn(with: provider)
+                await appStore.flushAuthDiagnostics()
 
                 // V3.1 Phase 5.1 (2026-05-21): ALWAYS check status after
                 // OAuth, regardless of sign-up vs sign-in path. The
@@ -69,6 +70,18 @@ extension OnboardingView {
                     return
                 }
 
+                if !isSigningUp {
+                    await MainActor.run {
+                        let message = "We couldn't find an existing account for this sign-in. Tap Create an account to set up your targets first."
+                        appStore.signOut()
+                        draft.accountProvider = nil
+                        isAccountLoading = false
+                        localError = message
+                        setScreenState(.account, state: .error, errorMessage: message)
+                    }
+                    return
+                }
+
                 await MainActor.run {
                     isAccountLoading = false
                     setScreenState(.account, state: .default)
@@ -92,6 +105,16 @@ extension OnboardingView {
             appStore.setError(nil)
             setScreenState(.ready, state: .loading)
             defer { isSubmitting = false }
+
+            if let missingRoute = firstMissingRequiredSetupRoute {
+                let message = "Please finish setup before creating your account."
+                pendingRouteError = message
+                appStore.setError(message)
+                setScreenState(.ready, state: .error, errorMessage: message)
+                setScreenState(missingRoute, state: .error, errorMessage: message)
+                flow.moveToOnboarding(missingRoute)
+                return
+            }
 
             let request = OnboardingRequest(
                 goal: draft.goal ?? .maintain,
@@ -195,6 +218,25 @@ extension OnboardingView {
             .map(\.rawValue)
             .sorted()
             .joined(separator: ",")
+    }
+
+    var firstMissingRequiredSetupRoute: OnboardingRoute? {
+        if draft.goal == nil {
+            return .goal
+        }
+        if draft.challenge == nil {
+            return .challenge
+        }
+        if !draft.hasBaselineValues {
+            return .baseline
+        }
+        if draft.activity == nil {
+            return .activity
+        }
+        if draft.pace == nil {
+            return .pace
+        }
+        return nil
     }
 
     var readyScreenStatusMessage: String? {

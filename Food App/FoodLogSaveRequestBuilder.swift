@@ -35,6 +35,9 @@ enum FoodLogSaveRequestBuilder {
             parsedLog: SaveLogBody(
                 rawText: rawText,
                 loggedAt: response.loggedAt.isEmpty ? fallbackLoggedAt : response.loggedAt,
+                mealType: FoodLogMealTag.inferred(
+                    from: HomeLoggingDateUtils.date(fromLoggedAt: response.loggedAt.isEmpty ? fallbackLoggedAt : response.loggedAt) ?? Date()
+                ).rawValue,
                 inputKind: inputKind,
                 imageRef: nil,
                 confidence: response.confidence,

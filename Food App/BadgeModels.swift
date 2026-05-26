@@ -213,28 +213,50 @@ enum BadgeCatalog {
 @MainActor
 enum BadgeCelebrationState {
     private static let celebratedIdsKey = "celebratedBadgeDefinitionIds.v1"
+    private static let categoryCelebratedIdsKeyPrefix = "celebratedBadgeDefinitionIds.byCategory.v1."
     private static let bootstrappedKey = "hasBootstrappedBadgeCelebrations.v1"
 
     static func badgeToCelebrate(
         totals: BadgesTotals,
         currentStreakDays: Int,
+        preferredCategory: BadgeDefinition.Category? = nil,
         defaults: UserDefaults = .standard
     ) -> EarnedBadge? {
         let earned = BadgeCatalog.earnedDefinitions(totals: totals, currentStreakDays: currentStreakDays)
         let earnedIds = Set(earned.map(\.id))
         let alreadyCelebrated = celebratedIds(defaults: defaults)
-        let newlyEarned = earned.filter { !alreadyCelebrated.contains($0.id) }
+        let categoryAlreadyCelebrated = preferredCategory.map { categoryCelebratedIds(for: $0, defaults: defaults) }
+        let alreadyCelebratedForSelection = categoryAlreadyCelebrated ?? alreadyCelebrated
+        let newlyEarned = earned.filter { !alreadyCelebratedForSelection.contains($0.id) }
+        let eligibleNewlyEarned: [BadgeDefinition]
+        if let preferredCategory {
+            eligibleNewlyEarned = newlyEarned.filter { $0.category == preferredCategory }
+        } else {
+            eligibleNewlyEarned = newlyEarned
+        }
 
         defer {
-            defaults.set(earnedIds.sorted().joined(separator: ","), forKey: celebratedIdsKey)
+            let idsToRecord: Set<String>
+            if let preferredCategory {
+                let earnedInCategory = Set(earned.filter { $0.category == preferredCategory }.map(\.id))
+                idsToRecord = alreadyCelebrated.union(earnedInCategory)
+                let categoryIdsToRecord = (categoryAlreadyCelebrated ?? []).union(earnedInCategory)
+                defaults.set(
+                    categoryIdsToRecord.sorted().joined(separator: ","),
+                    forKey: categoryCelebratedIdsKey(for: preferredCategory)
+                )
+            } else {
+                idsToRecord = earnedIds
+            }
+            defaults.set(idsToRecord.sorted().joined(separator: ","), forKey: celebratedIdsKey)
             defaults.set(true, forKey: bootstrappedKey)
         }
 
-        guard !newlyEarned.isEmpty else { return nil }
+        guard !eligibleNewlyEarned.isEmpty else { return nil }
 
         // On first observation, show one already-earned badge instead of
         // replaying the user's entire historical trophy case.
-        let selected = newlyEarned.max { lhs, rhs in
+        let selected = eligibleNewlyEarned.max { lhs, rhs in
             priority(for: lhs) < priority(for: rhs)
         }
         return selected.map(EarnedBadge.init(definition:))
@@ -242,6 +264,9 @@ enum BadgeCelebrationState {
 
     static func reset(defaults: UserDefaults = .standard) {
         defaults.removeObject(forKey: celebratedIdsKey)
+        for category in BadgeDefinition.Category.allCases {
+            defaults.removeObject(forKey: categoryCelebratedIdsKey(for: category))
+        }
         defaults.removeObject(forKey: bootstrappedKey)
     }
 
@@ -260,6 +285,21 @@ enum BadgeCelebrationState {
                 }
         )
         return unifiedIds.union(legacyStreakIds)
+    }
+
+    private static func categoryCelebratedIds(
+        for category: BadgeDefinition.Category,
+        defaults: UserDefaults
+    ) -> Set<String> {
+        Set(
+            (defaults.string(forKey: categoryCelebratedIdsKey(for: category)) ?? "")
+                .split(separator: ",")
+                .map(String.init)
+        )
+    }
+
+    private static func categoryCelebratedIdsKey(for category: BadgeDefinition.Category) -> String {
+        categoryCelebratedIdsKeyPrefix + category.id
     }
 
     private static func priority(for definition: BadgeDefinition) -> Int {

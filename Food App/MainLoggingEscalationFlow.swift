@@ -165,6 +165,7 @@ extension MainLoggingShellView {
             parsedLog: SaveLogBody(
                 rawText: rawText,
                 loggedAt: effectiveLoggedAt,
+                mealType: currentDraftMealType(),
                 inputKind: inputKind,
                 imageRef: currentImageRef,
                 confidence: parseResult.confidence,

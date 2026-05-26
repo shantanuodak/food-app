@@ -290,7 +290,7 @@ export async function getHydrationDayLogs(
     FROM hydration_logs
     WHERE user_id = $1
       AND (logged_at AT TIME ZONE $2)::date = $3::date
-    ORDER BY logged_at DESC, created_at DESC
+    ORDER BY logged_at ASC, created_at ASC, id ASC
     `,
     [userId, timezone, date]
   );

@@ -44,6 +44,12 @@ struct OB02cChallengeInsightScreen: View {
                 insight: "Research shows that a 60-second pause before eating reduces emotional binges by over 50%.",
                 help: "Just open the app — that one moment creates a mindful pause."
             )
+        case .other:
+            return (
+                headline: "Your routine is personal.\nYour plan should be too.",
+                insight: "Food habits rarely fit one neat category — tracking works best when it adapts to your real day.",
+                help: "Log however life happens: type it, snap it, adjust it, and keep moving."
+            )
         }
     }
 
@@ -160,6 +166,8 @@ struct OB02cChallengeInsightScreen: View {
             InconsistentMealsTimelineDemoCard()
         case .emotionalEating:
             EmotionalEatingBreathingDemoCard()
+        case .other:
+            portionControlDemoCard
         }
     }
 

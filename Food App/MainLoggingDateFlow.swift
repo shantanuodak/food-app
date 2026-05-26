@@ -148,6 +148,11 @@ extension MainLoggingShellView {
         )
     }
 
+    func currentDraftMealType(reference: Date = Date()) -> String {
+        let loggedAt = draftLoggedAt ?? draftTimestampForSelectedDate(reference: reference)
+        return (draftMealTag ?? FoodLogMealTag.inferred(from: loggedAt)).rawValue
+    }
+
     func captureDateChangeDraftRows() -> [DateChangeDraftRow] {
         let snapshotRowIDs = Set(activeParseSnapshots.map(\.rowID))
         let loggedAt = currentDraftLoggedAtString()

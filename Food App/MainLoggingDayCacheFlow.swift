@@ -28,16 +28,21 @@ extension MainLoggingShellView {
         // become visible.
         Task {
             let dateToLoad = summaryDateString
-            if let cached = dayCacheLogs[dateToLoad], cached.date == dateToLoad {
-                dayLogs = cached
-                syncInputRowsFromDayLogs(cached.logs, for: cached.date)
+            let cachedLogs = dayCacheLogs[dateToLoad].flatMap { $0.date == dateToLoad ? $0 : nil }
+            let cachedHydration = dayCacheHydrationLogs[dateToLoad].flatMap { $0.date == dateToLoad ? $0 : nil }
+            if let cachedLogs {
+                dayLogs = cachedLogs
             }
-            if let cachedHydration = dayCacheHydrationLogs[dateToLoad], cachedHydration.date == dateToLoad {
+            if let cachedHydration {
                 hydrationDayLogs = cachedHydration
-                syncInputRowsFromDayLogs(dayLogs?.logs ?? [], for: cachedHydration.date)
             }
-            await loadDayLogs(skipCache: true)
-            await loadHydrationDayLogs(skipCache: true)
+            if cachedLogs != nil || cachedHydration != nil {
+                let visibleFoodLogs = cachedLogs?.logs ?? (dayLogs?.date == dateToLoad ? (dayLogs?.logs ?? []) : [])
+                syncInputRowsFromDayLogs(visibleFoodLogs, for: dateToLoad)
+            }
+            async let foodLogsLoad: Void = loadDayLogs(skipCache: true)
+            async let hydrationLogsLoad: Void = loadHydrationDayLogs(skipCache: true)
+            _ = await (foodLogsLoad, hydrationLogsLoad)
         }
     }
 
@@ -298,45 +303,13 @@ extension MainLoggingShellView {
         let activeHydrationLogIds = shouldKeepActiveRows
             ? Set(currentActiveRows.compactMap(\.hydrationLogId))
             : []
-        let currentSavedRowOrder: [String: Int] = Dictionary(
-            uniqueKeysWithValues: inputRows.enumerated().compactMap { index, row in
-                rowStableSyncKey(row).map { ($0, index) }
-            }
-        )
         let foodRows: [HomeLogRow] = entries
             .filter { !activeServerLogIds.contains($0.id) }
             .map(HomeLoggingRowFactory.makeSavedRow)
         let hydrationRows: [HomeLogRow] = hydrationEntries
             .filter { !activeHydrationLogIds.contains($0.id) }
             .map(HomeLoggingRowFactory.makeHydrationSavedRow)
-        let savedRows = foodRows + hydrationRows
-        let orderedSavedRows = savedRows.enumerated()
-            .sorted { lhs, rhs in
-                let lhsOrder = rowStableSyncKey(lhs.element).flatMap { currentSavedRowOrder[$0] }
-                let rhsOrder = rowStableSyncKey(rhs.element).flatMap { currentSavedRowOrder[$0] }
 
-                switch (lhsOrder, rhsOrder) {
-                case let (lhs?, rhs?):
-                    return lhs < rhs
-                case (_?, nil):
-                    return true
-                case (nil, _?):
-                    return false
-                case (nil, nil):
-                    let lhsDate = rowLoggedAtDate(lhs.element)
-                    let rhsDate = rowLoggedAtDate(rhs.element)
-                    if lhsDate != rhsDate {
-                        // Home rows read oldest-to-newest; newly logged rows
-                        // belong at the end, not at the top of the day.
-                        return lhsDate < rhsDate
-                    }
-                    return lhs.offset < rhs.offset
-                }
-            }
-            .map(\.element)
-
-        // Merge server state into the existing visible order. This keeps rows from
-        // jumping during optimistic save -> stale cache -> fresh server refresh cycles.
         let pendingRows = pendingRowsForDate(dateString, excluding: entries)
         let pendingRowIDs = Set(pendingRows.map(\.id))
         let activeRows: [HomeLogRow]
@@ -350,9 +323,15 @@ extension MainLoggingShellView {
             pendingRows: pendingRows,
             activeRows: activeRows
         )
-        let nextRows = mergeRowsPreservingVisibleOrder(
-            currentRows: inputRows,
-            candidateRows: orderedSavedRows + pendingRows + preservedRows + activeRows
+        let orderedTimelineRows = chronologicalTimelineRows(
+            savedRows: foodRows + hydrationRows,
+            pendingRows: pendingRows,
+            activeRows: activeRows,
+            currentRows: inputRows
+        )
+        let activeDraftRows = activeRows.filter { rowStableSyncKey($0) == nil }
+        let nextRows = mergeRowsInCandidateOrder(
+            candidateRows: orderedTimelineRows + preservedRows + activeDraftRows
         )
         if inputRowsSyncSignature(inputRows) != inputRowsSyncSignature(nextRows) {
             inputRows = nextRows
@@ -389,15 +368,63 @@ extension MainLoggingShellView {
         return nil
     }
 
-    func rowLoggedAtDate(_ row: HomeLogRow) -> Date {
-        guard let loggedAt = row.serverLoggedAt else { return .distantPast }
-        return HomeLoggingDateUtils.loggedAtFormatter.date(from: loggedAt) ??
-            ISO8601DateFormatter().date(from: loggedAt) ??
-            .distantPast
+    func rowOrderSyncKey(_ row: HomeLogRow) -> String {
+        rowStableSyncKey(row) ?? "row:\(row.id.uuidString)"
     }
 
-    func mergeRowsPreservingVisibleOrder(
-        currentRows: [HomeLogRow],
+    func rowLoggedAtSortDate(_ row: HomeLogRow) -> Date? {
+        guard let loggedAt = row.serverLoggedAt else { return nil }
+        return HomeLoggingDateUtils.loggedAtFormatter.date(from: loggedAt) ??
+            ISO8601DateFormatter().date(from: loggedAt)
+    }
+
+    func rowLoggedAtDate(_ row: HomeLogRow) -> Date {
+        rowLoggedAtSortDate(row) ?? .distantPast
+    }
+
+    func chronologicalTimelineRows(
+        savedRows: [HomeLogRow],
+        pendingRows: [HomeLogRow],
+        activeRows: [HomeLogRow],
+        currentRows: [HomeLogRow]
+    ) -> [HomeLogRow] {
+        var currentRowOrder: [String: Int] = [:]
+        for (index, row) in currentRows.enumerated() where currentRowOrder[rowOrderSyncKey(row)] == nil {
+            currentRowOrder[rowOrderSyncKey(row)] = index
+        }
+        let serverBackedActiveRows = activeRows.filter { rowStableSyncKey($0) != nil }
+        return (savedRows + pendingRows + serverBackedActiveRows)
+            .enumerated()
+            .sorted { lhs, rhs in
+                let lhsDate = rowLoggedAtSortDate(lhs.element)
+                let rhsDate = rowLoggedAtSortDate(rhs.element)
+
+                switch (lhsDate, rhsDate) {
+                case let (lhs?, rhs?) where lhs != rhs:
+                    // Home rows read oldest-to-newest; water should occupy the
+                    // same timeline as food instead of being appended later.
+                    return lhs < rhs
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                default:
+                    break
+                }
+
+                let lhsOrder = currentRowOrder[rowOrderSyncKey(lhs.element)]
+                let rhsOrder = currentRowOrder[rowOrderSyncKey(rhs.element)]
+                switch (lhsOrder, rhsOrder) {
+                case let (lhs?, rhs?) where lhs != rhs:
+                    return lhs < rhs
+                default:
+                    return lhs.offset < rhs.offset
+                }
+            }
+            .map(\.element)
+    }
+
+    func mergeRowsInCandidateOrder(
         candidateRows: [HomeLogRow]
     ) -> [HomeLogRow] {
         var remainingByStableId: [String: HomeLogRow] = [:]
@@ -428,18 +455,6 @@ extension MainLoggingShellView {
             guard !usedKeys.contains(key) else { return }
             output.append(row)
             usedKeys.insert(key)
-        }
-
-        for current in currentRows {
-            if let stableKey = rowStableSyncKey(current),
-               let replacement = remainingByStableId.removeValue(forKey: stableKey) {
-                appendIfUnused(replacement)
-                continue
-            }
-
-            if let replacement = remainingByRowId.removeValue(forKey: current.id) {
-                appendIfUnused(replacement)
-            }
         }
 
         for key in candidateOrder where !usedKeys.contains(key) {

@@ -8,6 +8,7 @@ extension ChallengeChoice {
         case .eatingOut:         return Color(red: 0.90, green: 0.35, blue: 0.35)
         case .inconsistentMeals: return Color(red: 0.20, green: 0.65, blue: 0.85)
         case .emotionalEating:   return Color(red: 0.85, green: 0.40, blue: 0.60)
+        case .other:             return OnboardingGlassTheme.textSecondary
         }
     }
 }
@@ -33,32 +34,8 @@ struct OB02cChallengeScreen: View {
 
                 Spacer()
 
-                Text("What's your biggest\nchallenge?")
-                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 38))
-                    .foregroundStyle(colorScheme == .dark ? .white : .black)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(2)
-                    .opacity(appeared ? 1 : 0)
-                    .offset(y: appeared ? 0 : 12)
-
-                VStack(spacing: 12) {
-                    ForEach(Array(ChallengeChoice.allCases.enumerated()), id: \.element.id) { idx, choice in
-                        ChallengeOptionCard(
-                            choice: choice,
-                            isSelected: choice == selectedChallenge,
-                            action: {
-                                withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
-                                    selectedChallenge = choice
-                                }
-                            }
-                        )
-                        .opacity(appeared ? 1 : 0)
-                        .offset(y: appeared ? 0 : 16)
-                        .animation(.easeOut(duration: 0.45).delay(0.12 + Double(idx) * 0.07), value: appeared)
-                    }
-                }
-                .padding(.top, 28)
-                .padding(.horizontal, 20)
+                challengeContent
+                    .offset(y: -16)
 
                 Spacer()
 
@@ -111,6 +88,56 @@ struct OB02cChallengeScreen: View {
             }
         }
         .frame(height: 44)
+    }
+
+    private var challengeContent: some View {
+        VStack(spacing: 0) {
+            Text("What's your biggest\nchallenge?")
+                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 38))
+                .foregroundStyle(colorScheme == .dark ? .white : .black)
+                .multilineTextAlignment(.center)
+                .lineSpacing(2)
+                .opacity(appeared ? 1 : 0)
+                .offset(y: appeared ? 0 : 12)
+
+            VStack(spacing: 12) {
+                ForEach(Array(ChallengeChoice.primaryCases.enumerated()), id: \.element.id) { idx, choice in
+                    ChallengeOptionCard(
+                        choice: choice,
+                        isSelected: choice == selectedChallenge,
+                        action: {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.7)) {
+                                selectedChallenge = choice
+                            }
+                        }
+                    )
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 16)
+                    .animation(.easeOut(duration: 0.45).delay(0.12 + Double(idx) * 0.07), value: appeared)
+                }
+            }
+            .padding(.top, 28)
+            .padding(.horizontal, 20)
+
+            Button {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.75)) {
+                    selectedChallenge = .other
+                }
+                onContinue()
+            } label: {
+                Text("Something else")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                    .underline()
+                    .frame(minHeight: 36)
+                    .padding(.horizontal, 16)
+            }
+            .buttonStyle(.plain)
+            .opacity(appeared ? 1 : 0)
+            .animation(.easeOut(duration: 0.4).delay(0.52), value: appeared)
+            .padding(.top, 10)
+            .accessibilityHint(Text("Continue without choosing one of the listed challenges."))
+        }
     }
 }
 

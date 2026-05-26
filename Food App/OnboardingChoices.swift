@@ -195,8 +195,17 @@ enum ChallengeChoice: String, CaseIterable, Identifiable, Codable {
     case eatingOut
     case inconsistentMeals
     case emotionalEating
+    case other
 
     var id: String { rawValue }
+
+    static let primaryCases: [ChallengeChoice] = [
+        .portionControl,
+        .snacking,
+        .eatingOut,
+        .inconsistentMeals,
+        .emotionalEating
+    ]
 
     var title: String {
         switch self {
@@ -205,6 +214,7 @@ enum ChallengeChoice: String, CaseIterable, Identifiable, Codable {
         case .eatingOut: return "Eating out too often"
         case .inconsistentMeals: return "Inconsistent meals"
         case .emotionalEating: return "Emotional eating"
+        case .other: return "Something else"
         }
     }
 
@@ -215,6 +225,7 @@ enum ChallengeChoice: String, CaseIterable, Identifiable, Codable {
         case .eatingOut: return "Restaurant meals are hard to track"
         case .inconsistentMeals: return "I skip meals or eat at random times"
         case .emotionalEating: return "I eat when stressed or bored"
+        case .other: return "My challenge is not listed"
         }
     }
 
@@ -225,6 +236,7 @@ enum ChallengeChoice: String, CaseIterable, Identifiable, Codable {
         case .eatingOut: return "fork.knife.circle"
         case .inconsistentMeals: return "clock.arrow.2.circlepath"
         case .emotionalEating: return "heart.circle"
+        case .other: return "ellipsis.circle"
         }
     }
 }

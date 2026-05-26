@@ -68,24 +68,28 @@ struct SlideToConfirmButton: View {
             ZStack(alignment: .leading) {
                 // Track
                 Capsule()
-                    .fill(Color.black)
+                    .fill(OnboardingGlassTheme.ctaBackground)
+                    .overlay(
+                        Capsule()
+                            .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+                    )
 
                 // Label — fades as the thumb travels rightward so the
                 // user's commitment becomes the dominant visual signal.
                 Text(isConfirmed || isProcessing ? "Starting..." : label)
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(.white.opacity(1.0 - progress * 0.8))
+                    .foregroundStyle(OnboardingGlassTheme.ctaForeground.opacity(1.0 - progress * 0.8))
                     .frame(maxWidth: .infinity)
                     .accessibilityHidden(true)
 
                 // Thumb
                 Circle()
-                    .fill(Color.white)
+                    .fill(OnboardingGlassTheme.ctaForeground)
                     .frame(width: thumbSize, height: thumbSize)
                     .overlay(
                         Image(systemName: isConfirmed ? "checkmark" : "chevron.right")
                             .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.black)
+                            .foregroundStyle(OnboardingGlassTheme.ctaBackground)
                     )
                     .padding(.leading, thumbInset)
                     .offset(x: dragOffset)

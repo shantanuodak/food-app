@@ -50,7 +50,8 @@ enum HomeLoggingRowFactory {
             isSaved: item.serverLogId != nil,
             savedAt: nil,
             serverLogId: item.serverLogId,
-            serverLoggedAt: body.loggedAt
+            serverLoggedAt: body.loggedAt,
+            mealType: body.mealType
         )
     }
 
@@ -84,6 +85,7 @@ enum HomeLoggingRowFactory {
             savedAt: nil,
             serverLogId: entry.id,
             serverLoggedAt: entry.loggedAt,
+            mealType: entry.mealType,
             savedMealId: savedMealMarker?.savedMealId,
             savedMealName: savedMealMarker?.savedMealName
         )
@@ -129,6 +131,7 @@ enum HomeLoggingRowFactory {
         return DayLogEntry(
             id: logId,
             loggedAt: loggedAt,
+            mealType: payload.mealType,
             rawText: payload.rawText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? meal.name : payload.rawText,
             inputKind: "text",
             imageRef: payload.imageRef,

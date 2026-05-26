@@ -23,6 +23,7 @@ type DayLogItem = {
 type DayLogEntry = {
   id: string;
   loggedAt: string;
+  mealType: string | null;
   rawText: string;
   inputKind: string;
   imageRef: string | null;
@@ -103,6 +104,7 @@ export async function getDayLogsRange(
   const logsResult = await pool.query<{
     id: string;
     logged_at: Date;
+    meal_type: string | null;
     raw_text: string;
     input_kind: string;
     image_ref: string | null;
@@ -113,7 +115,7 @@ export async function getDayLogsRange(
     total_fat_g: string;
     day_date: string;
   }>(
-    `SELECT id, logged_at, raw_text, input_kind, image_ref, parse_confidence,
+    `SELECT id, logged_at, meal_type, raw_text, input_kind, image_ref, parse_confidence,
             total_calories, total_protein_g, total_carbs_g, total_fat_g,
             (logged_at AT TIME ZONE $2)::date::text AS day_date
      FROM food_logs
@@ -215,6 +217,7 @@ export async function getDayLogsRange(
     logsByDay.get(dayDate)!.push({
       id: log.id,
       loggedAt: log.logged_at instanceof Date ? log.logged_at.toISOString() : String(log.logged_at),
+      mealType: log.meal_type,
       rawText: log.raw_text,
       inputKind: log.input_kind || 'text',
       imageRef: log.image_ref,
@@ -263,6 +266,7 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
   const logsResult = await pool.query<{
     id: string;
     logged_at: Date;
+    meal_type: string | null;
     raw_text: string;
     input_kind: string;
     image_ref: string | null;
@@ -273,7 +277,7 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
     total_fat_g: string;
   }>(
     `
-    SELECT id, logged_at, raw_text, input_kind, image_ref, parse_confidence,
+    SELECT id, logged_at, meal_type, raw_text, input_kind, image_ref, parse_confidence,
            total_calories, total_protein_g, total_carbs_g, total_fat_g
     FROM food_logs
     WHERE user_id = $1
@@ -365,6 +369,7 @@ export async function getDayLogs(userId: string, date: string, timezoneOverride?
     return {
       id: log.id,
       loggedAt: log.logged_at instanceof Date ? log.logged_at.toISOString() : String(log.logged_at),
+      mealType: log.meal_type,
       rawText: log.raw_text,
       inputKind: log.input_kind || 'text',
       imageRef: log.image_ref,

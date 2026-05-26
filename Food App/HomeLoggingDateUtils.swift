@@ -41,8 +41,7 @@ enum HomeLoggingDateUtils {
     }
 
     static func summaryDayString(fromLoggedAt loggedAt: String, fallback: String? = nil) -> String {
-        if let parsed = loggedAtFormatter.date(from: loggedAt) ??
-            ISO8601DateFormatter().date(from: loggedAt) {
+        if let parsed = date(fromLoggedAt: loggedAt) {
             return summaryRequestFormatter.string(from: parsed)
         }
 
@@ -51,5 +50,11 @@ enum HomeLoggingDateUtils {
         }
 
         return fallback ?? summaryRequestFormatter.string(from: Date())
+    }
+
+    static func date(fromLoggedAt loggedAt: String?) -> Date? {
+        guard let loggedAt else { return nil }
+        return loggedAtFormatter.date(from: loggedAt) ??
+            ISO8601DateFormatter().date(from: loggedAt)
     }
 }

@@ -417,6 +417,7 @@ extension MainLoggingShellView {
         row.text = rowText
         row.imagePreviewData = pendingImagePreviewData
         row.imageRef = pendingImageStorageRef
+        row.mealType = currentDraftMealType()
         suppressDebouncedParseOnce = true
 
         // Preserve existing rows (both saved history and unsaved drafts the user typed)
@@ -468,7 +469,13 @@ extension MainLoggingShellView {
         confirmedItems: [ParsedFoodItem],
         confirmedTotals: NutritionTotals
     ) -> ParseLogResponse {
-        ParseLogResponse(
+        let loggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(
+            from: draftLoggedAt ??
+                HomeLoggingDateUtils.date(fromLoggedAt: response.loggedAt) ??
+                Date()
+        )
+
+        return ParseLogResponse(
             requestId: response.requestId,
             parseRequestId: response.parseRequestId,
             parseVersion: response.parseVersion,
@@ -483,7 +490,7 @@ extension MainLoggingShellView {
             reasonCodes: response.reasonCodes,
             retryAfterSeconds: response.retryAfterSeconds,
             parseDurationMs: response.parseDurationMs,
-            loggedAt: response.loggedAt,
+            loggedAt: loggedAt,
             confidence: response.confidence,
             totals: confirmedTotals,
             items: confirmedItems,

@@ -8,6 +8,44 @@ import UIKit
 // See docs/CLAUDE_PHASE_7A_REMAINING_HANDOFF.md Part 2.
 
 extension MainLoggingShellView {
+    var isComposerBackgroundTapBlocked: Bool {
+        isVoiceOverlayPresented ||
+            isDetailsDrawerPresented ||
+            selectedRowDetails != nil ||
+            isProfilePresented ||
+            isCalendarPresented ||
+            isNutritionSummaryPresented ||
+            isProgressChartsPresented ||
+            isSavedMealsPresented ||
+            isFoodStoryPresented ||
+            isLoggingTipsPresented ||
+            isLoggingTipsPromptPresented ||
+            isStreakDrawerPresented ||
+            isBadgesTrophyCasePresented ||
+            isHydrationGoalPromptPresented ||
+            hydrationAmountPrompt != nil ||
+            saveMealDraft != nil ||
+            isImagePickerPresented ||
+            isCustomCameraPresented ||
+            isCameraAnalysisSheetPresented ||
+            isCameraAnalysisSheetPresentedOverCover ||
+            isHomeTutorialPresented ||
+            isDaySwipeTutorialPresented
+    }
+
+    func handleComposerBackgroundTap() {
+        Task { @MainActor in
+            await Task.yield()
+            guard !isComposerBackgroundTapBlocked else { return }
+            guard !presentMindfulPauseIfNeeded(for: .text) else { return }
+            if isKeyboardVisible {
+                dismissComposerKeyboard()
+            } else {
+                focusComposerInputFromBackgroundTap()
+            }
+        }
+    }
+
     func pendingSyncKey(for item: PendingSaveQueueItem) -> String {
         if let rowID = item.rowID {
             return "row:\(rowID.uuidString)"
@@ -16,15 +54,7 @@ extension MainLoggingShellView {
     }
 
     func focusComposerInputFromBackgroundTap() {
-        guard !isVoiceOverlayPresented,
-              !isDetailsDrawerPresented,
-              !isProfilePresented,
-              !isCalendarPresented,
-              !isNutritionSummaryPresented,
-              !isStreakDrawerPresented,
-              !isCustomCameraPresented,
-              !isCameraAnalysisSheetPresented,
-              !isCameraAnalysisSheetPresentedOverCover else {
+        guard !isComposerBackgroundTapBlocked else {
             return
         }
 
@@ -419,8 +449,9 @@ extension MainLoggingShellView {
 
         initialHomeBootstrapTask?.cancel()
         initialHomeBootstrapTask = Task { @MainActor in
-            await loadDayLogs(skipCache: true)
-            await loadHydrationDayLogs(skipCache: true)
+            async let foodLogsLoad: Void = loadDayLogs(skipCache: true)
+            async let hydrationLogsLoad: Void = loadHydrationDayLogs(skipCache: true)
+            _ = await (foodLogsLoad, hydrationLogsLoad)
             guard !Task.isCancelled else { return }
             try? await Task.sleep(nanoseconds: 1_500_000_000)
             guard !Task.isCancelled else { return }
