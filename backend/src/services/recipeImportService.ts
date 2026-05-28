@@ -116,6 +116,11 @@ type RecipeMarkdownPayload = {
   markdown: string;
 };
 
+type WprmIngredientGroup = {
+  heading: string;
+  items: string[];
+};
+
 function cleanString(value: unknown, maxLength = 1000): string | null {
   if (typeof value !== 'string' && typeof value !== 'number') {
     return null;
@@ -142,6 +147,23 @@ function compactStringList(values: unknown, maxItemLength = 220): string[] {
     result.push(cleaned);
   }
   return result;
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&#(\d+);/g, (_match, code: string) => String.fromCodePoint(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code: string) => String.fromCodePoint(Number.parseInt(code, 16)))
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#039;/gi, "'")
+    .replace(/&apos;/gi, "'")
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>');
+}
+
+function cleanHtmlText(value: string, maxLength = 1000): string | null {
+  return cleanString(decodeHtmlEntities(value.replace(/<[^>]+>/g, ' ')), maxLength);
 }
 
 function cleanMarkdownText(value: string, maxLength = 1000): string | null {
@@ -1041,6 +1063,96 @@ function markdownDescription(lines: string[]): string | null {
   );
 }
 
+function extractClassSpanText(fragment: string, className: string): string | null {
+  const match = fragment.match(new RegExp(`<span[^>]*class=["'][^"']*${escapedRegExp(className)}[^"']*["'][^>]*>([\\s\\S]*?)<\\/span>`, 'i'));
+  return match ? cleanHtmlText(match[1]!, 240) : null;
+}
+
+function extractWprmIngredientGroups(html: string): WprmIngredientGroup[] {
+  const containerStart = html.search(/class=["'][^"']*wprm-recipe-ingredients-container/i);
+  if (containerStart < 0) {
+    return [];
+  }
+
+  const instructionStart = html.indexOf('wprm-recipe-instructions-container', containerStart);
+  const container = html.slice(containerStart, instructionStart < 0 ? undefined : instructionStart);
+  const groups: WprmIngredientGroup[] = [];
+  const groupPattern = /<h4[^>]*class=["'][^"']*wprm-recipe-ingredient-group-name[^"']*["'][^>]*>([\s\S]*?)<\/h4>\s*<ul[^>]*>([\s\S]*?)<\/ul>/gi;
+
+  for (const groupMatch of container.matchAll(groupPattern)) {
+    const heading = cleanHtmlText(groupMatch[1]!, 120);
+    if (!heading) {
+      continue;
+    }
+
+    const items: string[] = [];
+    for (const itemMatch of groupMatch[2]!.matchAll(/<li[^>]*class=["'][^"']*wprm-recipe-ingredient[^"']*["'][^>]*>([\s\S]*?)<\/li>/gi)) {
+      const itemHtml = itemMatch[1]!;
+      const amount = extractClassSpanText(itemHtml, 'wprm-recipe-ingredient-amount');
+      const unit = extractClassSpanText(itemHtml, 'wprm-recipe-ingredient-unit');
+      const name = extractClassSpanText(itemHtml, 'wprm-recipe-ingredient-name');
+      const quantityParts = [amount, unit].filter((part): part is string => Boolean(part && part !== '-'));
+      const item = cleanString([...quantityParts, name].filter(Boolean).join(' '), 700);
+      if (item) {
+        items.push(item);
+      }
+    }
+
+    groups.push({ heading, items });
+  }
+
+  return groups;
+}
+
+function servingNumber(value: unknown): number | null {
+  const cleaned = cleanString(value, 80);
+  if (!cleaned) {
+    return null;
+  }
+  const match = cleaned.match(/\d+/);
+  return match ? Number(match[0]) : null;
+}
+
+function preferredSchoolRecipeIngredients(html: string, scraped: ScrapedRecipe, sourceUrl: string): string[] {
+  if (sourceDomainFor(new URL(sourceUrl).hostname) !== 'theicn.org') {
+    return [];
+  }
+
+  const groups = extractWprmIngredientGroups(html);
+  if (groups.length === 0) {
+    return [];
+  }
+
+  const targetServings = servingNumber(scraped.recipeYield) ?? 50;
+  let matchingServing = false;
+  let fallbackWeightItems: string[] = [];
+  let firstMeasureItems: string[] = [];
+
+  for (const group of groups) {
+    const headingKey = normalizedMarkdownLabel(group.heading);
+    const headingServing = group.heading.match(/^(\d+)\s+servings?$/i)?.[1];
+    if (headingServing) {
+      matchingServing = Number(headingServing) === targetServings;
+      continue;
+    }
+
+    if (headingKey === 'measure' && group.items.length > 0) {
+      if (firstMeasureItems.length === 0) {
+        firstMeasureItems = group.items;
+      }
+      if (matchingServing) {
+        return group.items;
+      }
+    }
+
+    if (headingKey === 'weight' && matchingServing && fallbackWeightItems.length === 0) {
+      fallbackWeightItems = group.items;
+    }
+  }
+
+  return fallbackWeightItems.length > 0 ? fallbackWeightItems : firstMeasureItems;
+}
+
 function scrapeRecipeMarkdown(markdown: string): ScrapedRecipe {
   const lines = markdownLines(markdown);
   if (
@@ -1091,11 +1203,15 @@ function shouldTryReaderFallback(error: unknown): boolean {
   );
 }
 
-async function scrapeRecipeHtml(html: string): Promise<ScrapedRecipe> {
+async function scrapeRecipeHtml(html: string, sourceUrl: string): Promise<ScrapedRecipe> {
   try {
     const scraped = (await getRecipeData({ html })) as ScrapedRecipe | undefined;
     if (!scraped) {
       throw new Error('No recipe found');
+    }
+    const schoolRecipeIngredients = preferredSchoolRecipeIngredients(html, scraped, sourceUrl);
+    if (schoolRecipeIngredients.length > 0) {
+      scraped.recipeIngredients = schoolRecipeIngredients;
     }
     return scraped;
   } catch {
@@ -1185,7 +1301,7 @@ export async function importRecipeFromUrl(input: {
 async function importRecipeDraftFromSafeUrl(safeUrl: SafeRecipeUrl): Promise<RecipeDraft> {
   try {
     const { finalUrl, html } = await fetchRecipeHtml(safeUrl.url);
-    const scraped = await scrapeRecipeHtml(html);
+    const scraped = await scrapeRecipeHtml(html, finalUrl);
     const draft = buildRecipeDraft(scraped, finalUrl);
     if (draft.ingredients.length > 60) {
       throw new ApiError(

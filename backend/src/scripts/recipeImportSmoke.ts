@@ -20,7 +20,8 @@ const defaultCases: SmokeCase[] = [
   { url: 'https://www.gimmesomeoven.com/baked-chicken-breast/', expectation: 'blocked' },
   { url: 'https://sallysbakingaddiction.com/chewy-chocolate-chip-cookies/', expectation: 'import' },
   { url: 'https://www.eatingwell.com/recipe/267768/chicken-spinach-skillet-pasta-with-lemon-parmesan/', expectation: 'blocked' },
-  { url: 'https://www.thekitchn.com/quiche-recipe-23649844', expectation: 'import' }
+  { url: 'https://www.thekitchn.com/quiche-recipe-23649844', expectation: 'import' },
+  { url: 'https://theicn.org/cnrb/recipes-for-schools/breakfast-bowl-usda-recipe-for-schools/', expectation: 'import' }
 ];
 
 type SmokeResult = {

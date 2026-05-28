@@ -448,6 +448,65 @@ describe('recipeImportService.importRecipeFromUrl', () => {
     expect(release).toHaveBeenCalledTimes(1);
   });
 
+  test('prefers ICN serving measure ingredients over duplicated school-recipe schema rows', async () => {
+    useTestDatabaseUrl();
+
+    const html = `
+      <div class="wprm-recipe-ingredients-container" data-servings="50">
+        <h4 class="wprm-recipe-ingredient-group-name">50 Servings</h4><ul class="wprm-recipe-ingredients"></ul>
+        <h4 class="wprm-recipe-ingredient-group-name">Weight</h4>
+        <ul class="wprm-recipe-ingredients">
+          <li class="wprm-recipe-ingredient"><span class="wprm-recipe-ingredient-amount">12</span> <span class="wprm-recipe-ingredient-unit">lbs</span> <span class="wprm-recipe-ingredient-name">Potatoes, frozen</span></li>
+          <li class="wprm-recipe-ingredient"><span class="wprm-recipe-ingredient-amount">-</span> <span class="wprm-recipe-ingredient-unit">-</span> <span class="wprm-recipe-ingredient-name">Salt-free seasoning</span></li>
+        </ul>
+        <h4 class="wprm-recipe-ingredient-group-name">Measure</h4>
+        <ul class="wprm-recipe-ingredients">
+          <li class="wprm-recipe-ingredient"><span class="wprm-recipe-ingredient-amount">1 gal 3</span> <span class="wprm-recipe-ingredient-unit">qts 2 cups</span> <span class="wprm-recipe-ingredient-name">Potatoes, frozen</span></li>
+          <li class="wprm-recipe-ingredient"><span class="wprm-recipe-ingredient-amount">½</span> <span class="wprm-recipe-ingredient-unit">cup</span> <span class="wprm-recipe-ingredient-name">Salt-free seasoning</span></li>
+        </ul>
+        <h4 class="wprm-recipe-ingredient-group-name">100 Servings</h4><ul class="wprm-recipe-ingredients"></ul>
+        <h4 class="wprm-recipe-ingredient-group-name">Measure</h4>
+        <ul class="wprm-recipe-ingredients">
+          <li class="wprm-recipe-ingredient"><span class="wprm-recipe-ingredient-amount">3 gal 3</span> <span class="wprm-recipe-ingredient-unit">qts</span> <span class="wprm-recipe-ingredient-name">Potatoes, frozen</span></li>
+        </ul>
+      </div>
+      <div class="wprm-recipe-instructions-container"></div>
+    `;
+    const scraper = vi.fn(async () => ({
+      name: 'Breakfast Bowl USDA Recipe for Schools',
+      recipeYield: '50',
+      recipeIngredients: [
+        '12 lbs Potatoes, frozen',
+        '- - Salt-free seasoning',
+        '1 gal 3 qts 2 cups Potatoes, frozen',
+        '½ cup Salt-free seasoning',
+        '3 gal 3 qts Potatoes, frozen'
+      ],
+      recipeInstructions: ['Serve one bowl.']
+    }));
+    const fetchMock = vi.fn(async () => {
+      return new Response(html, { status: 200, headers: { 'content-type': 'text/html' } });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.doMock('@dimfu/recipe-scraper', () => ({ default: scraper }));
+
+    const { importRecipeDraftForSmokeTest } = await import('../src/services/recipeImportService.js');
+
+    await expect(
+      importRecipeDraftForSmokeTest('https://theicn.org/cnrb/recipes-for-schools/breakfast-bowl-usda-recipe-for-schools/')
+    ).resolves.toMatchObject({
+      title: 'Breakfast Bowl USDA Recipe for Schools',
+      sourceDomain: 'theicn.org',
+      servings: '50',
+      ingredients: [
+        { rawText: '1 gal 3 qts 2 cups Potatoes, frozen' },
+        { rawText: '½ cup Salt-free seasoning' }
+      ],
+      steps: [{ text: 'Serve one bowl.' }]
+    });
+  });
+
   test('parses Good Food reader markdown with method step markers', async () => {
     useTestDatabaseUrl();
 
