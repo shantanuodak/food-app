@@ -6,8 +6,12 @@ import { ApiError } from '../utils/errors.js';
 import { ensureUserExists } from './userService.js';
 
 const SCRAPE_TIMEOUT_MS = 8000;
+const READER_TIMEOUT_MS = 10000;
 const MAX_REDIRECTS = 3;
 const MAX_HTML_BYTES = 3_000_000;
+const MAX_MARKDOWN_BYTES = 800_000;
+const READER_BASE_URL = 'https://r.jina.ai/http://';
+const READER_FALLBACK_STATUSES = new Set([401, 403, 406, 429, 451]);
 
 type AuthContext = {
   authProvider?: string | null;
@@ -102,6 +106,16 @@ type SafeRecipeUrl = {
   domain: string;
 };
 
+type RecipeHtmlPayload = {
+  finalUrl: string;
+  html: string;
+};
+
+type RecipeMarkdownPayload = {
+  finalUrl: string;
+  markdown: string;
+};
+
 function cleanString(value: unknown, maxLength = 1000): string | null {
   if (typeof value !== 'string' && typeof value !== 'number') {
     return null;
@@ -128,6 +142,17 @@ function compactStringList(values: unknown, maxItemLength = 220): string[] {
     result.push(cleaned);
   }
   return result;
+}
+
+function cleanMarkdownText(value: string, maxLength = 1000): string | null {
+  const cleaned = value
+    .replace(/!\[[^\]]*]\([^)]*\)/g, '')
+    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/[_`]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return cleanString(cleaned, maxLength);
 }
 
 function normalizeHostname(hostname: string): string {
@@ -210,7 +235,7 @@ export function assertSafeRecipeUrl(rawUrl: string): SafeRecipeUrl {
   };
 }
 
-async function fetchRecipeHtml(startUrl: string): Promise<{ finalUrl: string; html: string }> {
+async function fetchRecipeHtml(startUrl: string): Promise<RecipeHtmlPayload> {
   let currentUrl = startUrl;
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
     const controller = new AbortController();
@@ -248,7 +273,10 @@ async function fetchRecipeHtml(startUrl: string): Promise<{ finalUrl: string; ht
     }
 
     if (!response.ok) {
-      throw new ApiError(502, 'RECIPE_IMPORT_FETCH_FAILED', `Recipe page returned HTTP ${response.status}`);
+      const code = READER_FALLBACK_STATUSES.has(response.status)
+        ? 'RECIPE_IMPORT_SITE_BLOCKED'
+        : 'RECIPE_IMPORT_FETCH_FAILED';
+      throw new ApiError(502, code, `Recipe page returned HTTP ${response.status}`);
     }
 
     const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
@@ -270,6 +298,174 @@ async function fetchRecipeHtml(startUrl: string): Promise<{ finalUrl: string; ht
   }
 
   throw new ApiError(502, 'RECIPE_IMPORT_TOO_MANY_REDIRECTS', 'Recipe page redirected too many times');
+}
+
+function readerUrlFor(sourceUrl: string): string {
+  const parsed = new URL(sourceUrl);
+  parsed.protocol = 'http:';
+  parsed.hash = '';
+  return `${READER_BASE_URL}${parsed.host}${parsed.pathname}${parsed.search}`;
+}
+
+async function fetchRecipeMarkdownViaReader(sourceUrl: string): Promise<RecipeMarkdownPayload> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), READER_TIMEOUT_MS);
+  let response: Response;
+
+  try {
+    response = await fetch(readerUrlFor(sourceUrl), {
+      method: 'GET',
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: {
+        accept: 'text/plain, text/markdown',
+        'user-agent': 'FoodAppRecipeImporter/1.0 (+https://food.app)'
+      }
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError(504, 'RECIPE_IMPORT_TIMEOUT', 'Recipe page took too long to respond');
+    }
+    throw new ApiError(
+      502,
+      'RECIPE_IMPORT_SITE_BLOCKED',
+      'That recipe site blocked direct import. Try another recipe page.'
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  if (!response.ok) {
+    throw new ApiError(
+      502,
+      'RECIPE_IMPORT_SITE_BLOCKED',
+      'That recipe site blocked direct import. Try another recipe page.'
+    );
+  }
+
+  const contentLength = Number(response.headers.get('content-length') ?? '0');
+  if (Number.isFinite(contentLength) && contentLength > MAX_MARKDOWN_BYTES) {
+    throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
+  }
+
+  const markdown = await response.text();
+  if (markdown.length > MAX_MARKDOWN_BYTES) {
+    throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
+  }
+
+  return { finalUrl: sourceUrl, markdown };
+}
+
+function markdownLines(markdown: string): string[] {
+  return markdown.split(/\r?\n/).map((line) => line.trim());
+}
+
+function markdownHeadingTitle(lines: string[]): string | null {
+  for (const line of lines) {
+    const match = line.match(/^#\s+(.+)$/);
+    const title = match ? cleanMarkdownText(match[1]!.replace(/\s+Recipe$/i, ''), 180) : null;
+    if (title && !/^(just a moment|access denied)$/i.test(title)) {
+      return title;
+    }
+  }
+
+  const titleLine = lines.find((line) => line.toLowerCase().startsWith('title:'));
+  return titleLine ? cleanMarkdownText(titleLine.slice('title:'.length), 180) : null;
+}
+
+function markdownValueAfterLabel(lines: string[], label: string): string | null {
+  const normalizedLabel = label.toLowerCase();
+  for (let index = 0; index < lines.length; index += 1) {
+    if (lines[index]!.replace(/:$/, '').toLowerCase() !== normalizedLabel) {
+      continue;
+    }
+    for (const candidate of lines.slice(index + 1, index + 8)) {
+      if (!candidate || candidate.startsWith('#')) {
+        continue;
+      }
+      return cleanMarkdownText(candidate, 120);
+    }
+  }
+  return null;
+}
+
+function markdownSection(lines: string[], heading: string): string[] {
+  const normalizedHeading = `## ${heading}`.toLowerCase();
+  const startIndex = lines.findIndex((line) => line.toLowerCase() === normalizedHeading);
+  if (startIndex < 0) {
+    return [];
+  }
+  const endIndex = lines.findIndex((line, index) => index > startIndex && /^#{1,6}\s+/.test(line));
+  return lines.slice(startIndex + 1, endIndex < 0 ? undefined : endIndex);
+}
+
+function markdownIngredients(lines: string[]): string[] {
+  return markdownSection(lines, 'Ingredients')
+    .map((line) => line.match(/^\*\s+(.+)$/)?.[1])
+    .filter((line): line is string => Boolean(line))
+    .map((line) => cleanMarkdownText(line, 700))
+    .filter((line): line is string => Boolean(line));
+}
+
+function markdownSteps(lines: string[]): string[] {
+  return markdownSection(lines, 'Directions')
+    .map((line) => line.match(/^\d+\.\s+(.+)$/)?.[1])
+    .filter((line): line is string => Boolean(line))
+    .map((line) => cleanMarkdownText(line, 2000))
+    .filter((line): line is string => Boolean(line));
+}
+
+function markdownHeroImage(markdown: string): string | null {
+  const match = markdown.match(/!\[[^\]]*]\((https?:\/\/[^\s]+(?:\([^)]*\)[^\s]*)?)\)/);
+  return match ? cleanString(match[1], 1000) : null;
+}
+
+function markdownDescription(lines: string[]): string | null {
+  return (
+    lines
+      .map((line) => cleanMarkdownText(line, 2000))
+      .find((line) => {
+        if (!line || line.length < 80) {
+          return false;
+        }
+        const lower = line.toLowerCase();
+        return (
+          !lower.startsWith('url source:') &&
+          !lower.startsWith('markdown content:') &&
+          !lower.includes('http://') &&
+          !lower.includes('https://') &&
+          !line.startsWith('*') &&
+          !line.startsWith('#')
+        );
+      }) ?? null
+  );
+}
+
+function scrapeRecipeMarkdown(markdown: string): ScrapedRecipe {
+  const lines = markdownLines(markdown);
+  const name = markdownHeadingTitle(lines);
+  const recipeIngredients = markdownIngredients(lines);
+  const recipeInstructions = markdownSteps(lines);
+
+  if (!name || recipeIngredients.length === 0) {
+    throw new ApiError(
+      422,
+      'RECIPE_IMPORT_NO_RECIPE_SCHEMA',
+      'Could not find structured recipe data on that page'
+    );
+  }
+
+  return {
+    name,
+    image: markdownHeroImage(markdown) ?? undefined,
+    description: markdownDescription(lines) ?? undefined,
+    prepTime: markdownValueAfterLabel(lines, 'Prep Time') ?? undefined,
+    cookTime: markdownValueAfterLabel(lines, 'Cook Time') ?? undefined,
+    totalTime: markdownValueAfterLabel(lines, 'Total Time') ?? undefined,
+    recipeYield: markdownValueAfterLabel(lines, 'Servings') ?? markdownValueAfterLabel(lines, 'Yield') ?? undefined,
+    recipeIngredients,
+    recipeInstructions
+  };
 }
 
 async function scrapeRecipeHtml(html: string): Promise<ScrapedRecipe> {
@@ -339,9 +535,19 @@ export async function importRecipeFromUrl(input: {
   url: string;
 }): Promise<{ importId: string; draft: RecipeDraft }> {
   const safeUrl = assertSafeRecipeUrl(input.url);
-  const { finalUrl, html } = await fetchRecipeHtml(safeUrl.url);
-  const scraped = await scrapeRecipeHtml(html);
-  const draft = buildRecipeDraft(scraped, finalUrl);
+  let draft: RecipeDraft;
+  try {
+    const { finalUrl, html } = await fetchRecipeHtml(safeUrl.url);
+    const scraped = await scrapeRecipeHtml(html);
+    draft = buildRecipeDraft(scraped, finalUrl);
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.code !== 'RECIPE_IMPORT_SITE_BLOCKED') {
+      throw error;
+    }
+    const { finalUrl, markdown } = await fetchRecipeMarkdownViaReader(safeUrl.url);
+    const scraped = scrapeRecipeMarkdown(markdown);
+    draft = buildRecipeDraft(scraped, finalUrl);
+  }
 
   const client = await pool.connect();
   try {

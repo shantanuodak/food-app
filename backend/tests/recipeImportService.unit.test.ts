@@ -227,4 +227,110 @@ describe('recipeImportService.importRecipeFromUrl', () => {
     expect(query).toHaveBeenNthCalledWith(3, 'COMMIT');
     expect(release).toHaveBeenCalledTimes(1);
   });
+
+  test('falls back to reader markdown when the recipe page blocks direct fetches', async () => {
+    useTestDatabaseUrl();
+
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: '99999999-9999-9999-9999-999999999997' }] })
+      .mockResolvedValueOnce({ rows: [] });
+    const release = vi.fn();
+    const markdown = `
+      Title: Best Turkey Burgers
+
+      URL Source: http://www.allrecipes.com/recipe/39748/actually-delicious-turkey-burgers/
+
+      Markdown Content:
+      # Best Turkey Burgers Recipe
+
+      This turkey burger recipe is full of flavor and can be used for burgers, meatballs, or meatloaves.
+
+      Prep Time:
+      15 mins
+
+      Cook Time:
+      15 mins
+
+      Total Time:
+      30 mins
+
+      Servings:
+      12
+
+      ## Ingredients
+
+      *   3 pounds ground turkey
+      *   1 teaspoon salt
+
+      ## Directions
+
+      1.   Gather all ingredients.
+      2.   Mix ground turkey and salt together in a large bowl.
+    `;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('https://r.jina.ai/http://')) {
+        return new Response(markdown, { status: 200, headers: { 'content-type': 'text/plain' } });
+      }
+      return new Response('blocked', { status: 403, headers: { 'content-type': 'text/html' } });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.doMock('../src/db.js', () => ({
+      pool: {
+        connect: vi.fn(async () => ({ query, release }))
+      }
+    }));
+    vi.doMock('../src/services/userService.js', () => ({
+      ensureUserExists: vi.fn(async () => undefined)
+    }));
+
+    const { importRecipeFromUrl } = await import('../src/services/recipeImportService.js');
+
+    await expect(
+      importRecipeFromUrl({
+        userId: '11111111-1111-1111-1111-111111111111',
+        auth: { authProvider: 'dev', userEmail: 'user@example.com' },
+        url: 'https://www.allrecipes.com/recipe/39748/actually-delicious-turkey-burgers/'
+      })
+    ).resolves.toMatchObject({
+      importId: '99999999-9999-9999-9999-999999999997',
+      draft: {
+        title: 'Best Turkey Burgers',
+        sourceUrl: 'https://www.allrecipes.com/recipe/39748/actually-delicious-turkey-burgers/',
+        sourceDomain: 'allrecipes.com',
+        servings: '12',
+        prepTime: '15 mins',
+        cookTime: '15 mins',
+        totalTime: '30 mins',
+        ingredients: [{ rawText: '3 pounds ground turkey' }, { rawText: '1 teaspoon salt' }],
+        steps: [{ text: 'Gather all ingredients.' }, { text: 'Mix ground turkey and salt together in a large bowl.' }]
+      }
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'https://www.allrecipes.com/recipe/39748/actually-delicious-turkey-burgers/',
+      expect.objectContaining({ redirect: 'manual' })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://r.jina.ai/http://www.allrecipes.com/recipe/39748/actually-delicious-turkey-burgers/',
+      expect.objectContaining({ redirect: 'follow' })
+    );
+    expect(query).toHaveBeenNthCalledWith(1, 'BEGIN');
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.stringContaining('INSERT INTO recipe_imports'),
+      expect.arrayContaining([
+        '11111111-1111-1111-1111-111111111111',
+        'https://www.allrecipes.com/recipe/39748/actually-delicious-turkey-burgers/',
+        'allrecipes.com'
+      ])
+    );
+    expect(query).toHaveBeenNthCalledWith(3, 'COMMIT');
+    expect(release).toHaveBeenCalledTimes(1);
+  });
 });
