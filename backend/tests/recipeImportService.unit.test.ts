@@ -333,4 +333,118 @@ describe('recipeImportService.importRecipeFromUrl', () => {
     expect(query).toHaveBeenNthCalledWith(3, 'COMMIT');
     expect(release).toHaveBeenCalledTimes(1);
   });
+
+  test('falls back to reader markdown when structured recipe data is missing', async () => {
+    useTestDatabaseUrl();
+
+    const query = vi
+      .fn()
+      .mockResolvedValueOnce({ rows: [] })
+      .mockResolvedValueOnce({ rows: [{ id: '99999999-9999-9999-9999-999999999996' }] })
+      .mockResolvedValueOnce({ rows: [] });
+    const release = vi.fn();
+    const markdown = `
+      Title: Easy Veggie Stir Fry
+
+      URL Source: http://www.loveandlemons.com/stir-fry-recipe/
+
+      Markdown Content:
+      This easy stir fry recipe features colorful veggies in a delicious sweet and savory sauce.
+
+      ## Easy Stir Fry Recipe
+
+      Prep Time: 10 minutes
+
+      Cook Time: 10 minutes
+
+      Total Time: 20 minutes
+
+      Serves 4 to 6
+
+      This vegetable stir fry recipe is a quick, easy, and delicious weeknight dinner!
+
+      *   2 tablespoons[extra-virgin olive oil](https://example.com/oil)
+      *   1 red bell pepper, stemmed, seeded, and sliced
+      *   3 cups small broccoli florets
+
+      #### **Stir Fry Sauce**
+
+      *   ½ cup water
+      *   ⅓ cup[low-sodium soy sauce](https://example.com/soy)
+      *   2[garlic cloves](https://example.com/garlic), grated
+
+      Cook Mode Prevent your screen from going dark
+
+      *   Make the stir fry sauce: In a medium bowl, whisk together the water, soy sauce, garlic, and ginger.
+      *   Make the stir fry. Heat the olive oil in a large skillet or wok over high heat.
+      *   Reduce the heat to medium and pour in the stir fry sauce.
+    `;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('https://r.jina.ai/http://')) {
+        return new Response(markdown, { status: 200, headers: { 'content-type': 'text/plain' } });
+      }
+      return new Response('<html><title>Easy Veggie Stir Fry</title></html>', {
+        status: 200,
+        headers: { 'content-type': 'text/html' }
+      });
+    });
+    const scraper = vi.fn(async () => {
+      throw new Error('No recipe found');
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+    vi.doMock('@dimfu/recipe-scraper', () => ({ default: scraper }));
+    vi.doMock('../src/db.js', () => ({
+      pool: {
+        connect: vi.fn(async () => ({ query, release }))
+      }
+    }));
+    vi.doMock('../src/services/userService.js', () => ({
+      ensureUserExists: vi.fn(async () => undefined)
+    }));
+
+    const { importRecipeFromUrl } = await import('../src/services/recipeImportService.js');
+
+    await expect(
+      importRecipeFromUrl({
+        userId: '11111111-1111-1111-1111-111111111111',
+        auth: { authProvider: 'dev', userEmail: 'user@example.com' },
+        url: 'https://www.loveandlemons.com/stir-fry-recipe/'
+      })
+    ).resolves.toMatchObject({
+      importId: '99999999-9999-9999-9999-999999999996',
+      draft: {
+        title: 'Easy Veggie Stir Fry',
+        sourceUrl: 'https://www.loveandlemons.com/stir-fry-recipe/',
+        sourceDomain: 'loveandlemons.com',
+        servings: '4 to 6',
+        prepTime: '10 minutes',
+        cookTime: '10 minutes',
+        totalTime: '20 minutes',
+        ingredients: [
+          { rawText: '2 tablespoons extra-virgin olive oil' },
+          { rawText: '1 red bell pepper, stemmed, seeded, and sliced' },
+          { rawText: '3 cups small broccoli florets' },
+          { rawText: '½ cup water' },
+          { rawText: '⅓ cup low-sodium soy sauce' },
+          { rawText: '2 garlic cloves, grated' }
+        ],
+        steps: [
+          { text: 'Make the stir fry sauce: In a medium bowl, whisk together the water, soy sauce, garlic, and ginger.' },
+          { text: 'Make the stir fry. Heat the olive oil in a large skillet or wok over high heat.' },
+          { text: 'Reduce the heat to medium and pour in the stir fry sauce.' }
+        ]
+      }
+    });
+
+    expect(scraper).toHaveBeenCalledWith({ html: '<html><title>Easy Veggie Stir Fry</title></html>' });
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'https://r.jina.ai/http://www.loveandlemons.com/stir-fry-recipe/',
+      expect.objectContaining({ redirect: 'follow' })
+    );
+    expect(query).toHaveBeenNthCalledWith(3, 'COMMIT');
+    expect(release).toHaveBeenCalledTimes(1);
+  });
 });

@@ -147,7 +147,7 @@ function compactStringList(values: unknown, maxItemLength = 220): string[] {
 function cleanMarkdownText(value: string, maxLength = 1000): string | null {
   const cleaned = value
     .replace(/!\[[^\]]*]\([^)]*\)/g, '')
-    .replace(/\[([^\]]+)]\([^)]*\)/g, '$1')
+    .replace(/\[([^\]]+)]\([^)]*\)/g, ' $1')
     .replace(/\*\*([^*]+)\*\*/g, '$1')
     .replace(/[_`]/g, '')
     .replace(/\s+/g, ' ')
@@ -376,7 +376,15 @@ function markdownHeadingTitle(lines: string[]): string | null {
 function markdownValueAfterLabel(lines: string[], label: string): string | null {
   const normalizedLabel = label.toLowerCase();
   for (let index = 0; index < lines.length; index += 1) {
-    if (lines[index]!.replace(/:$/, '').toLowerCase() !== normalizedLabel) {
+    const line = lines[index]!;
+    const lower = line.toLowerCase();
+    if (lower.startsWith(`${normalizedLabel}:`)) {
+      const inlineValue = cleanMarkdownText(line.slice(line.indexOf(':') + 1), 120);
+      if (inlineValue) {
+        return inlineValue;
+      }
+    }
+    if (line.replace(/:$/, '').toLowerCase() !== normalizedLabel) {
       continue;
     }
     for (const candidate of lines.slice(index + 1, index + 8)) {
@@ -385,6 +393,22 @@ function markdownValueAfterLabel(lines: string[], label: string): string | null 
       }
       return cleanMarkdownText(candidate, 120);
     }
+  }
+  return null;
+}
+
+function markdownServings(lines: string[]): string | null {
+  const labeled = markdownValueAfterLabel(lines, 'Servings') ?? markdownValueAfterLabel(lines, 'Yield');
+  if (labeled) {
+    return labeled;
+  }
+
+  for (const line of lines) {
+    const match = line.match(/^serves\s+(.+)$/i);
+    if (!match) {
+      continue;
+    }
+    return cleanMarkdownText(match[1]!, 120);
   }
   return null;
 }
@@ -399,20 +423,83 @@ function markdownSection(lines: string[], heading: string): string[] {
   return lines.slice(startIndex + 1, endIndex < 0 ? undefined : endIndex);
 }
 
+function markdownRecipeCardLines(lines: string[]): string[] {
+  const startIndex = lines.findIndex((line, index) => {
+    if (!/^##\s+.+recipe\b/i.test(line)) {
+      return false;
+    }
+    const preview = lines.slice(index, index + 30).join('\n').toLowerCase();
+    return preview.includes('prep time') || preview.includes('cook time') || preview.includes('serves ');
+  });
+
+  if (startIndex < 0) {
+    return [];
+  }
+
+  const endIndex = lines.findIndex((line, index) => index > startIndex && /^##\s+/.test(line));
+  return lines.slice(startIndex + 1, endIndex < 0 ? undefined : endIndex);
+}
+
+function markdownBulletText(line: string, maxLength: number): string | null {
+  const bullet = line.match(/^\*\s+(.+)$/)?.[1];
+  if (!bullet) {
+    return null;
+  }
+  return cleanMarkdownText(bullet, maxLength);
+}
+
+function markdownRecipeCardIngredients(lines: string[]): string[] {
+  const cardLines = markdownRecipeCardLines(lines);
+  if (cardLines.length === 0) {
+    return [];
+  }
+
+  const ingredients: string[] = [];
+  for (const line of cardLines) {
+    const lower = line.toLowerCase();
+    if (lower.startsWith('cook mode') || lower.startsWith('instructions') || lower.startsWith('directions')) {
+      break;
+    }
+    const ingredient = markdownBulletText(line, 700);
+    if (ingredient) {
+      ingredients.push(ingredient);
+    }
+  }
+  return ingredients;
+}
+
+function markdownRecipeCardSteps(lines: string[]): string[] {
+  const cardLines = markdownRecipeCardLines(lines);
+  const startIndex = cardLines.findIndex((line) => {
+    const lower = line.toLowerCase();
+    return lower.startsWith('cook mode') || lower.startsWith('instructions') || lower.startsWith('directions');
+  });
+  if (startIndex < 0) {
+    return [];
+  }
+
+  return cardLines
+    .slice(startIndex + 1)
+    .map((line) => markdownBulletText(line, 2000))
+    .filter((line): line is string => Boolean(line));
+}
+
 function markdownIngredients(lines: string[]): string[] {
-  return markdownSection(lines, 'Ingredients')
+  const exactSectionIngredients = markdownSection(lines, 'Ingredients')
     .map((line) => line.match(/^\*\s+(.+)$/)?.[1])
     .filter((line): line is string => Boolean(line))
     .map((line) => cleanMarkdownText(line, 700))
     .filter((line): line is string => Boolean(line));
+  return exactSectionIngredients.length > 0 ? exactSectionIngredients : markdownRecipeCardIngredients(lines);
 }
 
 function markdownSteps(lines: string[]): string[] {
-  return markdownSection(lines, 'Directions')
+  const directionSteps = markdownSection(lines, 'Directions')
     .map((line) => line.match(/^\d+\.\s+(.+)$/)?.[1])
     .filter((line): line is string => Boolean(line))
     .map((line) => cleanMarkdownText(line, 2000))
     .filter((line): line is string => Boolean(line));
+  return directionSteps.length > 0 ? directionSteps : markdownRecipeCardSteps(lines);
 }
 
 function markdownHeroImage(markdown: string): string | null {
@@ -462,10 +549,19 @@ function scrapeRecipeMarkdown(markdown: string): ScrapedRecipe {
     prepTime: markdownValueAfterLabel(lines, 'Prep Time') ?? undefined,
     cookTime: markdownValueAfterLabel(lines, 'Cook Time') ?? undefined,
     totalTime: markdownValueAfterLabel(lines, 'Total Time') ?? undefined,
-    recipeYield: markdownValueAfterLabel(lines, 'Servings') ?? markdownValueAfterLabel(lines, 'Yield') ?? undefined,
+    recipeYield: markdownServings(lines) ?? undefined,
     recipeIngredients,
     recipeInstructions
   };
+}
+
+function shouldTryReaderFallback(error: unknown): boolean {
+  return (
+    error instanceof ApiError &&
+    (error.code === 'RECIPE_IMPORT_SITE_BLOCKED' ||
+      error.code === 'RECIPE_IMPORT_NO_RECIPE_SCHEMA' ||
+      error.code === 'RECIPE_IMPORT_INCOMPLETE_RECIPE')
+  );
 }
 
 async function scrapeRecipeHtml(html: string): Promise<ScrapedRecipe> {
@@ -541,7 +637,7 @@ export async function importRecipeFromUrl(input: {
     const scraped = await scrapeRecipeHtml(html);
     draft = buildRecipeDraft(scraped, finalUrl);
   } catch (error) {
-    if (!(error instanceof ApiError) || error.code !== 'RECIPE_IMPORT_SITE_BLOCKED') {
+    if (!shouldTryReaderFallback(error)) {
       throw error;
     }
     const { finalUrl, markdown } = await fetchRecipeMarkdownViaReader(safeUrl.url);
