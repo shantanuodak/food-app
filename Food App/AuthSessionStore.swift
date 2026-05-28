@@ -33,6 +33,7 @@ enum AuthSessionStoreError: LocalizedError {
 final class AuthSessionStore: ObservableObject {
     @Published private(set) var session: AuthSession?
     private(set) var lastLoadStatus: String = "not_loaded"
+    private(set) var lastLoadStatusCode: OSStatus?
 
     private let serviceName: String
     private let accountName = "auth.session.v1"
@@ -52,6 +53,7 @@ final class AuthSessionStore: ObservableObject {
 
         var attributes = query
         attributes[kSecValueData as String] = data
+        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
 
         let status = SecItemAdd(attributes as CFDictionary, nil)
         guard status == errSecSuccess else {
@@ -66,6 +68,20 @@ final class AuthSessionStore: ObservableObject {
         session = nil
     }
 
+    var shouldRetryTransientLoadFailure: Bool {
+        guard session == nil, let status = lastLoadStatusCode else { return false }
+        return Self.isTransientKeychainStatus(status)
+    }
+
+    @discardableResult
+    func reloadSessionFromKeychain() -> AuthSession? {
+        let loadedSession = loadSession()
+        if let loadedSession {
+            session = loadedSession
+        }
+        return loadedSession
+    }
+
     private func loadSession() -> AuthSession? {
         var query = keychainQuery()
         query[kSecReturnData as String] = true
@@ -76,20 +92,24 @@ final class AuthSessionStore: ObservableObject {
 
         if status == errSecItemNotFound {
             lastLoadStatus = "not_found"
+            lastLoadStatusCode = status
             return nil
         }
 
         guard status == errSecSuccess, let data = item as? Data else {
             lastLoadStatus = "keychain_status_\(status)"
+            lastLoadStatusCode = status
             return nil
         }
 
         guard let decoded = try? JSONDecoder().decode(AuthSession.self, from: data) else {
             lastLoadStatus = "decode_failed"
+            lastLoadStatusCode = nil
             return nil
         }
 
         lastLoadStatus = "loaded"
+        lastLoadStatusCode = status
         return decoded
     }
 
@@ -99,5 +119,9 @@ final class AuthSessionStore: ObservableObject {
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: accountName
         ]
+    }
+
+    private static func isTransientKeychainStatus(_ status: OSStatus) -> Bool {
+        status == errSecInteractionNotAllowed || status == errSecNotAvailable
     }
 }

@@ -15,9 +15,9 @@ struct OB05PaceScreen: View {
 
     private var paceDescription: String {
         switch resolvedPace {
-        case .conservative: return "Slower, steadier progress with more flexibility day to day."
-        case .balanced: return "A practical middle ground: noticeable progress without feeling too restrictive."
-        case .aggressive: return "Faster progress with a tighter calorie target. Best if you want more structure."
+        case .conservative: return "Slower pace, more flexibility."
+        case .balanced: return "Steady progress, realistic pace."
+        case .aggressive: return "Faster pace, tighter target."
         }
     }
 
@@ -27,24 +27,6 @@ struct OB05PaceScreen: View {
         case .balanced: return "hare.fill"
         case .aggressive: return "flame.fill"
         }
-    }
-
-    private var weeklyRate: String {
-        // Read from the same calculator that drives the user's daily
-        // calorie target — otherwise the chip says one rate while the
-        // backend plans for another. Maintain has no rate.
-        guard let lbs = OnboardingCalculator.weeklyRateLbs(for: draft.goal, pace: resolvedPace) else {
-            return "Maintain weight"
-        }
-        // Trim ".0" for whole-number rates (1.0 → "1") so the chip reads
-        // naturally; keep one decimal otherwise (0.5 stays as "0.5").
-        let formatted: String
-        if lbs.truncatingRemainder(dividingBy: 1) == 0 {
-            formatted = String(Int(lbs))
-        } else {
-            formatted = String(format: "%g", lbs)
-        }
-        return "~\(formatted) lb/week"
     }
 
     var body: some View {
@@ -68,11 +50,10 @@ struct OB05PaceScreen: View {
                     .padding(.top, 20)
                     .padding(.horizontal, 24)
 
-                Text("This helps us set a daily target that matches how quickly you want to make progress while keeping the plan realistic.")
+                Text("Choose a pace for your target.")
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(OnboardingGlassTheme.textSecondary)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(3)
                     .opacity(appeared ? 1 : 0)
                     .padding(.top, 8)
                     .padding(.horizontal, 32)
@@ -100,29 +81,16 @@ struct OB05PaceScreen: View {
                         .foregroundStyle(colorScheme == .dark ? .white.opacity(0.6) : .black.opacity(0.5))
                         .multilineTextAlignment(.center)
                         .lineSpacing(2)
-                        .frame(height: 56, alignment: .top)
+                        .frame(height: 28, alignment: .top)
                         .animation(.easeInOut(duration: 0.2), value: resolvedPace)
                 }
                 .padding(.horizontal, 32)
-                .frame(height: 176)
+                .frame(height: 148)
 
                 // Slider
                 paceSlider(style: style)
                     .padding(.top, 40)
                     .padding(.horizontal, 34)
-
-                // Weekly rate pill
-                Text(weeklyRate)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(style.foreground)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(
-                        Capsule()
-                            .fill(style.foreground.opacity(0.12))
-                    )
-                    .padding(.top, 24)
-                    .animation(.easeInOut(duration: 0.2), value: resolvedPace)
 
                 Spacer()
 

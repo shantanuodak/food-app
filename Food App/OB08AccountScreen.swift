@@ -80,8 +80,8 @@ struct OB08AccountScreen: View {
 
                 Spacer(minLength: 0)
 
-                Image(systemName: option.isPrimary ? "arrow.right" : "chevron.right")
-                    .font(.system(size: option.isPrimary ? 14 : 12, weight: .bold))
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(option.isPrimary ? AccountScreenPalette.primaryAccent : AccountScreenPalette.secondaryInk)
                     .frame(width: 30, height: 30)
                     .background(

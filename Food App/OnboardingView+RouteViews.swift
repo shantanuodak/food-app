@@ -831,18 +831,6 @@ private struct AccountPreviewGlassStack: View {
             .background(AccountRoutePalette.cardFront)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(alignment: .top) {
-                LinearGradient(
-                    colors: [
-                        AccountRoutePalette.shine,
-                        .clear
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                )
-                .frame(height: 1)
-                .blendMode(.screen)
-            }
             .overlay(
                 RoundedRectangle(cornerRadius: 28, style: .continuous)
                     .strokeBorder(AccountRoutePalette.cardStrokeStrong, lineWidth: 1)
