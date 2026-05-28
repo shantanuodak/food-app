@@ -447,4 +447,128 @@ describe('recipeImportService.importRecipeFromUrl', () => {
     expect(query).toHaveBeenNthCalledWith(3, 'COMMIT');
     expect(release).toHaveBeenCalledTimes(1);
   });
+
+  test('parses Good Food reader markdown with method step markers', async () => {
+    useTestDatabaseUrl();
+
+    const markdown = `
+      Title: Best ever chocolate brownies recipe | Good Food
+
+      Markdown Content:
+      # Best ever chocolate brownies recipe
+
+      **Cuts into 16 squares or 32 triangles**
+
+      Prep:**25 mins**
+
+      Cook:**27 mins - 35 mins**
+
+      ## Ingredients
+
+      ## Nutrition
+
+      *   185g [unsalted butter](https://example.com/butter)
+      *   185g best dark chocolate
+      *   85g plain flour
+      *   kcal 150
+      *   fat 9 g
+
+      ## Method
+
+      *   ### step 1
+
+      Cut the butter into small cubes and tip into a bowl.
+
+      *   ### step 2
+
+      Break the chocolate into pieces and add to the bowl.
+    `;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('https://r.jina.ai/http://')) {
+        return new Response(markdown, { status: 200, headers: { 'content-type': 'text/plain' } });
+      }
+      return new Response('payment required', { status: 402, headers: { 'content-type': 'text/html' } });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { importRecipeDraftForSmokeTest } = await import('../src/services/recipeImportService.js');
+
+    await expect(importRecipeDraftForSmokeTest('https://www.bbcgoodfood.com/recipes/best-ever-chocolate-brownies-recipe')).resolves.toMatchObject({
+      title: 'Best ever chocolate brownies',
+      sourceDomain: 'bbcgoodfood.com',
+      servings: '16 squares or 32 triangles',
+      prepTime: '25 mins',
+      cookTime: '27 mins - 35 mins',
+      ingredients: [
+        { rawText: '185g unsalted butter' },
+        { rawText: '185g best dark chocolate' },
+        { rawText: '85g plain flour' }
+      ],
+      steps: [
+        { text: 'Cut the butter into small cubes and tip into a bowl.' },
+        { text: 'Break the chocolate into pieces and add to the bowl.' }
+      ]
+    });
+  });
+
+  test('parses recipe card markdown with checkbox ingredients', async () => {
+    useTestDatabaseUrl();
+
+    const markdown = `
+      Title: Best Lentil Soup Recipe - Cookie and Kate
+
+      Markdown Content:
+      # Best Lentil Soup Recipe - Cookie and Kate
+
+      ## Best Lentil Soup
+
+      *   Author: Kathryne Taylor
+      *   Prep Time:10 mins
+      *   Cook Time:45 mins
+      *   Total Time:55 minutes
+      *   Yield:4 servings
+
+      ### Ingredients
+
+      *   - [x] ¼ cup extra virgin olive oil
+      *   - [x] 1 medium yellow or white onion, chopped
+      *   - [x] 2 carrots, peeled and chopped
+
+      ### Instructions
+
+      1.   Warm the olive oil in a large Dutch oven over medium heat.
+      2.   Add the chopped onion and carrot and cook until softened.
+    `;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.startsWith('https://r.jina.ai/http://')) {
+        return new Response(markdown, { status: 200, headers: { 'content-type': 'text/plain' } });
+      }
+      return new Response('blocked', { status: 403, headers: { 'content-type': 'text/html' } });
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { importRecipeDraftForSmokeTest } = await import('../src/services/recipeImportService.js');
+
+    await expect(importRecipeDraftForSmokeTest('https://cookieandkate.com/best-lentil-soup-recipe/')).resolves.toMatchObject({
+      title: 'Best Lentil Soup',
+      sourceDomain: 'cookieandkate.com',
+      servings: '4 servings',
+      prepTime: '10 mins',
+      cookTime: '45 mins',
+      totalTime: '55 minutes',
+      ingredients: [
+        { rawText: '¼ cup extra virgin olive oil' },
+        { rawText: '1 medium yellow or white onion, chopped' },
+        { rawText: '2 carrots, peeled and chopped' }
+      ],
+      steps: [
+        { text: 'Warm the olive oil in a large Dutch oven over medium heat.' },
+        { text: 'Add the chopped onion and carrot and cook until softened.' }
+      ]
+    });
+  });
 });

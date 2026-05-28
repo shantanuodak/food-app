@@ -6,12 +6,12 @@ import { ApiError } from '../utils/errors.js';
 import { ensureUserExists } from './userService.js';
 
 const SCRAPE_TIMEOUT_MS = 8000;
-const READER_TIMEOUT_MS = 10000;
+const READER_TIMEOUT_MS = 20000;
 const MAX_REDIRECTS = 3;
 const MAX_HTML_BYTES = 3_000_000;
 const MAX_MARKDOWN_BYTES = 800_000;
 const READER_BASE_URL = 'https://r.jina.ai/http://';
-const READER_FALLBACK_STATUSES = new Set([401, 403, 406, 429, 451]);
+const READER_FALLBACK_STATUSES = new Set([401, 402, 403, 406, 429, 451]);
 
 type AuthContext = {
   authProvider?: string | null;
@@ -148,7 +148,7 @@ function cleanMarkdownText(value: string, maxLength = 1000): string | null {
   const cleaned = value
     .replace(/!\[[^\]]*]\([^)]*\)/g, '')
     .replace(/\[([^\]]+)]\([^)]*\)/g, ' $1')
-    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, ' $1 ')
     .replace(/[_`]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
@@ -360,30 +360,150 @@ function markdownLines(markdown: string): string[] {
   return markdown.split(/\r?\n/).map((line) => line.trim());
 }
 
+type MarkdownHeading = {
+  level: number;
+  text: string;
+};
+
+function stripMarkdownListPrefix(line: string): string {
+  return line
+    .replace(/^\*\s+/, '')
+    .replace(/^-\s+\[[ xX]\]\s*/, '')
+    .replace(/^\[[ xX]\]\s*/, '')
+    .replace(/^[-+]\s+/, '')
+    .trim();
+}
+
+function markdownHeading(line: string): MarkdownHeading | null {
+  const match = line.match(/^(#{1,6})\s+(.+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const text = cleanMarkdownText(match[2]!, 220);
+  return text ? { level: match[1]!.length, text } : null;
+}
+
+function normalizedMarkdownLabel(value: string): string {
+  return value
+    .replace(/\s+recipe$/i, '')
+    .replace(/[:.!?]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function markdownCleanLine(line: string, maxLength = 1000): string | null {
+  return cleanMarkdownText(stripMarkdownListPrefix(line), maxLength);
+}
+
+function markdownRecipeCardStartIndex(lines: string[]): number {
+  return lines.findIndex((line, index) => {
+    const heading = markdownHeading(line);
+    if (!heading || heading.level !== 2) {
+      return false;
+    }
+
+    const headingKey = normalizedMarkdownLabel(heading.text);
+    if (['ingredients', 'instructions', 'directions', 'method', 'nutrition'].includes(headingKey)) {
+      return false;
+    }
+
+    const preview = lines
+      .slice(index, index + 90)
+      .map((candidate) => markdownCleanLine(candidate, 220) ?? candidate)
+      .join('\n')
+      .toLowerCase();
+    const hasTiming = preview.includes('prep time') || preview.includes('cook time') || preview.includes('total time');
+    const hasRecipeParts =
+      preview.includes('ingredients') ||
+      preview.includes('instructions') ||
+      preview.includes('directions') ||
+      preview.includes('cook mode');
+    return hasTiming && hasRecipeParts;
+  });
+}
+
+function cleanRecipeTitleCandidate(value: string): string | null {
+  const cleaned = cleanMarkdownText(
+    value
+      .replace(/\s+\|\s+.+$/g, '')
+      .replace(/\s+-\s+[A-Z][A-Za-z0-9 '&.]+$/g, '')
+      .replace(/\s+Recipe$/i, ''),
+    180
+  );
+  if (!cleaned || /^(just a moment|access denied|page not found)$/i.test(cleaned)) {
+    return null;
+  }
+  return cleaned;
+}
+
 function markdownHeadingTitle(lines: string[]): string | null {
-  for (const line of lines) {
-    const match = line.match(/^#\s+(.+)$/);
-    const title = match ? cleanMarkdownText(match[1]!.replace(/\s+Recipe$/i, ''), 180) : null;
-    if (title && !/^(just a moment|access denied)$/i.test(title)) {
+  const titleLine = lines.find((line) => line.toLowerCase().startsWith('title:'));
+  const explicitTitle = titleLine ? cleanRecipeTitleCandidate(titleLine.slice('title:'.length)) : null;
+  if (explicitTitle) {
+    return explicitTitle;
+  }
+
+  const cardStartIndex = markdownRecipeCardStartIndex(lines);
+  if (cardStartIndex >= 0) {
+    const heading = markdownHeading(lines[cardStartIndex]!);
+    const title = heading ? cleanRecipeTitleCandidate(heading.text) : null;
+    if (title) {
       return title;
     }
   }
 
-  const titleLine = lines.find((line) => line.toLowerCase().startsWith('title:'));
-  return titleLine ? cleanMarkdownText(titleLine.slice('title:'.length), 180) : null;
+  for (const line of lines) {
+    const match = line.match(/^#\s+(.+)$/);
+    const title = match ? cleanRecipeTitleCandidate(match[1]!) : null;
+    if (title) {
+      return title;
+    }
+  }
+  return null;
+}
+
+function escapedRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function cleanMetadataValue(value: string, maxLength = 120): string | null {
+  return cleanMarkdownText(
+    value.replace(/\s+(?:active|cook|cook time|makes|prep|prep time|serves|total|total time|yield)\b.*$/i, ''),
+    maxLength
+  );
+}
+
+function cleanServingsValue(value: string): string | null {
+  return cleanMarkdownText(value.replace(/\s+(?:active|cook|cook time|makes|prep|prep time|total|total time|yield)\b.*$/i, ''), 120);
 }
 
 function markdownValueAfterLabel(lines: string[], label: string): string | null {
   const normalizedLabel = label.toLowerCase();
+  const labelPattern = escapedRegExp(label);
   for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]!;
+    const line = markdownCleanLine(lines[index]!, 240);
+    if (!line) {
+      continue;
+    }
+
     const lower = line.toLowerCase();
     if (lower.startsWith(`${normalizedLabel}:`)) {
-      const inlineValue = cleanMarkdownText(line.slice(line.indexOf(':') + 1), 120);
+      const inlineValue = cleanMetadataValue(line.slice(line.indexOf(':') + 1), 120);
       if (inlineValue) {
         return inlineValue;
       }
     }
+
+    const noColonMatch = line.match(new RegExp(`^${labelPattern}\\s+(.+)$`, 'i'));
+    if (noColonMatch) {
+      const inlineValue = cleanMetadataValue(noColonMatch[1]!, 120);
+      if (inlineValue) {
+        return inlineValue;
+      }
+    }
+
     if (line.replace(/:$/, '').toLowerCase() !== normalizedLabel) {
       continue;
     }
@@ -391,7 +511,10 @@ function markdownValueAfterLabel(lines: string[], label: string): string | null 
       if (!candidate || candidate.startsWith('#')) {
         continue;
       }
-      return cleanMarkdownText(candidate, 120);
+      const value = markdownCleanLine(candidate, 120);
+      if (value) {
+        return value;
+      }
     }
   }
   return null;
@@ -404,48 +527,395 @@ function markdownServings(lines: string[]): string | null {
   }
 
   for (const line of lines) {
-    const match = line.match(/^serves\s+(.+)$/i);
-    if (!match) {
+    const cleanedLine = markdownCleanLine(line, 160);
+    if (!cleanedLine) {
       continue;
     }
-    return cleanMarkdownText(match[1]!, 120);
+    const servesMatch = cleanedLine.match(/^serves\s+(.+)$/i);
+    if (servesMatch) {
+      return cleanServingsValue(servesMatch[1]!);
+    }
+    const cutsMatch = cleanedLine.match(/^cuts into\s+(.+)$/i);
+    if (cutsMatch) {
+      return cleanMarkdownText(cutsMatch[1]!, 120);
+    }
   }
   return null;
 }
 
-function markdownSection(lines: string[], heading: string): string[] {
-  const normalizedHeading = `## ${heading}`.toLowerCase();
-  const startIndex = lines.findIndex((line) => line.toLowerCase() === normalizedHeading);
+function markdownRecipeCardLines(lines: string[]): string[] {
+  const startIndex = markdownRecipeCardStartIndex(lines);
   if (startIndex < 0) {
     return [];
   }
-  const endIndex = lines.findIndex((line, index) => index > startIndex && /^#{1,6}\s+/.test(line));
-  return lines.slice(startIndex + 1, endIndex < 0 ? undefined : endIndex);
-}
 
-function markdownRecipeCardLines(lines: string[]): string[] {
-  const startIndex = lines.findIndex((line, index) => {
-    if (!/^##\s+.+recipe\b/i.test(line)) {
+  const startHeading = markdownHeading(lines[startIndex]!);
+  const endIndex = lines.findIndex((line, index) => {
+    if (index <= startIndex) {
       return false;
     }
-    const preview = lines.slice(index, index + 30).join('\n').toLowerCase();
-    return preview.includes('prep time') || preview.includes('cook time') || preview.includes('serves ');
+    const heading = markdownHeading(line);
+    return Boolean(heading && startHeading && heading.level <= startHeading.level);
   });
-
-  if (startIndex < 0) {
-    return [];
-  }
-
-  const endIndex = lines.findIndex((line, index) => index > startIndex && /^##\s+/.test(line));
   return lines.slice(startIndex + 1, endIndex < 0 ? undefined : endIndex);
 }
 
 function markdownBulletText(line: string, maxLength: number): string | null {
-  const bullet = line.match(/^\*\s+(.+)$/)?.[1];
+  const bullet = line.match(/^(?:\*|-|\+)\s+(.+)$/)?.[1];
   if (!bullet) {
     return null;
   }
-  return cleanMarkdownText(bullet, maxLength);
+  return cleanMarkdownText(stripMarkdownListPrefix(bullet), maxLength);
+}
+
+function markdownInputText(line: string, maxLength: number): string | null {
+  const input = line.match(/^\[Input]\s+(.+)$/)?.[1];
+  if (!input) {
+    return null;
+  }
+  const cleaned = cleanMarkdownText(input, maxLength);
+  if (!cleaned || /^(deselect all|add to shopping list|view shopping list|ingredient substitutions)$/i.test(cleaned)) {
+    return null;
+  }
+  return cleaned;
+}
+
+function markdownOrderedText(line: string, maxLength: number): string | null {
+  const ordered = line.match(/^\d+\.\s+(.+)$/)?.[1];
+  return ordered ? cleanMarkdownText(ordered, maxLength) : null;
+}
+
+function isIngredientNoise(text: string): boolean {
+  const lower = text.toLowerCase();
+  return (
+    lower === '* *' ||
+    lower === 'print' ||
+    lower.startsWith('author:') ||
+    lower.startsWith('category:') ||
+    lower.startsWith('method:') ||
+    lower.startsWith('cuisine:') ||
+    lower.startsWith('diet:') ||
+    lower.startsWith('prep time:') ||
+    lower.startsWith('cook time:') ||
+    lower.startsWith('total time:') ||
+    lower.startsWith('yield:') ||
+    lower.startsWith('servings:') ||
+    lower.startsWith('scale') ||
+    lower.startsWith('pin recipe') ||
+    lower.startsWith('cook mode') ||
+    lower.includes('prevent your screen') ||
+    /^(kcal|calories|carbohydrates|protein|fat|saturated fat|saturates|trans fat|cholesterol|sodium|carbs|sugars|fibre|fiber|salt)\b/i.test(
+      text
+    )
+  );
+}
+
+function isInstructionNoise(text: string): boolean {
+  const lower = text.toLowerCase();
+  return lower === '* *' || lower.startsWith('video ') || lower.startsWith('notes') || lower.startsWith('nutrition');
+}
+
+function isInstructionLike(text: string): boolean {
+  return /^(add|arrange|bake|bring|chill|combine|cook|cover|divide|drain|fill|fold|heat|in a|line|make|mix|noodles:|once|pour|preheat|reduce|refrigerate|remove|roll|serve|set aside|simmer|stir|strain|taste|to serve|top|transfer|use|when|whisk)\b/i.test(
+    text
+  );
+}
+
+function isQuantityOnlyIngredientPart(text: string): boolean {
+  return (
+    text.length <= 28 &&
+    /^\d/.test(text) &&
+    !/[,.]/.test(text) &&
+    !/\b(?:and|or|with|plus|divided|trimmed|chopped|diced|minced|sliced|grated|ground|fresh|frozen)\b/i.test(text)
+  );
+}
+
+function collectIngredientsFromLines(lines: string[]): string[] {
+  const ingredients: string[] = [];
+  let hasCollectedIngredient = false;
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const heading = markdownHeading(line);
+    if (heading) {
+      const headingKey = normalizedMarkdownLabel(heading.text);
+      if (
+        [
+          'method',
+          'directions',
+          'instructions',
+          'notes',
+          'recipe notes',
+          'frequently asked questions',
+          'comments',
+          'reader interactions'
+        ].includes(headingKey)
+      ) {
+        break;
+      }
+      if (headingKey === 'nutrition' || headingKey === 'nutrition facts') {
+        if (hasCollectedIngredient) {
+          break;
+        }
+        continue;
+      }
+      continue;
+    }
+
+    let ingredient = markdownBulletText(line, 700) ?? markdownInputText(line, 700);
+    if (ingredient && isQuantityOnlyIngredientPart(ingredient)) {
+      for (let nextIndex = index + 1; nextIndex < Math.min(index + 4, lines.length); nextIndex += 1) {
+        const nextLine = lines[nextIndex]!;
+        if (
+          !nextLine ||
+          markdownHeading(nextLine) ||
+          markdownBulletText(nextLine, 700) ||
+          markdownOrderedText(nextLine, 700) ||
+          markdownInputText(nextLine, 700)
+        ) {
+          continue;
+        }
+        const nextText = markdownCleanLine(nextLine, 700);
+        if (nextText && !isIngredientNoise(nextText)) {
+          ingredient = `${ingredient} ${nextText}`;
+          index = nextIndex;
+          break;
+        }
+      }
+    }
+    if (!ingredient || isIngredientNoise(ingredient)) {
+      continue;
+    }
+    ingredients.push(ingredient);
+    hasCollectedIngredient = true;
+  }
+
+  return ingredients;
+}
+
+function markdownIngredientSection(lines: string[]): string[] {
+  const startIndex = lines.findIndex((line) => {
+    const heading = markdownHeading(line);
+    return Boolean(heading && heading.level <= 4 && normalizedMarkdownLabel(heading.text) === 'ingredients');
+  });
+  return startIndex < 0 ? [] : collectIngredientsFromLines(lines.slice(startIndex + 1));
+}
+
+function markdownInstructionSection(lines: string[]): string[] {
+  const startIndex = lines.findIndex((line) => {
+    const heading = markdownHeading(line);
+    if (!heading) {
+      return false;
+    }
+    const headingKey = normalizedMarkdownLabel(heading.text);
+    return ['directions', 'instructions', 'method'].includes(headingKey);
+  });
+  if (startIndex < 0) {
+    return [];
+  }
+
+  const startHeading = markdownHeading(lines[startIndex]!);
+  const steps: string[] = [];
+  let stepParts: string[] = [];
+  let isCollectingStepBlock = false;
+  const flushStepBlock = () => {
+    const text = cleanMarkdownText(stepParts.join(' '), 2000);
+    if (text && !isInstructionNoise(text)) {
+      steps.push(text);
+    }
+    stepParts = [];
+  };
+
+  for (const line of lines.slice(startIndex + 1)) {
+    const heading = markdownHeading(line);
+    if (heading && startHeading && heading.level <= startHeading.level) {
+      break;
+    }
+
+    const stepMarker = line.match(/^(?:\*\s+)?#{1,6}\s*step\s+\d+/i);
+    if (stepMarker) {
+      flushStepBlock();
+      isCollectingStepBlock = true;
+      continue;
+    }
+
+    const ordered = markdownOrderedText(line, 2000);
+    if (ordered && !isInstructionNoise(ordered)) {
+      flushStepBlock();
+      isCollectingStepBlock = false;
+      steps.push(ordered);
+      continue;
+    }
+
+    const bullet = markdownBulletText(line, 2000);
+    if (bullet && !isInstructionNoise(bullet)) {
+      if (isCollectingStepBlock) {
+        stepParts.push(bullet);
+      } else {
+        steps.push(bullet);
+      }
+      continue;
+    }
+
+    const text = markdownCleanLine(line, 2000);
+    if (text && isCollectingStepBlock && !isInstructionNoise(text)) {
+      stepParts.push(text);
+    }
+  }
+  flushStepBlock();
+
+  return steps;
+}
+
+function markdownStepsAfterIngredients(lines: string[]): string[] {
+  const startIndex = lines.findIndex((line) => {
+    const heading = markdownHeading(line);
+    return Boolean(heading && heading.level <= 4 && normalizedMarkdownLabel(heading.text) === 'ingredients');
+  });
+  if (startIndex < 0) {
+    return [];
+  }
+
+  const steps: string[] = [];
+  let hasStartedSteps = false;
+
+  for (const line of lines.slice(startIndex + 1)) {
+    const heading = markdownHeading(line);
+    if (heading) {
+      const headingKey = normalizedMarkdownLabel(heading.text);
+      if (['recipe notes', 'notes', 'nutrition', 'nutrition facts', 'comments', 'reader interactions'].includes(headingKey)) {
+        break;
+      }
+      if (['directions', 'instructions', 'method'].includes(headingKey)) {
+        continue;
+      }
+    }
+
+    const ordered = markdownOrderedText(line, 2000);
+    if (ordered && !isInstructionNoise(ordered)) {
+      hasStartedSteps = true;
+      steps.push(ordered);
+      continue;
+    }
+
+    if (hasStartedSteps && markdownBulletText(line, 2000)) {
+      break;
+    }
+  }
+
+  return steps;
+}
+
+function markdownIngredientsBeforeCookMode(lines: string[]): string[] {
+  const cookModeIndex = lines.findIndex((line) => (markdownCleanLine(line, 120) ?? '').toLowerCase().startsWith('cook mode'));
+  if (cookModeIndex < 0) {
+    return [];
+  }
+
+  const ingredients: string[] = [];
+  for (let index = cookModeIndex - 1; index >= 0; index -= 1) {
+    const line = lines[index]!;
+    const ingredient = markdownBulletText(line, 700);
+    if (ingredient && !isIngredientNoise(ingredient)) {
+      ingredients.push(ingredient);
+      continue;
+    }
+
+    if (!line || line === '* * *') {
+      continue;
+    }
+
+    if (ingredients.length > 0) {
+      break;
+    }
+  }
+
+  return ingredients.reverse();
+}
+
+function markdownStepsAfterCookMode(lines: string[]): string[] {
+  const cookModeIndex = lines.findIndex((line) => (markdownCleanLine(line, 120) ?? '').toLowerCase().startsWith('cook mode'));
+  if (cookModeIndex < 0) {
+    return [];
+  }
+
+  const steps: string[] = [];
+  for (const line of lines.slice(cookModeIndex + 1)) {
+    const heading = markdownHeading(line);
+    if (heading && ['notes', 'nutrition', 'did you make this recipe', 'reader interactions'].includes(normalizedMarkdownLabel(heading.text))) {
+      break;
+    }
+
+    const ordered = markdownOrderedText(line, 2000);
+    const bullet = markdownBulletText(line, 2000);
+    const step = ordered ?? bullet;
+    if (step && !isInstructionNoise(step)) {
+      steps.push(step);
+    }
+  }
+
+  return steps;
+}
+
+function markdownContiguousRecipeLists(lines: string[]): { ingredients: string[]; steps: string[] } {
+  const timeIndex = lines.findIndex((line) => {
+    const cleaned = markdownCleanLine(line, 160)?.toLowerCase() ?? '';
+    return cleaned.startsWith('total time') || cleaned.startsWith('cook time') || cleaned.startsWith('prep time');
+  });
+  const awakeIndex = lines.findIndex((line) => {
+    const cleaned = markdownCleanLine(line, 160)?.toLowerCase() ?? '';
+    return cleaned === 'keep screen awake' || cleaned.startsWith('cook mode');
+  });
+  const searchStartIndex = timeIndex >= 0 ? timeIndex : awakeIndex;
+  if (searchStartIndex < 0) {
+    return { ingredients: [], steps: [] };
+  }
+
+  const firstBulletIndex = lines.findIndex((line, index) => index > searchStartIndex && Boolean(markdownBulletText(line, 700)));
+  if (firstBulletIndex < 0) {
+    return { ingredients: [], steps: [] };
+  }
+
+  const ingredients: string[] = [];
+  const steps: string[] = [];
+  let isCollectingSteps = false;
+
+  for (const line of lines.slice(firstBulletIndex)) {
+    const heading = markdownHeading(line);
+    if (heading && ['did you make this recipe', 'reader interactions', 'comments', 'notes'].includes(normalizedMarkdownLabel(heading.text))) {
+      break;
+    }
+
+    const ordered = markdownOrderedText(line, 2000);
+    if (ordered && !isInstructionNoise(ordered)) {
+      isCollectingSteps = true;
+      steps.push(ordered);
+      continue;
+    }
+
+    const bullet = markdownBulletText(line, 2000);
+    if (!bullet) {
+      const cleaned = markdownCleanLine(line, 160);
+      if (isCollectingSteps && cleaned && /^video\s+\d+/i.test(cleaned)) {
+        break;
+      }
+      continue;
+    }
+
+    if (!isCollectingSteps && isInstructionLike(bullet)) {
+      isCollectingSteps = true;
+    }
+
+    if (isCollectingSteps) {
+      if (!isInstructionNoise(bullet)) {
+        steps.push(bullet);
+      }
+    } else if (!isIngredientNoise(bullet)) {
+      ingredients.push(bullet);
+    }
+  }
+
+  return { ingredients, steps };
 }
 
 function markdownRecipeCardIngredients(lines: string[]): string[] {
@@ -454,14 +924,22 @@ function markdownRecipeCardIngredients(lines: string[]): string[] {
     return [];
   }
 
+  const explicitStart = cardLines.findIndex((line) => {
+    const heading = markdownHeading(line);
+    return Boolean(heading && normalizedMarkdownLabel(heading.text) === 'ingredients');
+  });
+  if (explicitStart >= 0) {
+    return collectIngredientsFromLines(cardLines.slice(explicitStart + 1));
+  }
+
   const ingredients: string[] = [];
   for (const line of cardLines) {
-    const lower = line.toLowerCase();
+    const lower = (markdownCleanLine(line, 240) ?? line).toLowerCase();
     if (lower.startsWith('cook mode') || lower.startsWith('instructions') || lower.startsWith('directions')) {
       break;
     }
     const ingredient = markdownBulletText(line, 700);
-    if (ingredient) {
+    if (ingredient && !isIngredientNoise(ingredient)) {
       ingredients.push(ingredient);
     }
   }
@@ -478,28 +956,63 @@ function markdownRecipeCardSteps(lines: string[]): string[] {
     return [];
   }
 
-  return cardLines
-    .slice(startIndex + 1)
-    .map((line) => markdownBulletText(line, 2000))
-    .filter((line): line is string => Boolean(line));
+  const steps: string[] = [];
+  for (const line of cardLines.slice(startIndex + 1)) {
+    const heading = markdownHeading(line);
+    if (heading && ['notes', 'nutrition'].includes(normalizedMarkdownLabel(heading.text))) {
+      break;
+    }
+    const ordered = markdownOrderedText(line, 2000);
+    const bullet = markdownBulletText(line, 2000);
+    const step = ordered ?? bullet;
+    if (step && !isInstructionNoise(step)) {
+      steps.push(step);
+    }
+  }
+  return steps;
 }
 
 function markdownIngredients(lines: string[]): string[] {
-  const exactSectionIngredients = markdownSection(lines, 'Ingredients')
-    .map((line) => line.match(/^\*\s+(.+)$/)?.[1])
-    .filter((line): line is string => Boolean(line))
-    .map((line) => cleanMarkdownText(line, 700))
-    .filter((line): line is string => Boolean(line));
-  return exactSectionIngredients.length > 0 ? exactSectionIngredients : markdownRecipeCardIngredients(lines);
+  const sectionIngredients = markdownIngredientSection(lines);
+  if (sectionIngredients.length > 0) {
+    return sectionIngredients;
+  }
+
+  const cardIngredients = markdownRecipeCardIngredients(lines);
+  if (cardIngredients.length > 0) {
+    return cardIngredients;
+  }
+
+  const cookModeIngredients = markdownIngredientsBeforeCookMode(lines);
+  if (cookModeIngredients.length > 0) {
+    return cookModeIngredients;
+  }
+
+  return markdownContiguousRecipeLists(lines).ingredients;
 }
 
 function markdownSteps(lines: string[]): string[] {
-  const directionSteps = markdownSection(lines, 'Directions')
-    .map((line) => line.match(/^\d+\.\s+(.+)$/)?.[1])
-    .filter((line): line is string => Boolean(line))
-    .map((line) => cleanMarkdownText(line, 2000))
-    .filter((line): line is string => Boolean(line));
-  return directionSteps.length > 0 ? directionSteps : markdownRecipeCardSteps(lines);
+  const sectionSteps = markdownInstructionSection(lines);
+  if (sectionSteps.length > 0) {
+    return sectionSteps;
+  }
+
+  const afterIngredientsSteps = markdownStepsAfterIngredients(lines);
+  if (afterIngredientsSteps.length > 0) {
+    return afterIngredientsSteps;
+  }
+
+  const cardSteps = markdownRecipeCardSteps(lines);
+  if (cardSteps.length > 0) {
+    return cardSteps;
+  }
+
+  const cookModeSteps = markdownStepsAfterCookMode(lines);
+  if (cookModeSteps.length > 0) {
+    return cookModeSteps;
+  }
+
+  return markdownContiguousRecipeLists(lines).steps;
 }
 
 function markdownHeroImage(markdown: string): string | null {
@@ -530,6 +1043,19 @@ function markdownDescription(lines: string[]): string | null {
 
 function scrapeRecipeMarkdown(markdown: string): ScrapedRecipe {
   const lines = markdownLines(markdown);
+  if (
+    markdown.includes('Warning: Target URL returned error 403') ||
+    markdown.includes('Verification successful. Waiting for') ||
+    markdown.toLowerCase().includes('title: just a moment') ||
+    lines.some((line) => /^(#\s+)?(just a moment|access denied)$/i.test(line))
+  ) {
+    throw new ApiError(
+      502,
+      'RECIPE_IMPORT_SITE_BLOCKED',
+      'That recipe site blocked direct import. Try another recipe page.'
+    );
+  }
+
   const name = markdownHeadingTitle(lines);
   const recipeIngredients = markdownIngredients(lines);
   const recipeInstructions = markdownSteps(lines);
@@ -546,8 +1072,8 @@ function scrapeRecipeMarkdown(markdown: string): ScrapedRecipe {
     name,
     image: markdownHeroImage(markdown) ?? undefined,
     description: markdownDescription(lines) ?? undefined,
-    prepTime: markdownValueAfterLabel(lines, 'Prep Time') ?? undefined,
-    cookTime: markdownValueAfterLabel(lines, 'Cook Time') ?? undefined,
+    prepTime: markdownValueAfterLabel(lines, 'Prep Time') ?? markdownValueAfterLabel(lines, 'Prep') ?? undefined,
+    cookTime: markdownValueAfterLabel(lines, 'Cook Time') ?? markdownValueAfterLabel(lines, 'Cook') ?? undefined,
     totalTime: markdownValueAfterLabel(lines, 'Total Time') ?? undefined,
     recipeYield: markdownServings(lines) ?? undefined,
     recipeIngredients,
@@ -559,6 +1085,7 @@ function shouldTryReaderFallback(error: unknown): boolean {
   return (
     error instanceof ApiError &&
     (error.code === 'RECIPE_IMPORT_SITE_BLOCKED' ||
+      error.code === 'RECIPE_IMPORT_TIMEOUT' ||
       error.code === 'RECIPE_IMPORT_NO_RECIPE_SCHEMA' ||
       error.code === 'RECIPE_IMPORT_INCOMPLETE_RECIPE')
   );
@@ -631,19 +1158,7 @@ export async function importRecipeFromUrl(input: {
   url: string;
 }): Promise<{ importId: string; draft: RecipeDraft }> {
   const safeUrl = assertSafeRecipeUrl(input.url);
-  let draft: RecipeDraft;
-  try {
-    const { finalUrl, html } = await fetchRecipeHtml(safeUrl.url);
-    const scraped = await scrapeRecipeHtml(html);
-    draft = buildRecipeDraft(scraped, finalUrl);
-  } catch (error) {
-    if (!shouldTryReaderFallback(error)) {
-      throw error;
-    }
-    const { finalUrl, markdown } = await fetchRecipeMarkdownViaReader(safeUrl.url);
-    const scraped = scrapeRecipeMarkdown(markdown);
-    draft = buildRecipeDraft(scraped, finalUrl);
-  }
+  const draft = await importRecipeDraftFromSafeUrl(safeUrl);
 
   const client = await pool.connect();
   try {
@@ -665,6 +1180,33 @@ export async function importRecipeFromUrl(input: {
   } finally {
     client.release();
   }
+}
+
+async function importRecipeDraftFromSafeUrl(safeUrl: SafeRecipeUrl): Promise<RecipeDraft> {
+  try {
+    const { finalUrl, html } = await fetchRecipeHtml(safeUrl.url);
+    const scraped = await scrapeRecipeHtml(html);
+    const draft = buildRecipeDraft(scraped, finalUrl);
+    if (draft.ingredients.length > 60) {
+      throw new ApiError(
+        422,
+        'RECIPE_IMPORT_INCOMPLETE_RECIPE',
+        'Recipe data looked noisy, so reader fallback is required'
+      );
+    }
+    return draft;
+  } catch (error) {
+    if (!shouldTryReaderFallback(error)) {
+      throw error;
+    }
+    const { finalUrl, markdown } = await fetchRecipeMarkdownViaReader(safeUrl.url);
+    const scraped = scrapeRecipeMarkdown(markdown);
+    return buildRecipeDraft(scraped, finalUrl);
+  }
+}
+
+export async function importRecipeDraftForSmokeTest(url: string): Promise<RecipeDraft> {
+  return importRecipeDraftFromSafeUrl(assertSafeRecipeUrl(url));
 }
 
 function normalizeDraftForSave(input: SavedRecipeInput): Omit<SavedRecipeInput, 'sourceUrl'> & {
