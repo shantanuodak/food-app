@@ -132,6 +132,39 @@ function cleanString(value: unknown, maxLength = 1000): string | null {
   return trimmed.slice(0, maxLength);
 }
 
+function cleanHttpUrl(value: unknown, maxLength = 1000): string | null {
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const cleaned = cleanHttpUrl(item, maxLength);
+      if (cleaned) {
+        return cleaned;
+      }
+    }
+    return null;
+  }
+
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    return cleanHttpUrl(record.url ?? record.src ?? record.contentUrl, maxLength);
+  }
+
+  const cleaned = cleanString(value, maxLength);
+  if (!cleaned) {
+    return null;
+  }
+
+  const withoutMarkdownTail = cleaned.includes(')](') ? cleaned.slice(0, cleaned.indexOf(')](')) : cleaned;
+  try {
+    const url = new URL(withoutMarkdownTail);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+      return null;
+    }
+    return url.toString().slice(0, maxLength);
+  } catch {
+    return null;
+  }
+}
+
 function compactStringList(values: unknown, maxItemLength = 220): string[] {
   if (!Array.isArray(values)) {
     return [];
@@ -1039,7 +1072,7 @@ function markdownSteps(lines: string[]): string[] {
 
 function markdownHeroImage(markdown: string): string | null {
   const match = markdown.match(/!\[[^\]]*]\((https?:\/\/[^\s]+(?:\([^)]*\)[^\s]*)?)\)/);
-  return match ? cleanString(match[1], 1000) : null;
+  return match ? cleanHttpUrl(match[1], 1000) : null;
 }
 
 function markdownDescription(lines: string[]): string | null {
@@ -1252,7 +1285,7 @@ export function buildRecipeDraft(scraped: ScrapedRecipe, sourceUrl: string): Rec
     sourceUrl: safeUrl.url,
     sourceDomain: safeUrl.domain,
     sourceName: safeUrl.domain,
-    heroImageUrl: cleanString(scraped.image, 1000),
+    heroImageUrl: cleanHttpUrl(scraped.image, 1000),
     description: cleanString(scraped.description, 2000),
     servings: cleanString(scraped.recipeYield, 120),
     prepTime: cleanString(scraped.prepTime, 120),
@@ -1353,7 +1386,7 @@ function normalizeDraftForSave(input: SavedRecipeInput): Omit<SavedRecipeInput, 
     sourceUrl: safeUrl.url,
     sourceDomain: safeUrl.domain,
     sourceName: cleanString(input.sourceName, 180),
-    heroImageUrl: cleanString(input.heroImageUrl, 1000),
+    heroImageUrl: cleanHttpUrl(input.heroImageUrl, 1000),
     description: cleanString(input.description, 2000),
     servings: cleanString(input.servings, 120),
     prepTime: cleanString(input.prepTime, 120),

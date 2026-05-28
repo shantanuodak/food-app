@@ -96,6 +96,23 @@ describe('recipeImportService.buildRecipeDraft', () => {
       buildRecipeDraft({ name: 'No ingredients', recipeIngredients: [] }, 'https://example.com/recipe')
     ).toThrow(expect.objectContaining({ code: 'RECIPE_IMPORT_INCOMPLETE_RECIPE' }));
   });
+
+  test('normalizes malformed scraper image URLs without blocking import', async () => {
+    useTestDatabaseUrl();
+    const { buildRecipeDraft } = await import('../src/services/recipeImportService.js');
+
+    const draft = buildRecipeDraft(
+      {
+        name: 'Turkey Burgers',
+        image: 'https://cdn.example.com/turkey-burgers.jpg)](https://www.example.com/recipe#',
+        recipeIngredients: ['1 pound turkey'],
+        recipeInstructions: ['Cook burgers.']
+      },
+      'https://www.example.com/recipes/turkey-burgers'
+    );
+
+    expect(draft.heroImageUrl).toBe('https://cdn.example.com/turkey-burgers.jpg');
+  });
 });
 
 describe('recipeImportService.importRecipeFromUrl', () => {
