@@ -1,0 +1,637 @@
+import { isIP } from 'node:net';
+import type { PoolClient } from 'pg';
+import getRecipeData from '@dimfu/recipe-scraper';
+import { pool } from '../db.js';
+import { ApiError } from '../utils/errors.js';
+import { ensureUserExists } from './userService.js';
+
+const SCRAPE_TIMEOUT_MS = 8000;
+const MAX_REDIRECTS = 3;
+const MAX_HTML_BYTES = 3_000_000;
+
+type AuthContext = {
+  authProvider?: string | null;
+  userEmail?: string | null;
+};
+
+type ScrapedRecipe = Partial<{
+  url: string;
+  name: string;
+  image: string;
+  description: string;
+  cookTime: string;
+  prepTime: string;
+  totalTime: string;
+  recipeYield: string | number;
+  recipeIngredients: unknown[];
+  recipeInstructions: unknown[];
+  recipeCategories: unknown[];
+  recipeCuisines: unknown[];
+  keywords: unknown[];
+}>;
+
+export type RecipeIngredientDraft = {
+  rawText: string;
+  quantityText: string | null;
+  unitText: string | null;
+  ingredientName: string | null;
+};
+
+export type RecipeStepDraft = {
+  text: string;
+};
+
+export type RecipeDraft = {
+  title: string;
+  sourceUrl: string;
+  sourceDomain: string;
+  sourceName: string | null;
+  heroImageUrl: string | null;
+  description: string | null;
+  servings: string | null;
+  prepTime: string | null;
+  cookTime: string | null;
+  totalTime: string | null;
+  categories: string[];
+  cuisines: string[];
+  keywords: string[];
+  ingredients: RecipeIngredientDraft[];
+  steps: RecipeStepDraft[];
+  confidence: number;
+  warnings: string[];
+};
+
+export type SavedRecipeInput = Omit<RecipeDraft, 'confidence' | 'warnings' | 'sourceDomain'> & {
+  importId?: string | null;
+  nutrition?: unknown;
+};
+
+export type SavedRecipe = Omit<RecipeDraft, 'confidence' | 'warnings'> & {
+  id: string;
+  importId: string | null;
+  nutrition: unknown | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+type RecipeRow = {
+  id: string;
+  import_id: string | null;
+  title: string;
+  source_url: string;
+  source_domain: string;
+  source_name: string | null;
+  hero_image_url: string | null;
+  description: string | null;
+  servings: string | null;
+  prep_time: string | null;
+  cook_time: string | null;
+  total_time: string | null;
+  categories: string[] | null;
+  cuisines: string[] | null;
+  keywords: string[] | null;
+  nutrition_json: unknown | null;
+  ingredients: unknown;
+  steps: unknown;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type SafeRecipeUrl = {
+  url: string;
+  domain: string;
+};
+
+function cleanString(value: unknown, maxLength = 1000): string | null {
+  if (typeof value !== 'string' && typeof value !== 'number') {
+    return null;
+  }
+  const trimmed = String(value).replace(/\s+/g, ' ').trim();
+  if (!trimmed) {
+    return null;
+  }
+  return trimmed.slice(0, maxLength);
+}
+
+function compactStringList(values: unknown, maxItemLength = 220): string[] {
+  if (!Array.isArray(values)) {
+    return [];
+  }
+  const seen = new Set<string>();
+  const result: string[] = [];
+  for (const value of values) {
+    const cleaned = cleanString(value, maxItemLength);
+    if (!cleaned || seen.has(cleaned.toLowerCase())) {
+      continue;
+    }
+    seen.add(cleaned.toLowerCase());
+    result.push(cleaned);
+  }
+  return result;
+}
+
+function normalizeHostname(hostname: string): string {
+  return hostname.toLowerCase().replace(/^\[/, '').replace(/\]$/, '').replace(/\.$/, '');
+}
+
+function sourceDomainFor(hostname: string): string {
+  return normalizeHostname(hostname).replace(/^www\./, '');
+}
+
+function isPrivateIpv4(hostname: string): boolean {
+  const parts = hostname.split('.').map((part) => Number(part));
+  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) {
+    return false;
+  }
+  const [a, b] = parts;
+  return (
+    a === 0 ||
+    a === 10 ||
+    a === 127 ||
+    (a === 100 && b >= 64 && b <= 127) ||
+    (a === 169 && b === 254) ||
+    (a === 172 && b >= 16 && b <= 31) ||
+    (a === 192 && b === 168) ||
+    (a === 198 && (b === 18 || b === 19)) ||
+    a >= 224
+  );
+}
+
+function isPrivateIpv6(hostname: string): boolean {
+  const normalized = normalizeHostname(hostname);
+  if (normalized === '::' || normalized === '::1') {
+    return true;
+  }
+  if (normalized.startsWith('fc') || normalized.startsWith('fd') || normalized.startsWith('fe80:')) {
+    return true;
+  }
+  if (normalized.startsWith('::ffff:')) {
+    return isPrivateIpv4(normalized.slice('::ffff:'.length));
+  }
+  return false;
+}
+
+export function assertSafeRecipeUrl(rawUrl: string): SafeRecipeUrl {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new ApiError(400, 'RECIPE_IMPORT_INVALID_URL', 'Recipe URL is not valid');
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    throw new ApiError(400, 'RECIPE_IMPORT_INVALID_URL', 'Recipe URL must use http or https');
+  }
+
+  const hostname = normalizeHostname(parsed.hostname);
+  if (!hostname) {
+    throw new ApiError(400, 'RECIPE_IMPORT_INVALID_URL', 'Recipe URL must include a host');
+  }
+
+  if (
+    hostname === 'localhost' ||
+    hostname.endsWith('.localhost') ||
+    hostname.endsWith('.local') ||
+    hostname === 'ip6-localhost' ||
+    hostname === 'ip6-loopback'
+  ) {
+    throw new ApiError(400, 'RECIPE_IMPORT_UNSAFE_URL', 'Recipe URL must be a public web page');
+  }
+
+  const ipVersion = isIP(hostname);
+  if ((ipVersion === 4 && isPrivateIpv4(hostname)) || (ipVersion === 6 && isPrivateIpv6(hostname))) {
+    throw new ApiError(400, 'RECIPE_IMPORT_UNSAFE_URL', 'Recipe URL must be a public web page');
+  }
+
+  parsed.hash = '';
+  return {
+    url: parsed.toString(),
+    domain: sourceDomainFor(hostname)
+  };
+}
+
+async function fetchRecipeHtml(startUrl: string): Promise<{ finalUrl: string; html: string }> {
+  let currentUrl = startUrl;
+  for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS);
+    let response: Response;
+    try {
+      response = await fetch(currentUrl, {
+        method: 'GET',
+        redirect: 'manual',
+        signal: controller.signal,
+        headers: {
+          accept: 'text/html,application/xhtml+xml',
+          'user-agent': 'FoodAppRecipeImporter/1.0 (+https://food.app)'
+        }
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError(504, 'RECIPE_IMPORT_TIMEOUT', 'Recipe page took too long to respond');
+      }
+      throw new ApiError(502, 'RECIPE_IMPORT_FETCH_FAILED', 'Could not fetch the recipe page');
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    if ([301, 302, 303, 307, 308].includes(response.status)) {
+      const location = response.headers.get('location');
+      if (!location) {
+        throw new ApiError(502, 'RECIPE_IMPORT_FETCH_FAILED', 'Recipe page redirected without a destination');
+      }
+      if (redirectCount === MAX_REDIRECTS) {
+        throw new ApiError(502, 'RECIPE_IMPORT_TOO_MANY_REDIRECTS', 'Recipe page redirected too many times');
+      }
+      currentUrl = assertSafeRecipeUrl(new URL(location, currentUrl).toString()).url;
+      continue;
+    }
+
+    if (!response.ok) {
+      throw new ApiError(502, 'RECIPE_IMPORT_FETCH_FAILED', `Recipe page returned HTTP ${response.status}`);
+    }
+
+    const contentType = response.headers.get('content-type')?.toLowerCase() ?? '';
+    if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml+xml')) {
+      throw new ApiError(415, 'RECIPE_IMPORT_UNSUPPORTED_CONTENT', 'Recipe URL must point to an HTML page');
+    }
+
+    const contentLength = Number(response.headers.get('content-length') ?? '0');
+    if (Number.isFinite(contentLength) && contentLength > MAX_HTML_BYTES) {
+      throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
+    }
+
+    const html = await response.text();
+    if (html.length > MAX_HTML_BYTES) {
+      throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
+    }
+
+    return { finalUrl: currentUrl, html };
+  }
+
+  throw new ApiError(502, 'RECIPE_IMPORT_TOO_MANY_REDIRECTS', 'Recipe page redirected too many times');
+}
+
+async function scrapeRecipeHtml(html: string): Promise<ScrapedRecipe> {
+  try {
+    const scraped = (await getRecipeData({ html })) as ScrapedRecipe | undefined;
+    if (!scraped) {
+      throw new Error('No recipe found');
+    }
+    return scraped;
+  } catch {
+    throw new ApiError(
+      422,
+      'RECIPE_IMPORT_NO_RECIPE_SCHEMA',
+      'Could not find structured recipe data on that page'
+    );
+  }
+}
+
+export function buildRecipeDraft(scraped: ScrapedRecipe, sourceUrl: string): RecipeDraft {
+  const safeUrl = assertSafeRecipeUrl(sourceUrl);
+  const title = cleanString(scraped.name, 180);
+  const ingredients = compactStringList(scraped.recipeIngredients, 700).map((rawText) => ({
+    rawText,
+    quantityText: null,
+    unitText: null,
+    ingredientName: null
+  }));
+  const steps = compactStringList(scraped.recipeInstructions, 2000).map((text) => ({ text }));
+
+  if (!title || ingredients.length === 0) {
+    throw new ApiError(
+      422,
+      'RECIPE_IMPORT_INCOMPLETE_RECIPE',
+      'Recipe data is missing a title or ingredients'
+    );
+  }
+
+  const warnings: string[] = [];
+  if (steps.length === 0) {
+    warnings.push('No instructions were found. The user can add steps before saving.');
+  }
+
+  return {
+    title,
+    sourceUrl: safeUrl.url,
+    sourceDomain: safeUrl.domain,
+    sourceName: safeUrl.domain,
+    heroImageUrl: cleanString(scraped.image, 1000),
+    description: cleanString(scraped.description, 2000),
+    servings: cleanString(scraped.recipeYield, 120),
+    prepTime: cleanString(scraped.prepTime, 120),
+    cookTime: cleanString(scraped.cookTime, 120),
+    totalTime: cleanString(scraped.totalTime, 120),
+    categories: compactStringList(scraped.recipeCategories, 80),
+    cuisines: compactStringList(scraped.recipeCuisines, 80),
+    keywords: compactStringList(scraped.keywords, 80),
+    ingredients,
+    steps,
+    confidence: steps.length > 0 ? 0.92 : 0.78,
+    warnings
+  };
+}
+
+export async function importRecipeFromUrl(input: {
+  userId: string;
+  auth?: AuthContext;
+  url: string;
+}): Promise<{ importId: string; draft: RecipeDraft }> {
+  const safeUrl = assertSafeRecipeUrl(input.url);
+  const { finalUrl, html } = await fetchRecipeHtml(safeUrl.url);
+  const scraped = await scrapeRecipeHtml(html);
+  const draft = buildRecipeDraft(scraped, finalUrl);
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await ensureUserExists(input.userId, { authProvider: input.auth?.authProvider, email: input.auth?.userEmail }, client);
+    const inserted = await client.query<{ id: string }>(
+      `
+      INSERT INTO recipe_imports (user_id, source_url, source_domain, status, draft_json)
+      VALUES ($1, $2, $3, 'draft', $4::jsonb)
+      RETURNING id
+      `,
+      [input.userId, draft.sourceUrl, draft.sourceDomain, JSON.stringify(draft)]
+    );
+    await client.query('COMMIT');
+    return { importId: inserted.rows[0]!.id, draft };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+function normalizeDraftForSave(input: SavedRecipeInput): Omit<SavedRecipeInput, 'sourceUrl'> & {
+  sourceUrl: string;
+  sourceDomain: string;
+} {
+  const safeUrl = assertSafeRecipeUrl(input.sourceUrl);
+  const title = cleanString(input.title, 180);
+  const ingredients = input.ingredients
+    .map((ingredient) => ({
+      rawText: cleanString(ingredient.rawText, 700),
+      quantityText: cleanString(ingredient.quantityText, 120),
+      unitText: cleanString(ingredient.unitText, 80),
+      ingredientName: cleanString(ingredient.ingredientName, 220)
+    }))
+    .filter((ingredient): ingredient is RecipeIngredientDraft => Boolean(ingredient.rawText));
+  const steps = input.steps
+    .map((step) => ({ text: cleanString(step.text, 2000) }))
+    .filter((step): step is RecipeStepDraft => Boolean(step.text));
+
+  if (!title || ingredients.length === 0) {
+    throw new ApiError(400, 'RECIPE_INVALID_REVIEW_DATA', 'Recipe needs a title and at least one ingredient');
+  }
+
+  return {
+    ...input,
+    title,
+    sourceUrl: safeUrl.url,
+    sourceDomain: safeUrl.domain,
+    sourceName: cleanString(input.sourceName, 180),
+    heroImageUrl: cleanString(input.heroImageUrl, 1000),
+    description: cleanString(input.description, 2000),
+    servings: cleanString(input.servings, 120),
+    prepTime: cleanString(input.prepTime, 120),
+    cookTime: cleanString(input.cookTime, 120),
+    totalTime: cleanString(input.totalTime, 120),
+    categories: compactStringList(input.categories, 80),
+    cuisines: compactStringList(input.cuisines, 80),
+    keywords: compactStringList(input.keywords, 80),
+    ingredients,
+    steps
+  };
+}
+
+async function insertRecipeChildren(
+  client: PoolClient,
+  recipeId: string,
+  ingredients: RecipeIngredientDraft[],
+  steps: RecipeStepDraft[]
+): Promise<void> {
+  for (const [index, ingredient] of ingredients.entries()) {
+    await client.query(
+      `
+      INSERT INTO recipe_ingredients (recipe_id, position, raw_text, quantity_text, unit_text, ingredient_name)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [
+        recipeId,
+        index,
+        ingredient.rawText,
+        ingredient.quantityText,
+        ingredient.unitText,
+        ingredient.ingredientName
+      ]
+    );
+  }
+
+  for (const [index, step] of steps.entries()) {
+    await client.query(
+      `
+      INSERT INTO recipe_steps (recipe_id, position, text)
+      VALUES ($1, $2, $3)
+      `,
+      [recipeId, index, step.text]
+    );
+  }
+}
+
+function parseIngredients(value: unknown): RecipeIngredientDraft[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+      const record = item as Record<string, unknown>;
+      const rawText = cleanString(record.rawText);
+      if (!rawText) {
+        return null;
+      }
+      return {
+        rawText,
+        quantityText: cleanString(record.quantityText, 120),
+        unitText: cleanString(record.unitText, 80),
+        ingredientName: cleanString(record.ingredientName, 220)
+      };
+    })
+    .filter((item): item is RecipeIngredientDraft => Boolean(item));
+}
+
+function parseSteps(value: unknown): RecipeStepDraft[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .map((item) => {
+      if (!item || typeof item !== 'object') {
+        return null;
+      }
+      const text = cleanString((item as Record<string, unknown>).text, 2000);
+      return text ? { text } : null;
+    })
+    .filter((item): item is RecipeStepDraft => Boolean(item));
+}
+
+function toSavedRecipe(row: RecipeRow): SavedRecipe {
+  return {
+    id: row.id,
+    importId: row.import_id,
+    title: row.title,
+    sourceUrl: row.source_url,
+    sourceDomain: row.source_domain,
+    sourceName: row.source_name,
+    heroImageUrl: row.hero_image_url,
+    description: row.description,
+    servings: row.servings,
+    prepTime: row.prep_time,
+    cookTime: row.cook_time,
+    totalTime: row.total_time,
+    categories: row.categories ?? [],
+    cuisines: row.cuisines ?? [],
+    keywords: row.keywords ?? [],
+    ingredients: parseIngredients(row.ingredients),
+    steps: parseSteps(row.steps),
+    nutrition: row.nutrition_json,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString()
+  };
+}
+
+const recipeSelectSql = `
+  SELECT
+    r.id,
+    r.import_id,
+    r.title,
+    r.source_url,
+    r.source_domain,
+    r.source_name,
+    r.hero_image_url,
+    r.description,
+    r.servings,
+    r.prep_time,
+    r.cook_time,
+    r.total_time,
+    r.categories,
+    r.cuisines,
+    r.keywords,
+    r.nutrition_json,
+    COALESCE((
+      SELECT jsonb_agg(
+        jsonb_build_object(
+          'rawText', ri.raw_text,
+          'quantityText', ri.quantity_text,
+          'unitText', ri.unit_text,
+          'ingredientName', ri.ingredient_name
+        )
+        ORDER BY ri.position
+      )
+      FROM recipe_ingredients ri
+      WHERE ri.recipe_id = r.id
+    ), '[]'::jsonb) AS ingredients,
+    COALESCE((
+      SELECT jsonb_agg(
+        jsonb_build_object('text', rs.text)
+        ORDER BY rs.position
+      )
+      FROM recipe_steps rs
+      WHERE rs.recipe_id = r.id
+    ), '[]'::jsonb) AS steps,
+    r.created_at,
+    r.updated_at
+  FROM recipes r
+`;
+
+export async function saveRecipe(input: {
+  userId: string;
+  auth?: AuthContext;
+  recipe: SavedRecipeInput;
+}): Promise<SavedRecipe> {
+  const recipe = normalizeDraftForSave(input.recipe);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await ensureUserExists(input.userId, { authProvider: input.auth?.authProvider, email: input.auth?.userEmail }, client);
+
+    if (recipe.importId) {
+      const importResult = await client.query<{ id: string }>(
+        `SELECT id FROM recipe_imports WHERE id = $1 AND user_id = $2`,
+        [recipe.importId, input.userId]
+      );
+      if (!importResult.rows[0]) {
+        throw new ApiError(404, 'RECIPE_IMPORT_NOT_FOUND', 'Recipe import not found');
+      }
+    }
+
+    const inserted = await client.query<{ id: string }>(
+      `
+      INSERT INTO recipes (
+        user_id, import_id, title, source_url, source_domain, source_name, hero_image_url,
+        description, servings, prep_time, cook_time, total_time, categories, cuisines,
+        keywords, nutrition_json
+      )
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16::jsonb)
+      RETURNING id
+      `,
+      [
+        input.userId,
+        recipe.importId ?? null,
+        recipe.title,
+        recipe.sourceUrl,
+        recipe.sourceDomain,
+        recipe.sourceName,
+        recipe.heroImageUrl,
+        recipe.description,
+        recipe.servings,
+        recipe.prepTime,
+        recipe.cookTime,
+        recipe.totalTime,
+        recipe.categories,
+        recipe.cuisines,
+        recipe.keywords,
+        recipe.nutrition === undefined ? null : JSON.stringify(recipe.nutrition)
+      ]
+    );
+
+    const recipeId = inserted.rows[0]!.id;
+    await insertRecipeChildren(client, recipeId, recipe.ingredients, recipe.steps);
+
+    if (recipe.importId) {
+      await client.query(
+        `
+        UPDATE recipe_imports
+        SET status = 'saved', updated_at = NOW()
+        WHERE id = $1 AND user_id = $2
+        `,
+        [recipe.importId, input.userId]
+      );
+    }
+
+    const saved = await client.query<RecipeRow>(
+      `${recipeSelectSql} WHERE r.id = $1 AND r.user_id = $2`,
+      [recipeId, input.userId]
+    );
+    await client.query('COMMIT');
+    return toSavedRecipe(saved.rows[0]!);
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function listRecipes(userId: string): Promise<{ recipes: SavedRecipe[] }> {
+  const result = await pool.query<RecipeRow>(
+    `${recipeSelectSql} WHERE r.user_id = $1 ORDER BY r.updated_at DESC, r.created_at DESC`,
+    [userId]
+  );
+  return { recipes: result.rows.map(toSavedRecipe) };
+}

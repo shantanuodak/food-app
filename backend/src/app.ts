@@ -14,6 +14,7 @@ import logsRoutes from './routes/logs.js';
 import hydrationRoutes from './routes/hydration.js';
 import rewardsRoutes from './routes/rewards.js';
 import savedMealsRoutes from './routes/savedMeals.js';
+import recipesRoutes from './routes/recipes.js';
 import authDiagnosticRoutes from './routes/authDiagnostics.js';
 import internalMetricsRoutes from './routes/internalMetrics.js';
 import internalImageParseTestRoutes from './routes/internalImageParseTest.js';
@@ -214,6 +215,7 @@ export function createApp() {
   app.use('/v1/hydration', authRequired, hydrationRoutes);
   app.use('/v1/rewards', authRequired, rewardsRoutes);
   app.use('/v1/saved-meals', authRequired, savedMealsRoutes);
+  app.use('/v1/recipes', authRequired, recipesRoutes);
   app.use('/v1/auth-diagnostics', authRequired, authDiagnosticRoutes);
   app.use('/v1/admin/feature-flags', authRequired, adminFeatureFlagsRoutes);
   app.use('/v1/health', authRequired, healthRoutes);

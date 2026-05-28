@@ -20,6 +20,7 @@
     "test:integration": "RUN_INTEGRATION_TESTS=true vitest run tests/integration.api.test.ts"
   },
   "dependencies": {
+    "@dimfu/recipe-scraper": "^0.3.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "helmet": "^8.1.0",
