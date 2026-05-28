@@ -139,10 +139,12 @@ struct FocalWheelPicker: View {
     }
 
     private func opacity(absDelta: CGFloat) -> Double {
-        // 1.0 at centre, 0 by distance 2.5. Quadratic ease-out keeps adjacent
-        // rows readable while making the falloff at the edges feel natural.
+        // 1.0 at centre, then fade non-selected rows an extra 20% so the
+        // selected value is easier to identify at rest and while scrolling.
         let t = min(Double(absDelta) / 2.5, 1.0)
-        return 1.0 - t * t
+        let baseOpacity = 1.0 - t * t
+        let nonCenterFade = 1.0 - min(Double(absDelta), 1.0) * 0.20
+        return baseOpacity * nonCenterFade
     }
 
     private func blurRadius(absDelta: CGFloat) -> CGFloat {

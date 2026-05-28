@@ -3,6 +3,8 @@ import SwiftUI
 import UIKit
 
 struct MainLoggingBottomDock: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let shouldShowSyncExceptionPill: Bool
     let syncStatusTitle: String
     let syncStatusExplanation: String
@@ -77,6 +79,28 @@ struct MainLoggingBottomDock: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
+        .background(alignment: .bottom) {
+            dockBackdrop
+        }
+    }
+
+    private var dockSurfaceColor: Color {
+        colorScheme == .dark ? AppColor.shellBackgroundBottom : Color(uiColor: .systemBackground)
+    }
+
+    private var dockBackdrop: some View {
+        LinearGradient(
+            colors: [
+                dockSurfaceColor.opacity(0),
+                dockSurfaceColor.opacity(isKeyboardVisible ? 0.94 : 0.72),
+                dockSurfaceColor.opacity(isKeyboardVisible ? 1.0 : 0.92)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: shouldShowSyncExceptionPill ? 148 : 112)
+        .frame(maxWidth: .infinity)
+        .allowsHitTesting(false)
     }
 
     private var syncStatusPill: some View {
@@ -238,8 +262,8 @@ struct MainLoggingBottomDock: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(0.20 * adjustedTintStrength),
-                                color.opacity(0.09 * adjustedTintStrength)
+                                dockSurfaceColor,
+                                dockSurfaceColor
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -247,10 +271,37 @@ struct MainLoggingBottomDock: View {
                     )
                     .overlay(
                         Circle()
-                            .stroke(color.opacity(0.34 * adjustedTintStrength), lineWidth: 1)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        color.opacity(0.28 * adjustedTintStrength),
+                                        color.opacity(0.16 * adjustedTintStrength)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(color.opacity(0.40 * adjustedTintStrength), lineWidth: 1)
                     )
                     .shadow(color: color.opacity(0.12 * adjustedTintStrength), radius: 7, y: 3)
                     .frame(width: dockCircleSize, height: dockCircleSize)
+
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.08 : 0.32),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .center
+                        )
+                    )
+                    .frame(width: dockCircleSize, height: dockCircleSize)
+                    .allowsHitTesting(false)
 
                 Image(systemName: systemImage)
                     .font(.system(size: dockIconSize, weight: .bold))
