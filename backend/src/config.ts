@@ -80,6 +80,18 @@ export const config = {
   geminiFlashModel: process.env.GEMINI_FLASH_MODEL || 'gemini-3.1-flash-lite',
   geminiFlashLiteModel: process.env.GEMINI_FLASH_LITE_MODEL || 'gemini-3.1-flash-lite',
   geminiTimeoutMs: integerWithDefault('GEMINI_TIMEOUT_MS', 20_000),
+  groqApiKey: process.env.GROQ_API_KEY || '',
+  groqApiBaseUrl: process.env.GROQ_API_BASE_URL || 'https://api.groq.com/openai/v1',
+  groqAudioTranscriptionModel: process.env.GROQ_AUDIO_TRANSCRIPTION_MODEL || 'whisper-large-v3-turbo',
+  recipeAudioImportEnabled: booleanWithDefault('RECIPE_AUDIO_IMPORT_ENABLED', true),
+  // Gemini structuring + de-noise pass over imported recipe drafts. Default
+  // OFF: enabling it changes the live import path (adds an LLM call) and keeps
+  // existing hermetic import tests from reaching the network. Flip to true via
+  // env to enable in an environment that has a Gemini key. Measured mean
+  // +19.5 quality with zero regressions (see recipe:clean-eval).
+  recipeCleanupEnabled: booleanWithDefault('RECIPE_CLEANUP_ENABLED', false),
+  recipeAudioMaxBytes: integerWithDefault('RECIPE_AUDIO_MAX_BYTES', 25_000_000),
+  recipeAudioTranscriptionTimeoutMs: integerWithDefault('RECIPE_AUDIO_TRANSCRIPTION_TIMEOUT_MS', 45_000),
   usdaApiKey: process.env.USDA_API_KEY || process.env.USDA_FDC_API_KEY || '',
   usdaApiBaseUrl: process.env.USDA_API_BASE_URL || 'https://api.nal.usda.gov/fdc/v1',
   usdaTimeoutMs: integerWithDefault('USDA_TIMEOUT_MS', 8_000),
@@ -99,6 +111,14 @@ export const config = {
   parseRateLimitEnabled: booleanWithDefault('PARSE_RATE_LIMIT_ENABLED', true),
   parseRateLimitWindowMs: integerWithDefault('PARSE_RATE_LIMIT_WINDOW_MS', 60_000),
   parseRateLimitMaxRequests: integerWithDefault('PARSE_RATE_LIMIT_MAX_REQUESTS', 60),
+  // Recipe import is far more expensive than parse (outbound fetch + a paid
+  // Groq transcription for the audio lane), so it gets its own, tighter
+  // per-user limits keyed by lane.
+  recipeRateLimitEnabled: booleanWithDefault('RECIPE_RATE_LIMIT_ENABLED', true),
+  recipeRateLimitWindowMs: integerWithDefault('RECIPE_RATE_LIMIT_WINDOW_MS', 60_000),
+  recipeUrlImportRateLimitMax: integerWithDefault('RECIPE_URL_IMPORT_RATE_LIMIT_MAX', 12),
+  recipeAudioImportRateLimitMax: integerWithDefault('RECIPE_AUDIO_IMPORT_RATE_LIMIT_MAX', 6),
+  recipeSaveRateLimitMax: integerWithDefault('RECIPE_SAVE_RATE_LIMIT_MAX', 40),
   geminiCircuitBreakerEnabled: booleanWithDefault('GEMINI_CIRCUIT_BREAKER_ENABLED', true),
   geminiCircuitBreakerConsecutive429: integerWithDefault('GEMINI_CIRCUIT_BREAKER_CONSECUTIVE_429', 5),
   geminiCircuitBreakerCooldownMs: integerWithDefault('GEMINI_CIRCUIT_BREAKER_COOLDOWN_MS', 20_000),

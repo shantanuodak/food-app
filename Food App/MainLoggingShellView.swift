@@ -42,6 +42,7 @@ struct MainLoggingShellView: View {
     @State var queuedParseRowIDs: [UUID] = []
     @State var inFlightParseSnapshot: InFlightParseSnapshot?
     @State var pendingFollowupRequested = false
+    @State var pendingFollowupNormalizedRowTextByID: [UUID: String] = [:]
     @State var latestQueuedNoteText: String?
     @State var autoSaveTask: Task<Void, Never>?
     @State var unresolvedRetryTask: Task<Void, Never>?
@@ -141,6 +142,7 @@ struct MainLoggingShellView: View {
     @State var isNutritionSummaryPresented = false
     @State var isProgressChartsPresented = false
     @State var isSavedMealsPresented = false
+    @State var isRecipesPresented = false
     @State var isFoodStoryPresented = false
     @State var isLoggingTipsPresented = false
     /// Bottom sheet popup that nudges the user toward Logging Tips when a

@@ -3,6 +3,8 @@ import SwiftUI
 import UIKit
 
 struct MainLoggingBottomDock: View {
+    @Environment(\.colorScheme) private var colorScheme
+
     let shouldShowSyncExceptionPill: Bool
     let syncStatusTitle: String
     let syncStatusExplanation: String
@@ -77,6 +79,28 @@ struct MainLoggingBottomDock: View {
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 16)
+        .background(alignment: .bottom) {
+            dockBackdrop
+        }
+    }
+
+    private var dockSurfaceColor: Color {
+        colorScheme == .dark ? AppColor.shellBackgroundBottom : Color(uiColor: .systemBackground)
+    }
+
+    private var dockBackdrop: some View {
+        LinearGradient(
+            colors: [
+                dockSurfaceColor.opacity(0),
+                dockSurfaceColor.opacity(isKeyboardVisible ? 0.94 : 0.72),
+                dockSurfaceColor.opacity(isKeyboardVisible ? 1.0 : 0.92)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: shouldShowSyncExceptionPill ? 148 : 112)
+        .frame(maxWidth: .infinity)
+        .allowsHitTesting(false)
     }
 
     private var syncStatusPill: some View {
@@ -238,8 +262,8 @@ struct MainLoggingBottomDock: View {
                     .fill(
                         LinearGradient(
                             colors: [
-                                color.opacity(0.20 * adjustedTintStrength),
-                                color.opacity(0.09 * adjustedTintStrength)
+                                dockSurfaceColor,
+                                dockSurfaceColor
                             ],
                             startPoint: .topLeading,
                             endPoint: .bottomTrailing
@@ -247,10 +271,37 @@ struct MainLoggingBottomDock: View {
                     )
                     .overlay(
                         Circle()
-                            .stroke(color.opacity(0.34 * adjustedTintStrength), lineWidth: 1)
+                            .fill(
+                                LinearGradient(
+                                    colors: [
+                                        color.opacity(0.28 * adjustedTintStrength),
+                                        color.opacity(0.16 * adjustedTintStrength)
+                                    ],
+                                    startPoint: .topLeading,
+                                    endPoint: .bottomTrailing
+                                )
+                            )
+                    )
+                    .overlay(
+                        Circle()
+                            .stroke(color.opacity(0.40 * adjustedTintStrength), lineWidth: 1)
                     )
                     .shadow(color: color.opacity(0.12 * adjustedTintStrength), radius: 7, y: 3)
                     .frame(width: dockCircleSize, height: dockCircleSize)
+
+                Circle()
+                    .fill(
+                        LinearGradient(
+                            colors: [
+                                .white.opacity(colorScheme == .dark ? 0.08 : 0.32),
+                                .clear
+                            ],
+                            startPoint: .topLeading,
+                            endPoint: .center
+                        )
+                    )
+                    .frame(width: dockCircleSize, height: dockCircleSize)
+                    .allowsHitTesting(false)
 
                 Image(systemName: systemImage)
                     .font(.system(size: dockIconSize, weight: .bold))
@@ -288,13 +339,7 @@ struct MainLoggingTopHeaderStrip: View {
             } label: {
                 HomeGreetingChip(firstName: firstName)
             }
-            // 2026-05-23: matching the date chip on the right — glassy
-            // capsule with the same 14h × 8v padding. The translucent
-            // background keeps the greeting readable when content scrolls
-            // beneath it, and the symmetric pill treatment makes the top
-            // strip read as two paired controls instead of one floating
-            // text label + a pill.
-            .buttonStyle(LiquidGlassCapsuleButtonStyle())
+            .buttonStyle(.plain)
             .accessibilityLabel(Text("Open profile"))
 
             Spacer(minLength: 0)
@@ -349,11 +394,20 @@ struct MainLoggingTopHeaderStrip: View {
                 AppHaptics.selection()
                 isCalendarPresented = true
             } label: {
-                Text(dateTitle)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(colorScheme == .dark ? .white.opacity(0.96) : Color.primary.opacity(0.80))
+                HStack(spacing: 4) {
+                    Text(dateTitle)
+                        .font(.system(size: 16, weight: .semibold, design: .rounded))
+                        .lineLimit(1)
+
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(dateTextColor.opacity(0.48))
+                }
+                .foregroundStyle(dateTextColor)
+                .frame(minHeight: 44, alignment: .center)
+                .contentShape(Rectangle())
             }
-            .buttonStyle(LiquidGlassCapsuleButtonStyle())
+            .buttonStyle(.plain)
             .accessibilityLabel(Text("Select date"))
         }
         .padding(.horizontal, 10)
@@ -376,6 +430,12 @@ struct MainLoggingTopHeaderStrip: View {
         }
     }
 
+    private var dateTextColor: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.94)
+            : Color.primary.opacity(0.72)
+    }
+
     /// 2026-05-23: implicit `.animation(_, value:)` + `repeatForever` was
     /// unreliable when the bound value only flipped once on appear — the
     /// loop never started. Triggering the autoreversing animation via an
@@ -389,6 +449,7 @@ struct MainLoggingTopHeaderStrip: View {
             }
         }
     }
+
 }
 
 private struct FoodStoryHeaderPreviewIcon: View {

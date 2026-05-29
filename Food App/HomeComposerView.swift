@@ -298,6 +298,7 @@ struct HM01LogComposerSection: View {
                     rows[index].hydrationInputUnit = nil
                     rows[index].hydrationConfidence = nil
                     rows[index].hydrationLogId = nil
+                    rows[index].mealType = nil
                     return
                 }
 
@@ -397,6 +398,7 @@ struct HM01LogComposerSection: View {
         row.hydrationInputUnit = nil
         row.hydrationConfidence = nil
         row.hydrationLogId = nil
+        row.mealType = nil
     }
 
     private func indexForRowID(_ rowID: UUID) -> Int? {

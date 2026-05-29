@@ -1,0 +1,458 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Onboarding Account Redesign</title>
+    <style>
+      :root {
+        --bg-1: #efe6d7;
+        --bg-2: #f8f4ed;
+        --ink: #1d1612;
+        --muted: rgba(42, 28, 20, 0.62);
+        --line: rgba(82, 56, 37, 0.10);
+        --glass: rgba(255, 255, 255, 0.36);
+        --glass-strong: rgba(255, 255, 255, 0.54);
+        --accent: #ff8f4c;
+        --accent-soft: rgba(255, 143, 76, 0.24);
+        --shadow: 0 28px 80px rgba(78, 52, 33, 0.18);
+        --radius-xl: 36px;
+        --radius-lg: 26px;
+        --radius-md: 20px;
+        --font-display: "Iowan Old Style", "Palatino Linotype", serif;
+        --font-ui: "SF Pro Display", "Avenir Next", "Segoe UI", sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        overflow: hidden;
+        color: var(--ink);
+        font-family: var(--font-ui);
+        background:
+          radial-gradient(circle at 18% 22%, rgba(255, 255, 255, 0.92), transparent 18rem),
+          radial-gradient(circle at 82% 20%, rgba(255, 143, 76, 0.22), transparent 22rem),
+          radial-gradient(circle at 70% 78%, rgba(255, 224, 196, 0.82), transparent 20rem),
+          linear-gradient(180deg, var(--bg-1), var(--bg-2));
+      }
+
+      .phone {
+        width: min(100%, 390px);
+        min-height: 844px;
+        position: relative;
+        overflow: hidden;
+        border-radius: 42px;
+        border: 1px solid rgba(255, 255, 255, 0.52);
+        box-shadow: 0 40px 120px rgba(77, 51, 33, 0.18);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.22), rgba(255, 255, 255, 0.06)),
+          linear-gradient(180deg, rgba(255, 249, 242, 0.72), rgba(251, 247, 241, 0.82));
+        backdrop-filter: blur(24px) saturate(140%);
+      }
+
+      .orb,
+      .orb::after {
+        position: absolute;
+        border-radius: 999px;
+        content: "";
+        filter: blur(6px);
+      }
+
+      .orb.top {
+        width: 240px;
+        height: 240px;
+        top: -52px;
+        right: -48px;
+        background: radial-gradient(circle, rgba(255, 143, 76, 0.44), transparent 68%);
+        animation: driftA 12s ease-in-out infinite;
+      }
+
+      .orb.top::after {
+        inset: 34px;
+        background: radial-gradient(circle, rgba(255, 255, 255, 0.58), transparent 72%);
+      }
+
+      .orb.bottom {
+        width: 220px;
+        height: 220px;
+        left: -72px;
+        bottom: 126px;
+        background: radial-gradient(circle, rgba(250, 210, 172, 0.68), transparent 68%);
+        animation: driftB 14s ease-in-out infinite;
+      }
+
+      .screen {
+        position: relative;
+        z-index: 1;
+        min-height: 844px;
+        padding: 24px 22px 28px;
+        display: flex;
+        flex-direction: column;
+      }
+
+      .topbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
+      .back {
+        width: 44px;
+        height: 44px;
+        display: grid;
+        place-items: center;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.32);
+        border: 1px solid rgba(255, 255, 255, 0.42);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.65);
+        backdrop-filter: blur(18px);
+        font-size: 22px;
+      }
+
+      .step {
+        padding: 9px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.28);
+        border: 1px solid rgba(255, 255, 255, 0.42);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.62);
+        backdrop-filter: blur(18px);
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .hero {
+        margin-top: 54px;
+        text-align: center;
+      }
+
+      .hero-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.30);
+        border: 1px solid rgba(255, 255, 255, 0.46);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72);
+        backdrop-filter: blur(18px);
+        color: #8c532f;
+        font-size: 12px;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .pulse {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 0 0 rgba(255, 143, 76, 0.42);
+        animation: pulse 2.2s ease-out infinite;
+      }
+
+      h1 {
+        margin: 22px 0 10px;
+        font-family: var(--font-display);
+        font-size: 46px;
+        line-height: 0.96;
+        letter-spacing: -0.05em;
+        font-weight: 500;
+      }
+
+      h1 em {
+        font-style: italic;
+        color: #7f4e30;
+      }
+
+      .subhead {
+        margin: 0 auto;
+        max-width: 260px;
+        font-size: 16px;
+        line-height: 1.45;
+        color: var(--muted);
+      }
+
+      .glass-stack {
+        position: relative;
+        margin-top: 42px;
+        height: 250px;
+      }
+
+      .glass-card {
+        position: absolute;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 100%;
+        border-radius: 32px;
+        border: 1px solid rgba(255, 255, 255, 0.46);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.72),
+          0 20px 60px rgba(83, 55, 35, 0.12);
+        backdrop-filter: blur(28px) saturate(145%);
+        -webkit-backdrop-filter: blur(28px) saturate(145%);
+        overflow: hidden;
+      }
+
+      .glass-card.back-a {
+        top: 18px;
+        width: 88%;
+        height: 164px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0.10));
+        transform: translateX(-50%) rotate(-7deg);
+      }
+
+      .glass-card.back-b {
+        top: 8px;
+        width: 92%;
+        height: 182px;
+        background: linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.14));
+        transform: translateX(-50%) rotate(6deg);
+      }
+
+      .glass-card.front {
+        top: 42px;
+        padding: 18px 18px 20px;
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0.18)),
+          linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+      }
+
+      .front::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background:
+          linear-gradient(135deg, rgba(255, 255, 255, 0.48), transparent 28%),
+          radial-gradient(circle at 80% 18%, rgba(255, 143, 76, 0.18), transparent 30%);
+        pointer-events: none;
+      }
+
+      .front-row {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .front-title {
+        font-size: 14px;
+        font-weight: 700;
+        letter-spacing: 0.02em;
+      }
+
+      .front-mini {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 700;
+      }
+
+      .preview-line {
+        position: relative;
+        margin-top: 18px;
+        height: 14px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.34);
+        overflow: hidden;
+      }
+
+      .preview-line::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 62%;
+        border-radius: 999px;
+        background: linear-gradient(90deg, rgba(255, 255, 255, 0.76), rgba(255, 143, 76, 0.42));
+      }
+
+      .preview-line.short::after {
+        width: 40%;
+      }
+
+      .preview-actions {
+        position: relative;
+        display: flex;
+        gap: 10px;
+        margin-top: 18px;
+      }
+
+      .preview-pill {
+        padding: 10px 12px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.34);
+        border: 1px solid rgba(255, 255, 255, 0.36);
+        font-size: 12px;
+        font-weight: 700;
+        color: rgba(29, 22, 18, 0.78);
+      }
+
+      .cta-group {
+        margin-top: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+      }
+
+      .cta {
+        min-height: 68px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        padding: 0 18px;
+        border-radius: 24px;
+        border: 1px solid rgba(255, 255, 255, 0.48);
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.20)),
+          linear-gradient(135deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.04));
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.76),
+          0 18px 44px rgba(85, 58, 40, 0.12);
+        backdrop-filter: blur(24px) saturate(145%);
+        -webkit-backdrop-filter: blur(24px) saturate(145%);
+      }
+
+      .cta.primary {
+        background:
+          linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(255, 255, 255, 0.12)),
+          linear-gradient(135deg, rgba(255, 143, 76, 0.32), rgba(255, 255, 255, 0.05) 62%);
+      }
+
+      .cta-icon {
+        width: 38px;
+        height: 38px;
+        flex: none;
+        display: grid;
+        place-items: center;
+        border-radius: 14px;
+        background: rgba(255, 255, 255, 0.32);
+        border: 1px solid rgba(255, 255, 255, 0.32);
+        font-size: 18px;
+        font-weight: 700;
+      }
+
+      .cta-copy strong {
+        display: block;
+        font-size: 17px;
+        font-weight: 700;
+      }
+
+      .cta-copy span {
+        display: block;
+        margin-top: 3px;
+        font-size: 12px;
+        color: var(--muted);
+        font-weight: 600;
+      }
+
+      .footer-note {
+        margin-top: 14px;
+        text-align: center;
+        font-size: 13px;
+        color: var(--muted);
+      }
+
+      @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(255, 143, 76, 0.40); }
+        70% { box-shadow: 0 0 0 14px rgba(255, 143, 76, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 143, 76, 0); }
+      }
+
+      @keyframes driftA {
+        0%, 100% { transform: translate3d(0, 0, 0); }
+        50% { transform: translate3d(-10px, 12px, 0); }
+      }
+
+      @keyframes driftB {
+        0%, 100% { transform: translate3d(0, 0, 0); }
+        50% { transform: translate3d(14px, -10px, 0); }
+      }
+
+      @media (max-width: 420px) {
+        body {
+          padding: 0;
+        }
+
+        .phone {
+          width: 100%;
+          min-height: 100vh;
+          border-radius: 0;
+        }
+
+        .screen {
+          min-height: 100vh;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="phone">
+      <div class="orb top"></div>
+      <div class="orb bottom"></div>
+
+      <section class="screen">
+        <div class="topbar">
+          <div class="back" aria-hidden="true">‹</div>
+          <div class="step">Final Step</div>
+        </div>
+
+        <section class="hero">
+          <div class="hero-badge">
+            <span class="pulse"></span>
+            Start Logging
+          </div>
+
+          <h1>Connect to <em>keep going</em></h1>
+          <p class="subhead">Save your setup and unlock your first log.</p>
+        </section>
+
+        <section class="glass-stack" aria-hidden="true">
+          <div class="glass-card back-a"></div>
+          <div class="glass-card back-b"></div>
+          <div class="glass-card front">
+            <div class="front-row">
+              <div class="front-title">Food App</div>
+              <div class="front-mini">Ready</div>
+            </div>
+            <div class="preview-line"></div>
+            <div class="preview-line short"></div>
+            <div class="preview-actions">
+              <div class="preview-pill">Photo</div>
+              <div class="preview-pill">Voice</div>
+              <div class="preview-pill">Text</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="cta-group">
+          <button class="cta primary" type="button">
+            <div class="cta-icon">G</div>
+            <div class="cta-copy">
+              <strong>Continue with Google</strong>
+              <span>Fastest way to get started</span>
+            </div>
+          </button>
+
+          <button class="cta" type="button">
+            <div class="cta-icon"></div>
+            <div class="cta-copy">
+              <strong>Continue with Apple</strong>
+              <span>Private and seamless</span>
+            </div>
+          </button>
+        </section>
+
+        <div class="footer-note">Takes a few seconds.</div>
+      </section>
+    </main>
+  </body>
+</html>

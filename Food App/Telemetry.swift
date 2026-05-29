@@ -110,6 +110,7 @@ final class AuthDiagnosticTelemetry {
 
     private let queueKey = "app.auth.diagnostic.events.v1"
     private let maxQueuedEvents = 80
+    private let maxFlushBatchSize = 50
     private let defaults: UserDefaults
     private let encoder = JSONEncoder()
     private let decoder = JSONDecoder()
@@ -184,15 +185,19 @@ final class AuthDiagnosticTelemetry {
         }
 
         do {
-            _ = try await apiClient.recordAuthDiagnosticEvents(
-                AuthDiagnosticBatchRequest(events: events.map { $0.requestPayload() })
-            )
-            let sentIds = Set(events.map(\.clientEventId))
-            locked {
-                let remaining = loadQueuedEventsLocked().filter { !sentIds.contains($0.clientEventId) }
-                saveQueuedEventsLocked(remaining)
-                isFlushing = false
+            for batchStart in stride(from: 0, to: events.count, by: maxFlushBatchSize) {
+                let batch = Array(events[batchStart..<min(batchStart + maxFlushBatchSize, events.count)])
+                _ = try await apiClient.recordAuthDiagnosticEvents(
+                    AuthDiagnosticBatchRequest(events: batch.map { $0.requestPayload() })
+                )
+
+                let sentIds = Set(batch.map(\.clientEventId))
+                locked {
+                    let remaining = loadQueuedEventsLocked().filter { !sentIds.contains($0.clientEventId) }
+                    saveQueuedEventsLocked(remaining)
+                }
             }
+            locked { isFlushing = false }
         } catch {
             locked { isFlushing = false }
             NSLog("[auth_diagnostic_flush_failed] %@", error.localizedDescription)

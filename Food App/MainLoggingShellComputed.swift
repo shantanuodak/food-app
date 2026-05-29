@@ -2,6 +2,10 @@ import SwiftUI
 import Foundation
 
 extension MainLoggingShellView {
+    var bottomDockScrollClearance: CGFloat {
+        shouldShowSyncExceptionPill ? 132 : 92
+    }
+
     var bottomActionDock: some View {
         MainLoggingBottomDock(
             shouldShowSyncExceptionPill: shouldShowSyncExceptionPill,

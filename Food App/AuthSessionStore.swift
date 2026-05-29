@@ -17,6 +17,7 @@ enum AuthSessionStoreError: LocalizedError {
     case encodingFailed
     case decodingFailed
     case keychain(OSStatus)
+    case staleSession
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +27,8 @@ enum AuthSessionStoreError: LocalizedError {
             return "Failed to decode stored auth session."
         case let .keychain(status):
             return "Failed to access secure auth storage (\(status))."
+        case .staleSession:
+            return "Stored auth session changed before the recovered session could be saved."
         }
     }
 }
@@ -33,9 +36,18 @@ enum AuthSessionStoreError: LocalizedError {
 final class AuthSessionStore: ObservableObject {
     @Published private(set) var session: AuthSession?
     private(set) var lastLoadStatus: String = "not_loaded"
+    private(set) var lastLoadStatusCode: OSStatus?
 
     private let serviceName: String
     private let accountName = "auth.session.v1"
+
+    /// Process-wide shared store. The main app, Siri, notification, and
+    /// QuickCamera code paths must all read/write ONE in-memory session.
+    /// Multiple stores each holding their own copy were the root of the
+    /// overnight-logout race: each refreshed the same rotating Supabase
+    /// token independently, the first rotated it, and the rest hit
+    /// "Refresh Token Already Used" and cleared the session.
+    static let shared = AuthSessionStore()
 
     init(serviceName: String = Bundle.main.bundleIdentifier ?? "FoodApp") {
         self.serviceName = serviceName
@@ -48,14 +60,36 @@ final class AuthSessionStore: ObservableObject {
         }
 
         let query = keychainQuery()
-        SecItemDelete(query as CFDictionary)
+        let updatedAttributes: [String: Any] = [
+            kSecValueData as String: data
+        ]
 
-        var attributes = query
-        attributes[kSecValueData as String] = data
+        let updateStatus = SecItemUpdate(query as CFDictionary, updatedAttributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            self.session = session
+            return
+        }
 
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw AuthSessionStoreError.keychain(status)
+        guard updateStatus == errSecItemNotFound else {
+            throw AuthSessionStoreError.keychain(updateStatus)
+        }
+
+        var addAttributes = query
+        addAttributes[kSecValueData as String] = data
+        addAttributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+        let addStatus = SecItemAdd(addAttributes as CFDictionary, nil)
+        if addStatus == errSecDuplicateItem {
+            let retryStatus = SecItemUpdate(query as CFDictionary, updatedAttributes as CFDictionary)
+            guard retryStatus == errSecSuccess else {
+                throw AuthSessionStoreError.keychain(retryStatus)
+            }
+            self.session = session
+            return
+        }
+
+        guard addStatus == errSecSuccess else {
+            throw AuthSessionStoreError.keychain(addStatus)
         }
 
         self.session = session
@@ -64,6 +98,51 @@ final class AuthSessionStore: ObservableObject {
     func clear() {
         SecItemDelete(keychainQuery() as CFDictionary)
         session = nil
+    }
+
+    func replaceInMemory(_ session: AuthSession) {
+        self.session = session
+    }
+
+    func storeRecovered(_ session: AuthSession, replacing expectedSession: AuthSession) throws {
+        let currentSession = loadSession()
+
+        // Idempotent: the freshly rotated session is already persisted — e.g.
+        // the Supabase authStateChanges mirror (or a joined single-flight
+        // refresh) wrote it first. Treat as success instead of throwing
+        // staleSession, otherwise a refresh that actually SUCCEEDED would
+        // surface to its caller as a failure.
+        if let currentSession,
+           currentSession.accessToken == session.accessToken,
+           currentSession.refreshToken == session.refreshToken {
+            self.session = currentSession
+            return
+        }
+
+        // Otherwise require that the keychain still holds the token we
+        // refreshed from. If it holds something else entirely, the caller
+        // should reload and re-evaluate rather than clobber it.
+        guard let currentSession,
+              currentSession.accessToken == expectedSession.accessToken,
+              currentSession.refreshToken == expectedSession.refreshToken else {
+            throw AuthSessionStoreError.staleSession
+        }
+
+        try store(session)
+    }
+
+    var shouldRetryTransientLoadFailure: Bool {
+        guard session == nil, let status = lastLoadStatusCode else { return false }
+        return Self.isTransientKeychainStatus(status)
+    }
+
+    @discardableResult
+    func reloadSessionFromKeychain() -> AuthSession? {
+        let loadedSession = loadSession()
+        if let loadedSession {
+            session = loadedSession
+        }
+        return loadedSession
     }
 
     private func loadSession() -> AuthSession? {
@@ -76,20 +155,24 @@ final class AuthSessionStore: ObservableObject {
 
         if status == errSecItemNotFound {
             lastLoadStatus = "not_found"
+            lastLoadStatusCode = status
             return nil
         }
 
         guard status == errSecSuccess, let data = item as? Data else {
             lastLoadStatus = "keychain_status_\(status)"
+            lastLoadStatusCode = status
             return nil
         }
 
         guard let decoded = try? JSONDecoder().decode(AuthSession.self, from: data) else {
             lastLoadStatus = "decode_failed"
+            lastLoadStatusCode = nil
             return nil
         }
 
         lastLoadStatus = "loaded"
+        lastLoadStatusCode = status
         return decoded
     }
 
@@ -99,5 +182,9 @@ final class AuthSessionStore: ObservableObject {
             kSecAttrService as String: serviceName,
             kSecAttrAccount as String: accountName
         ]
+    }
+
+    private static func isTransientKeychainStatus(_ status: OSStatus) -> Bool {
+        status == errSecInteractionNotAllowed || status == errSecNotAvailable
     }
 }

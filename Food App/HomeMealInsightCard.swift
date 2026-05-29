@@ -114,8 +114,11 @@ private struct FloatingInsightCard: View {
                 Text(subtitleSentence)
                     .font(.system(size: 13, weight: .regular))
                     .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .layoutPriority(1)
             .accessibilityElement(children: .combine)
             .accessibilityLabel(Text("Quick allergy check. \(subtitleSentence)"))
 
@@ -266,7 +269,7 @@ private struct FloatingInsightCard: View {
             return "This may include \(joinTerms(terms)). Worth a quick look before you move on."
         }
 
-        return "\(displayName) may include \(joinTerms(terms)). You marked \(joinTerms(terms)) as an allergy, so it may be worth a quick look."
+        return "\(displayName) may include \(joinTerms(terms)). Marked allergy: \(joinTerms(terms))."
     }
 
     private func allergyTerm(_ key: String) -> String? {

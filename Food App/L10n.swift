@@ -60,14 +60,9 @@ enum L10n {
     static let onboardingSplashExistingAccountButton = tr("onboarding.splash.existing_account_button", "Sign in")
 
     // MARK: - OB08 Account screen
-    static let onboardingAccountSubtitle = tr("onboarding.account.subtitle", "Save your progress.\nUnlock your plan.")
-    static let onboardingAccountFeatureLoggingTitle = tr("onboarding.account.feature.logging.title", "AI-powered logging")
-    static let onboardingAccountFeatureLoggingSubtitle = tr("onboarding.account.feature.logging.subtitle", "Snap, scan, or speak — tracked instantly")
-    static let onboardingAccountFeatureProgressTitle = tr("onboarding.account.feature.progress.title", "Progress that adapts")
-    static let onboardingAccountFeatureProgressSubtitle = tr("onboarding.account.feature.progress.subtitle", "Your plan updates as your results do")
-    static let onboardingAccountFeatureSecureTitle = tr("onboarding.account.feature.secure.title", "Private & secure")
-    static let onboardingAccountFeatureSecureSubtitle = tr("onboarding.account.feature.secure.subtitle", "Your data is encrypted and only yours")
-    static let onboardingAccountSocialProof = tr("onboarding.account.social_proof", "Trusted by 5,000+ people")
+    static let onboardingAccountBadge = tr("onboarding.account.badge", "Start logging")
+    static let onboardingAccountTitle = tr("onboarding.account.title", "Connect to keep going")
+    static let onboardingAccountTitleAccent = tr("onboarding.account.title_accent", "keep going")
     static let onboardingAccountGoogleLabel = tr("onboarding.account.button.google", "Google")
     static let onboardingAccountAppleLabel = tr("onboarding.account.button.apple", "Apple")
     static let onboardingAccountAppleUnavailable = tr("onboarding.account.apple_unavailable", "Apple sign-in is coming soon. Use Google for now.")

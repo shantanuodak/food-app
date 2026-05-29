@@ -1,9 +1,12 @@
 import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 import type { PoolClient } from 'pg';
 import getRecipeData from '@dimfu/recipe-scraper';
 import { pool } from '../db.js';
+import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import { ensureUserExists } from './userService.js';
+import { cleanupRecipeDraft } from './recipeCleanupService.js';
 
 const SCRAPE_TIMEOUT_MS = 8000;
 const READER_TIMEOUT_MS = 20000;
@@ -290,9 +293,114 @@ export function assertSafeRecipeUrl(rawUrl: string): SafeRecipeUrl {
   };
 }
 
+type HostResolver = (hostname: string) => Promise<Array<{ address: string; family: number }>>;
+
+const defaultHostResolver: HostResolver = (hostname) => lookup(hostname, { all: true });
+
+// Active resolver used by internal callers (e.g. fetchRecipeHtml). Overridable
+// so unit tests stay hermetic (no real DNS) — see setRecipeHostResolverForTests.
+let activeHostResolver: HostResolver = defaultHostResolver;
+
+export function setRecipeHostResolverForTests(resolver: HostResolver | null): void {
+  activeHostResolver = resolver ?? defaultHostResolver;
+}
+
+// SSRF guard for the actual network fetch. assertSafeRecipeUrl only inspects
+// the URL string, so a hostname that RESOLVES to an internal address (an
+// attacker pointing evil.example at 169.254.169.254 / 10.x / 127.x, i.e. DNS
+// rebinding) would otherwise sail through. Resolve the host and reject if ANY
+// returned address is private/loopback/link-local/reserved. The resolver is
+// injectable for tests.
+//
+// Caveat: this validates-then-fetches, so a sub-second rebind could still flip
+// the address between our lookup and fetch's own lookup. Fully closing that
+// needs connection pinning (a custom `lookup` on an http/https agent, or an
+// undici dispatcher) — tracked as a follow-up. This closes the practical,
+// reported hostname->internal hole.
+export async function assertResolvedHostIsPublic(
+  hostname: string,
+  resolver: HostResolver = activeHostResolver
+): Promise<void> {
+  const host = normalizeHostname(hostname);
+  // Literal IPs were already validated by assertSafeRecipeUrl.
+  if (isIP(host) !== 0) {
+    return;
+  }
+
+  let records: Array<{ address: string; family: number }>;
+  try {
+    records = await resolver(host);
+  } catch {
+    throw new ApiError(502, 'RECIPE_IMPORT_FETCH_FAILED', 'Could not resolve the recipe host');
+  }
+
+  if (!records || records.length === 0) {
+    throw new ApiError(400, 'RECIPE_IMPORT_UNSAFE_URL', 'Recipe URL must be a public web page');
+  }
+
+  for (const record of records) {
+    const isPrivate = record.family === 6 ? isPrivateIpv6(record.address) : isPrivateIpv4(record.address);
+    if (isPrivate) {
+      throw new ApiError(400, 'RECIPE_IMPORT_UNSAFE_URL', 'Recipe URL resolves to a non-public address');
+    }
+  }
+}
+
+// Stream the response body with a hard byte cap so a missing/dishonest
+// content-length or a chunked response can't OOM the process by buffering an
+// unbounded body. Aborts the in-flight request the moment the cap is exceeded.
+// Counts BYTES (not UTF-16 code units, which is what String.length returns).
+export async function readBodyWithByteCap(
+  response: Response,
+  maxBytes: number,
+  controller: AbortController
+): Promise<string> {
+  const body = response.body;
+  if (!body) {
+    const fallback = await response.text();
+    if (Buffer.byteLength(fallback, 'utf8') > maxBytes) {
+      controller.abort();
+      throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
+    }
+    return fallback;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        controller.abort();
+        throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Reader already released/closed (e.g. after abort) — nothing to do.
+    }
+  }
+
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 async function fetchRecipeHtml(startUrl: string): Promise<RecipeHtmlPayload> {
   let currentUrl = startUrl;
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    // Re-resolve on every hop: the initial host AND every redirect target must
+    // resolve to a public address before we connect.
+    await assertResolvedHostIsPublic(new URL(currentUrl).hostname);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS);
     let response: Response;
@@ -339,15 +447,14 @@ async function fetchRecipeHtml(startUrl: string): Promise<RecipeHtmlPayload> {
       throw new ApiError(415, 'RECIPE_IMPORT_UNSUPPORTED_CONTENT', 'Recipe URL must point to an HTML page');
     }
 
+    // Fail fast on an honest content-length, then stream-cap the body so a
+    // missing/lying header or a chunked response can't OOM us.
     const contentLength = Number(response.headers.get('content-length') ?? '0');
     if (Number.isFinite(contentLength) && contentLength > MAX_HTML_BYTES) {
       throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
     }
 
-    const html = await response.text();
-    if (html.length > MAX_HTML_BYTES) {
-      throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
-    }
+    const html = await readBodyWithByteCap(response, MAX_HTML_BYTES, controller);
 
     return { finalUrl: currentUrl, html };
   }
@@ -403,10 +510,7 @@ async function fetchRecipeMarkdownViaReader(sourceUrl: string): Promise<RecipeMa
     throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
   }
 
-  const markdown = await response.text();
-  if (markdown.length > MAX_MARKDOWN_BYTES) {
-    throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
-  }
+  const markdown = await readBodyWithByteCap(response, MAX_MARKDOWN_BYTES, controller);
 
   return { finalUrl: sourceUrl, markdown };
 }
@@ -1332,6 +1436,16 @@ export async function importRecipeFromUrl(input: {
 }
 
 async function importRecipeDraftFromSafeUrl(safeUrl: SafeRecipeUrl): Promise<RecipeDraft> {
+  const raw = await scrapeRawDraftFromSafeUrl(safeUrl);
+  return maybeCleanupDraft(raw);
+}
+
+/**
+ * The deterministic scrape — direct HTML + recipe-scraper, with the markdown
+ * reader fallback for bot-walled / schemaless pages. Returns the RAW draft
+ * (no LLM). Kept separate so the optional cleanup pass has a single seam.
+ */
+async function scrapeRawDraftFromSafeUrl(safeUrl: SafeRecipeUrl): Promise<RecipeDraft> {
   try {
     const { finalUrl, html } = await fetchRecipeHtml(safeUrl.url);
     const scraped = await scrapeRecipeHtml(html, finalUrl);
@@ -1354,8 +1468,41 @@ async function importRecipeDraftFromSafeUrl(safeUrl: SafeRecipeUrl): Promise<Rec
   }
 }
 
+/**
+ * Optional Gemini structuring + de-noise pass, gated by RECIPE_CLEANUP_ENABLED.
+ * The cleanup service is internally guarded (it returns the original draft on
+ * any LLM failure / empty / unusable response), and we additionally wrap the
+ * whole call so a cleanup error can NEVER turn a successful scrape into a
+ * failed import — worst case we fall back to the raw draft.
+ */
+async function maybeCleanupDraft(draft: RecipeDraft): Promise<RecipeDraft> {
+  if (!config.recipeCleanupEnabled) {
+    return draft;
+  }
+  try {
+    const { cleaned, changed, skippedReason } = await cleanupRecipeDraft(draft);
+    if (!changed && skippedReason) {
+      console.warn(`[recipeImport] cleanup skipped (${skippedReason}); using raw draft for ${draft.sourceDomain}`);
+    }
+    return cleaned;
+  } catch (error) {
+    console.warn('[recipeImport] cleanup pass threw; using raw draft', error);
+    return draft;
+  }
+}
+
 export async function importRecipeDraftForSmokeTest(url: string): Promise<RecipeDraft> {
   return importRecipeDraftFromSafeUrl(assertSafeRecipeUrl(url));
+}
+
+/**
+ * Returns the RAW (pre-cleanup) draft regardless of the RECIPE_CLEANUP_ENABLED
+ * flag. Used by the controlled before/after eval so it can score the raw
+ * scrape and the cleaned draft from the SAME fetch — eliminating the
+ * flaky-bot-wall URL-drift confound you get by toggling the flag across runs.
+ */
+export async function importRawRecipeDraftForEval(url: string): Promise<RecipeDraft> {
+  return scrapeRawDraftFromSafeUrl(assertSafeRecipeUrl(url));
 }
 
 function normalizeDraftForSave(input: SavedRecipeInput): Omit<SavedRecipeInput, 'sourceUrl'> & {

@@ -79,13 +79,27 @@ final class AuthService {
     #endif
     @MainActor private var appleSignInDelegate: AppleSignInDelegate?
 
-    /// Single-flight refresh coordinator. Ensures at most one in-flight
-    /// `supabaseClient.auth.refreshSession(refreshToken:)` exists at any
-    /// time across the four refresh entry points (validAccessToken,
-    /// refreshSessionIfNeeded, handleUnauthorizedAndAttemptRecovery,
-    /// restoreSessionIfPossible). Concurrent callers `await` the same
-    /// task and share the result.
-    private let refreshCoordinator = RefreshCoordinator()
+    /// Single-flight refresh coordinator. Ensures all concurrent refreshes
+    /// for the same refresh token share one `supabaseClient.auth.refreshSession`
+    /// task across all AuthService instances and refresh entry points.
+    private static let refreshCoordinator = RefreshCoordinator()
+
+    /// Process-wide shared instance built from the live configuration. Siri,
+    /// notifications, QuickCamera, and the main app all use THIS instance (and
+    /// its single `SupabaseClient`) so every refresh funnels through one SDK
+    /// single-flight task. Constructing a fresh `AuthService` per call was the
+    /// root of the overnight logout. Tests inject their own `AuthService`.
+    static let shared: AuthService = {
+        let configuration = AppConfiguration.live()
+        return AuthService(
+            sessionStore: AuthSessionStore.shared,
+            fallbackToken: configuration.authToken,
+            googleClientID: configuration.googleClientID,
+            googleServerClientID: configuration.googleServerClientID,
+            supabaseURL: configuration.supabaseURL,
+            supabaseAnonKey: configuration.supabaseAnonKey
+        )
+    }()
 
     init(
         sessionStore: AuthSessionStore,
@@ -109,7 +123,15 @@ final class AuthService {
                 supabaseKey: supabaseAnonKey,
                 options: SupabaseClientOptions(
                     auth: SupabaseClientOptions.AuthOptions(
-                        autoRefreshToken: false,
+                        // Let the SDK own refresh. It single-flights EVERY
+                        // refresh (auto-tick, setSession, the `session`
+                        // accessor, manual refreshSession) through one
+                        // in-flight task per client, and proactively refreshes
+                        // before expiry. Safe now that the whole app shares ONE
+                        // AuthService/SupabaseClient (see .shared) and we mirror
+                        // SDK rotations back into the keychain (see
+                        // startMirroringSupabaseAuthState).
+                        autoRefreshToken: true,
                         emitLocalSessionAsInitialSession: true
                     )
                 )
@@ -117,6 +139,7 @@ final class AuthService {
         } else {
             self.supabaseClient = nil
         }
+        startMirroringSupabaseAuthState()
         #endif
     }
 
@@ -172,10 +195,11 @@ final class AuthService {
                     )
                     return
                 }
-                if isInvalidSessionRecoveryError(error) {
-                    NSLog("[Auth] restoreSession second-attempt refresh failed (recoverable error: %@)", String(describing: error))
-                    await clearStoredSession(from: "restoreSessionIfPossible.secondAttemptRefreshFailed")
-                }
+                _ = await recoverOrClearAfterRefreshFailure(
+                    triedRefreshToken: refreshToken,
+                    error: error,
+                    origin: "restoreSessionIfPossible.secondAttemptRefreshFailed"
+                )
             }
         }
     }
@@ -254,12 +278,14 @@ final class AuthService {
                 let refreshedSession = try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
                 return refreshedSession.accessToken
             } catch {
-                if isInvalidSessionRecoveryError(error) {
-                    NSLog("[Auth] validAccessToken refresh failed (recoverable error: %@)", String(describing: error))
-                    await clearStoredSession(from: "validAccessToken.refreshFailedRecoverable")
-                    return nil
+                if let healed = await recoverOrClearAfterRefreshFailure(
+                    triedRefreshToken: refreshToken,
+                    error: error,
+                    origin: "validAccessToken.refreshFailed"
+                ) {
+                    return healed.accessToken
                 }
-                throw error
+                return nil
             }
         }
 
@@ -283,12 +309,11 @@ final class AuthService {
         do {
             return try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
         } catch {
-            if isInvalidSessionRecoveryError(error) {
-                NSLog("[Auth] refreshSessionIfNeeded failed (recoverable error: %@)", String(describing: error))
-                await clearStoredSession(from: "refreshSessionIfNeeded.refreshFailedRecoverable")
-                return nil
-            }
-            throw error
+            return await recoverOrClearAfterRefreshFailure(
+                triedRefreshToken: refreshToken,
+                error: error,
+                origin: "refreshSessionIfNeeded.refreshFailed"
+            )
         }
     }
 
@@ -303,11 +328,11 @@ final class AuthService {
             _ = try await refreshSupabaseSession(refreshToken: refreshToken, metadata: storedSession)
             return true
         } catch {
-            if isInvalidSessionRecoveryError(error) {
-                NSLog("[Auth] handleUnauthorizedAndAttemptRecovery refresh failed (recoverable error: %@)", String(describing: error))
-                await clearStoredSession(from: "handleUnauthorizedAndAttemptRecovery.refreshFailedRecoverable")
-            }
-            return false
+            return (await recoverOrClearAfterRefreshFailure(
+                triedRefreshToken: refreshToken,
+                error: error,
+                origin: "handleUnauthorizedAndAttemptRecovery.refreshFailed"
+            )) != nil
         }
     }
 
@@ -714,6 +739,44 @@ final class AuthService {
             message.contains("revoked")
     }
 
+    // 2026-05-28: A failed refresh used to clear the session immediately on any
+    // "recoverable" error — including "Refresh Token Already Used", which is
+    // precisely the lost-race signal, NOT a dead session. That bounced users to
+    // sign-in. Now, BEFORE clearing, reload the keychain: if another flow (or
+    // the SDK's own auto-refresh) already rotated to a fresh, valid session,
+    // adopt it (self-heal). Only if there is no usable session AND the error is
+    // a genuine invalid/revoked signal do we actually sign the user out. Net
+    // effect: this can only ever log out LESS than before, never more.
+    private func recoverOrClearAfterRefreshFailure(triedRefreshToken: String?, error: Error, origin: String) async -> AuthSession? {
+        if let healed = await reloadFreshSessionIfRotated(awayFrom: triedRefreshToken) {
+            NSLog("[Auth] self-healed at %@ (keychain holds a freshly rotated session)", origin)
+            AuthDiagnosticTelemetry.shared.emit(
+                eventName: "session_refresh_self_healed",
+                session: healed,
+                details: ["origin": origin]
+            )
+            return healed
+        }
+
+        if isInvalidSessionRecoveryError(error) {
+            await clearStoredSession(from: origin)
+        } else {
+            NSLog("[Auth] refresh failed at %@ but session kept (non-recoverable error: %@)", origin, String(describing: error))
+        }
+        return nil
+    }
+
+    /// Reloads from the keychain and returns the session only if it is usable
+    /// (non-expired) AND its refresh token differs from the one we just tried —
+    /// i.e. someone rotated it out from under us and we can safely adopt it.
+    private func reloadFreshSessionIfRotated(awayFrom triedRefreshToken: String?) async -> AuthSession? {
+        let reloaded = await MainActor.run { sessionStore.reloadSessionFromKeychain() }
+        guard let reloaded, let refresh = nonEmpty(reloaded.refreshToken) else { return nil }
+        if let tried = triedRefreshToken, refresh == tried { return nil }
+        guard !sessionNeedsRefresh(reloaded) else { return nil }
+        return reloaded
+    }
+
     // 2026-05-24: every clearStoredSession call now identifies its origin
     // so device logs can tell us exactly which path fired the bounce. If
     // the user reports another logout, pull device logs via Console.app
@@ -752,27 +815,27 @@ final class AuthService {
         )
 
         let authSession = makeAuthSession(from: session, provider: metadata.provider, existing: metadata)
-        return try await persistRecoveredSession(authSession)
+        return try await persistRecoveredSession(authSession, replacing: metadata)
     }
 
     // 2026-05-24: refreshSupabaseSession is the SINGLE-FLIGHT entry point —
-    // every caller goes through the in-flight coordinator below so parallel
-    // refreshes can't fight over the same refresh token. (Tanmay's logout
-    // 2026-05-22 + shantanuodak1993 2026-05-24 root cause: two callers each
-    // started their own refresh with the same token; Supabase rotated the
-    // token for the first one's success, the second one's request used the
-    // now-retired token and hit "Refresh Token Already Used", whose catch
-    // handler cleared the session and bounced the user to sign-in.)
+    // every caller goes through the shared in-flight coordinator below so
+    // parallel refreshes can't fight over the same refresh token. (Tanmay's
+    // logout 2026-05-22 + shantanuodak1993 2026-05-24 + Rashmi 2026-05-28:
+    // separate AuthService instances could still start their own refresh with
+    // the same token. Supabase rotated the token for the first success, then
+    // the later request used the now-retired token and hit "Refresh Token
+    // Already Used", whose catch handler cleared the session.)
     //
     // Yesterday's detach-on-timeout fix in runWithStartupTimeout closed the
     // "structured cancellation kills the refresh" angle. This single-flight
     // closes the "five cold-launch API calls all try to refresh at once"
-    // angle. Both fixes are needed.
+    // angle. The static coordinator also covers LiveAPIClientFactory clients.
     private func refreshSupabaseSession(
         refreshToken: String,
         metadata: AuthSession
     ) async throws -> AuthSession {
-        let (task, taskID) = await refreshCoordinator.acquireOrJoin {
+        let (task, taskID) = await Self.refreshCoordinator.acquireOrJoin(refreshToken: refreshToken) {
             Task<AuthSession, Error> { [weak self] in
                 guard let self else { throw AuthServiceError.missingSupabaseSDK }
                 return try await self.performSupabaseRefresh(
@@ -789,9 +852,13 @@ final class AuthService {
         } catch {
             outcome = .failure(error)
         }
-        await refreshCoordinator.release(id: taskID)
+        await Self.refreshCoordinator.release(id: taskID, refreshToken: refreshToken)
         switch outcome {
-        case .success(let session): return session
+        case .success(let session):
+            await MainActor.run {
+                self.sessionStore.replaceInMemory(session)
+            }
+            return session
         case .failure(let error): throw error
         }
     }
@@ -825,7 +892,7 @@ final class AuthService {
                 session: metadata
             )
             let authSession = makeAuthSession(from: session, provider: metadata.provider, existing: metadata)
-            return try await persistRecoveredSession(authSession)
+            return try await persistRecoveredSession(authSession, replacing: metadata)
         } catch {
             NSLog("[Auth] performSupabaseRefresh FAILED (tokenTail=%@ error=%@)", tokenTail, String(describing: error))
             AuthDiagnosticTelemetry.shared.emit(
@@ -852,6 +919,59 @@ final class AuthService {
             lastName: existing.lastName
         )
     }
+
+    // 2026-05-28: With autoRefreshToken enabled, the SDK rotates the refresh
+    // token on its own (background timer + initial-session restore). The app
+    // keychain is a SEPARATE source of truth that other code paths read, so
+    // every SDK rotation MUST be mirrored back into it — otherwise the keychain
+    // keeps a stale, already-rotated token and the next cold launch refreshes
+    // with a dead token and logs the user out. This is the safety net that
+    // makes auto-refresh safe alongside our own store.
+    private func startMirroringSupabaseAuthState() {
+        guard let supabaseClient else { return }
+        Task { [weak self] in
+            for await change in supabaseClient.auth.authStateChanges {
+                await self?.mirrorSupabaseAuthState(event: change.event, session: change.session)
+            }
+        }
+    }
+
+    @MainActor
+    private func mirrorSupabaseAuthState(event: AuthChangeEvent, session: Session?) {
+        switch event {
+        case .signedIn, .tokenRefreshed, .userUpdated, .initialSession:
+            guard let session else { return }
+            let existing = sessionStore.session
+            let mirrored = AuthSession(
+                accessToken: session.accessToken,
+                refreshToken: session.refreshToken,
+                expiresAt: Date(timeIntervalSince1970: session.expiresAt),
+                provider: existing?.provider ?? .apple,
+                userID: existing?.userID ?? session.user.id.uuidString,
+                email: existing?.email ?? session.user.email,
+                firstName: existing?.firstName,
+                lastName: existing?.lastName
+            )
+            // Only write on an actual token change to avoid redundant keychain
+            // churn and @Published emissions (the app's own refresh path also
+            // persists, so most events are no-ops here).
+            guard existing?.accessToken != mirrored.accessToken ||
+                    existing?.refreshToken != mirrored.refreshToken else {
+                return
+            }
+            do {
+                try sessionStore.store(mirrored)
+                NSLog("[Auth] mirrored SDK %@ into keychain (newTail=%@)", event.rawValue, String(session.refreshToken.suffix(8)))
+            } catch {
+                NSLog("[Auth] failed to mirror SDK %@: %@", event.rawValue, String(describing: error))
+            }
+        default:
+            // Never clear here: sign-out is an explicit user action handled by
+            // signOut(). A stray SDK .signedOut (e.g. from a failed background
+            // refresh) must not nuke a session we can still recover.
+            break
+        }
+    }
     #endif
 
     #if !canImport(Supabase)
@@ -871,10 +991,10 @@ final class AuthService {
     }
     #endif
 
-    private func persistRecoveredSession(_ session: AuthSession) async throws -> AuthSession {
+    private func persistRecoveredSession(_ session: AuthSession, replacing expectedSession: AuthSession) async throws -> AuthSession {
         do {
             try await MainActor.run {
-                try sessionStore.store(session)
+                try sessionStore.storeRecovered(session, replacing: expectedSession)
             }
         } catch {
             throw AuthServiceError.failedToPersistSession(error.localizedDescription)
@@ -1135,47 +1255,49 @@ private final class AppleSignInDelegate: NSObject, ASAuthorizationControllerDele
 
 // MARK: - Single-flight refresh coordinator
 
-/// Serializes Supabase refresh calls so multiple parallel callers share
-/// one in-flight `auth.refreshSession(refreshToken:)`. Eliminates the
-/// "two refreshes with the same refresh token, one rotates, the other
-/// hits 'already used'" race that was clearing the session and
+/// Serializes Supabase refresh calls by refresh token so multiple parallel
+/// callers share one in-flight `auth.refreshSession(refreshToken:)`.
+/// Eliminates the "two refreshes with the same refresh token, one rotates,
+/// the other hits 'already used'" race that was clearing the session and
 /// bouncing users to sign-in on cold launches.
 ///
 /// Pattern: caller passes a closure that builds the task. If a task is
-/// already in flight, return that one and discard the new closure. The
-/// caller awaits the shared task value.
+/// already in flight for that token, return that one and discard the new
+/// closure. The caller awaits the shared task value.
 ///
 /// Identity is by UUID so the release call only clears the slot when
 /// it's the same task that originally claimed it — protects against
 /// a stale release from a previous cycle nuking a fresh task.
 actor RefreshCoordinator {
-    private var inflightTask: Task<AuthSession, Error>?
-    private var inflightID: UUID?
+    private struct InflightRefresh {
+        let id: UUID
+        let task: Task<AuthSession, Error>
+    }
 
-    func acquireOrJoin(_ start: () -> Task<AuthSession, Error>) -> (task: Task<AuthSession, Error>, id: UUID) {
-        if let existing = inflightTask, let id = inflightID, !existing.isCancelled {
+    private var inflightByRefreshToken: [String: InflightRefresh] = [:]
+
+    func acquireOrJoin(refreshToken: String, _ start: () -> Task<AuthSession, Error>) -> (task: Task<AuthSession, Error>, id: UUID) {
+        if let existing = inflightByRefreshToken[refreshToken], !existing.task.isCancelled {
             // Joining a refresh that's already running. If we see lots of
             // these in the logs right before a successful refresh, the
             // single-flight is doing its job — that's exactly the race
             // we were trying to close.
-            NSLog("[Auth] RefreshCoordinator JOIN inflight (id=%@)", id.uuidString)
-            return (existing, id)
+            NSLog("[Auth] RefreshCoordinator JOIN inflight (id=%@ tokenTail=%@)", existing.id.uuidString, String(refreshToken.suffix(8)))
+            return (existing.task, existing.id)
         }
         let new = start()
         let id = UUID()
-        inflightTask = new
-        inflightID = id
-        NSLog("[Auth] RefreshCoordinator START new refresh (id=%@)", id.uuidString)
+        inflightByRefreshToken[refreshToken] = InflightRefresh(id: id, task: new)
+        NSLog("[Auth] RefreshCoordinator START new refresh (id=%@ tokenTail=%@)", id.uuidString, String(refreshToken.suffix(8)))
         return (new, id)
     }
 
-    func release(id: UUID) {
-        guard inflightID == id else {
-            NSLog("[Auth] RefreshCoordinator release IGNORED (stale id=%@)", id.uuidString)
+    func release(id: UUID, refreshToken: String) {
+        guard inflightByRefreshToken[refreshToken]?.id == id else {
+            NSLog("[Auth] RefreshCoordinator release IGNORED (stale id=%@ tokenTail=%@)", id.uuidString, String(refreshToken.suffix(8)))
             return
         }
-        NSLog("[Auth] RefreshCoordinator RELEASE (id=%@)", id.uuidString)
-        inflightTask = nil
-        inflightID = nil
+        NSLog("[Auth] RefreshCoordinator RELEASE (id=%@ tokenTail=%@)", id.uuidString, String(refreshToken.suffix(8)))
+        inflightByRefreshToken[refreshToken] = nil
     }
 }

@@ -44,14 +44,14 @@ enum OnboardingGlassTheme {
     /// Text color for rows immediately adjacent to the selected row.
     static let pickerAdjacentTextUI = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.55)
-            : UIColor(red: 0.62, green: 0.62, blue: 0.62, alpha: 1)
+            ? UIColor(white: 1, alpha: 0.44)
+            : UIColor(red: 0.62, green: 0.62, blue: 0.62, alpha: 0.80)
     }
     /// Text color for rows further from the selected row.
     static let pickerDistantTextUI = UIColor { trait in
         trait.userInterfaceStyle == .dark
-            ? UIColor(white: 1, alpha: 0.30)
-            : UIColor(red: 0.81, green: 0.81, blue: 0.81, alpha: 1)
+            ? UIColor(white: 1, alpha: 0.24)
+            : UIColor(red: 0.81, green: 0.81, blue: 0.81, alpha: 0.80)
     }
     static let buttonShadow = adaptiveColor(
         light: UIColor(red: 0.08, green: 0.10, blue: 0.14, alpha: 0.10),

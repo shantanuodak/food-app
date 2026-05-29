@@ -65,15 +65,27 @@ final class AppStore: ObservableObject {
         defaults: UserDefaults = .standard
     ) {
         let resolvedConfiguration = configuration ?? AppConfiguration.live()
-        let sessionStore = AuthSessionStore()
-        let authService = AuthService(
-            sessionStore: sessionStore,
-            fallbackToken: resolvedConfiguration.authToken,
-            googleClientID: resolvedConfiguration.googleClientID,
-            googleServerClientID: resolvedConfiguration.googleServerClientID,
-            supabaseURL: resolvedConfiguration.supabaseURL,
-            supabaseAnonKey: resolvedConfiguration.supabaseAnonKey
-        )
+        // The live app uses the process-wide shared AuthService/AuthSessionStore
+        // so the main app, Siri, notifications, and QuickCamera all share ONE
+        // SupabaseClient and ONE in-memory session (see LiveAPIClientFactory).
+        // Tests/previews that inject a custom configuration get isolated
+        // instances so they never touch the real keychain session.
+        let sessionStore: AuthSessionStore
+        let authService: AuthService
+        if configuration == nil {
+            sessionStore = AuthSessionStore.shared
+            authService = AuthService.shared
+        } else {
+            sessionStore = AuthSessionStore()
+            authService = AuthService(
+                sessionStore: sessionStore,
+                fallbackToken: resolvedConfiguration.authToken,
+                googleClientID: resolvedConfiguration.googleClientID,
+                googleServerClientID: resolvedConfiguration.googleServerClientID,
+                supabaseURL: resolvedConfiguration.supabaseURL,
+                supabaseAnonKey: resolvedConfiguration.supabaseAnonKey
+            )
+        }
         self.configuration = resolvedConfiguration
         self.authSessionStore = sessionStore
         self.authService = authService
@@ -153,6 +165,20 @@ final class AppStore: ObservableObject {
             .sink { [weak self] notification in
                 guard let token = notification.userInfo?["token"] as? String else { return }
                 self?.recordAPNsDeviceToken(token)
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UIApplication.didBecomeActiveNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.recoverSessionAfterTransientKeychainLoad(reason: "didBecomeActive")
+            }
+            .store(in: &cancellables)
+
+        NotificationCenter.default.publisher(for: UIApplication.protectedDataDidBecomeAvailableNotification)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.recoverSessionAfterTransientKeychainLoad(reason: "protectedDataAvailable")
             }
             .store(in: &cancellables)
 
@@ -325,6 +351,61 @@ final class AppStore: ObservableObject {
         ]
     }
 
+    @discardableResult
+    private func recoverSessionAfterTransientKeychainLoad(reason: String) -> Bool {
+        guard authSessionStore.shouldRetryTransientLoadFailure else { return false }
+
+        let previousLoadStatus = authSessionStore.lastLoadStatus
+        guard authSessionStore.reloadSessionFromKeychain() != nil else {
+            AuthDiagnosticTelemetry.shared.emit(
+                eventName: "keychain_retry_failed",
+                userIdHint: nil,
+                provider: nil,
+                details: [
+                    "reason": reason,
+                    "previousLoadStatus": previousLoadStatus,
+                    "newLoadStatus": authSessionStore.lastLoadStatus,
+                    "localOnboardingComplete": String(isOnboardingComplete)
+                ]
+            )
+            return false
+        }
+
+        AuthDiagnosticTelemetry.shared.emit(
+            eventName: "keychain_retry_recovered_session",
+            session: authSessionStore.session,
+            details: [
+                "reason": reason,
+                "previousLoadStatus": previousLoadStatus,
+                "newLoadStatus": authSessionStore.lastLoadStatus,
+                "localOnboardingComplete": String(isOnboardingComplete)
+            ]
+        )
+
+        isSessionRestored = false
+        Task { [authService, weak self] in
+            AuthDiagnosticTelemetry.shared.emit(
+                eventName: "session_restore_started",
+                session: self?.authSessionStore.session,
+                details: ["path": "keychain_retry_\(reason)"]
+            )
+            await authService.restoreSessionIfPossible()
+            await self?.repairOnboardingCompletionFromBackendIfNeeded()
+            await MainActor.run {
+                self?.isSessionRestored = true
+                self?.scheduleLaunchOnboardingProfileRefreshIfNeeded()
+                self?.syncNotificationsWithBackend()
+            }
+            AuthDiagnosticTelemetry.shared.emit(
+                eventName: "session_restore_finished",
+                session: self?.authSessionStore.session,
+                details: ["hasStoredSessionAfter": String(self?.authSessionStore.session != nil)]
+            )
+            await self?.flushAuthDiagnostics()
+        }
+        return true
+    }
+
     private func repairOnboardingCompletionFromBackendIfNeeded() async {
         guard authSessionStore.session != nil, !isOnboardingComplete else { return }
         AuthDiagnosticTelemetry.shared.emit(
@@ -376,6 +457,18 @@ final class AppStore: ObservableObject {
         // keep the user in-app and let the next request retry recovery.
         if authSessionStore.session != nil {
             NSLog("[Auth] Suppressed sign-out for recoverable API auth error: \(apiError.localizedDescription)")
+            return false
+        }
+
+        if authSessionStore.shouldRetryTransientLoadFailure {
+            let recoveredSession = recoverSessionAfterTransientKeychainLoad(reason: "auth_failure")
+            if recoveredSession || authSessionStore.shouldRetryTransientLoadFailure {
+                NSLog("[Auth] Suppressed sign-out after transient keychain load failure.")
+                return false
+            }
+        }
+
+        if authSessionStore.session != nil {
             return false
         }
 

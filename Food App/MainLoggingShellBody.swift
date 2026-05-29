@@ -33,17 +33,19 @@ extension MainLoggingShellView {
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .safeAreaInset(edge: .bottom) {
-                // Floating glass card surfacing the most recent flagged meal.
-                // Bottom padding clears the mic/camera dock that lives in the
-                // outer `HomeTabShellView` ZStack (60pt buttons + 16pt dock
-                // padding ≈ 92pt of room).
-                RecentFlaggedMealCard(
-                    logs: dayLogs?.logs ?? [],
-                    contextKey: summaryDateString,
-                    dismissedLogIds: $dismissedInsightLogIds
-                )
-                .padding(.horizontal, 16)
-                .padding(.bottom, 92)
+                VStack(spacing: 0) {
+                    // Floating glass card surfacing the most recent flagged meal.
+                    RecentFlaggedMealCard(
+                        logs: dayLogs?.logs ?? [],
+                        contextKey: summaryDateString,
+                        dismissedLogIds: $dismissedInsightLogIds
+                    )
+                    .padding(.horizontal, 16)
+
+                    Color.clear
+                        .frame(height: bottomDockScrollClearance)
+                        .allowsHitTesting(false)
+                }
             }
             .simultaneousGesture(
                 DragGesture(minimumDistance: 15, coordinateSpace: .local)
@@ -140,6 +142,12 @@ extension MainLoggingShellView {
                 MainLoggingTipsPromptModifier(
                     isLoggingTipsPresented: $isLoggingTipsPresented,
                     isLoggingTipsPromptPresented: $isLoggingTipsPromptPresented
+                )
+            )
+            .modifier(
+                MainLoggingRecipeImportPresentationModifier(
+                    isPresented: $isRecipesPresented,
+                    appStore: appStore
                 )
             )
             .sheet(isPresented: $isStreakDrawerPresented) {
@@ -562,9 +570,23 @@ extension MainLoggingShellView {
             .overlay(alignment: .bottom) {
                 if !isVoiceOverlayPresented {
                     bottomActionDock
+                        // Lift the dock above the recipes sheet peek
+                        // (.height(88)) so the icons aren't covered.
+                        // Skip the lift while the keyboard is up — the
+                        // sheet auto-dismisses then and the dock can sit
+                        // right above the keyboard.
+                        .padding(.bottom, isKeyboardVisible ? 0 : 56)
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
+            .modifier(
+                HomeRecipesDrawerSheetModifier(
+                    isKeyboardVisible: isKeyboardVisible,
+                    isVoiceOverlayPresented: isVoiceOverlayPresented,
+                    isOtherModalPresented: isRecipesDrawerSuppressed,
+                    appStore: appStore
+                )
+            )
             .modifier(
                 MainLoggingTutorialModifier(
                     isHomeTutorialPresented: $isHomeTutorialPresented,
@@ -764,6 +786,36 @@ extension MainLoggingShellView {
                 draftLoggedAt = min(date, Date())
             }
         )
+    }
+}
+
+private struct MainLoggingRecipeImportPresentationModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let appStore: AppStore
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $isPresented) {
+                NavigationStack {
+                    RecipesScreen()
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") {
+                                    AppHaptics.lightImpact()
+                                    isPresented = false
+                                }
+                            }
+                        }
+                }
+                .environmentObject(appStore)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(24)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .recipeImportPendingURLDidChange)) { _ in
+                guard appStore.isOnboardingComplete else { return }
+                isPresented = true
+            }
     }
 }
 

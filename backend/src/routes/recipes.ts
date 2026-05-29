@@ -1,13 +1,35 @@
 import { Router } from 'express';
-import type { Response } from 'express';
+import type { NextFunction, Request, Response } from 'express';
+import multer from 'multer';
 import { z } from 'zod';
 import { importRecipeFromUrl, listRecipes, saveRecipe } from '../services/recipeImportService.js';
+import { importRecipeFromAudio } from '../services/recipeAudioImportService.js';
+import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
+import {
+  checkRecipeImportRateLimit,
+  type RecipeRateLane
+} from '../services/recipeImportRateLimiterService.js';
 
 const router = Router();
+const audioUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    files: 1,
+    fileSize: config.recipeAudioMaxBytes
+  }
+});
 
 const importFromUrlSchema = z.object({
   url: z.string().trim().min(1).max(3000)
+});
+
+const importFromAudioSchema = z.object({
+  sourceUrl: z.string().trim().min(1).max(3000),
+  sourceName: z.string().trim().max(180).nullable().optional(),
+  heroImageUrl: z.string().trim().max(1000).nullable().optional(),
+  audioUrl: z.string().trim().max(3000).nullable().optional(),
+  language: z.string().trim().min(2).max(12).nullable().optional()
 });
 
 const recipeIngredientSchema = z.object({
@@ -50,6 +72,35 @@ function authContext(res: Response) {
   };
 }
 
+function enforceRecipeRateLimit(userId: string, lane: RecipeRateLane): void {
+  const result = checkRecipeImportRateLimit(userId, lane);
+  if (!result.allowed) {
+    const error = new ApiError(429, 'RECIPE_RATE_LIMITED', 'Too many recipe requests. Please retry shortly.');
+    (error as ApiError & { retryAfterSeconds?: number }).retryAfterSeconds = result.retryAfterSeconds;
+    throw error;
+  }
+}
+
+function audioUploadMiddleware(req: Request, res: Response, next: NextFunction): void {
+  audioUpload.single('audio')(req, res, (error: unknown) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    if (error instanceof multer.MulterError) {
+      if (error.code === 'LIMIT_FILE_SIZE') {
+        next(new ApiError(413, 'RECIPE_AUDIO_FILE_TOO_LARGE', 'Audio file is too large'));
+        return;
+      }
+      next(new ApiError(400, 'RECIPE_AUDIO_UPLOAD_INVALID', error.message));
+      return;
+    }
+
+    next(error);
+  });
+}
+
 router.get('/', async (_req, res, next) => {
   try {
     const auth = authContext(res);
@@ -63,6 +114,7 @@ router.get('/', async (_req, res, next) => {
 router.post('/import-from-url', async (req, res, next) => {
   try {
     const auth = authContext(res);
+    enforceRecipeRateLimit(auth.userId, 'url');
     const body = importFromUrlSchema.parse(req.body);
     const result = await importRecipeFromUrl({
       userId: auth.userId,
@@ -75,9 +127,39 @@ router.post('/import-from-url', async (req, res, next) => {
   }
 });
 
+router.post('/import-from-audio', audioUploadMiddleware, async (req, res, next) => {
+  try {
+    const auth = authContext(res);
+    enforceRecipeRateLimit(auth.userId, 'audio');
+    const body = importFromAudioSchema.parse(req.body);
+    const audioFile = req.file
+      ? {
+          buffer: req.file.buffer,
+          mimeType: req.file.mimetype,
+          filename: req.file.originalname || 'recipe-audio.m4a'
+        }
+      : undefined;
+
+    const result = await importRecipeFromAudio({
+      userId: auth.userId,
+      auth,
+      sourceUrl: body.sourceUrl,
+      sourceName: body.sourceName ?? null,
+      heroImageUrl: body.heroImageUrl ?? null,
+      audioUrl: body.audioUrl ?? null,
+      language: body.language ?? null,
+      audio: audioFile
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
 router.post('/', async (req, res, next) => {
   try {
     const auth = authContext(res);
+    enforceRecipeRateLimit(auth.userId, 'save');
     const body = reviewedRecipeSchema.parse(req.body);
     const recipe = await saveRecipe({
       userId: auth.userId,

@@ -42,6 +42,19 @@ Use Supabase Free + Render Free deployment runbook:
 - Default primary image model is `gemini-2.5-flash`.
 - `AI_IMAGE_FALLBACK_MODEL` can be set to a different model for low-confidence image retries.
 
+## Recipe Audio Import
+- `POST /v1/recipes/import-from-audio` converts a recipe audio/video file or safe audio URL into the normal recipe review draft.
+- Groq is the first speech-to-text provider, behind a provider interface so other providers can be swapped in later.
+- Required for live Groq calls:
+  - `GROQ_API_KEY`
+  - `GROQ_API_BASE_URL=https://api.groq.com/openai/v1`
+  - `GROQ_AUDIO_TRANSCRIPTION_MODEL=whisper-large-v3-turbo`
+- Cost/control knobs:
+  - `RECIPE_AUDIO_IMPORT_ENABLED=true`
+  - `RECIPE_AUDIO_MAX_BYTES=25000000`
+  - `RECIPE_AUDIO_TRANSCRIPTION_TIMEOUT_MS=45000`
+- Architecture note: social URL/media extraction is intentionally separate. This endpoint expects audio/video bytes or a direct audio URL; platform-specific TikTok/Facebook/Instagram extraction should feed this endpoint rather than live inside it.
+
 ## FatSecret Platform Integration
 - Set `FATSECRET_CLIENT_ID` and `FATSECRET_CLIENT_SECRET` in `.env` to enable FatSecret lookup in primary parse flow.
 - Optional tuning:

@@ -28,21 +28,6 @@ struct ExistingAccountDetectedView: View {
     let onUpdateProfile: () -> Void
     let onCancel: () -> Void
 
-    private static let inkColor = Color(red: 0.141, green: 0.098, blue: 0.078)
-    private static let mutedColor = Color(red: 0.467, green: 0.416, blue: 0.380)
-    private static let brandOrange = Color(red: 0.902, green: 0.361, blue: 0.102)
-    private static let brandOrangeDeep = Color(red: 0.725, green: 0.306, blue: 0.071)
-    private static let borderColor = Color(red: 0.278, green: 0.176, blue: 0.098).opacity(0.11)
-    private static let surfaceGradient = LinearGradient(
-        colors: [
-            Color(red: 0.965, green: 0.886, blue: 0.792),
-            Color(red: 1.000, green: 0.976, blue: 0.941),
-            Color(red: 0.957, green: 0.918, blue: 0.875)
-        ],
-        startPoint: .topLeading,
-        endPoint: .bottomTrailing
-    )
-
     private var headline: String {
         if let displayName, !displayName.isEmpty {
             return "Welcome back, \(displayName)"
@@ -74,7 +59,7 @@ struct ExistingAccountDetectedView: View {
 
     var body: some View {
         ZStack {
-            Self.surfaceGradient.ignoresSafeArea()
+            ExistingAccountPalette.backgroundGradient.ignoresSafeArea()
 
             VStack(spacing: 0) {
                 Spacer().frame(height: 96)
@@ -103,25 +88,25 @@ struct ExistingAccountDetectedView: View {
             Text("Account found")
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .tracking(0.6)
-                .foregroundStyle(Self.brandOrangeDeep)
+                .foregroundStyle(ExistingAccountPalette.badgeInk)
                 .textCase(.uppercase)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(.white.opacity(0.72), in: Capsule())
+                .background(ExistingAccountPalette.badgeFill, in: Capsule())
                 .overlay(
-                    Capsule().stroke(Self.borderColor, lineWidth: 1)
+                    Capsule().stroke(ExistingAccountPalette.borderColor, lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.05), radius: 12, y: 6)
 
             Text(headline)
                 .font(.custom("InstrumentSerif-Italic", size: 38))
-                .foregroundStyle(Self.inkColor)
+                .foregroundStyle(ExistingAccountPalette.inkColor)
                 .multilineTextAlignment(.leading)
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(subtitle)
                 .font(.system(size: 15, weight: .semibold, design: .rounded))
-                .foregroundStyle(Self.mutedColor)
+                .foregroundStyle(ExistingAccountPalette.mutedColor)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -142,10 +127,10 @@ struct ExistingAccountDetectedView: View {
         .padding(.vertical, 4)
         .background(
             RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .fill(.white.opacity(0.72))
+                .fill(ExistingAccountPalette.cardFill)
                 .overlay(
                     RoundedRectangle(cornerRadius: 22, style: .continuous)
-                        .stroke(Self.borderColor, lineWidth: 1)
+                        .stroke(ExistingAccountPalette.borderColor, lineWidth: 1)
                 )
                 .shadow(color: .black.opacity(0.04), radius: 18, y: 8)
         )
@@ -155,11 +140,11 @@ struct ExistingAccountDetectedView: View {
         HStack(spacing: 12) {
             Text(label)
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
-                .foregroundStyle(Self.mutedColor)
+                .foregroundStyle(ExistingAccountPalette.mutedColor)
             Spacer(minLength: 8)
             Text(value)
                 .font(.system(size: 16, weight: .heavy, design: .rounded))
-                .foregroundStyle(Self.inkColor)
+                .foregroundStyle(ExistingAccountPalette.inkColor)
                 .monospacedDigit()
         }
         .padding(.horizontal, 18)
@@ -168,7 +153,7 @@ struct ExistingAccountDetectedView: View {
 
     private var divider: some View {
         Rectangle()
-            .fill(Self.borderColor)
+            .fill(ExistingAccountPalette.borderColor)
             .frame(height: 1)
             .padding(.horizontal, 18)
     }
@@ -187,14 +172,14 @@ struct ExistingAccountDetectedView: View {
                                 LinearGradient(
                                     colors: [
                                         Color(red: 1.00, green: 0.62, blue: 0.20),
-                                        Self.brandOrange
+                                        ExistingAccountPalette.brandOrange
                                     ],
                                     startPoint: .leading,
                                     endPoint: .trailing
                                 )
                             )
                     )
-                    .shadow(color: Self.brandOrange.opacity(0.30), radius: 14, y: 8)
+                    .shadow(color: ExistingAccountPalette.brandOrange.opacity(0.30), radius: 14, y: 8)
             }
             .buttonStyle(.plain)
             .accessibilityHint("Skips setup and signs in to your existing account.")
@@ -202,15 +187,15 @@ struct ExistingAccountDetectedView: View {
             Button(action: onUpdateProfile) {
                 Text("Update my profile with new info")
                     .font(.system(size: 15, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Self.brandOrangeDeep)
+                    .foregroundStyle(ExistingAccountPalette.secondaryButtonInk)
                     .frame(maxWidth: .infinity)
                     .frame(height: 48)
                     .background(
                         RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .fill(.white.opacity(0.78))
+                            .fill(ExistingAccountPalette.secondaryButtonFill)
                             .overlay(
                                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .stroke(Self.brandOrange.opacity(0.45), lineWidth: 1)
+                                    .stroke(ExistingAccountPalette.secondaryButtonStroke, lineWidth: 1)
                             )
                     )
             }
@@ -220,13 +205,77 @@ struct ExistingAccountDetectedView: View {
             Button(action: onCancel) {
                 Text("Cancel")
                     .font(.system(size: 14, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Self.mutedColor)
+                    .foregroundStyle(ExistingAccountPalette.mutedColor)
                     .frame(maxWidth: .infinity)
                     .frame(height: 40)
             }
             .buttonStyle(.plain)
             .accessibilityHint("Goes back to the previous screen.")
         }
+    }
+}
+
+private enum ExistingAccountPalette {
+    static let inkColor = adaptiveColor(
+        light: UIColor(red: 0.141, green: 0.098, blue: 0.078, alpha: 1.0),
+        dark: UIColor(white: 0.96, alpha: 1.0)
+    )
+    static let mutedColor = adaptiveColor(
+        light: UIColor(red: 0.467, green: 0.416, blue: 0.380, alpha: 1.0),
+        dark: UIColor(white: 0.84, alpha: 0.78)
+    )
+    static let brandOrange = Color(red: 0.902, green: 0.361, blue: 0.102)
+    static let badgeInk = adaptiveColor(
+        light: UIColor(red: 0.725, green: 0.306, blue: 0.071, alpha: 1.0),
+        dark: UIColor(red: 0.98, green: 0.77, blue: 0.56, alpha: 1.0)
+    )
+    static let borderColor = adaptiveColor(
+        light: UIColor(red: 0.278, green: 0.176, blue: 0.098, alpha: 0.11),
+        dark: UIColor(white: 1.0, alpha: 0.12)
+    )
+    static let badgeFill = adaptiveColor(
+        light: UIColor(white: 1.0, alpha: 0.72),
+        dark: UIColor(white: 1.0, alpha: 0.10)
+    )
+    static let cardFill = adaptiveColor(
+        light: UIColor(white: 1.0, alpha: 0.72),
+        dark: UIColor(red: 0.19, green: 0.16, blue: 0.14, alpha: 0.84)
+    )
+    static let secondaryButtonFill = adaptiveColor(
+        light: UIColor(white: 1.0, alpha: 0.78),
+        dark: UIColor(red: 0.18, green: 0.15, blue: 0.13, alpha: 0.90)
+    )
+    static let secondaryButtonInk = adaptiveColor(
+        light: UIColor(red: 0.725, green: 0.306, blue: 0.071, alpha: 1.0),
+        dark: UIColor(red: 0.97, green: 0.75, blue: 0.54, alpha: 1.0)
+    )
+    static let secondaryButtonStroke = adaptiveColor(
+        light: UIColor(red: 0.902, green: 0.361, blue: 0.102, alpha: 0.45),
+        dark: UIColor(red: 1.0, green: 0.62, blue: 0.20, alpha: 0.26)
+    )
+    static let backgroundGradient = LinearGradient(
+        colors: [
+            adaptiveColor(
+                light: UIColor(red: 0.965, green: 0.886, blue: 0.792, alpha: 1.0),
+                dark: UIColor(red: 0.09, green: 0.07, blue: 0.06, alpha: 1.0)
+            ),
+            adaptiveColor(
+                light: UIColor(red: 1.000, green: 0.976, blue: 0.941, alpha: 1.0),
+                dark: UIColor(red: 0.13, green: 0.10, blue: 0.09, alpha: 1.0)
+            ),
+            adaptiveColor(
+                light: UIColor(red: 0.957, green: 0.918, blue: 0.875, alpha: 1.0),
+                dark: UIColor(red: 0.16, green: 0.11, blue: 0.08, alpha: 1.0)
+            )
+        ],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
+    private static func adaptiveColor(light: UIColor, dark: UIColor) -> Color {
+        Color(uiColor: UIColor { traits in
+            traits.userInterfaceStyle == .dark ? dark : light
+        })
     }
 }
 

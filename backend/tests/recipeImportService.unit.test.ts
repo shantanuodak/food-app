@@ -49,6 +49,130 @@ describe('recipeImportService URL safety', () => {
   });
 });
 
+describe('recipeImportService.assertResolvedHostIsPublic (SSRF DNS guard)', () => {
+  test('allows a host that resolves only to public addresses', async () => {
+    useTestDatabaseUrl();
+    const { assertResolvedHostIsPublic } = await import('../src/services/recipeImportService.js');
+    const resolver = async () => [{ address: '93.184.216.34', family: 4 }];
+    await expect(assertResolvedHostIsPublic('example.com', resolver)).resolves.toBeUndefined();
+  });
+
+  test('rejects a host that resolves to an internal/metadata address (DNS rebinding)', async () => {
+    useTestDatabaseUrl();
+    const { assertResolvedHostIsPublic } = await import('../src/services/recipeImportService.js');
+    const cases: Array<Array<{ address: string; family: number }>> = [
+      [{ address: '169.254.169.254', family: 4 }], // cloud metadata endpoint
+      [{ address: '10.0.0.5', family: 4 }],
+      [{ address: '127.0.0.1', family: 4 }],
+      [{ address: '192.168.1.10', family: 4 }],
+      [{ address: '172.16.4.4', family: 4 }],
+      [{ address: '::1', family: 6 }],
+      [{ address: 'fd00::1', family: 6 }],
+      // A public + a private record together must STILL reject.
+      [{ address: '93.184.216.34', family: 4 }, { address: '169.254.169.254', family: 4 }]
+    ];
+    for (const records of cases) {
+      const resolver = async () => records;
+      await expect(
+        assertResolvedHostIsPublic('rebinding.example', resolver),
+        JSON.stringify(records)
+      ).rejects.toThrow();
+    }
+  });
+
+  test('skips resolution for literal IPs (already validated upstream)', async () => {
+    useTestDatabaseUrl();
+    const { assertResolvedHostIsPublic } = await import('../src/services/recipeImportService.js');
+    let resolverCalled = false;
+    const resolver = async () => {
+      resolverCalled = true;
+      return [{ address: '10.0.0.1', family: 4 }];
+    };
+    await expect(assertResolvedHostIsPublic('93.184.216.34', resolver)).resolves.toBeUndefined();
+    expect(resolverCalled).toBe(false);
+  });
+
+  test('rejects when the host cannot be resolved', async () => {
+    useTestDatabaseUrl();
+    const { assertResolvedHostIsPublic } = await import('../src/services/recipeImportService.js');
+    const resolver = async () => {
+      throw new Error('ENOTFOUND');
+    };
+    await expect(assertResolvedHostIsPublic('does-not-exist.example', resolver)).rejects.toThrow();
+  });
+});
+
+describe('recipeImportRateLimiterService', () => {
+  test('allows up to the per-lane limit, then blocks with a retry hint', async () => {
+    useTestDatabaseUrl();
+    const { checkRecipeImportRateLimit } = await import('../src/services/recipeImportRateLimiterService.js');
+    const { config } = await import('../src/config.js');
+    const now = 1_000_000;
+    const max = config.recipeAudioImportRateLimitMax;
+    for (let i = 0; i < max; i += 1) {
+      expect(checkRecipeImportRateLimit('user-1', 'audio', now).allowed, `request ${i}`).toBe(true);
+    }
+    const blocked = checkRecipeImportRateLimit('user-1', 'audio', now);
+    expect(blocked.allowed).toBe(false);
+    expect(blocked.retryAfterSeconds).toBeGreaterThan(0);
+  });
+
+  test('lanes and users have independent budgets', async () => {
+    useTestDatabaseUrl();
+    const { checkRecipeImportRateLimit } = await import('../src/services/recipeImportRateLimiterService.js');
+    const { config } = await import('../src/config.js');
+    const now = 2_000_000;
+    for (let i = 0; i < config.recipeAudioImportRateLimitMax; i += 1) {
+      checkRecipeImportRateLimit('user-2', 'audio', now);
+    }
+    expect(checkRecipeImportRateLimit('user-2', 'audio', now).allowed).toBe(false);
+    // Different lane and different user are unaffected.
+    expect(checkRecipeImportRateLimit('user-2', 'url', now).allowed).toBe(true);
+    expect(checkRecipeImportRateLimit('user-3', 'audio', now).allowed).toBe(true);
+  });
+
+  test('resets after the window elapses', async () => {
+    useTestDatabaseUrl();
+    const { checkRecipeImportRateLimit } = await import('../src/services/recipeImportRateLimiterService.js');
+    const { config } = await import('../src/config.js');
+    const now = 3_000_000;
+    for (let i = 0; i < config.recipeAudioImportRateLimitMax; i += 1) {
+      checkRecipeImportRateLimit('user-4', 'audio', now);
+    }
+    expect(checkRecipeImportRateLimit('user-4', 'audio', now).allowed).toBe(false);
+    const afterWindow = now + config.recipeRateLimitWindowMs + 1_000;
+    expect(checkRecipeImportRateLimit('user-4', 'audio', afterWindow).allowed).toBe(true);
+  });
+});
+
+describe('recipeImportService.readBodyWithByteCap', () => {
+  test('returns the full body when under the byte cap', async () => {
+    useTestDatabaseUrl();
+    const { readBodyWithByteCap } = await import('../src/services/recipeImportService.js');
+    const result = await readBodyWithByteCap(new Response('hello world'), 1000, new AbortController());
+    expect(result).toBe('hello world');
+  });
+
+  test('throws 413 and aborts the request when the body exceeds the cap', async () => {
+    useTestDatabaseUrl();
+    const { readBodyWithByteCap } = await import('../src/services/recipeImportService.js');
+    const controller = new AbortController();
+    await expect(
+      readBodyWithByteCap(new Response('this body is far too large for the tiny cap'), 5, controller)
+    ).rejects.toThrow();
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  test('caps on BYTES, not UTF-16 code units (multi-byte safety)', async () => {
+    useTestDatabaseUrl();
+    const { readBodyWithByteCap } = await import('../src/services/recipeImportService.js');
+    // Each pizza emoji is 4 UTF-8 bytes (2 UTF-16 code units); 3 => 12 bytes > 8.
+    await expect(
+      readBodyWithByteCap(new Response('🍕🍕🍕'), 8, new AbortController())
+    ).rejects.toThrow();
+  });
+});
+
 describe('recipeImportService.buildRecipeDraft', () => {
   test('normalizes scraper output into a reviewable draft', async () => {
     useTestDatabaseUrl();
@@ -161,7 +285,8 @@ describe('recipeImportService.importRecipeFromUrl', () => {
       ensureUserExists: vi.fn(async () => undefined)
     }));
 
-    const { importRecipeFromUrl } = await import('../src/services/recipeImportService.js');
+    const { importRecipeFromUrl, setRecipeHostResolverForTests } = await import('../src/services/recipeImportService.js');
+    setRecipeHostResolverForTests(async () => [{ address: '93.184.216.34', family: 4 }]);
 
     await expect(
       importRecipeFromUrl({
@@ -212,7 +337,8 @@ describe('recipeImportService.importRecipeFromUrl', () => {
       ensureUserExists: vi.fn(async () => undefined)
     }));
 
-    const { importRecipeFromUrl } = await import('../src/services/recipeImportService.js');
+    const { importRecipeFromUrl, setRecipeHostResolverForTests } = await import('../src/services/recipeImportService.js');
+    setRecipeHostResolverForTests(async () => [{ address: '93.184.216.34', family: 4 }]);
 
     await expect(
       importRecipeFromUrl({
@@ -304,7 +430,8 @@ describe('recipeImportService.importRecipeFromUrl', () => {
       ensureUserExists: vi.fn(async () => undefined)
     }));
 
-    const { importRecipeFromUrl } = await import('../src/services/recipeImportService.js');
+    const { importRecipeFromUrl, setRecipeHostResolverForTests } = await import('../src/services/recipeImportService.js');
+    setRecipeHostResolverForTests(async () => [{ address: '93.184.216.34', family: 4 }]);
 
     await expect(
       importRecipeFromUrl({
@@ -421,7 +548,8 @@ describe('recipeImportService.importRecipeFromUrl', () => {
       ensureUserExists: vi.fn(async () => undefined)
     }));
 
-    const { importRecipeFromUrl } = await import('../src/services/recipeImportService.js');
+    const { importRecipeFromUrl, setRecipeHostResolverForTests } = await import('../src/services/recipeImportService.js');
+    setRecipeHostResolverForTests(async () => [{ address: '93.184.216.34', family: 4 }]);
 
     await expect(
       importRecipeFromUrl({

@@ -33,6 +33,8 @@ final class APIClient {
         static let parseImage: TimeInterval = 45
         static let parseBarcode: TimeInterval = 2
         static let parseLabel: TimeInterval = 6
+        static let recipeImport: TimeInterval = 45
+        static let recipeAudioImport: TimeInterval = 90
         /// Generous timeout for endpoints that hit on cold launch or onboarding.
         /// Render.com free tier can take up to ~60s to wake from inactivity.
         static let coldStart: TimeInterval = 65
@@ -514,6 +516,68 @@ final class APIClient {
         try await request(path: "/v1/saved-meals", method: "GET", requiresAuth: true)
     }
 
+    func importRecipeFromURL(_ requestBody: RecipeImportRequest) async throws -> RecipeImportResponse {
+        try await request(
+            path: "/v1/recipes/import-from-url",
+            method: "POST",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
+    func importRecipeFromAudioURL(_ requestBody: RecipeAudioURLImportRequest) async throws -> RecipeImportResponse {
+        try await request(
+            path: "/v1/recipes/import-from-audio",
+            method: "POST",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
+    func importRecipeFromAudioFile(
+        fileData: Data,
+        filename: String,
+        mimeType: String,
+        sourceUrl: String,
+        sourceName: String?,
+        heroImageUrl: String? = nil,
+        language: String? = nil
+    ) async throws -> RecipeImportResponse {
+        let boundary = "Boundary-\(UUID().uuidString)"
+        let bodyData = multipartRecipeAudioBody(
+            fileData: fileData,
+            filename: filename,
+            mimeType: mimeType,
+            sourceUrl: sourceUrl,
+            sourceName: sourceName,
+            heroImageUrl: heroImageUrl,
+            language: language,
+            boundary: boundary
+        )
+
+        return try await performRequest(
+            path: "/v1/recipes/import-from-audio",
+            method: "POST",
+            bodyData: bodyData,
+            requiresAuth: true,
+            extraHeaders: ["Content-Type": "multipart/form-data; boundary=\(boundary)"]
+        )
+    }
+
+    func getRecipes() async throws -> RecipesResponse {
+        try await request(path: "/v1/recipes", method: "GET", requiresAuth: true)
+    }
+
+    @discardableResult
+    func createRecipe(_ requestBody: CreateRecipeRequest) async throws -> CreateRecipeResponse {
+        try await request(
+            path: "/v1/recipes",
+            method: "POST",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
     @discardableResult
     func createSavedMealCollection(_ requestBody: CreateSavedMealCollectionRequest) async throws -> CreateSavedMealCollectionResponse {
         try await request(
@@ -720,6 +784,54 @@ final class APIClient {
         return request
     }
 
+    private func multipartRecipeAudioBody(
+        fileData: Data,
+        filename: String,
+        mimeType: String,
+        sourceUrl: String,
+        sourceName: String?,
+        heroImageUrl: String?,
+        language: String?,
+        boundary: String
+    ) -> Data {
+        var body = Data()
+
+        func append(_ string: String) {
+            body.append(contentsOf: string.utf8)
+        }
+
+        func appendField(name: String, value: String?) {
+            guard let value = value?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+                return
+            }
+
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"\(multipartHeaderSafe(name))\"\r\n\r\n")
+            append(value)
+            append("\r\n")
+        }
+
+        appendField(name: "sourceUrl", value: sourceUrl)
+        appendField(name: "sourceName", value: sourceName)
+        appendField(name: "heroImageUrl", value: heroImageUrl)
+        appendField(name: "language", value: language)
+
+        append("--\(boundary)\r\n")
+        append("Content-Disposition: form-data; name=\"audio\"; filename=\"\(multipartHeaderSafe(filename))\"\r\n")
+        append("Content-Type: \(multipartHeaderSafe(mimeType.isEmpty ? "application/octet-stream" : mimeType))\r\n\r\n")
+        body.append(fileData)
+        append("\r\n--\(boundary)--\r\n")
+
+        return body
+    }
+
+    private func multipartHeaderSafe(_ value: String) -> String {
+        value
+            .replacingOccurrences(of: "\r", with: "_")
+            .replacingOccurrences(of: "\n", with: "_")
+            .replacingOccurrences(of: "\"", with: "_")
+    }
+
     private func timeoutInterval(for path: String) -> TimeInterval {
         switch path {
         case "/v1/logs/parse":
@@ -730,6 +842,10 @@ final class APIClient {
             return RequestTimeout.parseBarcode
         case "/v1/logs/parse/label":
             return RequestTimeout.parseLabel
+        case "/v1/recipes/import-from-url":
+            return RequestTimeout.recipeImport
+        case "/v1/recipes/import-from-audio":
+            return RequestTimeout.recipeAudioImport
         // These endpoints are hit at launch and after onboarding — allow time for cold starts.
         case "/v1/onboarding",
              "/v1/logs/day-summary",
