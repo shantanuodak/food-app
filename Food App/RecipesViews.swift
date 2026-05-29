@@ -438,6 +438,12 @@ struct RecipesScreen: View {
                 )
             } else {
                 importErrorMessage = error.localizedDescription
+                // Terminal failure (not a browser-import fallback): drop the
+                // pending share payload so it doesn't silently retry on every
+                // foreground. The user can re-share to try again.
+                if clearPendingURLOnSuccess {
+                    RecipeImportPendingStore.clearPendingURL()
+                }
             }
             isImporting = false
         }
@@ -519,6 +525,13 @@ struct RecipesScreen: View {
             return
         }
 
+        // Dedupe concurrent observers: a RecipesScreen already on-screen plus a
+        // second one presented on a fresh share would otherwise both import the
+        // same payload. Released on exit so a later re-trigger (e.g. after the
+        // user signs in) can still run.
+        guard RecipeImportPendingStore.beginProcessing(pendingPayload) else { return }
+        defer { RecipeImportPendingStore.endProcessing() }
+
         if let mediaAttachment = pendingPayload.mediaAttachment {
             pendingAudioImport = RecipePendingAudioImport(
                 sourceURL: pendingPayload.url,
@@ -536,6 +549,16 @@ struct RecipesScreen: View {
         guard let pendingURL = pendingPayload.url else {
             importErrorMessage = "Received a share, but it did not include a recipe link."
             RecipeImportPendingStore.clearPendingURL()
+            return
+        }
+
+        // Logged-out guard: don't dead-end on a "sign in required" error. KEEP
+        // the pending payload so it imports automatically once the user signs
+        // in — Food_AppApp re-posts .recipeImportPendingURLDidChange when
+        // onboarding completes.
+        guard appStore.authSessionStore.session != nil else {
+            importURL = pendingURL.absoluteString
+            importErrorMessage = "Sign in to import this recipe — it’ll be saved and ready as soon as you’re back in."
             return
         }
 

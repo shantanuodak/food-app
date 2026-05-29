@@ -73,8 +73,14 @@ private struct RootAppContentView: View {
                 guard restored else { return }
                 schedulePostLaunchMaintenanceIfReady()
             }
-            .onChange(of: appStore.isOnboardingComplete) { _, _ in
+            .onChange(of: appStore.isOnboardingComplete) { _, complete in
                 schedulePostLaunchMaintenanceIfReady()
+                // Re-trigger a pending recipe share once sign-in/onboarding
+                // finishes, so a recipe shared while logged out imports
+                // automatically instead of dead-ending.
+                if complete {
+                    RecipeImportPendingStore.notifyPendingURLIfAvailable()
+                }
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {

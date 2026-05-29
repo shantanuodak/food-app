@@ -207,6 +207,39 @@ enum RecipeImportPendingStore {
         return payload?.url
     }
 
+    // MARK: - Single-flight processing guard
+    //
+    // Two RecipesScreen instances can observe .recipeImportPendingURLDidChange
+    // at the same time (one pushed from the Profile bento + one freshly
+    // presented when a new share arrives). Without this, both read the same
+    // pending payload and fire duplicate imports. Keyed by payload identity and
+    // released when processing finishes, so a legitimate later re-trigger
+    // (e.g. after the user signs in) is still allowed. MainActor-serialized, so
+    // the check-and-set needs no lock.
+    @MainActor private static var inFlightProcessingKey: String?
+
+    @MainActor
+    static func beginProcessing(_ payload: RecipeImportPendingPayload) -> Bool {
+        let key = processingKey(for: payload)
+        if inFlightProcessingKey == key {
+            return false
+        }
+        inFlightProcessingKey = key
+        return true
+    }
+
+    @MainActor
+    static func endProcessing() {
+        inFlightProcessingKey = nil
+    }
+
+    private static func processingKey(for payload: RecipeImportPendingPayload) -> String {
+        let stamp = payload.createdAt.map { String($0.timeIntervalSince1970) } ?? "0"
+        let url = payload.url?.absoluteString ?? ""
+        let media = payload.mediaAttachment?.fileURL.absoluteString ?? ""
+        return "\(stamp)|\(url)|\(media)"
+    }
+
     static func clearPendingURL() {
         guard let defaults = UserDefaults(suiteName: appGroupID) else { return }
         defaults.removeObject(forKey: pendingURLKey)
