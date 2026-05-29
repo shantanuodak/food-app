@@ -49,6 +49,7 @@ struct RecipesScreen: View {
     @State private var browserImportSession: RecipeBrowserImportSession?
     @State private var pendingAudioImport: RecipePendingAudioImport?
     @State private var selectedRecipe: SavedRecipe?
+    @State private var recipePendingDeletion: SavedRecipe?
     @State private var didPresentPendingDraft = false
 
     init(pendingDraft: RecipeImportDraft? = nil, initialImportURL: String = "") {
@@ -144,6 +145,25 @@ struct RecipesScreen: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(24)
+        }
+        .confirmationDialog(
+            "Delete recipe?",
+            isPresented: Binding(
+                get: { recipePendingDeletion != nil },
+                set: { if !$0 { recipePendingDeletion = nil } }
+            ),
+            presenting: recipePendingDeletion
+        ) { recipe in
+            Button("Delete recipe", role: .destructive) {
+                AppHaptics.warning()
+                Task { await deleteRecipe(recipe) }
+            }
+            Button("Cancel", role: .cancel) {
+                AppHaptics.lightImpact()
+                recipePendingDeletion = nil
+            }
+        } message: { recipe in
+            Text("“\(recipe.title)” will be removed from your recipes. This can’t be undone.")
         }
     }
 
@@ -340,6 +360,13 @@ struct RecipesScreen: View {
                     RecipeFeaturedCard(recipe: featured)
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button(role: .destructive) {
+                        recipePendingDeletion = featured
+                    } label: {
+                        Label("Delete recipe", systemImage: "trash")
+                    }
+                }
             }
 
             if recipes.count > 1 {
@@ -368,6 +395,13 @@ struct RecipesScreen: View {
                             RecipeLibraryCard(recipe: recipe)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                recipePendingDeletion = recipe
+                            } label: {
+                                Label("Delete recipe", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
@@ -375,27 +409,7 @@ struct RecipesScreen: View {
     }
 
     private var normalizedImportURL: String {
-        let rawURL = importURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !rawURL.isEmpty else { return "" }
-
-        if rawURL.contains(" "),
-           let embeddedURL = firstSupportedWebURL(in: rawURL) {
-            return embeddedURL.absoluteString
-        }
-
-        if rawURL.lowercased().hasPrefix("http://") || rawURL.lowercased().hasPrefix("https://") {
-            return rawURL
-        }
-
-        if let embeddedURL = firstSupportedWebURL(in: rawURL) {
-            return embeddedURL.absoluteString
-        }
-
-        if rawURL.contains("."), !rawURL.contains(" ") {
-            return "https://\(rawURL)"
-        }
-
-        return rawURL
+        RecipeImportURL.normalized(importURL)
     }
 
     private func loadRecipes() async {
@@ -463,7 +477,7 @@ struct RecipesScreen: View {
                     sharedText: sharedText
                 )
             } else {
-                importErrorMessage = error.localizedDescription
+                importErrorMessage = RecipeImportFailure.friendlyMessage(error)
                 // Terminal failure (not a browser-import fallback): drop the
                 // pending share payload so it doesn't silently retry on every
                 // foreground. The user can re-share to try again.
@@ -476,13 +490,7 @@ struct RecipesScreen: View {
     }
 
     private func shouldUseBrowserImportFallback(_ error: Error) -> Bool {
-        let message = error.localizedDescription.lowercased()
-        return message.contains("blocked direct import") ||
-            message.contains("returned http 403") ||
-            message.contains("returned http 402") ||
-            message.contains("could not find structured recipe data") ||
-            message.contains("response format was not recognized") ||
-            message.contains("endpoint not found")
+        RecipeImportFailure.shouldFallBackToBrowser(error)
     }
 
     private func pasteAndImport() {
@@ -601,37 +609,29 @@ struct RecipesScreen: View {
         recipes.insert(recipe, at: 0)
     }
 
-    private func isSupportedRecipeURL(_ rawURL: String) -> Bool {
-        guard let components = URLComponents(string: rawURL),
-              let scheme = components.scheme?.lowercased(),
-              scheme == "https" || scheme == "http",
-              components.host?.isEmpty == false else {
-            return false
+    private func deleteRecipe(_ recipe: SavedRecipe) async {
+        do {
+            try await appStore.apiClient.deleteRecipe(id: recipe.id)
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                recipes.removeAll { $0.id == recipe.id }
+            }
+            if selectedRecipe?.id == recipe.id { selectedRecipe = nil }
+        } catch {
+            importErrorMessage = RecipeImportFailure.friendlyMessage(error)
         }
-        return true
+        recipePendingDeletion = nil
+    }
+
+    private func isSupportedRecipeURL(_ rawURL: String) -> Bool {
+        RecipeImportURL.isSupported(rawURL)
     }
 
     private func firstSupportedWebURL(in text: String) -> URL? {
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
-            return nil
-        }
-
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return detector
-            .matches(in: text, options: [], range: range)
-            .compactMap(\.url)
-            .first(where: { url in
-                guard let scheme = url.scheme?.lowercased(),
-                      scheme == "https" || scheme == "http",
-                      url.host?.isEmpty == false else {
-                    return false
-                }
-                return true
-            })
+        RecipeImportURL.firstSupportedWebURL(in: text)
     }
 }
 
-private struct RecipeBrowserImportSession: Identifiable {
+struct RecipeBrowserImportSession: Identifiable {
     let id = UUID()
     let url: URL
     var clearPendingURLOnSuccess = false
@@ -658,7 +658,7 @@ private struct RecipePendingAudioImport: Identifiable {
     }
 }
 
-private struct RecipeBrowserImportSheet: View {
+struct RecipeBrowserImportSheet: View {
     let url: URL
     let sourceHint: RecipeImportSourceHint
     let sharedText: String?
@@ -1748,7 +1748,7 @@ private struct RecipeCountPill: View {
     }
 }
 
-private struct RecipeReviewSheet: View {
+struct RecipeReviewSheet: View {
     @EnvironmentObject private var appStore: AppStore
 
     @State private var draft: RecipeImportDraft
@@ -2395,13 +2395,24 @@ struct RecipeDetailView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let source = recipeSourceLabel(recipe) {
-                RecipeMetaChip(icon: "link", text: source, tinted: true)
+            HStack(spacing: 8) {
+                if let source = recipeSourceLabel(recipe) {
+                    RecipeMetaChip(icon: "link", text: source, tinted: true)
+                }
+                if let time = RecipeDuration.humanLabel(from: recipe.totalTime ?? recipe.cookTime) {
+                    RecipeMetaChip(icon: "clock", text: time)
+                }
             }
             Text(recipe.title)
                 .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
                 .foregroundStyle(RecipesTokens.ink)
                 .fixedSize(horizontal: false, vertical: true)
+            if let description = recipe.description?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(RecipesTokens.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -2513,7 +2524,6 @@ struct RecipeDetailView: View {
         HStack {
             circleButton(icon: "chevron.left", action: onClose)
             Spacer()
-            circleButton(icon: "square.and.arrow.up", action: {})
         }
         .padding(.horizontal, 16)
         .padding(.top, 6)
@@ -2632,7 +2642,14 @@ extension SavedRecipe {
         sourceDomain: String?,
         sourceName: String?,
         heroImageUrl: String?,
+        description: String? = nil,
         servings: String?,
+        prepTime: String? = nil,
+        cookTime: String? = nil,
+        totalTime: String? = nil,
+        categories: [String] = [],
+        cuisines: [String] = [],
+        keywords: [String] = [],
         ingredients: [String],
         steps: [String],
         createdAt: String? = nil,
@@ -2644,7 +2661,14 @@ extension SavedRecipe {
         self.sourceDomain = sourceDomain
         self.sourceName = sourceName
         self.heroImageUrl = heroImageUrl
+        self.description = description
         self.servings = servings
+        self.prepTime = prepTime
+        self.cookTime = cookTime
+        self.totalTime = totalTime
+        self.categories = categories
+        self.cuisines = cuisines
+        self.keywords = keywords
         self.ingredients = ingredients.map { RecipeTextLine(text: $0) }
         self.steps = steps.map { RecipeTextLine(text: $0) }
         self.createdAt = createdAt

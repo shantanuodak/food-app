@@ -579,6 +579,16 @@ final class APIClient {
     }
 
     @discardableResult
+    func deleteRecipe(id: String) async throws -> DeleteRecipeResponse {
+        let encodedID = id.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? id
+        return try await request(
+            path: "/v1/recipes/\(encodedID)",
+            method: "DELETE",
+            requiresAuth: true
+        )
+    }
+
+    @discardableResult
     func createSavedMealCollection(_ requestBody: CreateSavedMealCollectionRequest) async throws -> CreateSavedMealCollectionResponse {
         try await request(
             path: "/v1/saved-meals/collections",
