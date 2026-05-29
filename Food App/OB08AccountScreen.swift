@@ -160,59 +160,59 @@ struct OB08AccountScreen: View {
 
 private enum AccountScreenPalette {
     static let ink = adaptiveColor(
-        light: UIColor(red: 0.16, green: 0.11, blue: 0.08, alpha: 1.0),
+        light: UIColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1.0),
         dark: UIColor(white: 0.96, alpha: 1.0)
     )
     static let secondaryInk = adaptiveColor(
-        light: UIColor(red: 0.29, green: 0.22, blue: 0.17, alpha: 0.78),
+        light: UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 0.76),
         dark: UIColor(white: 0.92, alpha: 0.74)
     )
     static let muted = adaptiveColor(
-        light: UIColor(red: 0.33, green: 0.26, blue: 0.22, alpha: 0.64),
+        light: UIColor(red: 0.36, green: 0.36, blue: 0.38, alpha: 0.62),
         dark: UIColor(white: 0.90, alpha: 0.60)
     )
     static let iconFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.52),
+        light: UIColor(white: 0.94, alpha: 0.90),
         dark: UIColor(white: 1.0, alpha: 0.12)
     )
     static let primaryIconFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.76),
+        light: UIColor(white: 0.92, alpha: 0.96),
         dark: UIColor(white: 1.0, alpha: 0.16)
     )
     static let secondaryIconFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.24),
+        light: UIColor(white: 0.90, alpha: 0.82),
         dark: UIColor(white: 1.0, alpha: 0.08)
     )
     static let primaryButtonTop = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.72),
+        light: UIColor(white: 1.0, alpha: 0.94),
         dark: UIColor(red: 0.25, green: 0.20, blue: 0.17, alpha: 0.92)
     )
     static let primaryButtonBottom = adaptiveColor(
-        light: UIColor(red: 0.96, green: 0.90, blue: 0.84, alpha: 0.58),
+        light: UIColor(white: 0.96, alpha: 0.86),
         dark: UIColor(red: 0.18, green: 0.15, blue: 0.13, alpha: 0.92)
     )
     static let secondaryButtonTop = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.66),
+        light: UIColor(white: 1.0, alpha: 0.86),
         dark: UIColor(red: 0.21, green: 0.17, blue: 0.14, alpha: 0.90)
     )
     static let secondaryButtonBottom = adaptiveColor(
-        light: UIColor(red: 0.95, green: 0.90, blue: 0.85, alpha: 0.50),
+        light: UIColor(white: 0.95, alpha: 0.72),
         dark: UIColor(red: 0.16, green: 0.13, blue: 0.11, alpha: 0.88)
     )
     static let borderPrimary = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.72),
+        light: UIColor(white: 0.0, alpha: 0.07),
         dark: UIColor(white: 1.0, alpha: 0.16)
     )
     static let borderSecondary = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.62),
+        light: UIColor(white: 0.0, alpha: 0.055),
         dark: UIColor(white: 1.0, alpha: 0.12)
     )
     static let primaryAccent = adaptiveColor(
-        light: UIColor(red: 0.63, green: 0.35, blue: 0.16, alpha: 1.0),
+        light: UIColor(red: 0.87, green: 0.42, blue: 0.12, alpha: 1.0),
         dark: UIColor(red: 0.99, green: 0.76, blue: 0.55, alpha: 1.0)
     )
     static let primaryAccentFill = adaptiveColor(
-        light: UIColor(red: 1.0, green: 0.92, blue: 0.84, alpha: 0.92),
+        light: UIColor(red: 1.0, green: 0.91, blue: 0.84, alpha: 0.86),
         dark: UIColor(red: 0.33, green: 0.23, blue: 0.17, alpha: 0.92)
     )
 

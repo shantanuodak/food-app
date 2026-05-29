@@ -17,6 +17,7 @@ enum AuthSessionStoreError: LocalizedError {
     case encodingFailed
     case decodingFailed
     case keychain(OSStatus)
+    case staleSession
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +27,8 @@ enum AuthSessionStoreError: LocalizedError {
             return "Failed to decode stored auth session."
         case let .keychain(status):
             return "Failed to access secure auth storage (\(status))."
+        case .staleSession:
+            return "Stored auth session changed before the recovered session could be saved."
         }
     }
 }
@@ -49,15 +52,36 @@ final class AuthSessionStore: ObservableObject {
         }
 
         let query = keychainQuery()
-        SecItemDelete(query as CFDictionary)
+        let updatedAttributes: [String: Any] = [
+            kSecValueData as String: data
+        ]
 
-        var attributes = query
-        attributes[kSecValueData as String] = data
-        attributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let updateStatus = SecItemUpdate(query as CFDictionary, updatedAttributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            self.session = session
+            return
+        }
 
-        let status = SecItemAdd(attributes as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw AuthSessionStoreError.keychain(status)
+        guard updateStatus == errSecItemNotFound else {
+            throw AuthSessionStoreError.keychain(updateStatus)
+        }
+
+        var addAttributes = query
+        addAttributes[kSecValueData as String] = data
+        addAttributes[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+
+        let addStatus = SecItemAdd(addAttributes as CFDictionary, nil)
+        if addStatus == errSecDuplicateItem {
+            let retryStatus = SecItemUpdate(query as CFDictionary, updatedAttributes as CFDictionary)
+            guard retryStatus == errSecSuccess else {
+                throw AuthSessionStoreError.keychain(retryStatus)
+            }
+            self.session = session
+            return
+        }
+
+        guard addStatus == errSecSuccess else {
+            throw AuthSessionStoreError.keychain(addStatus)
         }
 
         self.session = session
@@ -66,6 +90,20 @@ final class AuthSessionStore: ObservableObject {
     func clear() {
         SecItemDelete(keychainQuery() as CFDictionary)
         session = nil
+    }
+
+    func replaceInMemory(_ session: AuthSession) {
+        self.session = session
+    }
+
+    func storeRecovered(_ session: AuthSession, replacing expectedSession: AuthSession) throws {
+        guard let currentSession = loadSession(),
+              currentSession.accessToken == expectedSession.accessToken,
+              currentSession.refreshToken == expectedSession.refreshToken else {
+            throw AuthSessionStoreError.staleSession
+        }
+
+        try store(session)
     }
 
     var shouldRetryTransientLoadFailure: Bool {

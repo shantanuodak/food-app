@@ -687,83 +687,83 @@ private struct AccountLiquidGlassBackground: View {
 
 private enum AccountRoutePalette {
     static let ink = adaptiveColor(
-        light: UIColor(red: 0.16, green: 0.11, blue: 0.08, alpha: 1.0),
+        light: UIColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1.0),
         dark: UIColor(white: 0.96, alpha: 1.0)
     )
     static let secondaryInk = adaptiveColor(
-        light: UIColor(red: 0.28, green: 0.21, blue: 0.16, alpha: 0.78),
+        light: UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 0.76),
         dark: UIColor(white: 0.92, alpha: 0.74)
     )
     static let accentInk = adaptiveColor(
-        light: UIColor(red: 0.58, green: 0.33, blue: 0.16, alpha: 1.0),
+        light: UIColor(red: 0.86, green: 0.42, blue: 0.12, alpha: 1.0),
         dark: UIColor(red: 0.98, green: 0.71, blue: 0.42, alpha: 1.0)
     )
     static let backgroundTop = adaptiveColor(
-        light: UIColor(red: 0.94, green: 0.90, blue: 0.84, alpha: 1.0),
+        light: UIColor.white,
         dark: UIColor(red: 0.07, green: 0.06, blue: 0.05, alpha: 1.0)
     )
     static let backgroundBottom = adaptiveColor(
-        light: UIColor(red: 0.98, green: 0.96, blue: 0.93, alpha: 1.0),
+        light: UIColor.white,
         dark: UIColor(red: 0.11, green: 0.09, blue: 0.08, alpha: 1.0)
     )
     static let backgroundSheen = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.34),
+        light: UIColor(white: 1.0, alpha: 0.0),
         dark: UIColor(white: 1.0, alpha: 0.05)
     )
     static let backgroundDepth = adaptiveColor(
-        light: UIColor(red: 0.82, green: 0.74, blue: 0.64, alpha: 0.18),
+        light: UIColor.black.withAlphaComponent(0.025),
         dark: UIColor.black.withAlphaComponent(0.26)
     )
     static let controlFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.58),
+        light: UIColor(white: 1.0, alpha: 0.86),
         dark: UIColor(white: 1.0, alpha: 0.10)
     )
     static let controlStroke = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.74),
+        light: UIColor(white: 0.0, alpha: 0.07),
         dark: UIColor(white: 1.0, alpha: 0.16)
     )
     static let badgeFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.62),
+        light: UIColor(white: 1.0, alpha: 0.84),
         dark: UIColor(white: 1.0, alpha: 0.10)
     )
     static let badgeStroke = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.76),
+        light: UIColor(white: 0.0, alpha: 0.06),
         dark: UIColor(white: 1.0, alpha: 0.18)
     )
     static let cardFront = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.46),
+        light: UIColor(white: 1.0, alpha: 0.78),
         dark: UIColor(red: 0.18, green: 0.15, blue: 0.13, alpha: 0.86)
     )
     static let cardStrokeStrong = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.74),
+        light: UIColor(white: 0.0, alpha: 0.07),
         dark: UIColor(white: 1.0, alpha: 0.14)
     )
     static let lineTrack = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.42),
+        light: UIColor(white: 0.0, alpha: 0.08),
         dark: UIColor(white: 1.0, alpha: 0.12)
     )
     static let lineActive = adaptiveColor(
-        light: UIColor(red: 0.80, green: 0.48, blue: 0.24, alpha: 1.0),
+        light: UIColor(red: 0.91, green: 0.43, blue: 0.13, alpha: 1.0),
         dark: UIColor(red: 1.0, green: 0.74, blue: 0.45, alpha: 1.0)
     )
     static let pillFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.42),
+        light: UIColor(white: 0.96, alpha: 0.80),
         dark: UIColor(white: 1.0, alpha: 0.08)
     )
     static let pillStroke = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.62),
+        light: UIColor(white: 0.0, alpha: 0.06),
         dark: UIColor(white: 1.0, alpha: 0.12)
     )
     static let shine = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.38),
+        light: UIColor(white: 1.0, alpha: 0.56),
         dark: UIColor(white: 1.0, alpha: 0.12)
     )
     static let textBubbleFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.56),
+        light: UIColor(white: 0.96, alpha: 0.92),
         dark: UIColor(white: 1.0, alpha: 0.08)
     )
     static let textBubbleStroke = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.78),
+        light: UIColor(white: 0.0, alpha: 0.06),
         dark: UIColor(white: 1.0, alpha: 0.14)
     )
     private static func adaptiveColor(light: UIColor, dark: UIColor) -> Color {

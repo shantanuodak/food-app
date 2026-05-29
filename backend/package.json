@@ -14,12 +14,14 @@
     "eval:diff": "tsx src/scripts/evalDiff.ts",
     "eval:golden": "tsx src/scripts/goldenSetEval.ts",
     "eval:image": "tsx src/scripts/runImageParseEval.ts",
+    "recipe:smoke": "tsx src/scripts/recipeImportSmoke.ts",
     "preflight:release": "tsx src/scripts/releasePreflight.ts",
     "release:backend": "npm run build && npm test && npm run test:integration && npm run preflight:release",
     "test": "vitest run",
     "test:integration": "RUN_INTEGRATION_TESTS=true vitest run tests/integration.api.test.ts"
   },
   "dependencies": {
+    "@dimfu/recipe-scraper": "^0.3.0",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
     "helmet": "^8.1.0",

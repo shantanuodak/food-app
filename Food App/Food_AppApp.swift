@@ -21,6 +21,10 @@ struct Food_AppApp: App {
             RootBootstrapView()
                 .preferredColorScheme(AppearancePreference(rawValue: appearanceRaw)?.colorScheme)
                 .onOpenURL { url in
+                    if RecipeImportPendingStore.handle(url: url) {
+                        return
+                    }
+
                     if QuickCameraLaunchStore.handle(url: url) {
                         return
                     }
@@ -56,6 +60,7 @@ private struct RootAppContentView: View {
                     // network work is scheduled only after auth restoration.
                     try? await Task.sleep(nanoseconds: 800_000_000)
                     guard !Task.isCancelled else { return }
+                    RecipeImportPendingStore.notifyPendingURLIfAvailable()
                     FoodBackgroundRefreshService.shared.scheduleAppRefresh()
                     await appStore.refreshNotificationAuthState()
                     schedulePostLaunchMaintenanceIfReady()
@@ -72,7 +77,9 @@ private struct RootAppContentView: View {
                 schedulePostLaunchMaintenanceIfReady()
             }
             .onChange(of: scenePhase) { _, phase in
-                if phase == .background {
+                if phase == .active {
+                    RecipeImportPendingStore.notifyPendingURLIfAvailable()
+                } else if phase == .background {
                     FoodBackgroundRefreshService.shared.scheduleAppRefresh()
                 }
             }

@@ -482,108 +482,111 @@ private struct GoalValidationBackground: View {
 
 private enum GoalValidationPalette {
     static let ink = adaptiveColor(
-        light: UIColor(red: 0.15, green: 0.11, blue: 0.08, alpha: 1.0),
+        light: UIColor(red: 0.08, green: 0.08, blue: 0.09, alpha: 1.0),
         dark: UIColor(white: 0.96, alpha: 1.0)
     )
     static let secondaryInk = adaptiveColor(
-        light: UIColor(red: 0.28, green: 0.21, blue: 0.16, alpha: 0.78),
+        light: UIColor(red: 0.28, green: 0.28, blue: 0.30, alpha: 0.76),
         dark: UIColor(white: 0.92, alpha: 0.74)
     )
     static let mutedInk = adaptiveColor(
-        light: UIColor(red: 0.36, green: 0.28, blue: 0.23, alpha: 0.58),
+        light: UIColor(red: 0.38, green: 0.38, blue: 0.40, alpha: 0.58),
         dark: UIColor(white: 0.88, alpha: 0.52)
     )
     static let accentInk = adaptiveColor(
-        light: UIColor(red: 0.57, green: 0.33, blue: 0.17, alpha: 1.0),
+        light: UIColor(red: 0.86, green: 0.42, blue: 0.12, alpha: 1.0),
         dark: UIColor(red: 0.98, green: 0.75, blue: 0.53, alpha: 1.0)
     )
     static let backgroundTop = adaptiveColor(
-        light: UIColor(red: 0.95, green: 0.91, blue: 0.86, alpha: 1.0),
+        light: UIColor.white,
         dark: UIColor(red: 0.06, green: 0.05, blue: 0.04, alpha: 1.0)
     )
     static let backgroundBottom = adaptiveColor(
-        light: UIColor(red: 0.98, green: 0.96, blue: 0.93, alpha: 1.0),
+        light: UIColor.white,
         dark: UIColor(red: 0.10, green: 0.08, blue: 0.07, alpha: 1.0)
     )
     static let glowWarm = adaptiveColor(
-        light: UIColor(red: 1.0, green: 0.67, blue: 0.42, alpha: 0.24),
+        light: UIColor(red: 1.0, green: 0.50, blue: 0.20, alpha: 0.10),
         dark: UIColor(red: 1.0, green: 0.54, blue: 0.26, alpha: 0.22)
     )
     static let glowMint = adaptiveColor(
-        light: UIColor(red: 0.54, green: 0.90, blue: 0.78, alpha: 0.24),
+        light: UIColor(red: 0.26, green: 0.78, blue: 0.62, alpha: 0.08),
         dark: UIColor(red: 0.42, green: 0.86, blue: 0.74, alpha: 0.14)
     )
     static let glowSoft = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.54),
+        light: UIColor(white: 0.0, alpha: 0.025),
         dark: UIColor(white: 1.0, alpha: 0.08)
     )
     static let controlFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.58),
+        light: UIColor(white: 1.0, alpha: 0.86),
         dark: UIColor(white: 1.0, alpha: 0.09)
     )
     static let controlStroke = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.74),
+        light: UIColor(white: 0.0, alpha: 0.07),
         dark: UIColor(white: 1.0, alpha: 0.14)
     )
     static let badgeFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.60),
+        light: UIColor(white: 1.0, alpha: 0.84),
         dark: UIColor(white: 1.0, alpha: 0.09)
     )
     static let badgeStroke = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.76),
+        light: UIColor(white: 0.0, alpha: 0.06),
         dark: UIColor(white: 1.0, alpha: 0.16)
     )
     static let cardBackA = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.16),
+        light: UIColor(white: 1.0, alpha: 0.38),
         dark: UIColor(white: 1.0, alpha: 0.04)
     )
     static let cardBackB = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.18),
+        light: UIColor(white: 1.0, alpha: 0.46),
         dark: UIColor(white: 1.0, alpha: 0.06)
     )
     static let cardFront = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.42),
+        light: UIColor(white: 1.0, alpha: 0.80),
         dark: UIColor(red: 0.19, green: 0.16, blue: 0.14, alpha: 0.84)
     )
     static let cardStrokeStrong = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.70),
+        light: UIColor(white: 0.0, alpha: 0.07),
         dark: UIColor(white: 1.0, alpha: 0.14)
     )
     static let cardStrokeSoft = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.30),
+        light: UIColor(white: 0.0, alpha: 0.045),
         dark: UIColor(white: 1.0, alpha: 0.08)
     )
     static let beamTrack = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.20),
+        light: UIColor(white: 0.0, alpha: 0.08),
         dark: UIColor(white: 1.0, alpha: 0.08)
     )
     static let divider = adaptiveColor(
-        light: UIColor(red: 0.48, green: 0.37, blue: 0.30, alpha: 0.12),
+        light: UIColor(white: 0.0, alpha: 0.075),
         dark: UIColor(white: 1.0, alpha: 0.08)
     )
     static let metricFill = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.34),
+        light: UIColor(white: 0.96, alpha: 0.76),
         dark: UIColor(white: 1.0, alpha: 0.06)
     )
     static let metricStroke = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.46),
+        light: UIColor(white: 0.0, alpha: 0.055),
         dark: UIColor(white: 1.0, alpha: 0.10)
     )
     static let ctaTop = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.96),
+        light: UIColor(white: 0.06, alpha: 1.0),
         dark: UIColor(red: 0.98, green: 0.95, blue: 0.92, alpha: 0.96)
     )
     static let ctaBottom = adaptiveColor(
-        light: UIColor(red: 0.95, green: 0.90, blue: 0.84, alpha: 0.92),
+        light: UIColor(white: 0.0, alpha: 1.0),
         dark: UIColor(red: 0.92, green: 0.87, blue: 0.82, alpha: 0.94)
     )
-    static let ctaInk = Color(red: 0.10, green: 0.08, blue: 0.07)
+    static let ctaInk = adaptiveColor(
+        light: UIColor.white,
+        dark: UIColor(red: 0.10, green: 0.08, blue: 0.07, alpha: 1.0)
+    )
     static let ctaStroke = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.72),
+        light: UIColor(white: 1.0, alpha: 0.10),
         dark: UIColor(white: 1.0, alpha: 0.30)
     )
     static let shine = adaptiveColor(
-        light: UIColor(white: 1.0, alpha: 0.34),
+        light: UIColor(white: 1.0, alpha: 0.56),
         dark: UIColor(white: 1.0, alpha: 0.12)
     )
     static let accentGold = Color(red: 1.0, green: 0.70, blue: 0.30)

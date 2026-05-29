@@ -113,6 +113,7 @@ extension MainLoggingShellView {
             isNutritionSummaryPresented ||
             isProgressChartsPresented ||
             isSavedMealsPresented ||
+            isRecipesPresented ||
             isFoodStoryPresented ||
             isLoggingTipsPresented ||
             isLoggingTipsPromptPresented ||

@@ -8,4 +8,5 @@ extension Notification.Name {
     static let openBadgesFromStreakDrawer = Notification.Name("openBadgesFromStreakDrawer")
     static let openRemindersFromNotification = Notification.Name("openRemindersFromNotification")
     static let apnsDeviceTokenDidChange = Notification.Name("apnsDeviceTokenDidChange")
+    static let recipeImportPendingURLDidChange = Notification.Name("recipeImportPendingURLDidChange")
 }

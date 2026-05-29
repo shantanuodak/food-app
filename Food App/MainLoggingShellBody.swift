@@ -144,6 +144,12 @@ extension MainLoggingShellView {
                     isLoggingTipsPromptPresented: $isLoggingTipsPromptPresented
                 )
             )
+            .modifier(
+                MainLoggingRecipeImportPresentationModifier(
+                    isPresented: $isRecipesPresented,
+                    appStore: appStore
+                )
+            )
             .sheet(isPresented: $isStreakDrawerPresented) {
                 HomeStreakDrawerView()
                     .environmentObject(appStore)
@@ -766,6 +772,36 @@ extension MainLoggingShellView {
                 draftLoggedAt = min(date, Date())
             }
         )
+    }
+}
+
+private struct MainLoggingRecipeImportPresentationModifier: ViewModifier {
+    @Binding var isPresented: Bool
+    let appStore: AppStore
+
+    func body(content: Content) -> some View {
+        content
+            .sheet(isPresented: $isPresented) {
+                NavigationStack {
+                    RecipesScreen()
+                        .toolbar {
+                            ToolbarItem(placement: .cancellationAction) {
+                                Button("Done") {
+                                    AppHaptics.lightImpact()
+                                    isPresented = false
+                                }
+                            }
+                        }
+                }
+                .environmentObject(appStore)
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
+                .presentationCornerRadius(24)
+            }
+            .onReceive(NotificationCenter.default.publisher(for: .recipeImportPendingURLDidChange)) { _ in
+                guard appStore.isOnboardingComplete else { return }
+                isPresented = true
+            }
     }
 }
 

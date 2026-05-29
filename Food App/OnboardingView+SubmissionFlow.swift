@@ -63,8 +63,7 @@ extension OnboardingView {
                         } else {
                             // Sign-in path → user already knows they have
                             // an account, land them on home directly.
-                            appStore.markOnboardingComplete()
-                            flow.showHome()
+                            resumeExistingAccountSession()
                         }
                     }
                     return

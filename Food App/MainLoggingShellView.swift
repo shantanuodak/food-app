@@ -141,6 +141,7 @@ struct MainLoggingShellView: View {
     @State var isNutritionSummaryPresented = false
     @State var isProgressChartsPresented = false
     @State var isSavedMealsPresented = false
+    @State var isRecipesPresented = false
     @State var isFoodStoryPresented = false
     @State var isLoggingTipsPresented = false
     /// Bottom sheet popup that nudges the user toward Logging Tips when a

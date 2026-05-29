@@ -191,8 +191,7 @@ struct OnboardingView: View {
                     onContinueWithExisting: {
                         existingAccountStatus = nil
                         userConfirmedProfileOverwrite = false
-                        appStore.markOnboardingComplete()
-                        flow.showHome()
+                        resumeExistingAccountSession()
                     },
                     onUpdateProfile: {
                         existingAccountStatus = nil
@@ -247,6 +246,13 @@ struct OnboardingView: View {
         true
     }
 
+    func resumeExistingAccountSession() {
+        appStore.markOnboardingComplete()
+        Task {
+            await appStore.refreshOnboardingCompletionFromBackend()
+        }
+        flow.showHome()
+    }
 }
 
 // MARK: - Account Screen Carousel

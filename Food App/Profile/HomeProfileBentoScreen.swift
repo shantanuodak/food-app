@@ -119,6 +119,7 @@ struct HomeProfileBentoScreen: View {
                         // dashboard, without doubling up the calorie hero
                         // on every glance.
                         SavedMealsTile()
+                        RecipesTile()
                         HStack(alignment: .top, spacing: 12) {
                             NavigationLink {
                                 BadgesTrophyCaseView(currentStreakDays: streakDays)
@@ -1051,6 +1052,43 @@ private struct SavedMealsTile: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Saved Meals. Keep repeat meals ready without retyping.")
             .accessibilityHint("Opens saved meals")
+        }
+    }
+}
+
+/// Recipes — imported web recipes live separately from repeat logged meals.
+private struct RecipesTile: View {
+    var body: some View {
+        BentoTappableTile(
+            background: BentoTokens.whiteTileBackground,
+            border: BentoTokens.whiteTileBorder
+        ) {
+            RecipesScreen()
+        } label: {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "book.closed")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(BentoTokens.orange700)
+                    .frame(width: 42, height: 42, alignment: .center)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Recipes")
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(BentoTokens.gray900)
+
+                    Text("Review recipes imported from the web.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(BentoTokens.gray700)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Recipes. Review recipes imported from the web.")
+            .accessibilityHint("Opens recipes")
         }
     }
 }
