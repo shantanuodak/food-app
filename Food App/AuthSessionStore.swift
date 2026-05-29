@@ -41,6 +41,14 @@ final class AuthSessionStore: ObservableObject {
     private let serviceName: String
     private let accountName = "auth.session.v1"
 
+    /// Process-wide shared store. The main app, Siri, notification, and
+    /// QuickCamera code paths must all read/write ONE in-memory session.
+    /// Multiple stores each holding their own copy were the root of the
+    /// overnight-logout race: each refreshed the same rotating Supabase
+    /// token independently, the first rotated it, and the rest hit
+    /// "Refresh Token Already Used" and cleared the session.
+    static let shared = AuthSessionStore()
+
     init(serviceName: String = Bundle.main.bundleIdentifier ?? "FoodApp") {
         self.serviceName = serviceName
         self.session = loadSession()
@@ -97,7 +105,24 @@ final class AuthSessionStore: ObservableObject {
     }
 
     func storeRecovered(_ session: AuthSession, replacing expectedSession: AuthSession) throws {
-        guard let currentSession = loadSession(),
+        let currentSession = loadSession()
+
+        // Idempotent: the freshly rotated session is already persisted — e.g.
+        // the Supabase authStateChanges mirror (or a joined single-flight
+        // refresh) wrote it first. Treat as success instead of throwing
+        // staleSession, otherwise a refresh that actually SUCCEEDED would
+        // surface to its caller as a failure.
+        if let currentSession,
+           currentSession.accessToken == session.accessToken,
+           currentSession.refreshToken == session.refreshToken {
+            self.session = currentSession
+            return
+        }
+
+        // Otherwise require that the keychain still holds the token we
+        // refreshed from. If it holds something else entirely, the caller
+        // should reload and re-evaluate rather than clobber it.
+        guard let currentSession,
               currentSession.accessToken == expectedSession.accessToken,
               currentSession.refreshToken == expectedSession.refreshToken else {
             throw AuthSessionStoreError.staleSession

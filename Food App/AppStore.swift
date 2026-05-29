@@ -65,15 +65,27 @@ final class AppStore: ObservableObject {
         defaults: UserDefaults = .standard
     ) {
         let resolvedConfiguration = configuration ?? AppConfiguration.live()
-        let sessionStore = AuthSessionStore()
-        let authService = AuthService(
-            sessionStore: sessionStore,
-            fallbackToken: resolvedConfiguration.authToken,
-            googleClientID: resolvedConfiguration.googleClientID,
-            googleServerClientID: resolvedConfiguration.googleServerClientID,
-            supabaseURL: resolvedConfiguration.supabaseURL,
-            supabaseAnonKey: resolvedConfiguration.supabaseAnonKey
-        )
+        // The live app uses the process-wide shared AuthService/AuthSessionStore
+        // so the main app, Siri, notifications, and QuickCamera all share ONE
+        // SupabaseClient and ONE in-memory session (see LiveAPIClientFactory).
+        // Tests/previews that inject a custom configuration get isolated
+        // instances so they never touch the real keychain session.
+        let sessionStore: AuthSessionStore
+        let authService: AuthService
+        if configuration == nil {
+            sessionStore = AuthSessionStore.shared
+            authService = AuthService.shared
+        } else {
+            sessionStore = AuthSessionStore()
+            authService = AuthService(
+                sessionStore: sessionStore,
+                fallbackToken: resolvedConfiguration.authToken,
+                googleClientID: resolvedConfiguration.googleClientID,
+                googleServerClientID: resolvedConfiguration.googleServerClientID,
+                supabaseURL: resolvedConfiguration.supabaseURL,
+                supabaseAnonKey: resolvedConfiguration.supabaseAnonKey
+            )
+        }
         self.configuration = resolvedConfiguration
         self.authSessionStore = sessionStore
         self.authService = authService
