@@ -78,10 +78,13 @@ struct EarnedBadge: Identifiable, Equatable {
         case .logging:
             return "\(definition.requiredValue) logged meal\(definition.requiredValue == 1 ? "" : "s")"
         case .input:
-            return "Unlocked by using \(definition.title.lowercased())"
+            return definition.subtitle
         case .variety:
             return "\(definition.requiredValue) unique food\(definition.requiredValue == 1 ? "" : "s")"
         case .accuracy:
+            if definition.id == "first_refine" || definition.id == "careful_reviewer" {
+                return definition.subtitle
+            }
             return "\(definition.requiredValue) trusted nutrition moment\(definition.requiredValue == 1 ? "" : "s")"
         case .hydration:
             return "\(definition.requiredValue) water milestone\(definition.requiredValue == 1 ? "" : "s")"

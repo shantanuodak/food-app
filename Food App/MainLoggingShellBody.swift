@@ -570,9 +570,23 @@ extension MainLoggingShellView {
             .overlay(alignment: .bottom) {
                 if !isVoiceOverlayPresented {
                     bottomActionDock
+                        // Lift the dock above the recipes sheet peek
+                        // (.height(88)) so the icons aren't covered.
+                        // Skip the lift while the keyboard is up — the
+                        // sheet auto-dismisses then and the dock can sit
+                        // right above the keyboard.
+                        .padding(.bottom, isKeyboardVisible ? 0 : 56)
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
+            .modifier(
+                HomeRecipesDrawerSheetModifier(
+                    isKeyboardVisible: isKeyboardVisible,
+                    isVoiceOverlayPresented: isVoiceOverlayPresented,
+                    isOtherModalPresented: isRecipesDrawerSuppressed,
+                    appStore: appStore
+                )
+            )
             .modifier(
                 MainLoggingTutorialModifier(
                     isHomeTutorialPresented: $isHomeTutorialPresented,
