@@ -147,25 +147,25 @@ enum BadgeCatalog {
         switch definition.id {
         case let id where id.hasPrefix("streak_"):
             return currentStreakDays
-        case "meal_starter", "meal_regular", "logging_veteran":
+        case "meal_first_bite", "meal_starter", "meal_regular", "logging_veteran", "meal_dedicated":
             return totals.logs
         case "food_collector", "plate_curator", "food_archivist":
             return totals.foodItems
-        case "text_logger":
+        case "text_logger", "wordsmith":
             return totals.textLogs
-        case "voice_logger":
+        case "voice_logger", "smooth_talker":
             return totals.voiceLogs
-        case "camera_logger":
+        case "camera_logger", "shutterbug":
             return totals.imageLogs
         case "hands_on_editor":
             return totals.manualLogs + totals.manualOverrideItems
         case "variety_explorer", "broad_palate", "flavor_atlas":
             return totals.uniqueFoods
-        case "clean_parser":
+        case "clean_parser", "spot_on":
             return totals.highConfidenceLogs
-        case "trusted_matches":
+        case "trusted_matches", "nutrition_authority":
             return totals.highConfidenceItems
-        case "careful_reviewer":
+        case "first_refine", "careful_reviewer":
             return totals.manualOverrideItems
         case "hydration_first_drop", "hydration_three_logs":
             return totals.hydrationLogs ?? 0
@@ -181,26 +181,49 @@ enum BadgeCatalog {
     }
 
     private static let allDefinitions: [BadgeDefinition] = [
+        // Streaks — 2026-05-24: filled the old 7→30→100 jumps. Added a
+        // 14-day step (early reinforcement), 50 + 75 to bridge the long
+        // 30→100 desert, and a 365 capstone so there's a goal past 100.
         BadgeDefinition(id: "streak_first_spark", category: .streaks, title: "First Spark", subtitle: "Log your first day.", systemImage: "sparkle", requiredValue: 1, rarity: .bronze),
         BadgeDefinition(id: "streak_weekly_flame", category: .streaks, title: "Weekly Flame", subtitle: "Keep a 7-day streak.", systemImage: "flame.circle.fill", requiredValue: 7, rarity: .silver),
+        BadgeDefinition(id: "streak_two_weeks", category: .streaks, title: "On a Roll", subtitle: "Keep a 14-day streak.", systemImage: "flame.circle.fill", requiredValue: 14, rarity: .silver),
         BadgeDefinition(id: "streak_locked_in", category: .streaks, title: "Locked In", subtitle: "Keep a 30-day streak.", systemImage: "lock.circle.fill", requiredValue: 30, rarity: .gold),
+        BadgeDefinition(id: "streak_steadfast", category: .streaks, title: "Steadfast", subtitle: "Keep a 50-day streak.", systemImage: "bolt.circle.fill", requiredValue: 50, rarity: .gold),
+        BadgeDefinition(id: "streak_iron_will", category: .streaks, title: "Iron Will", subtitle: "Keep a 75-day streak.", systemImage: "shield.lefthalf.filled", requiredValue: 75, rarity: .gold),
         BadgeDefinition(id: "streak_century_club", category: .streaks, title: "Century Club", subtitle: "Keep a 100-day streak.", systemImage: "100.circle.fill", requiredValue: 100, rarity: .platinum),
+        BadgeDefinition(id: "streak_year_of_fire", category: .streaks, title: "Year of Fire", subtitle: "Keep a 365-day streak.", systemImage: "crown.fill", requiredValue: 365, rarity: .platinum),
+        // Logging — added an instant first-meal win and a 250-meal long-haul
+        // badge so the ladder doesn't stop at 100.
+        BadgeDefinition(id: "meal_first_bite", category: .logging, title: "First Bite", subtitle: "Log your first meal.", systemImage: "fork.knife", requiredValue: 1, rarity: .bronze),
         BadgeDefinition(id: "meal_starter", category: .logging, title: "Meal Starter", subtitle: "Log 10 meals.", systemImage: "fork.knife.circle.fill", requiredValue: 10, rarity: .bronze),
         BadgeDefinition(id: "meal_regular", category: .logging, title: "Meal Regular", subtitle: "Log 50 meals.", systemImage: "calendar.circle.fill", requiredValue: 50, rarity: .silver),
         BadgeDefinition(id: "logging_veteran", category: .logging, title: "Logging Veteran", subtitle: "Log 100 meals.", systemImage: "checkmark.seal.fill", requiredValue: 100, rarity: .gold),
+        BadgeDefinition(id: "meal_dedicated", category: .logging, title: "Dedicated Logger", subtitle: "Log 250 meals.", systemImage: "star.circle.fill", requiredValue: 250, rarity: .platinum),
         BadgeDefinition(id: "food_collector", category: .logging, title: "Food Collector", subtitle: "Record 100 food items.", systemImage: "square.grid.2x2.fill", requiredValue: 100, rarity: .bronze),
         BadgeDefinition(id: "plate_curator", category: .logging, title: "Plate Curator", subtitle: "Record 250 food items.", systemImage: "tray.full.fill", requiredValue: 250, rarity: .silver),
         BadgeDefinition(id: "food_archivist", category: .logging, title: "Food Archivist", subtitle: "Record 500 food items.", systemImage: "archivebox.circle.fill", requiredValue: 500, rarity: .gold),
+        // Input mastery — the bronze tier is "try each method once". Added a
+        // silver repeat-use tier (25×) per method so habitual users of a
+        // given input keep earning.
         BadgeDefinition(id: "text_logger", category: .input, title: "Text Logger", subtitle: "Log with text.", systemImage: "keyboard.fill", requiredValue: 1, rarity: .bronze),
+        BadgeDefinition(id: "wordsmith", category: .input, title: "Wordsmith", subtitle: "Log 25 meals with text.", systemImage: "text.bubble.fill", requiredValue: 25, rarity: .silver),
         BadgeDefinition(id: "voice_logger", category: .input, title: "Voice Logger", subtitle: "Log with voice.", systemImage: "mic.circle.fill", requiredValue: 1, rarity: .bronze),
+        BadgeDefinition(id: "smooth_talker", category: .input, title: "Smooth Talker", subtitle: "Log 25 meals with voice.", systemImage: "waveform.circle.fill", requiredValue: 25, rarity: .silver),
         BadgeDefinition(id: "camera_logger", category: .input, title: "Camera Logger", subtitle: "Log with the camera.", systemImage: "camera.circle.fill", requiredValue: 1, rarity: .bronze),
+        BadgeDefinition(id: "shutterbug", category: .input, title: "Shutterbug", subtitle: "Log 25 meals with the camera.", systemImage: "photo.circle.fill", requiredValue: 25, rarity: .silver),
         BadgeDefinition(id: "hands_on_editor", category: .input, title: "Hands-On Editor", subtitle: "Review or manually adjust a meal.", systemImage: "slider.horizontal.3", requiredValue: 1, rarity: .silver),
         BadgeDefinition(id: "variety_explorer", category: .variety, title: "Variety Explorer", subtitle: "Log 25 unique foods.", systemImage: "globe.americas.fill", requiredValue: 25, rarity: .bronze),
         BadgeDefinition(id: "broad_palate", category: .variety, title: "Broad Palate", subtitle: "Log 75 unique foods.", systemImage: "map.circle.fill", requiredValue: 75, rarity: .silver),
         BadgeDefinition(id: "flavor_atlas", category: .variety, title: "Flavor Atlas", subtitle: "Log 150 unique foods.", systemImage: "sparkles", requiredValue: 150, rarity: .gold),
-        BadgeDefinition(id: "clean_parser", category: .accuracy, title: "Clean Parser", subtitle: "Log 20 high-confidence meals.", systemImage: "checkmark.circle.fill", requiredValue: 20, rarity: .silver),
-        BadgeDefinition(id: "trusted_matches", category: .accuracy, title: "Trusted Matches", subtitle: "Get 50 high-confidence food matches.", systemImage: "seal.fill", requiredValue: 50, rarity: .silver),
+        // Accuracy — added an entry-level first-correction badge and two
+        // higher rungs (Spot On / Nutrition Authority) so precision keeps
+        // paying off past the first month.
+        BadgeDefinition(id: "first_refine", category: .accuracy, title: "First Correction", subtitle: "Refine 1 food item.", systemImage: "pencil.circle.fill", requiredValue: 1, rarity: .bronze),
         BadgeDefinition(id: "careful_reviewer", category: .accuracy, title: "Careful Reviewer", subtitle: "Manually refine 10 food items.", systemImage: "pencil.and.outline", requiredValue: 10, rarity: .gold),
+        BadgeDefinition(id: "clean_parser", category: .accuracy, title: "Clean Parser", subtitle: "Log 20 high-confidence meals.", systemImage: "checkmark.circle.fill", requiredValue: 20, rarity: .silver),
+        BadgeDefinition(id: "spot_on", category: .accuracy, title: "Spot On", subtitle: "Log 50 high-confidence meals.", systemImage: "rosette", requiredValue: 50, rarity: .gold),
+        BadgeDefinition(id: "trusted_matches", category: .accuracy, title: "Trusted Matches", subtitle: "Get 50 high-confidence food matches.", systemImage: "seal.fill", requiredValue: 50, rarity: .silver),
+        BadgeDefinition(id: "nutrition_authority", category: .accuracy, title: "Nutrition Authority", subtitle: "Get 150 high-confidence matches.", systemImage: "checkmark.shield.fill", requiredValue: 150, rarity: .platinum),
         BadgeDefinition(id: "hydration_first_drop", category: .hydration, title: "First Drop", subtitle: "Log your first water.", systemImage: "drop.fill", requiredValue: 1, rarity: .bronze),
         BadgeDefinition(id: "hydration_three_logs", category: .hydration, title: "Three Logs", subtitle: "Log water 3 times.", systemImage: "drop.circle.fill", requiredValue: 3, rarity: .silver),
         BadgeDefinition(id: "hydration_goal_day", category: .hydration, title: "Goal Day", subtitle: "Hit your daily water goal.", systemImage: "target", requiredValue: 1, rarity: .gold),
