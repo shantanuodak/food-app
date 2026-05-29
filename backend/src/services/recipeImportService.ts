@@ -3,8 +3,10 @@ import { lookup } from 'node:dns/promises';
 import type { PoolClient } from 'pg';
 import getRecipeData from '@dimfu/recipe-scraper';
 import { pool } from '../db.js';
+import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import { ensureUserExists } from './userService.js';
+import { cleanupRecipeDraft } from './recipeCleanupService.js';
 
 const SCRAPE_TIMEOUT_MS = 8000;
 const READER_TIMEOUT_MS = 20000;
@@ -1434,6 +1436,16 @@ export async function importRecipeFromUrl(input: {
 }
 
 async function importRecipeDraftFromSafeUrl(safeUrl: SafeRecipeUrl): Promise<RecipeDraft> {
+  const raw = await scrapeRawDraftFromSafeUrl(safeUrl);
+  return maybeCleanupDraft(raw);
+}
+
+/**
+ * The deterministic scrape — direct HTML + recipe-scraper, with the markdown
+ * reader fallback for bot-walled / schemaless pages. Returns the RAW draft
+ * (no LLM). Kept separate so the optional cleanup pass has a single seam.
+ */
+async function scrapeRawDraftFromSafeUrl(safeUrl: SafeRecipeUrl): Promise<RecipeDraft> {
   try {
     const { finalUrl, html } = await fetchRecipeHtml(safeUrl.url);
     const scraped = await scrapeRecipeHtml(html, finalUrl);
@@ -1453,6 +1465,29 @@ async function importRecipeDraftFromSafeUrl(safeUrl: SafeRecipeUrl): Promise<Rec
     const { finalUrl, markdown } = await fetchRecipeMarkdownViaReader(safeUrl.url);
     const scraped = scrapeRecipeMarkdown(markdown);
     return buildRecipeDraft(scraped, finalUrl);
+  }
+}
+
+/**
+ * Optional Gemini structuring + de-noise pass, gated by RECIPE_CLEANUP_ENABLED.
+ * The cleanup service is internally guarded (it returns the original draft on
+ * any LLM failure / empty / unusable response), and we additionally wrap the
+ * whole call so a cleanup error can NEVER turn a successful scrape into a
+ * failed import — worst case we fall back to the raw draft.
+ */
+async function maybeCleanupDraft(draft: RecipeDraft): Promise<RecipeDraft> {
+  if (!config.recipeCleanupEnabled) {
+    return draft;
+  }
+  try {
+    const { cleaned, changed, skippedReason } = await cleanupRecipeDraft(draft);
+    if (!changed && skippedReason) {
+      console.warn(`[recipeImport] cleanup skipped (${skippedReason}); using raw draft for ${draft.sourceDomain}`);
+    }
+    return cleaned;
+  } catch (error) {
+    console.warn('[recipeImport] cleanup pass threw; using raw draft', error);
+    return draft;
   }
 }
 

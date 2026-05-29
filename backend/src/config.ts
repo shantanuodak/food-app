@@ -84,6 +84,12 @@ export const config = {
   groqApiBaseUrl: process.env.GROQ_API_BASE_URL || 'https://api.groq.com/openai/v1',
   groqAudioTranscriptionModel: process.env.GROQ_AUDIO_TRANSCRIPTION_MODEL || 'whisper-large-v3-turbo',
   recipeAudioImportEnabled: booleanWithDefault('RECIPE_AUDIO_IMPORT_ENABLED', true),
+  // Gemini structuring + de-noise pass over imported recipe drafts. Default
+  // OFF: enabling it changes the live import path (adds an LLM call) and keeps
+  // existing hermetic import tests from reaching the network. Flip to true via
+  // env to enable in an environment that has a Gemini key. Measured mean
+  // +19.5 quality with zero regressions (see recipe:clean-eval).
+  recipeCleanupEnabled: booleanWithDefault('RECIPE_CLEANUP_ENABLED', false),
   recipeAudioMaxBytes: integerWithDefault('RECIPE_AUDIO_MAX_BYTES', 25_000_000),
   recipeAudioTranscriptionTimeoutMs: integerWithDefault('RECIPE_AUDIO_TRANSCRIPTION_TIMEOUT_MS', 45_000),
   usdaApiKey: process.env.USDA_API_KEY || process.env.USDA_FDC_API_KEY || '',
