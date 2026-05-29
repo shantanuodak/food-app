@@ -42,6 +42,7 @@ struct MainLoggingShellView: View {
     @State var queuedParseRowIDs: [UUID] = []
     @State var inFlightParseSnapshot: InFlightParseSnapshot?
     @State var pendingFollowupRequested = false
+    @State var pendingFollowupNormalizedRowTextByID: [UUID: String] = [:]
     @State var latestQueuedNoteText: String?
     @State var autoSaveTask: Task<Void, Never>?
     @State var unresolvedRetryTask: Task<Void, Never>?

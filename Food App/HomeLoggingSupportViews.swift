@@ -31,6 +31,7 @@ struct InFlightParseSnapshot {
     let requestSequence: Int
     let activeRowID: UUID
     let dirtyRowIDsAtDispatch: [UUID]
+    let normalizedRowTextByIDAtDispatch: [UUID: String]
 }
 
 struct RowCalorieDetails: Identifiable {

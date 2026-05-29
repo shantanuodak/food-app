@@ -112,6 +112,7 @@ extension MainLoggingShellView {
                 queuedParseRowIDs = []
                 latestQueuedNoteText = nil
                 pendingFollowupRequested = false
+                pendingFollowupNormalizedRowTextByID = [:]
                 // Defer synchronizeParseOwnership to debounce callback
             }
             return
@@ -146,6 +147,7 @@ extension MainLoggingShellView {
                 queuedParseRowIDs = []
                 latestQueuedNoteText = nil
                 pendingFollowupRequested = false
+                pendingFollowupNormalizedRowTextByID = [:]
                 synchronizeParseOwnership()
             }
             return
@@ -171,6 +173,7 @@ extension MainLoggingShellView {
             activeParseRowID = snapshot.activeRowID
             queuedParseRowIDs = orderedDirtyRowIDsForCurrentInput().filter { $0 != snapshot.activeRowID }
             pendingFollowupRequested = false
+            pendingFollowupNormalizedRowTextByID = [:]
             latestQueuedNoteText = nil
             synchronizeParseOwnership()
             return
@@ -183,7 +186,7 @@ extension MainLoggingShellView {
             inFlightParseSnapshot = nil
             if !Task.isCancelled {
                 if shouldAdvanceToNextRow {
-                    processNextQueuedParseIfNeeded()
+                    processNextQueuedParseIfNeeded(after: snapshot)
                 } else {
                     synchronizeParseOwnership()
                 }
@@ -227,20 +230,18 @@ extension MainLoggingShellView {
             // Staleness guard: the user may have edited the row's text while
             // this parse was in flight (e.g. typed "chicken tenders", then
             // edited to "3 pieces chicken tenders" before the response came
-            // back). Applying the stale response would map 1-piece calories
-            // onto the new text AND stamp normalizedTextAtParse with the new
-            // text, making the row look fresh — so `rowNeedsFreshParse` would
-            // return false and no follow-up parse would fire. Instead, discard
-            // the response here and let the deferred
-            // `processNextQueuedParseIfNeeded()` (via shouldAdvanceToNextRow)
-            // dispatch a fresh parse against the edited text.
+            // back). Applying the stale response would map old calories onto
+            // the new text. Discard it and wait for the next explicit
+            // completion signal before spending on the edited text.
             if let currentRow = inputRows.first(where: { $0.id == snapshot.activeRowID }) {
                 let normalizedSent = HomeLoggingTextMatch.normalizedRowText(snapshot.text)
                 let normalizedCurrent = HomeLoggingTextMatch.normalizedRowText(currentRow.text)
                 if !normalizedSent.isEmpty && normalizedSent != normalizedCurrent {
                     // Leave the row marked dirty (we deliberately don't touch
-                    // calories/parsedItems/normalizedTextAtParse) and let the
-                    // defer block re-dispatch against the new text.
+                    // calories/parsedItems/normalizedTextAtParse). The
+                    // continuation queue below only runs rows that were
+                    // explicitly requested and not passively edited afterward.
+                    shouldAdvanceToNextRow = pendingFollowupRequested
                     emitParseTelemetrySuccess(response: response, durationMs: durationMs, uiApplied: false)
                     return
                 }
@@ -302,10 +303,13 @@ extension MainLoggingShellView {
             )
 
             let remainingDirtyRowIDs = orderedDirtyRowIDsForCurrentInput()
-            activeParseRowID = remainingDirtyRowIDs.first
-            queuedParseRowIDs = Array(remainingDirtyRowIDs.dropFirst())
-            pendingFollowupRequested = !remainingDirtyRowIDs.isEmpty
-            latestQueuedNoteText = remainingDirtyRowIDs.isEmpty ? nil : trimmedNoteText
+            let continuationRowIDs = continuationRowIDsAfterParse(
+                snapshot: snapshot,
+                dirtyRowIDs: remainingDirtyRowIDs
+            )
+            activeParseRowID = continuationRowIDs.first
+            queuedParseRowIDs = Array(continuationRowIDs.dropFirst())
+            latestQueuedNoteText = continuationRowIDs.isEmpty ? nil : trimmedNoteText
 
             // Always show accumulated results so the UI never goes blank while the queue drains.
             parseResult = response
@@ -341,6 +345,7 @@ extension MainLoggingShellView {
             activeParseRowID = snapshot.activeRowID
             queuedParseRowIDs = orderedDirtyRowIDsForCurrentInput().filter { $0 != snapshot.activeRowID }
             pendingFollowupRequested = false
+            pendingFollowupNormalizedRowTextByID = [:]
             latestQueuedNoteText = nil
             let message = userFriendlyParseError(error)
             parseInfoMessage = nil
@@ -857,6 +862,7 @@ extension MainLoggingShellView {
             queuedParseRowIDs = dirtyRowIDs.filter { $0 != activeParseRowID }
             latestQueuedNoteText = text
             pendingFollowupRequested = true
+            pendingFollowupNormalizedRowTextByID = normalizedRowTextByID(for: dirtyRowIDs)
             synchronizeParseOwnership()
             return
         }
@@ -878,16 +884,19 @@ extension MainLoggingShellView {
     ) {
         parseRequestSequence += 1
         let loggedAt = currentDraftLoggedAtString()
+        let normalizedRowTextByID = normalizedRowTextByID(for: dirtyRowIDs)
         inFlightParseSnapshot = InFlightParseSnapshot(
             text: text,
             loggedAt: loggedAt,
             requestSequence: parseRequestSequence,
             activeRowID: activeRowID,
-            dirtyRowIDsAtDispatch: dirtyRowIDs
+            dirtyRowIDsAtDispatch: dirtyRowIDs,
+            normalizedRowTextByIDAtDispatch: normalizedRowTextByID
         )
         activeParseRowID = activeRowID
         queuedParseRowIDs = Array(dirtyRowIDs.dropFirst())
         pendingFollowupRequested = false
+        pendingFollowupNormalizedRowTextByID = [:]
         latestQueuedNoteText = nil
         parseInfoMessage = nil
         parseError = nil
@@ -900,15 +909,19 @@ extension MainLoggingShellView {
     }
 
     @MainActor
-    func processNextQueuedParseIfNeeded() {
+    func processNextQueuedParseIfNeeded(after snapshot: InFlightParseSnapshot) {
         let dirtyRowIDs = orderedDirtyRowIDsForCurrentInput()
-        guard let nextActiveRowID = dirtyRowIDs.first else {
+        let continuationRowIDs = continuationRowIDsAfterParse(
+            snapshot: snapshot,
+            dirtyRowIDs: dirtyRowIDs
+        )
+        guard let nextActiveRowID = continuationRowIDs.first else {
             clearParseSchedulerState()
             return
         }
 
         activeParseRowID = nextActiveRowID
-        queuedParseRowIDs = Array(dirtyRowIDs.dropFirst())
+        queuedParseRowIDs = Array(continuationRowIDs.dropFirst())
         synchronizeParseOwnership()
 
         let nextText = inputRows.first(where: { $0.id == nextActiveRowID })?.text
@@ -918,8 +931,49 @@ extension MainLoggingShellView {
         startTextParse(
             text: nextText,
             activeRowID: nextActiveRowID,
-            dirtyRowIDs: dirtyRowIDs
+            dirtyRowIDs: continuationRowIDs
         )
+    }
+
+    func normalizedRowTextByID(for rowIDs: [UUID]) -> [UUID: String] {
+        Dictionary(
+            uniqueKeysWithValues: rowIDs.compactMap { rowID in
+                guard let rowText = inputRows.first(where: { $0.id == rowID })?.text else {
+                    return nil
+                }
+                return (rowID, HomeLoggingTextMatch.normalizedRowText(rowText))
+            }
+        )
+    }
+
+    func continuationRowIDsAfterParse(
+        snapshot: InFlightParseSnapshot,
+        dirtyRowIDs: [UUID]
+    ) -> [UUID] {
+        if pendingFollowupRequested {
+            return dirtyRowIDs.filter { rowID in
+                guard let requestedText = pendingFollowupNormalizedRowTextByID[rowID] else {
+                    return false
+                }
+                guard let currentText = inputRows.first(where: { $0.id == rowID })?.text else {
+                    return false
+                }
+                return HomeLoggingTextMatch.normalizedRowText(currentText) == requestedText
+            }
+        }
+
+        let rowIDsRequestedAtDispatch = Set(snapshot.dirtyRowIDsAtDispatch)
+        return dirtyRowIDs.filter { rowID in
+            guard rowID != snapshot.activeRowID else { return false }
+            guard rowIDsRequestedAtDispatch.contains(rowID) else { return false }
+            guard let dispatchedText = snapshot.normalizedRowTextByIDAtDispatch[rowID] else {
+                return false
+            }
+            guard let currentText = inputRows.first(where: { $0.id == rowID })?.text else {
+                return false
+            }
+            return HomeLoggingTextMatch.normalizedRowText(currentText) == dispatchedText
+        }
     }
 
     func clearParseSchedulerState() {
@@ -930,6 +984,7 @@ extension MainLoggingShellView {
         queuedParseRowIDs = []
         inFlightParseSnapshot = nil
         pendingFollowupRequested = false
+        pendingFollowupNormalizedRowTextByID = [:]
         latestQueuedNoteText = nil
         synchronizeParseOwnership()
     }
@@ -955,6 +1010,8 @@ extension MainLoggingShellView {
         if activeParseRowID != nil { activeParseRowID = nil }
         if !queuedParseRowIDs.isEmpty { queuedParseRowIDs = [] }
         if inFlightParseSnapshot != nil { inFlightParseSnapshot = nil }
+        if pendingFollowupRequested { pendingFollowupRequested = false }
+        if !pendingFollowupNormalizedRowTextByID.isEmpty { pendingFollowupNormalizedRowTextByID = [:] }
         if !autoSavedParseIDs.isEmpty { autoSavedParseIDs = [] }
         parseCoordinator.clearAll()
         if parseInFlightCount != 0 { parseInFlightCount = 0 }
