@@ -42,6 +42,10 @@ interface LlmCleanIngredient {
 interface LlmCleanResponse {
   title?: string | null;
   description?: string | null;
+  servings?: string | null;
+  prepTime?: string | null;
+  cookTime?: string | null;
+  totalTime?: string | null;
   ingredients?: LlmCleanIngredient[];
   steps?: string[];
 }
@@ -90,11 +94,19 @@ function buildPrompt(draft: RecipeDraft): string {
     '5. Clean the title: remove trailing site names ("... | Site"), clickbait',
     '   ("The BEST Ever!!"), emoji, and hashtags. Keep the dish name.',
     '6. Keep the description to one clean sentence, or null if it is just blog prose.',
+    '7. Extract servings and times ONLY if the text states them explicitly',
+    '   ("serves 4" -> servings "4"; "bake for 35 minutes" -> cookTime',
+    '   "35 minutes"; "ready in 30 min" -> totalTime). If a value is not',
+    '   clearly stated, return null. NEVER guess or estimate a time/serving.',
     '',
     'Return ONLY this JSON (no markdown fences):',
     '{',
     '  "title": string,',
     '  "description": string | null,',
+    '  "servings": string | null,',
+    '  "prepTime": string | null,',
+    '  "cookTime": string | null,',
+    '  "totalTime": string | null,',
     '  "ingredients": [{ "quantity": string|null, "unit": string|null, "name": string, "raw": string }],',
     '  "steps": [string]',
     '}',
@@ -149,6 +161,14 @@ function mapResponseToDraft(draft: RecipeDraft, parsed: LlmCleanResponse): Recip
     ...draft,
     title,
     description: nonEmpty(parsed.description ?? null, 2000) ?? draft.description,
+    // Metadata: PREFER the existing scraped value (JSON-LD is authoritative);
+    // only fall back to the LLM-extracted value when the draft lacks one.
+    // This fills the gap for social/reader-fallback drafts (which have no
+    // metadata) while never overwriting a good scraped value with a guess.
+    servings: draft.servings ?? nonEmpty(parsed.servings ?? null, 120),
+    prepTime: draft.prepTime ?? nonEmpty(parsed.prepTime ?? null, 120),
+    cookTime: draft.cookTime ?? nonEmpty(parsed.cookTime ?? null, 120),
+    totalTime: draft.totalTime ?? nonEmpty(parsed.totalTime ?? null, 120),
     ingredients,
     // If the model returned no steps but the original had some, keep the
     // originals rather than dropping instructions entirely.

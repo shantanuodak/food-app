@@ -97,6 +97,34 @@ describe('cleanupRecipeDraft — happy path', () => {
   });
 });
 
+describe('cleanupRecipeDraft — metadata extraction', () => {
+  const withMeta = JSON.stringify({
+    title: 'Creamy Garlic Pasta',
+    servings: '4',
+    prepTime: '5 minutes',
+    cookTime: '15 minutes',
+    totalTime: '20 minutes',
+    ingredients: [{ quantity: '8', unit: 'oz', name: 'spaghetti', raw: '8 oz spaghetti' }],
+    steps: ['Cook the pasta.'],
+  });
+
+  test('fills missing servings/times on a metadata-less (social-style) draft', async () => {
+    const raw: RecipeDraft = { ...noisyRawDraft(), servings: null, prepTime: null, cookTime: null, totalTime: null };
+    const { cleaned } = await cleanupRecipeDraft(raw, { generate: fakeGenerate(withMeta) });
+    expect(cleaned.servings).toBe('4');
+    expect(cleaned.cookTime).toBe('15 minutes');
+    expect(cleaned.totalTime).toBe('20 minutes');
+  });
+
+  test('never overwrites an existing scraped metadata value', async () => {
+    // noisyRawDraft already has servings '4 servings' / cookTime '15 mins'.
+    const raw = noisyRawDraft();
+    const { cleaned } = await cleanupRecipeDraft(raw, { generate: fakeGenerate(withMeta) });
+    expect(cleaned.servings).toBe('4 servings');
+    expect(cleaned.cookTime).toBe('15 mins');
+  });
+});
+
 describe('cleanupRecipeDraft — guardrails (never make it worse)', () => {
   test('LLM unavailable (null) returns the original untouched', async () => {
     const raw = noisyRawDraft();
