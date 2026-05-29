@@ -138,7 +138,7 @@ struct RecipesScreen: View {
             .presentationCornerRadius(24)
         }
         .sheet(item: $selectedRecipe) { recipe in
-            SavedRecipeDetailSheet(recipe: recipe) {
+            RecipeDetailView(recipe: recipe) {
                 selectedRecipe = nil
             }
             .presentationDetents([.large])
@@ -331,19 +331,45 @@ struct RecipesScreen: View {
     }
 
     private var recipesSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("Saved recipes")
-                .font(.system(size: 15, weight: .heavy))
-                .foregroundStyle(RecipesTokens.ink.opacity(0.82))
-
-            ForEach(recipes) { recipe in
+        VStack(alignment: .leading, spacing: 18) {
+            if let featured = recipes.first {
                 Button {
                     AppHaptics.lightImpact()
-                    selectedRecipe = recipe
+                    selectedRecipe = featured
                 } label: {
-                    SavedRecipeCard(recipe: recipe)
+                    RecipeFeaturedCard(recipe: featured)
                 }
                 .buttonStyle(.plain)
+            }
+
+            if recipes.count > 1 {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Your library")
+                        .font(.system(size: 17, weight: .heavy))
+                        .foregroundStyle(RecipesTokens.ink)
+                    Spacer()
+                    Text("\(recipes.count)")
+                        .font(.system(size: 13, weight: .heavy))
+                        .foregroundStyle(RecipesTokens.orange)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(RecipesTokens.orangeSoft, in: Capsule())
+                }
+
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
+                    spacing: 14
+                ) {
+                    ForEach(Array(recipes.dropFirst())) { recipe in
+                        Button {
+                            AppHaptics.lightImpact()
+                            selectedRecipe = recipe
+                        } label: {
+                            RecipeLibraryCard(recipe: recipe)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
             }
         }
     }
@@ -1995,3 +2021,721 @@ private struct RecipesLoadingCard: View {
         .shadow(color: RecipesTokens.shadow, radius: 14, y: 6)
     }
 }
+
+// ============================================================================
+// MARK: - Recipe experience redesign (2026-05-29)
+// Editorial, image-forward recipe Library + magazine-style Detail. Fully
+// data-driven (renders from SavedRecipe) so it previews in VisualQA with
+// sample data and can be swapped into RecipesScreen once approved. Reuses the
+// app design system: AppColor tokens + Instrument Serif display type.
+// ============================================================================
+
+private enum RecipeDS {
+    // Appetizing duotone gradients used when a recipe has no photo (or while it
+    // loads). Deterministic per title so a recipe always gets the same look.
+    static let gradients: [[Color]] = [
+        [Color(red: 0.96, green: 0.49, blue: 0.22), Color(red: 0.85, green: 0.26, blue: 0.20)], // terracotta
+        [Color(red: 0.99, green: 0.74, blue: 0.30), Color(red: 0.90, green: 0.45, blue: 0.13)], // amber
+        [Color(red: 0.42, green: 0.72, blue: 0.53), Color(red: 0.16, green: 0.49, blue: 0.41)], // herb
+        [Color(red: 0.56, green: 0.55, blue: 0.93), Color(red: 0.36, green: 0.32, blue: 0.78)], // periwinkle
+        [Color(red: 0.94, green: 0.43, blue: 0.56), Color(red: 0.77, green: 0.23, blue: 0.45)], // berry
+        [Color(red: 0.44, green: 0.69, blue: 0.87), Color(red: 0.19, green: 0.44, blue: 0.73)]  // sky
+    ]
+
+    static let glyphs = ["fork.knife", "carrot.fill", "cup.and.saucer.fill", "flame.fill", "leaf.fill", "birthday.cake.fill"]
+
+    private static func stableHash(_ seed: String, _ salt: UInt32) -> UInt32 {
+        seed.unicodeScalars.reduce(salt) { ($0 &* 31) &+ $1.value }
+    }
+
+    static func gradient(for seed: String) -> LinearGradient {
+        let pair = gradients[Int(stableHash(seed, 7) % UInt32(gradients.count))]
+        return LinearGradient(colors: pair, startPoint: .topLeading, endPoint: .bottomTrailing)
+    }
+
+    static func glyph(for seed: String) -> String {
+        glyphs[Int(stableHash(seed, 3) % UInt32(glyphs.count))]
+    }
+}
+
+/// Recipe artwork: real photo when available, otherwise a deterministic
+/// gradient + food glyph so image-less recipes still look intentional.
+private struct RecipeArtwork: View {
+    let recipe: SavedRecipe
+    var glyphSize: CGFloat = 40
+
+    var body: some View {
+        ZStack {
+            RecipeDS.gradient(for: recipe.title)
+
+            Image(systemName: RecipeDS.glyph(for: recipe.title))
+                .font(.system(size: glyphSize, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.9))
+                .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+
+            if let raw = recipe.heroImageUrl, let url = URL(string: raw) {
+                AsyncImage(url: url) { phase in
+                    if case .success(let image) = phase {
+                        image.resizable().scaledToFill()
+                    } else {
+                        Color.clear
+                    }
+                }
+            }
+        }
+        .clipped()
+        .accessibilityHidden(true)
+    }
+}
+
+/// Small icon + label chip used for recipe metadata.
+private struct RecipeMetaChip: View {
+    let icon: String
+    let text: String
+    var tinted: Bool = false
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Image(systemName: icon)
+                .font(.system(size: 11, weight: .bold))
+            Text(text)
+                .font(.system(size: 12.5, weight: .semibold))
+                .lineLimit(1)
+        }
+        .foregroundStyle(tinted ? RecipesTokens.orange : RecipesTokens.muted)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(
+            (tinted ? RecipesTokens.orangeSoft : RecipesTokens.pressSurface),
+            in: Capsule()
+        )
+    }
+}
+
+private func recipeSourceLabel(_ recipe: SavedRecipe) -> String? {
+    if let name = recipe.sourceName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+        return name
+    }
+    if let domain = recipe.sourceDomain?.trimmingCharacters(in: .whitespacesAndNewlines), !domain.isEmpty {
+        return domain.replacingOccurrences(of: "www.", with: "")
+    }
+    if let host = URL(string: recipe.sourceUrl ?? "")?.host {
+        return host.replacingOccurrences(of: "www.", with: "")
+    }
+    return nil
+}
+
+// MARK: Library (list) screen
+
+struct RecipeLibraryView: View {
+    let recipes: [SavedRecipe]
+    var onOpen: (SavedRecipe) -> Void = { _ in }
+    var onImport: () -> Void = {}
+
+    private let columns = [
+        GridItem(.flexible(), spacing: 14),
+        GridItem(.flexible(), spacing: 14)
+    ]
+
+    var body: some View {
+        ScrollView(showsIndicators: false) {
+            VStack(alignment: .leading, spacing: 24) {
+                header
+                importBar
+
+                if let featured = recipes.first {
+                    RecipeFeaturedCard(recipe: featured)
+                        .onTapGesture { onOpen(featured) }
+                }
+
+                if recipes.count > 1 {
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Your library")
+                            .font(.system(size: 17, weight: .heavy))
+                            .foregroundStyle(RecipesTokens.ink)
+                        Spacer()
+                        Text("\(recipes.count)")
+                            .font(.system(size: 13, weight: .heavy))
+                            .foregroundStyle(RecipesTokens.orange)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(RecipesTokens.orangeSoft, in: Capsule())
+                    }
+
+                    LazyVGrid(columns: columns, spacing: 14) {
+                        ForEach(Array(recipes.dropFirst())) { recipe in
+                            RecipeLibraryCard(recipe: recipe)
+                                .onTapGesture { onOpen(recipe) }
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 18)
+            .padding(.top, 8)
+            .padding(.bottom, 40)
+        }
+        .background(RecipesTokens.screenBackground.ignoresSafeArea())
+    }
+
+    private var header: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("YOUR KITCHEN")
+                    .font(.system(size: 12, weight: .heavy))
+                    .tracking(1.6)
+                    .foregroundStyle(RecipesTokens.orange)
+                Text("Recipes")
+                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 46))
+                    .foregroundStyle(RecipesTokens.ink)
+            }
+            Spacer()
+            Button(action: onImport) {
+                Image(systemName: "plus")
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundStyle(.white)
+                    .frame(width: 46, height: 46)
+                    .background(RecipesTokens.orange, in: Circle())
+                    .shadow(color: RecipesTokens.orange.opacity(0.35), radius: 10, y: 5)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Add a recipe")
+            .padding(.top, 18)
+        }
+    }
+
+    private var importBar: some View {
+        Button(action: onImport) {
+            HStack(spacing: 10) {
+                Image(systemName: "link")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(RecipesTokens.orange)
+                Text("Paste a recipe link to import")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(RecipesTokens.muted)
+                Spacer()
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 13, weight: .heavy))
+                    .foregroundStyle(RecipesTokens.muted.opacity(0.7))
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .stroke(RecipesTokens.fieldBorder, style: StrokeStyle(lineWidth: 1.4, dash: [6, 5]))
+            }
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct RecipeFeaturedCard: View {
+    let recipe: SavedRecipe
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ZStack(alignment: .bottomLeading) {
+                RecipeArtwork(recipe: recipe, glyphSize: 54)
+                    .frame(height: 210)
+                    .frame(maxWidth: .infinity)
+
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.08), .black.opacity(0.62)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("LATEST")
+                        .font(.system(size: 10.5, weight: .heavy))
+                        .tracking(1.4)
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(.white.opacity(0.22), in: Capsule())
+                        .background(.ultraThinMaterial, in: Capsule())
+
+                    Text(recipe.title)
+                        .font(OnboardingTypography.instrumentSerif(style: .regular, size: 28))
+                        .foregroundStyle(.white)
+                        .lineLimit(2)
+                        .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
+                }
+                .padding(16)
+            }
+            .frame(height: 210)
+            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+
+            HStack(spacing: 8) {
+                if let source = recipeSourceLabel(recipe) {
+                    RecipeMetaChip(icon: "link", text: source, tinted: true)
+                }
+                if let servings = recipe.servings, !servings.isEmpty {
+                    RecipeMetaChip(icon: "person.2.fill", text: servings)
+                }
+                RecipeMetaChip(icon: "carrot.fill", text: "\(recipe.ingredients.count)")
+                RecipeMetaChip(icon: "list.number", text: "\(recipe.steps.count) steps")
+                Spacer(minLength: 0)
+            }
+            .padding(.top, 12)
+            .padding(.horizontal, 2)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Latest recipe: \(recipe.title)")
+    }
+}
+
+private struct RecipeLibraryCard: View {
+    let recipe: SavedRecipe
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            RecipeArtwork(recipe: recipe, glyphSize: 34)
+                .frame(height: 120)
+                .frame(maxWidth: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 7) {
+                Text(recipe.title)
+                    .font(.system(size: 15.5, weight: .bold))
+                    .foregroundStyle(RecipesTokens.ink)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                HStack(spacing: 6) {
+                    Image(systemName: "carrot.fill")
+                        .font(.system(size: 10, weight: .bold))
+                    Text("\(recipe.ingredients.count) ingr")
+                    Text("•")
+                    Text("\(recipe.steps.count) steps")
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(RecipesTokens.muted)
+                .lineLimit(1)
+
+                if let source = recipeSourceLabel(recipe) {
+                    Text(source)
+                        .font(.system(size: 11.5, weight: .bold))
+                        .foregroundStyle(RecipesTokens.orange)
+                        .lineLimit(1)
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 11)
+            .padding(.bottom, 13)
+        }
+        .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(RecipesTokens.border, lineWidth: 1)
+        }
+        .shadow(color: RecipesTokens.shadow, radius: 12, y: 5)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(recipe.title)
+    }
+}
+
+// MARK: Detail screen
+
+struct RecipeDetailView: View {
+    let recipe: SavedRecipe
+    var onClose: () -> Void = {}
+
+    @State private var checkedIngredients: Set<Int> = []
+    @Environment(\.openURL) private var openURL
+
+    var body: some View {
+        ZStack(alignment: .top) {
+            RecipesTokens.screenBackground.ignoresSafeArea()
+
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    hero
+                    VStack(alignment: .leading, spacing: 22) {
+                        titleBlock
+                        metaRow
+                        ingredientsSection
+                        stepsSection
+                        sourceFooter
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+                    .padding(.bottom, 40)
+                    .background(
+                        RecipesTokens.screenBackground
+                            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                    )
+                    .offset(y: -26)
+                }
+            }
+            .ignoresSafeArea(edges: .top)
+
+            floatingBar
+        }
+    }
+
+    private var hero: some View {
+        ZStack(alignment: .bottomLeading) {
+            RecipeArtwork(recipe: recipe, glyphSize: 64)
+                .frame(height: 280)
+                .frame(maxWidth: .infinity)
+                .clipped()
+
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.10), .black.opacity(0.45)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .frame(height: 280)
+        .frame(maxWidth: .infinity)
+        .clipped()
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if let source = recipeSourceLabel(recipe) {
+                RecipeMetaChip(icon: "link", text: source, tinted: true)
+            }
+            Text(recipe.title)
+                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
+                .foregroundStyle(RecipesTokens.ink)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var metaRow: some View {
+        HStack(spacing: 10) {
+            RecipeStatTile(value: "\(recipe.ingredients.count)", label: "Ingredients", icon: "carrot.fill")
+            RecipeStatTile(value: "\(recipe.steps.count)", label: "Steps", icon: "list.number")
+            RecipeStatTile(
+                value: recipe.servings.flatMap { $0.isEmpty ? nil : $0 } ?? "—",
+                label: "Servings",
+                icon: "person.2.fill"
+            )
+        }
+    }
+
+    private var ingredientsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(
+                title: "Ingredients",
+                icon: "carrot.fill",
+                trailing: "\(checkedIngredients.count)/\(recipe.ingredients.count)"
+            )
+
+            VStack(spacing: 0) {
+                ForEach(Array(recipe.ingredients.enumerated()), id: \.offset) { index, line in
+                    if index > 0 {
+                        Divider().overlay(RecipesTokens.fieldBorder).padding(.leading, 42)
+                    }
+                    RecipeIngredientCheckRow(
+                        text: line.text,
+                        isChecked: checkedIngredients.contains(index)
+                    ) {
+                        AppHaptics.lightImpact()
+                        if checkedIngredients.contains(index) {
+                            checkedIngredients.remove(index)
+                        } else {
+                            checkedIngredients.insert(index)
+                        }
+                    }
+                }
+            }
+            .padding(.vertical, 4)
+            .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 22, style: .continuous)
+                    .stroke(RecipesTokens.border, lineWidth: 1)
+            }
+        }
+    }
+
+    private var stepsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            sectionHeader(title: "Method", icon: "list.number", trailing: "\(recipe.steps.count)")
+
+            VStack(spacing: 10) {
+                ForEach(Array(recipe.steps.enumerated()), id: \.offset) { index, line in
+                    RecipeStepRow(number: index + 1, text: line.text)
+                }
+            }
+        }
+    }
+
+    private var sourceFooter: some View {
+        Group {
+            if let raw = recipe.sourceUrl, let url = URL(string: raw) {
+                Button {
+                    AppHaptics.lightImpact()
+                    openURL(url)
+                } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: "safari.fill")
+                            .font(.system(size: 15, weight: .bold))
+                        Text("View original recipe")
+                            .font(.system(size: 15, weight: .bold))
+                        Spacer()
+                        Image(systemName: "arrow.up.right")
+                            .font(.system(size: 13, weight: .heavy))
+                    }
+                    .foregroundStyle(RecipesTokens.orange)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 15)
+                    .background(RecipesTokens.orangeSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    private func sectionHeader(title: String, icon: String, trailing: String) -> some View {
+        HStack(spacing: 9) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(RecipesTokens.orange)
+            Text(title)
+                .font(.system(size: 18, weight: .heavy))
+                .foregroundStyle(RecipesTokens.ink)
+            Spacer()
+            Text(trailing)
+                .font(.system(size: 12.5, weight: .heavy))
+                .foregroundStyle(RecipesTokens.orange)
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(RecipesTokens.orangeSoft, in: Capsule())
+        }
+    }
+
+    private var floatingBar: some View {
+        HStack {
+            circleButton(icon: "chevron.left", action: onClose)
+            Spacer()
+            circleButton(icon: "square.and.arrow.up", action: {})
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 6)
+    }
+
+    private func circleButton(icon: String, action: @escaping () -> Void) -> some View {
+        Button {
+            AppHaptics.lightImpact()
+            action()
+        } label: {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(RecipesTokens.ink)
+                .frame(width: 38, height: 38)
+                .background(.ultraThinMaterial, in: Circle())
+                .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.5))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+private struct RecipeStatTile: View {
+    let value: String
+    let label: String
+    let icon: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(RecipesTokens.orange)
+            Text(value)
+                .font(.system(size: 22, weight: .heavy))
+                .foregroundStyle(RecipesTokens.ink)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            Text(label)
+                .font(.system(size: 11.5, weight: .bold))
+                .foregroundStyle(RecipesTokens.muted)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(RecipesTokens.border, lineWidth: 1)
+        }
+    }
+}
+
+private struct RecipeIngredientCheckRow: View {
+    let text: String
+    let isChecked: Bool
+    let onToggle: () -> Void
+
+    var body: some View {
+        Button(action: onToggle) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: isChecked ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(isChecked ? RecipesTokens.orange : RecipesTokens.muted.opacity(0.5))
+
+                Text(text)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(isChecked ? RecipesTokens.muted : RecipesTokens.ink)
+                    .strikethrough(isChecked, color: RecipesTokens.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(text)
+        .accessibilityValue(isChecked ? "Checked" : "Not checked")
+    }
+}
+
+private struct RecipeStepRow: View {
+    let number: Int
+    let text: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Text("\(number)")
+                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 22))
+                .foregroundStyle(RecipesTokens.orange)
+                .frame(width: 38, height: 38)
+                .background(RecipesTokens.orangeSoft, in: Circle())
+
+            Text(text)
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(RecipesTokens.ink)
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(14)
+        .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .stroke(RecipesTokens.border, lineWidth: 1)
+        }
+    }
+}
+
+#if DEBUG
+extension SavedRecipe {
+    /// Sample-data initializer (DEBUG only) for previews / VisualQA. The
+    /// production model is decoder-only.
+    init(
+        id: String,
+        title: String,
+        sourceUrl: String?,
+        sourceDomain: String?,
+        sourceName: String?,
+        heroImageUrl: String?,
+        servings: String?,
+        ingredients: [String],
+        steps: [String],
+        createdAt: String? = nil,
+        updatedAt: String? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.sourceUrl = sourceUrl
+        self.sourceDomain = sourceDomain
+        self.sourceName = sourceName
+        self.heroImageUrl = heroImageUrl
+        self.servings = servings
+        self.ingredients = ingredients.map { RecipeTextLine(text: $0) }
+        self.steps = steps.map { RecipeTextLine(text: $0) }
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+    }
+}
+
+enum RecipeSampleData {
+    static let library: [SavedRecipe] = [
+        SavedRecipe(
+            id: "1",
+            title: "Charred Tomato & Burrata Toast",
+            sourceUrl: "https://smittenkitchen.com/burrata-toast",
+            sourceDomain: "smittenkitchen.com",
+            sourceName: "Smitten Kitchen",
+            heroImageUrl: nil,
+            servings: "2",
+            ingredients: [
+                "4 thick slices sourdough",
+                "2 cups cherry tomatoes, halved",
+                "1 ball fresh burrata",
+                "3 tbsp olive oil",
+                "2 cloves garlic, smashed",
+                "Flaky sea salt & black pepper",
+                "Fresh basil leaves"
+            ],
+            steps: [
+                "Heat the olive oil in a skillet over medium-high until shimmering.",
+                "Add the cherry tomatoes and a pinch of salt; let them blister undisturbed for 3 minutes, then toss.",
+                "Rub the toasted sourdough with the smashed garlic while still warm.",
+                "Tear the burrata over the toast, spoon the charred tomatoes on top, and finish with basil, flaky salt, and a drizzle of oil."
+            ]
+        ),
+        SavedRecipe(
+            id: "2",
+            title: "Weeknight Miso Salmon Bowls",
+            sourceUrl: "https://www.bonappetit.com/miso-salmon",
+            sourceDomain: "bonappetit.com",
+            sourceName: "Bon Appétit",
+            heroImageUrl: nil,
+            servings: "4",
+            ingredients: ["4 salmon fillets", "3 tbsp white miso", "2 cups jasmine rice", "1 cucumber, ribboned", "Sesame seeds"],
+            steps: ["Whisk miso glaze.", "Broil the salmon 8 minutes.", "Serve over rice with cucumber."]
+        ),
+        SavedRecipe(
+            id: "3",
+            title: "Brown Butter Banana Bread",
+            sourceUrl: "https://cooking.nytimes.com/banana-bread",
+            sourceDomain: "cooking.nytimes.com",
+            sourceName: "NYT Cooking",
+            heroImageUrl: nil,
+            servings: "1 loaf",
+            ingredients: ["3 ripe bananas", "1/2 cup brown butter", "2 eggs", "1 1/2 cups flour"],
+            steps: ["Brown the butter.", "Mix wet, then dry.", "Bake 55 minutes at 350°F."]
+        ),
+        SavedRecipe(
+            id: "4",
+            title: "Crispy Chili Garlic Noodles",
+            sourceUrl: "https://thewoksoflife.com/chili-noodles",
+            sourceDomain: "thewoksoflife.com",
+            sourceName: "The Woks of Life",
+            heroImageUrl: nil,
+            servings: "2",
+            ingredients: ["8 oz noodles", "3 tbsp chili crisp", "2 tbsp soy sauce", "Scallions"],
+            steps: ["Boil noodles.", "Toss with sauce.", "Top with scallions."]
+        ),
+        SavedRecipe(
+            id: "5",
+            title: "Lemon Herb Roast Chicken",
+            sourceUrl: "https://www.seriouseats.com/roast-chicken",
+            sourceDomain: "seriouseats.com",
+            sourceName: "Serious Eats",
+            heroImageUrl: nil,
+            servings: "4",
+            ingredients: ["1 whole chicken", "2 lemons", "Fresh thyme", "Butter"],
+            steps: ["Dry-brine overnight.", "Roast at 425°F for 50 min."]
+        )
+    ]
+
+    static var featured: SavedRecipe { library[0] }
+}
+
+struct RecipesVisualQARoot: View {
+    let stateID: String
+
+    var body: some View {
+        if stateID.contains("/detail") {
+            RecipeDetailView(recipe: RecipeSampleData.featured)
+        } else {
+            RecipeLibraryView(recipes: RecipeSampleData.library)
+        }
+    }
+}
+#endif

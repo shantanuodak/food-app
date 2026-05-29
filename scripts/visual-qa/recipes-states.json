@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "device": "iPhone 17 Pro",
+  "appearance": "light",
+  "bundleIdentifier": "com.shantanu.foodapp",
+  "outputDirectory": "artifacts/visual-qa/screenshots",
+  "states": [
+    { "id": "recipes/library/default", "name": "Recipes - Library - Light", "implemented": true },
+    { "id": "recipes/library/dark", "name": "Recipes - Library - Dark", "implemented": true },
+    { "id": "recipes/detail/default", "name": "Recipes - Detail - Light", "implemented": true },
+    { "id": "recipes/detail/dark", "name": "Recipes - Detail - Dark", "implemented": true }
+  ]
+}

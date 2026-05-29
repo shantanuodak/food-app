@@ -282,6 +282,8 @@ struct VisualQARootView: View {
                 .environmentObject(appStore)
         case "widget-guide/default":
             WidgetSetupGuideView(presentationStyle: .sheet(onClose: {}))
+        case let id where id.hasPrefix("recipes/"):
+            RecipesVisualQARoot(stateID: id)
         default:
             VisualQAUnsupportedStateView(stateID: stateID)
         }
