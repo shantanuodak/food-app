@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { lookup } from 'node:dns/promises';
 import type { PoolClient } from 'pg';
 import getRecipeData from '@dimfu/recipe-scraper';
 import { pool } from '../db.js';
@@ -290,9 +291,65 @@ export function assertSafeRecipeUrl(rawUrl: string): SafeRecipeUrl {
   };
 }
 
+type HostResolver = (hostname: string) => Promise<Array<{ address: string; family: number }>>;
+
+const defaultHostResolver: HostResolver = (hostname) => lookup(hostname, { all: true });
+
+// Active resolver used by internal callers (e.g. fetchRecipeHtml). Overridable
+// so unit tests stay hermetic (no real DNS) — see setRecipeHostResolverForTests.
+let activeHostResolver: HostResolver = defaultHostResolver;
+
+export function setRecipeHostResolverForTests(resolver: HostResolver | null): void {
+  activeHostResolver = resolver ?? defaultHostResolver;
+}
+
+// SSRF guard for the actual network fetch. assertSafeRecipeUrl only inspects
+// the URL string, so a hostname that RESOLVES to an internal address (an
+// attacker pointing evil.example at 169.254.169.254 / 10.x / 127.x, i.e. DNS
+// rebinding) would otherwise sail through. Resolve the host and reject if ANY
+// returned address is private/loopback/link-local/reserved. The resolver is
+// injectable for tests.
+//
+// Caveat: this validates-then-fetches, so a sub-second rebind could still flip
+// the address between our lookup and fetch's own lookup. Fully closing that
+// needs connection pinning (a custom `lookup` on an http/https agent, or an
+// undici dispatcher) — tracked as a follow-up. This closes the practical,
+// reported hostname->internal hole.
+export async function assertResolvedHostIsPublic(
+  hostname: string,
+  resolver: HostResolver = activeHostResolver
+): Promise<void> {
+  const host = normalizeHostname(hostname);
+  // Literal IPs were already validated by assertSafeRecipeUrl.
+  if (isIP(host) !== 0) {
+    return;
+  }
+
+  let records: Array<{ address: string; family: number }>;
+  try {
+    records = await resolver(host);
+  } catch {
+    throw new ApiError(502, 'RECIPE_IMPORT_FETCH_FAILED', 'Could not resolve the recipe host');
+  }
+
+  if (!records || records.length === 0) {
+    throw new ApiError(400, 'RECIPE_IMPORT_UNSAFE_URL', 'Recipe URL must be a public web page');
+  }
+
+  for (const record of records) {
+    const isPrivate = record.family === 6 ? isPrivateIpv6(record.address) : isPrivateIpv4(record.address);
+    if (isPrivate) {
+      throw new ApiError(400, 'RECIPE_IMPORT_UNSAFE_URL', 'Recipe URL resolves to a non-public address');
+    }
+  }
+}
+
 async function fetchRecipeHtml(startUrl: string): Promise<RecipeHtmlPayload> {
   let currentUrl = startUrl;
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
+    // Re-resolve on every hop: the initial host AND every redirect target must
+    // resolve to a public address before we connect.
+    await assertResolvedHostIsPublic(new URL(currentUrl).hostname);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), SCRAPE_TIMEOUT_MS);
     let response: Response;

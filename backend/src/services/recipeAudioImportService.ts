@@ -214,6 +214,10 @@ export async function importRecipeFromAudio(input: RecipeAudioImportInput): Prom
   const source = assertSafeRecipeUrl(input.sourceUrl);
   const audioUrl = cleanText(input.audioUrl, 3000);
   if (audioUrl) {
+    // URL-string validation only (protocol + literal private IPs). This URL is
+    // fetched by Groq server-side, not by us, so resolving DNS here wouldn't
+    // protect our network. Documented residual: a rebinding host in audioUrl
+    // could target Groq's infra, not ours.
     assertSafeRecipeUrl(audioUrl);
   }
 

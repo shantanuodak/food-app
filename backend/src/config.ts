@@ -105,6 +105,14 @@ export const config = {
   parseRateLimitEnabled: booleanWithDefault('PARSE_RATE_LIMIT_ENABLED', true),
   parseRateLimitWindowMs: integerWithDefault('PARSE_RATE_LIMIT_WINDOW_MS', 60_000),
   parseRateLimitMaxRequests: integerWithDefault('PARSE_RATE_LIMIT_MAX_REQUESTS', 60),
+  // Recipe import is far more expensive than parse (outbound fetch + a paid
+  // Groq transcription for the audio lane), so it gets its own, tighter
+  // per-user limits keyed by lane.
+  recipeRateLimitEnabled: booleanWithDefault('RECIPE_RATE_LIMIT_ENABLED', true),
+  recipeRateLimitWindowMs: integerWithDefault('RECIPE_RATE_LIMIT_WINDOW_MS', 60_000),
+  recipeUrlImportRateLimitMax: integerWithDefault('RECIPE_URL_IMPORT_RATE_LIMIT_MAX', 12),
+  recipeAudioImportRateLimitMax: integerWithDefault('RECIPE_AUDIO_IMPORT_RATE_LIMIT_MAX', 6),
+  recipeSaveRateLimitMax: integerWithDefault('RECIPE_SAVE_RATE_LIMIT_MAX', 40),
   geminiCircuitBreakerEnabled: booleanWithDefault('GEMINI_CIRCUIT_BREAKER_ENABLED', true),
   geminiCircuitBreakerConsecutive429: integerWithDefault('GEMINI_CIRCUIT_BREAKER_CONSECUTIVE_429', 5),
   geminiCircuitBreakerCooldownMs: integerWithDefault('GEMINI_CIRCUIT_BREAKER_COOLDOWN_MS', 20_000),

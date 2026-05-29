@@ -6,6 +6,10 @@ import { importRecipeFromUrl, listRecipes, saveRecipe } from '../services/recipe
 import { importRecipeFromAudio } from '../services/recipeAudioImportService.js';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
+import {
+  checkRecipeImportRateLimit,
+  type RecipeRateLane
+} from '../services/recipeImportRateLimiterService.js';
 
 const router = Router();
 const audioUpload = multer({
@@ -68,6 +72,15 @@ function authContext(res: Response) {
   };
 }
 
+function enforceRecipeRateLimit(userId: string, lane: RecipeRateLane): void {
+  const result = checkRecipeImportRateLimit(userId, lane);
+  if (!result.allowed) {
+    const error = new ApiError(429, 'RECIPE_RATE_LIMITED', 'Too many recipe requests. Please retry shortly.');
+    (error as ApiError & { retryAfterSeconds?: number }).retryAfterSeconds = result.retryAfterSeconds;
+    throw error;
+  }
+}
+
 function audioUploadMiddleware(req: Request, res: Response, next: NextFunction): void {
   audioUpload.single('audio')(req, res, (error: unknown) => {
     if (!error) {
@@ -101,6 +114,7 @@ router.get('/', async (_req, res, next) => {
 router.post('/import-from-url', async (req, res, next) => {
   try {
     const auth = authContext(res);
+    enforceRecipeRateLimit(auth.userId, 'url');
     const body = importFromUrlSchema.parse(req.body);
     const result = await importRecipeFromUrl({
       userId: auth.userId,
@@ -116,6 +130,7 @@ router.post('/import-from-url', async (req, res, next) => {
 router.post('/import-from-audio', audioUploadMiddleware, async (req, res, next) => {
   try {
     const auth = authContext(res);
+    enforceRecipeRateLimit(auth.userId, 'audio');
     const body = importFromAudioSchema.parse(req.body);
     const audioFile = req.file
       ? {
@@ -144,6 +159,7 @@ router.post('/import-from-audio', audioUploadMiddleware, async (req, res, next) 
 router.post('/', async (req, res, next) => {
   try {
     const auth = authContext(res);
+    enforceRecipeRateLimit(auth.userId, 'save');
     const body = reviewedRecipeSchema.parse(req.body);
     const recipe = await saveRecipe({
       userId: auth.userId,
