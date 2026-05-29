@@ -344,6 +344,55 @@ export async function assertResolvedHostIsPublic(
   }
 }
 
+// Stream the response body with a hard byte cap so a missing/dishonest
+// content-length or a chunked response can't OOM the process by buffering an
+// unbounded body. Aborts the in-flight request the moment the cap is exceeded.
+// Counts BYTES (not UTF-16 code units, which is what String.length returns).
+export async function readBodyWithByteCap(
+  response: Response,
+  maxBytes: number,
+  controller: AbortController
+): Promise<string> {
+  const body = response.body;
+  if (!body) {
+    const fallback = await response.text();
+    if (Buffer.byteLength(fallback, 'utf8') > maxBytes) {
+      controller.abort();
+      throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
+    }
+    return fallback;
+  }
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      if (!value) {
+        continue;
+      }
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        controller.abort();
+        throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    try {
+      reader.releaseLock();
+    } catch {
+      // Reader already released/closed (e.g. after abort) — nothing to do.
+    }
+  }
+
+  return Buffer.concat(chunks).toString('utf8');
+}
+
 async function fetchRecipeHtml(startUrl: string): Promise<RecipeHtmlPayload> {
   let currentUrl = startUrl;
   for (let redirectCount = 0; redirectCount <= MAX_REDIRECTS; redirectCount += 1) {
@@ -396,15 +445,14 @@ async function fetchRecipeHtml(startUrl: string): Promise<RecipeHtmlPayload> {
       throw new ApiError(415, 'RECIPE_IMPORT_UNSUPPORTED_CONTENT', 'Recipe URL must point to an HTML page');
     }
 
+    // Fail fast on an honest content-length, then stream-cap the body so a
+    // missing/lying header or a chunked response can't OOM us.
     const contentLength = Number(response.headers.get('content-length') ?? '0');
     if (Number.isFinite(contentLength) && contentLength > MAX_HTML_BYTES) {
       throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
     }
 
-    const html = await response.text();
-    if (html.length > MAX_HTML_BYTES) {
-      throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
-    }
+    const html = await readBodyWithByteCap(response, MAX_HTML_BYTES, controller);
 
     return { finalUrl: currentUrl, html };
   }
@@ -460,10 +508,7 @@ async function fetchRecipeMarkdownViaReader(sourceUrl: string): Promise<RecipeMa
     throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
   }
 
-  const markdown = await response.text();
-  if (markdown.length > MAX_MARKDOWN_BYTES) {
-    throw new ApiError(413, 'RECIPE_IMPORT_PAGE_TOO_LARGE', 'Recipe page is too large to import');
-  }
+  const markdown = await readBodyWithByteCap(response, MAX_MARKDOWN_BYTES, controller);
 
   return { finalUrl: sourceUrl, markdown };
 }

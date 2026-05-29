@@ -145,6 +145,34 @@ describe('recipeImportRateLimiterService', () => {
   });
 });
 
+describe('recipeImportService.readBodyWithByteCap', () => {
+  test('returns the full body when under the byte cap', async () => {
+    useTestDatabaseUrl();
+    const { readBodyWithByteCap } = await import('../src/services/recipeImportService.js');
+    const result = await readBodyWithByteCap(new Response('hello world'), 1000, new AbortController());
+    expect(result).toBe('hello world');
+  });
+
+  test('throws 413 and aborts the request when the body exceeds the cap', async () => {
+    useTestDatabaseUrl();
+    const { readBodyWithByteCap } = await import('../src/services/recipeImportService.js');
+    const controller = new AbortController();
+    await expect(
+      readBodyWithByteCap(new Response('this body is far too large for the tiny cap'), 5, controller)
+    ).rejects.toThrow();
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  test('caps on BYTES, not UTF-16 code units (multi-byte safety)', async () => {
+    useTestDatabaseUrl();
+    const { readBodyWithByteCap } = await import('../src/services/recipeImportService.js');
+    // Each pizza emoji is 4 UTF-8 bytes (2 UTF-16 code units); 3 => 12 bytes > 8.
+    await expect(
+      readBodyWithByteCap(new Response('🍕🍕🍕'), 8, new AbortController())
+    ).rejects.toThrow();
+  });
+});
+
 describe('recipeImportService.buildRecipeDraft', () => {
   test('normalizes scraper output into a reviewable draft', async () => {
     useTestDatabaseUrl();
