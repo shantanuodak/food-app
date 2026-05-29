@@ -28,20 +28,33 @@ struct OB02eHowItWorksScreen: View {
                     .padding(.horizontal, 24)
                     .padding(.top, 24)
 
-                // Feature cards — staggered entry per card so they cascade in
+                // Feature cards — staggered entry per card so they cascade in.
+                // 2026-05-24: each card also gets a subtle FloatingDrift so the
+                // grid reads as "infographic floating in space" rather than
+                // "list of tappable rows". Testers were tapping the cards
+                // expecting them to do something; the drift signals that the
+                // cards are display content and Next is the only action.
                 ScrollView(.vertical, showsIndicators: false) {
                     VStack(spacing: 26) {
                         typingCard
                             .modifier(StaggeredEntry(index: 0, appeared: appeared))
+                            .modifier(FloatingDrift(phaseSeed: 0.00))
 
                         TrackProgressCardView()
                             .modifier(StaggeredEntry(index: 1, appeared: appeared))
+                            .modifier(FloatingDrift(phaseSeed: 0.20))
 
                         TakePhotoCardView()
                             .modifier(StaggeredEntry(index: 2, appeared: appeared))
+                            .modifier(FloatingDrift(phaseSeed: 0.40))
+
+                        CuratedRecipesCardView()
+                            .modifier(StaggeredEntry(index: 3, appeared: appeared))
+                            .modifier(FloatingDrift(phaseSeed: 0.60))
 
                         WidgetShortcutCardView()
-                            .modifier(StaggeredEntry(index: 3, appeared: appeared))
+                            .modifier(StaggeredEntry(index: 4, appeared: appeared))
+                            .modifier(FloatingDrift(phaseSeed: 0.80))
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 28)
@@ -607,6 +620,159 @@ private struct WidgetShortcutCardView: View {
                 .font(.system(size: 13, weight: .black))
                 .foregroundStyle(.white)
                 .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(12)
+        }
+        .frame(width: 117, height: 117)
+    }
+}
+
+// MARK: - Floating Drift modifier
+
+/// Subtly drifts a view via sin-wave-driven offset + rotation. Used to
+/// signal "this is a display element floating in space" rather than
+/// "this is a tappable settings row" — testers were tapping the
+/// feature cards in onboarding expecting them to do something. Each
+/// card gets a different `phaseSeed` so they don't drift in sync.
+///
+/// Drift amplitudes are intentionally tiny (±1.5pt translate, ±0.4°
+/// rotate) — enough to read as motion, small enough that content stays
+/// stable to read. Respects `accessibilityReduceMotion`.
+private struct FloatingDrift: ViewModifier {
+    let phaseSeed: Double
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func body(content: Content) -> some View {
+        if reduceMotion {
+            content
+        } else {
+            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
+                let t = context.date.timeIntervalSinceReferenceDate
+                let twoPi = Double.pi * 2
+                let dx = sin(t * 0.40 + phaseSeed * twoPi)        * 1.5
+                let dy = sin(t * 0.32 + phaseSeed * twoPi * 1.5)  * 1.5
+                let rotation = sin(t * 0.22 + phaseSeed * twoPi)  * 0.4
+
+                content
+                    .offset(x: dx, y: dy)
+                    .rotationEffect(.degrees(rotation))
+            }
+        }
+    }
+}
+
+// MARK: - Curated Recipes Card
+
+/// Fifth feature card (added 2026-05-24). Positions the recipe feature
+/// as "we did the curation work" rather than "we dump 10,000 random
+/// recipes on you" — the differentiator vs. competitors. Shows a
+/// stylized recipe preview tile on the left with macros + a
+/// "Fits your targets" chip; title + subtitle on the right.
+private struct CuratedRecipesCardView: View {
+    @State private var checkPulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 16) {
+            recipePreview
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Recipes worth your goals")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
+
+                Text("Hand-picked meals that hit your targets — no endless scrolling.")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                    .lineSpacing(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 20)
+        .padding(.vertical, 12)
+        .frame(height: 142)
+        .frame(maxWidth: .infinity)
+        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
+        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                checkPulse = true
+            }
+        }
+    }
+
+    /// Compact recipe preview — circular dish illustration at top, name,
+    /// macros, and a "Fits your targets" check chip at the bottom. Same
+    /// 117pt square footprint as the other cards' left panels.
+    private var recipePreview: some View {
+        let accent = LinearGradient(
+            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
+        return ZStack {
+            // Outer card chrome — matches widget preview style
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 1.00, green: 0.94, blue: 0.84),
+                            Color(red: 1.00, green: 0.88, blue: 0.72)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+                )
+
+            VStack(spacing: 6) {
+                // Dish illustration: stacked circles signaling a bowl
+                ZStack {
+                    Circle()
+                        .fill(accent)
+                        .frame(width: 38, height: 38)
+                    Circle()
+                        .fill(.white.opacity(0.85))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "fork.knife")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(accent)
+                }
+
+                Text("Greek bowl")
+                    .font(.system(size: 11, weight: .bold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.30, green: 0.18, blue: 0.08))
+                    .lineLimit(1)
+
+                Text("320 cal · 22g P")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded))
+                    .foregroundStyle(Color(red: 0.42, green: 0.30, blue: 0.18))
+                    .monospacedDigit()
+
+                // "Fits your targets" check chip — gently pulses to draw
+                // attention to the curated/personalized angle
+                HStack(spacing: 3) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("Fits")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(Color(red: 0.13, green: 0.55, blue: 0.30))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2.5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color(red: 0.85, green: 0.95, blue: 0.88))
+                )
+                .scaleEffect(checkPulse ? 1.06 : 1.0)
             }
             .padding(12)
         }
