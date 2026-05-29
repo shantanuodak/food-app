@@ -1775,3 +1775,19 @@ export async function listRecipes(userId: string): Promise<{ recipes: SavedRecip
   );
   return { recipes: result.rows.map(toSavedRecipe) };
 }
+
+// Hard delete. recipe_ingredients and recipe_steps are removed automatically by
+// their `ON DELETE CASCADE` foreign keys (migrations/0039_recipes.sql). Scoped
+// by user_id so a user can never delete another user's recipe; a missing row
+// (wrong id OR not owned) is reported as 404.
+export async function deleteRecipe(userId: string, recipeId: string): Promise<{ id: string; status: 'deleted' }> {
+  const result = await pool.query<{ id: string }>(
+    `DELETE FROM recipes WHERE id = $1 AND user_id = $2 RETURNING id`,
+    [recipeId, userId]
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new ApiError(404, 'RECIPE_NOT_FOUND', 'Recipe not found');
+  }
+  return { id: row.id, status: 'deleted' };
+}

@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { importRecipeFromUrl, listRecipes, saveRecipe } from '../services/recipeImportService.js';
+import { importRecipeFromUrl, listRecipes, saveRecipe, deleteRecipe } from '../services/recipeImportService.js';
 import { importRecipeFromAudio } from '../services/recipeAudioImportService.js';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
@@ -22,6 +22,10 @@ const audioUpload = multer({
 
 const importFromUrlSchema = z.object({
   url: z.string().trim().min(1).max(3000)
+});
+
+const recipeIdParamSchema = z.object({
+  id: z.string().uuid()
 });
 
 const importFromAudioSchema = z.object({
@@ -189,6 +193,18 @@ router.post('/', async (req, res, next) => {
       }
     });
     res.status(201).json({ recipe });
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.delete('/:id', async (req, res, next) => {
+  try {
+    const auth = authContext(res);
+    enforceRecipeRateLimit(auth.userId, 'save');
+    const params = recipeIdParamSchema.parse(req.params);
+    const result = await deleteRecipe(auth.userId, params.id);
+    res.json(result);
   } catch (error) {
     next(error);
   }
