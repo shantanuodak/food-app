@@ -124,6 +124,32 @@ describe('scoreRecipeDraft — noise detection', () => {
   });
 });
 
+describe('scoreRecipeDraft — nutrition-fact false positives', () => {
+  test('legit ingredients containing sugar/fat/protein are NOT flagged as junk', () => {
+    const report = scoreRecipeDraft(makeDraft({
+      ingredients: [
+        { rawText: '1 cup granulated sugar', quantityText: null, unitText: null, ingredientName: null },
+        { rawText: '2 tbsp brown sugar', quantityText: null, unitText: null, ingredientName: null },
+        { rawText: '1 lb ground beef', quantityText: null, unitText: null, ingredientName: null },
+        { rawText: '1 scoop protein powder', quantityText: null, unitText: null, ingredientName: null },
+        { rawText: '2 tbsp coconut fat', quantityText: null, unitText: null, ingredientName: null },
+      ],
+    }));
+    expect(report.defects.map((d) => d.code)).not.toContain('ingredients_junk_lines');
+  });
+
+  test('actual nutrition-fact lines ARE flagged as junk', () => {
+    const report = scoreRecipeDraft(makeDraft({
+      ingredients: [
+        { rawText: '1 cup flour', quantityText: null, unitText: null, ingredientName: null },
+        { rawText: 'Calories 520 Protein 12g Fat 28g', quantityText: null, unitText: null, ingredientName: null },
+        { rawText: 'Sodium: 400mg', quantityText: null, unitText: null, ingredientName: null },
+      ],
+    }));
+    expect(report.defects.map((d) => d.code)).toContain('ingredients_junk_lines');
+  });
+});
+
 describe('scoreRecipeDraft — parseability gap flag', () => {
   test('flags that structured fields are never populated', () => {
     const report = scoreRecipeDraft(makeDraft());

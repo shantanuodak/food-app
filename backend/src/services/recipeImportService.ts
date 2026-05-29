@@ -1495,6 +1495,16 @@ export async function importRecipeDraftForSmokeTest(url: string): Promise<Recipe
   return importRecipeDraftFromSafeUrl(assertSafeRecipeUrl(url));
 }
 
+/**
+ * Returns the RAW (pre-cleanup) draft regardless of the RECIPE_CLEANUP_ENABLED
+ * flag. Used by the controlled before/after eval so it can score the raw
+ * scrape and the cleaned draft from the SAME fetch — eliminating the
+ * flaky-bot-wall URL-drift confound you get by toggling the flag across runs.
+ */
+export async function importRawRecipeDraftForEval(url: string): Promise<RecipeDraft> {
+  return scrapeRawDraftFromSafeUrl(assertSafeRecipeUrl(url));
+}
+
 function normalizeDraftForSave(input: SavedRecipeInput): Omit<SavedRecipeInput, 'sourceUrl'> & {
   sourceUrl: string;
   sourceDomain: string;

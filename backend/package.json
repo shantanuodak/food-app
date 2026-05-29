@@ -20,7 +20,8 @@
     "test": "vitest run",
     "test:integration": "RUN_INTEGRATION_TESTS=true vitest run tests/integration.api.test.ts",
     "recipe:quality": "tsx src/scripts/recipeQualityHarness.ts",
-    "recipe:clean-eval": "tsx src/scripts/recipeCleanEval.ts"
+    "recipe:clean-eval": "tsx src/scripts/recipeCleanEval.ts",
+    "recipe:clean-compare": "tsx src/scripts/recipeCleanCompare.ts"
   },
   "dependencies": {
     "@dimfu/recipe-scraper": "^0.3.0",

@@ -127,8 +127,23 @@ const NOISE_PHRASES = [
   'get the recipe', 'see the recipe', 'recipe card below', 'tap here',
 ];
 
-// Nutrition-fact tokens that sometimes leak in as fake ingredient lines.
-const NUTRITION_LEAK = /\b(kcal|calories|protein|carbohydrate|carbs?|saturated fat|total fat|cholesterol|sodium|fiber|fibre|sugar)\b/i;
+/**
+ * Detects a nutrition-FACTS line ("Calories 320", "Protein 28g", "Sodium:
+ * 400mg", "Nutrition Facts...") that leaked in as a fake ingredient.
+ *
+ * Critically, this must NOT fire on legitimate ingredients that merely
+ * contain a nutrition word — "1 cup sugar", "2 tbsp brown sugar", "1 lb
+ * ground beef", "1 scoop protein powder" are real ingredients, not junk.
+ * So we require the nutrition word to be paired with a number+unit (the
+ * shape of a facts panel), or an explicit "Nutrition Facts" / "Calories N".
+ */
+function looksLikeNutritionFact(text: string): boolean {
+  if (/\bnutrition facts?\b/i.test(text)) return true;
+  if (/\b(calories|kcal)\b/i.test(text) && /\d/.test(text)) return true;
+  // "Protein 28g", "Sodium: 400 mg", "Total Fat 12g", "Sugars 9 g"
+  if (/\b(protein|fat|carbohydrates?|carbs|sodium|fiber|fibre|cholesterol|sugars?)\b\s*:?\s*\d+\s*(g|mg|kcal|%)\b/i.test(text)) return true;
+  return false;
+}
 
 // Emoji range (rough, covers the common pictographic blocks).
 const EMOJI = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}]/u;
@@ -247,7 +262,7 @@ function scoreIngredientIntegrity(draft: RecipeDraft, defects: RecipeQualityDefe
     const text = ing.rawText.trim();
     const lower = text.toLowerCase();
     const isJunk =
-      NUTRITION_LEAK.test(text) ||
+      looksLikeNutritionFact(text) ||
       NOISE_PHRASES.some((p) => lower.includes(p)) ||
       /^(print|scale|author|servings?|yield|course|cuisine|prep time|cook time|total time)\b/i.test(text) ||
       BARE_URL.test(text);
@@ -263,7 +278,7 @@ function scoreIngredientIntegrity(draft: RecipeDraft, defects: RecipeQualityDefe
   if (junkLines > 0) {
     const sample = ings.find((i) => {
       const lower = i.rawText.toLowerCase();
-      return NUTRITION_LEAK.test(i.rawText) || NOISE_PHRASES.some((p) => lower.includes(p)) || BARE_URL.test(i.rawText);
+      return looksLikeNutritionFact(i.rawText) || NOISE_PHRASES.some((p) => lower.includes(p)) || BARE_URL.test(i.rawText);
     });
     defects.push({
       dimension: 'ingredientIntegrity',
