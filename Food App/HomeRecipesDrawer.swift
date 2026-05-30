@@ -726,6 +726,15 @@ struct HomeRecipesDrawerContent: View {
 // chain there is already long enough that adding the sheet inline tips
 // it over).
 
+// ⚠️ DO NOT attach this as an always-on `.sheet` over a `NavigationStack`.
+// Doing so drives SwiftUI's PositionedNavigationDestinationProcessor.PollingRule
+// into an infinite per-frame update loop that freezes the app on launch
+// (root-caused 2026-05-30 via `sample`: 100% main thread in the poll rule;
+// detaching the modifier → 0 poll frames). It was detached from
+// MainLoggingShellBody for this reason. Before re-enabling the always-on
+// home recipes peek, reimplement it as an inline ZStack overlay with a
+// SwiftUI transition (see lesson_no_nested_sheet_in_fullscreencover) rather
+// than a perpetually-present sheet.
 struct HomeRecipesDrawerSheetModifier: ViewModifier {
     let isKeyboardVisible: Bool
     let isVoiceOverlayPresented: Bool
