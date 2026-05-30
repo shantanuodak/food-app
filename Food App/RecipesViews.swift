@@ -871,33 +871,78 @@ struct RecipeBrowserImportSheet: View {
             let payload = try JSONDecoder().decode(RecipeBrowserExtractionPayload.self, from: data)
             if payload.error != nil {
                 if let draft = sharedTextFallbackDraft() {
-                    isExtracting = false
-                    onImported(draft)
+                    await emit(draft)
                     return
                 }
                 throw RecipeBrowserImportError.noRecipeData
             }
 
             let draft = try payload.draft(fallbackURL: url)
-            isExtracting = false
-            onImported(draft)
+            await emit(draft)
         } catch let error as RecipeBrowserImportError {
             if let draft = sharedTextFallbackDraft() {
-                isExtracting = false
-                onImported(draft)
+                await emit(draft)
             } else {
                 errorMessage = browserImportErrorMessage(for: error)
                 isExtracting = false
             }
         } catch {
             if let draft = sharedTextFallbackDraft() {
-                isExtracting = false
-                onImported(draft)
+                await emit(draft)
             } else {
                 errorMessage = "Couldn’t read this page yet. Wait for it to finish loading, then try again."
                 isExtracting = false
             }
         }
+    }
+
+    /// Routes a locally-built draft through the backend Gemini structuring pass
+    /// (`POST /v1/recipes/structure-text`) before handing it to the Review
+    /// sheet, then clears the spinner. Falls back to the local draft if
+    /// structuring fails or returns nothing usable, so import never breaks.
+    @MainActor
+    private func emit(_ localDraft: RecipeImportDraft) async {
+        let structured = await structuredDraft(from: localDraft)
+        isExtracting = false
+        onImported(structured)
+    }
+
+    @MainActor
+    private func structuredDraft(from localDraft: RecipeImportDraft) async -> RecipeImportDraft {
+        let rawText = bestRawTextForStructuring(localDraft: localDraft)
+        guard rawText.count >= 12 else { return localDraft }
+        do {
+            let response = try await appStore.apiClient.structureRecipeText(
+                RecipeStructureTextRequest(
+                    text: rawText,
+                    sourceUrl: localDraft.sourceUrl,
+                    sourceName: localDraft.sourceName ?? sourceHint.displayName,
+                    heroImageUrl: localDraft.heroImageUrl
+                )
+            )
+            var structured = response.draft
+            guard !structured.ingredients.isEmpty else { return localDraft }
+            if structured.heroImageUrl == nil { structured.heroImageUrl = localDraft.heroImageUrl }
+            if structured.sourceName == nil { structured.sourceName = localDraft.sourceName }
+            if structured.sourceDomain == nil { structured.sourceDomain = localDraft.sourceDomain }
+            return structured
+        } catch {
+            return localDraft
+        }
+    }
+
+    /// Best raw text to hand the backend for structuring: a user-pasted recipe
+    /// wins, then the shared caption, then a reconstruction from the local draft.
+    private func bestRawTextForStructuring(localDraft: RecipeImportDraft) -> String {
+        let manual = manualRecipeText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !manual.isEmpty { return manual }
+        if let shared = sharedText?.trimmingCharacters(in: .whitespacesAndNewlines), !shared.isEmpty {
+            return shared
+        }
+        var parts: [String] = [localDraft.title]
+        parts.append(contentsOf: localDraft.ingredients)
+        parts.append(contentsOf: localDraft.steps)
+        return parts.joined(separator: "\n")
     }
 
     private func browserImportErrorMessage(for error: RecipeBrowserImportError) -> String {
@@ -938,7 +983,8 @@ struct RecipeBrowserImportSheet: View {
         }
 
         textFallbackErrorMessage = nil
-        onImported(draft)
+        isExtracting = true
+        Task { await emit(draft) }
     }
 }
 

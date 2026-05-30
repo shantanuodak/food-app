@@ -160,6 +160,13 @@ struct RecipeAudioURLImportRequest: Encodable {
     let language: String?
 }
 
+struct RecipeStructureTextRequest: Encodable {
+    let text: String
+    let sourceUrl: String
+    let sourceName: String?
+    let heroImageUrl: String?
+}
+
 struct RecipeImportResponse: Decodable {
     let draft: RecipeImportDraft
 
