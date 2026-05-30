@@ -185,7 +185,8 @@ struct HomeRecipesDrawerContent: View {
             RecipeBrowserImportSheet(
                 url: session.url,
                 sourceHint: session.sourceHint,
-                sharedText: session.sharedText
+                sharedText: session.sharedText,
+                apiClient: appStore.apiClient
             ) { draft in
                 browserImportSession = nil
                 // Let the browser sheet finish dismissing before the review

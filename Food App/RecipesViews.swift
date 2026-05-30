@@ -118,7 +118,8 @@ struct RecipesScreen: View {
             RecipeBrowserImportSheet(
                 url: session.url,
                 sourceHint: session.sourceHint,
-                sharedText: session.sharedText
+                sharedText: session.sharedText,
+                apiClient: appStore.apiClient
             ) { draft in
                 if session.clearPendingURLOnSuccess {
                     RecipeImportPendingStore.clearPendingURL()
@@ -664,6 +665,10 @@ struct RecipeBrowserImportSheet: View {
     let url: URL
     let sourceHint: RecipeImportSourceHint
     let sharedText: String?
+    /// Used to POST extracted text to /v1/recipes/structure-text for Gemini
+    /// structuring. Passed in explicitly (rather than via @EnvironmentObject)
+    /// so the dependency is unambiguous across both presentation sites.
+    let apiClient: APIClient
     let onImported: (RecipeImportDraft) -> Void
     let onCancel: () -> Void
 
@@ -678,12 +683,14 @@ struct RecipeBrowserImportSheet: View {
         url: URL,
         sourceHint: RecipeImportSourceHint = .genericWeb,
         sharedText: String? = nil,
+        apiClient: APIClient,
         onImported: @escaping (RecipeImportDraft) -> Void,
         onCancel: @escaping () -> Void
     ) {
         self.url = url
         self.sourceHint = sourceHint
         self.sharedText = sharedText
+        self.apiClient = apiClient
         self.onImported = onImported
         self.onCancel = onCancel
         _manualRecipeText = State(initialValue: sharedText ?? "")
@@ -912,7 +919,7 @@ struct RecipeBrowserImportSheet: View {
         let rawText = bestRawTextForStructuring(localDraft: localDraft)
         guard rawText.count >= 12 else { return localDraft }
         do {
-            let response = try await appStore.apiClient.structureRecipeText(
+            let response = try await apiClient.structureRecipeText(
                 RecipeStructureTextRequest(
                     text: rawText,
                     sourceUrl: localDraft.sourceUrl,
