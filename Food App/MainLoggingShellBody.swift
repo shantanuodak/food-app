@@ -570,24 +570,20 @@ extension MainLoggingShellView {
             .overlay(alignment: .bottom) {
                 if !isVoiceOverlayPresented {
                     bottomActionDock
+                        // Lift the dock above the recipes sheet peek
+                        // (.height(88)) so the icons aren't covered.
+                        .padding(.bottom, isKeyboardVisible ? 0 : 56)
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
-            // 2026-05-30: HomeRecipesDrawerSheetModifier (the always-on
-            // recipes peek) was DETACHED here. It presented an always-on
-            // `.sheet` with `presentationBackgroundInteraction` over this
-            // NavigationStack, which drove SwiftUI's
-            // PositionedNavigationDestinationProcessor.PollingRule into an
-            // infinite update loop — re-evaluating this very body every
-            // frame and freezing the app on launch (root-caused via an
-            // Instruments-style `sample`: 100% main thread in the poll
-            // rule; removing the modifier → 0 poll frames). An always-
-            // present drawer must NOT be a sheet over a NavigationStack;
-            // reimplement as an inline ZStack overlay (see
-            // lesson_no_nested_sheet_in_fullscreencover). The
-            // HomeRecipesDrawer component remains in the repo for that
-            // reimplementation. Recipes stay reachable via Profile →
-            // RecipesScreen.
+            .modifier(
+                HomeRecipesDrawerSheetModifier(
+                    isKeyboardVisible: isKeyboardVisible,
+                    isVoiceOverlayPresented: isVoiceOverlayPresented,
+                    isOtherModalPresented: isRecipesDrawerSuppressed,
+                    appStore: appStore
+                )
+            )
             .modifier(
                 MainLoggingTutorialModifier(
                     isHomeTutorialPresented: $isHomeTutorialPresented,
