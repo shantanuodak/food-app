@@ -2,7 +2,7 @@ import SwiftUI
 import UIKit
 import WebKit
 
-private enum RecipesTokens {
+enum RecipesTokens {
     static let orange = AppColor.brandOrangeDeep
     static let orangeSoft = AppColor.brandOrangeSoft
     static let ink = AppColor.textPrimary
@@ -139,9 +139,11 @@ struct RecipesScreen: View {
             .presentationCornerRadius(24)
         }
         .sheet(item: $selectedRecipe) { recipe in
-            RecipeDetailView(recipe: recipe) {
+            RecipeDetailView(recipe: recipe, onClose: {
                 selectedRecipe = nil
-            }
+            }, onDelete: {
+                Task { await deleteRecipe(recipe) }
+            })
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(24)
@@ -1770,7 +1772,7 @@ private enum RecipeDS {
 
 /// Recipe artwork: real photo when available, otherwise a deterministic
 /// gradient + food glyph so image-less recipes still look intentional.
-private struct RecipeArtwork: View {
+struct RecipeArtwork: View {
     let recipe: SavedRecipe
     var glyphSize: CGFloat = 40
 
@@ -1822,7 +1824,7 @@ private struct RecipeMetaChip: View {
     }
 }
 
-private func recipeSourceLabel(_ recipe: SavedRecipe) -> String? {
+func recipeSourceLabel(_ recipe: SavedRecipe) -> String? {
     if let name = recipe.sourceName?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
         return name
     }
@@ -1995,7 +1997,9 @@ private struct RecipeFeaturedCard: View {
     }
 }
 
-private struct RecipeLibraryCard: View {
+/// Shared recipe card — used by both the full Recipes screen and the home
+/// recipes peek drawer so the two surfaces render identically.
+struct RecipeLibraryCard: View {
     let recipe: SavedRecipe
 
     var body: some View {
@@ -2051,8 +2055,14 @@ private struct RecipeLibraryCard: View {
 struct RecipeDetailView: View {
     let recipe: SavedRecipe
     var onClose: () -> Void = {}
+    /// When set, a trash button appears in the floating bar; tapping it
+    /// confirms, then invokes this to hard-delete + dismiss. Wired by both
+    /// the full Recipes screen and the home recipes drawer to their own
+    /// `deleteRecipe(_:)`.
+    var onDelete: (() -> Void)? = nil
 
     @State private var checkedIngredients: Set<Int> = []
+    @State private var showDeleteConfirm = false
     @Environment(\.openURL) private var openURL
 
     var body: some View {
@@ -2082,6 +2092,19 @@ struct RecipeDetailView: View {
             .ignoresSafeArea(edges: .top)
 
             floatingBar
+        }
+        .confirmationDialog(
+            "Delete recipe?",
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button("Delete recipe", role: .destructive) {
+                AppHaptics.warning()
+                onDelete?()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("“\(recipe.title)” will be removed from your recipes. This can’t be undone.")
         }
     }
 
@@ -2234,6 +2257,9 @@ struct RecipeDetailView: View {
         HStack {
             circleButton(icon: "chevron.left", action: onClose)
             Spacer()
+            if onDelete != nil {
+                circleButton(icon: "trash") { showDeleteConfirm = true }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 6)

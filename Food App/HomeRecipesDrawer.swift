@@ -170,9 +170,11 @@ struct HomeRecipesDrawerContent: View {
         // NavigationStack + Done toolbar here produced a dead floating back
         // button and a hero/nav-bar layout clash.
         .sheet(item: $selectedRecipe) { recipe in
-            RecipeDetailView(recipe: recipe) {
+            RecipeDetailView(recipe: recipe, onClose: {
                 selectedRecipe = nil
-            }
+            }, onDelete: {
+                Task { await deleteRecipe(recipe) }
+            })
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(24)
@@ -649,13 +651,18 @@ struct HomeRecipesDrawerContent: View {
             noMatchesState
         } else {
             ScrollView {
-                LazyVStack(spacing: 10) {
+                // Same image-forward card + 2-column grid as RecipesScreen
+                // so the home peek and the full Recipes screen match.
+                LazyVGrid(
+                    columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
+                    spacing: 16
+                ) {
                     ForEach(filteredRecipes) { recipe in
                         Button {
                             AppHaptics.lightImpact()
                             selectedRecipe = recipe
                         } label: {
-                            HomeRecipesDrawerCard(recipe: recipe)
+                            RecipeLibraryCard(recipe: recipe)
                         }
                         .buttonStyle(.plain)
                         .contextMenu {
@@ -928,101 +935,5 @@ struct HomeRecipesDrawerSheetModifier: ViewModifier {
     }
 }
 
-// MARK: - Recipe card
-
-private struct HomeRecipesDrawerCard: View {
-    let recipe: SavedRecipe
-
-    var body: some View {
-        HStack(spacing: 12) {
-            thumbnail
-                .frame(width: 76, height: 76)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            VStack(alignment: .leading, spacing: 4) {
-                if let domain = recipe.sourceDomain ?? recipe.sourceName, !domain.isEmpty {
-                    Text(domain.uppercased())
-                        .font(.system(size: 9, weight: .black, design: .rounded))
-                        .tracking(0.6)
-                        .foregroundStyle(AppColor.brandOrangeDeep)
-                        .lineLimit(1)
-                }
-                Text(recipe.title)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(AppColor.textPrimary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-
-                HStack(spacing: 6) {
-                    if let servings = recipe.servings, !servings.isEmpty {
-                        Text(servings)
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(AppColor.textSecondary)
-                    }
-                    if !recipe.ingredients.isEmpty {
-                        Text("•")
-                            .font(.system(size: 10))
-                            .foregroundStyle(AppColor.textSecondary)
-                        Text("\(recipe.ingredients.count) ingredients")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(AppColor.textSecondary)
-                    }
-                }
-            }
-
-            Spacer(minLength: 4)
-
-            Image(systemName: "chevron.right")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(AppColor.textSecondary.opacity(0.60))
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(AppColor.surface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(AppColor.borderSubtle, lineWidth: 1)
-        )
-        .shadow(color: .black.opacity(0.04), radius: 8, y: 3)
-    }
-
-    @ViewBuilder
-    private var thumbnail: some View {
-        if let urlString = recipe.heroImageUrl, let url = URL(string: urlString) {
-            AsyncImage(url: url) { phase in
-                switch phase {
-                case .success(let image):
-                    image
-                        .resizable()
-                        .scaledToFill()
-                case .failure:
-                    placeholder
-                case .empty:
-                    placeholder
-                @unknown default:
-                    placeholder
-                }
-            }
-        } else {
-            placeholder
-        }
-    }
-
-    private var placeholder: some View {
-        ZStack {
-            LinearGradient(
-                colors: [
-                    Color(red: 1.00, green: 0.90, blue: 0.72),
-                    Color(red: 1.00, green: 0.78, blue: 0.52)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            Image(systemName: "fork.knife")
-                .font(.system(size: 22, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.78))
-        }
-    }
-}
+// (HomeRecipesDrawerCard removed 2026-05-30 — the drawer now uses the
+// shared RecipeLibraryCard so it matches the full Recipes screen.)
