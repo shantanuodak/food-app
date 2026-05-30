@@ -881,6 +881,15 @@ struct HomeRecipesDrawerContent: View {
 // chain there is already long enough that adding the sheet inline tips
 // it over).
 
+// ⚠️ DO NOT attach this as an always-on `.sheet` over a `NavigationStack`.
+// Doing so drives SwiftUI's PositionedNavigationDestinationProcessor.PollingRule
+// into an infinite per-frame update loop that freezes the app on launch
+// (root-caused 2026-05-30 via `sample`: 100% main thread in the poll rule;
+// detaching the modifier → 0 poll frames). It was detached from
+// MainLoggingShellBody for this reason. Before re-enabling the always-on
+// home recipes peek, reimplement it as an inline ZStack overlay with a
+// SwiftUI transition (see lesson_no_nested_sheet_in_fullscreencover) rather
+// than a perpetually-present sheet.
 struct HomeRecipesDrawerSheetModifier: ViewModifier {
     let isKeyboardVisible: Bool
     let isVoiceOverlayPresented: Bool
@@ -899,27 +908,50 @@ struct HomeRecipesDrawerSheetModifier: ViewModifier {
     /// the size the user liked (per 2026-05-24 walkthrough).
     @State private var detent: PresentationDetent = .height(88)
 
+    /// Real, writable source of truth for the always-on sheet.
+    ///
+    /// 2026-05-29: this MUST be stored state, not a get-only
+    /// `Binding(get:set:{ _ in })`. The previous derived binding (which
+    /// dropped every write) put SwiftUI's internal sheet-presentation
+    /// state permanently at odds with the source-of-truth: the framework
+    /// writes back when a presentation settles, those writes were
+    /// ignored, the getter kept returning `true`, and SwiftUI re-ran the
+    /// HOST `MainLoggingShellView.body` on every runloop pass trying to
+    /// reconcile — an infinite render loop that froze the app on launch
+    /// (`presentationBackgroundInteraction` kept the home view live, so
+    /// the churn pinned the main thread instead of parking behind a
+    /// dimmed sheet). We now mirror the derived condition into real
+    /// state via `.onAppear` + `.onChange` below.
+    @State private var isDrawerPresented = false
+
+    /// Derived presentation condition — the recipes peek yields the
+    /// home view's single sheet slot whenever the keyboard, the voice
+    /// overlay, or any other home modal needs it.
+    private var shouldPresentDrawer: Bool {
+        !isKeyboardVisible && !isVoiceOverlayPresented && !isOtherModalPresented
+    }
+
     func body(content: Content) -> some View {
-        content.sheet(
-            isPresented: Binding(
-                get: { !isKeyboardVisible && !isVoiceOverlayPresented && !isOtherModalPresented },
-                set: { _ in }
-            )
-        ) {
-            HomeRecipesDrawerContent(detent: $detent)
-                .environmentObject(appStore)
-                .presentationDetents([.height(88), .large], selection: $detent)
-                .presentationDragIndicator(.visible)
-                .presentationBackground(AppDrawerSurface.gradient)
-                .presentationBackgroundInteraction(.enabled(upThrough: .height(88)))
-                // 2026-05-24: explicit 28pt only affects the top corners
-                // — overrides iOS 26's default "Liquid Glass" floating
-                // treatment for small detents and forces a traditional
-                // edge-to-edge sheet (rounded top, flush bottom against
-                // the home indicator).
-                .presentationCornerRadius(28)
-                .interactiveDismissDisabled(true)
-        }
+        content
+            .onAppear { isDrawerPresented = shouldPresentDrawer }
+            .onChange(of: shouldPresentDrawer) { _, newValue in
+                isDrawerPresented = newValue
+            }
+            .sheet(isPresented: $isDrawerPresented) {
+                HomeRecipesDrawerContent(detent: $detent)
+                    .environmentObject(appStore)
+                    .presentationDetents([.height(88), .large], selection: $detent)
+                    .presentationDragIndicator(.visible)
+                    .presentationBackground(AppDrawerSurface.gradient)
+                    .presentationBackgroundInteraction(.enabled(upThrough: .height(88)))
+                    // 2026-05-24: explicit 28pt only affects the top corners
+                    // — overrides iOS 26's default "Liquid Glass" floating
+                    // treatment for small detents and forces a traditional
+                    // edge-to-edge sheet (rounded top, flush bottom against
+                    // the home indicator).
+                    .presentationCornerRadius(28)
+                    .interactiveDismissDisabled(true)
+            }
     }
 }
 
