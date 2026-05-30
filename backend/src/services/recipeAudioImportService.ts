@@ -4,6 +4,7 @@ import { pool } from '../db.js';
 import { ApiError } from '../utils/errors.js';
 import { ensureUserExists } from './userService.js';
 import { assertSafeRecipeUrl } from './recipeImportService.js';
+import { cleanupRecipeDraft } from './recipeCleanupService.js';
 import type { RecipeDraft, RecipeIngredientDraft, RecipeStepDraft } from './recipeImportService.js';
 
 const GROQ_TRANSCRIPTION_ENDPOINT = '/audio/transcriptions';
@@ -237,7 +238,7 @@ export async function importRecipeFromAudio(input: RecipeAudioImportInput): Prom
     prompt: DEFAULT_TRANSCRIPTION_PROMPT
   });
 
-  const draft = buildRecipeDraftFromTranscript({
+  const rawDraft = buildRecipeDraftFromTranscript({
     transcript: transcription.text,
     sourceUrl: source.url,
     sourceName: input.sourceName,
@@ -245,6 +246,7 @@ export async function importRecipeFromAudio(input: RecipeAudioImportInput): Prom
     provider: transcription.provider,
     model: transcription.model
   });
+  const draft = await maybeCleanupDraft(rawDraft);
 
   const importId = await insertRecipeImportDraft({
     userId: input.userId,
@@ -265,6 +267,30 @@ export async function importRecipeFromAudio(input: RecipeAudioImportInput): Prom
       requestId: transcription.requestId
     }
   };
+}
+
+/**
+ * Optional Gemini structuring + de-noise pass, gated by RECIPE_CLEANUP_ENABLED.
+ * Mirrors the URL lane's helper in recipeImportService.ts. The cleanup service
+ * is internally guarded (returns the original draft on any LLM failure / empty /
+ * unusable response), and we additionally wrap the whole call so a cleanup error
+ * can NEVER turn a successful transcription into a failed import — worst case we
+ * fall back to the raw draft.
+ */
+async function maybeCleanupDraft(draft: RecipeDraft): Promise<RecipeDraft> {
+  if (!config.recipeCleanupEnabled) {
+    return draft;
+  }
+  try {
+    const { cleaned, changed, skippedReason } = await cleanupRecipeDraft(draft);
+    if (!changed && skippedReason) {
+      console.warn(`[recipeAudioImport] cleanup skipped (${skippedReason}); using raw draft for ${draft.sourceDomain}`);
+    }
+    return cleaned;
+  } catch (error) {
+    console.warn('[recipeAudioImport] cleanup pass threw; using raw draft', error);
+    return draft;
+  }
 }
 
 async function insertRecipeImportDraft(input: {

@@ -89,7 +89,7 @@ export const config = {
   // existing hermetic import tests from reaching the network. Flip to true via
   // env to enable in an environment that has a Gemini key. Measured mean
   // +19.5 quality with zero regressions (see recipe:clean-eval).
-  recipeCleanupEnabled: booleanWithDefault('RECIPE_CLEANUP_ENABLED', false),
+  recipeCleanupEnabled: booleanWithDefault('RECIPE_CLEANUP_ENABLED', true),
   recipeAudioMaxBytes: integerWithDefault('RECIPE_AUDIO_MAX_BYTES', 25_000_000),
   recipeAudioTranscriptionTimeoutMs: integerWithDefault('RECIPE_AUDIO_TRANSCRIPTION_TIMEOUT_MS', 45_000),
   usdaApiKey: process.env.USDA_API_KEY || process.env.USDA_FDC_API_KEY || '',
