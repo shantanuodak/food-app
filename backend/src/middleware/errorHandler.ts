@@ -21,11 +21,17 @@ export function errorHandler(err: unknown, _req: Request, res: Response, _next: 
   }
 
   if (err instanceof ApiError) {
+    const retryAfterSeconds = (err as ApiError & { retryAfterSeconds?: number }).retryAfterSeconds;
+    const hasRetryAfter = typeof retryAfterSeconds === 'number' && Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0;
+    if (hasRetryAfter) {
+      res.setHeader('Retry-After', String(Math.ceil(retryAfterSeconds!)));
+    }
     res.status(err.statusCode).json({
       error: {
         code: err.code,
         message: err.message,
-        requestId
+        requestId,
+        ...(hasRetryAfter ? { retryAfterSeconds: Math.ceil(retryAfterSeconds!) } : {})
       }
     });
     return;

@@ -49,6 +49,7 @@ struct RecipesScreen: View {
     @State private var browserImportSession: RecipeBrowserImportSession?
     @State private var pendingAudioImport: RecipePendingAudioImport?
     @State private var selectedRecipe: SavedRecipe?
+    @State private var recipePendingDeletion: SavedRecipe?
     @State private var didPresentPendingDraft = false
 
     init(pendingDraft: RecipeImportDraft? = nil, initialImportURL: String = "") {
@@ -144,6 +145,25 @@ struct RecipesScreen: View {
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(24)
+        }
+        .confirmationDialog(
+            "Delete recipe?",
+            isPresented: Binding(
+                get: { recipePendingDeletion != nil },
+                set: { if !$0 { recipePendingDeletion = nil } }
+            ),
+            presenting: recipePendingDeletion
+        ) { recipe in
+            Button("Delete recipe", role: .destructive) {
+                AppHaptics.warning()
+                Task { await deleteRecipe(recipe) }
+            }
+            Button("Cancel", role: .cancel) {
+                AppHaptics.lightImpact()
+                recipePendingDeletion = nil
+            }
+        } message: { recipe in
+            Text("“\(recipe.title)” will be removed from your recipes. This can’t be undone.")
         }
     }
 
@@ -340,6 +360,13 @@ struct RecipesScreen: View {
                     RecipeFeaturedCard(recipe: featured)
                 }
                 .buttonStyle(.plain)
+                .contextMenu {
+                    Button(role: .destructive) {
+                        recipePendingDeletion = featured
+                    } label: {
+                        Label("Delete recipe", systemImage: "trash")
+                    }
+                }
             }
 
             if recipes.count > 1 {
@@ -368,6 +395,13 @@ struct RecipesScreen: View {
                             RecipeLibraryCard(recipe: recipe)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                recipePendingDeletion = recipe
+                            } label: {
+                                Label("Delete recipe", systemImage: "trash")
+                            }
+                        }
                     }
                 }
             }
@@ -375,27 +409,7 @@ struct RecipesScreen: View {
     }
 
     private var normalizedImportURL: String {
-        let rawURL = importURL.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !rawURL.isEmpty else { return "" }
-
-        if rawURL.contains(" "),
-           let embeddedURL = firstSupportedWebURL(in: rawURL) {
-            return embeddedURL.absoluteString
-        }
-
-        if rawURL.lowercased().hasPrefix("http://") || rawURL.lowercased().hasPrefix("https://") {
-            return rawURL
-        }
-
-        if let embeddedURL = firstSupportedWebURL(in: rawURL) {
-            return embeddedURL.absoluteString
-        }
-
-        if rawURL.contains("."), !rawURL.contains(" ") {
-            return "https://\(rawURL)"
-        }
-
-        return rawURL
+        RecipeImportURL.normalized(importURL)
     }
 
     private func loadRecipes() async {
@@ -463,7 +477,7 @@ struct RecipesScreen: View {
                     sharedText: sharedText
                 )
             } else {
-                importErrorMessage = error.localizedDescription
+                importErrorMessage = RecipeImportFailure.friendlyMessage(error)
                 // Terminal failure (not a browser-import fallback): drop the
                 // pending share payload so it doesn't silently retry on every
                 // foreground. The user can re-share to try again.
@@ -476,13 +490,7 @@ struct RecipesScreen: View {
     }
 
     private func shouldUseBrowserImportFallback(_ error: Error) -> Bool {
-        let message = error.localizedDescription.lowercased()
-        return message.contains("blocked direct import") ||
-            message.contains("returned http 403") ||
-            message.contains("returned http 402") ||
-            message.contains("could not find structured recipe data") ||
-            message.contains("response format was not recognized") ||
-            message.contains("endpoint not found")
+        RecipeImportFailure.shouldFallBackToBrowser(error)
     }
 
     private func pasteAndImport() {
@@ -601,37 +609,29 @@ struct RecipesScreen: View {
         recipes.insert(recipe, at: 0)
     }
 
-    private func isSupportedRecipeURL(_ rawURL: String) -> Bool {
-        guard let components = URLComponents(string: rawURL),
-              let scheme = components.scheme?.lowercased(),
-              scheme == "https" || scheme == "http",
-              components.host?.isEmpty == false else {
-            return false
+    private func deleteRecipe(_ recipe: SavedRecipe) async {
+        do {
+            try await appStore.apiClient.deleteRecipe(id: recipe.id)
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.86)) {
+                recipes.removeAll { $0.id == recipe.id }
+            }
+            if selectedRecipe?.id == recipe.id { selectedRecipe = nil }
+        } catch {
+            importErrorMessage = RecipeImportFailure.friendlyMessage(error)
         }
-        return true
+        recipePendingDeletion = nil
+    }
+
+    private func isSupportedRecipeURL(_ rawURL: String) -> Bool {
+        RecipeImportURL.isSupported(rawURL)
     }
 
     private func firstSupportedWebURL(in text: String) -> URL? {
-        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else {
-            return nil
-        }
-
-        let range = NSRange(text.startIndex..<text.endIndex, in: text)
-        return detector
-            .matches(in: text, options: [], range: range)
-            .compactMap(\.url)
-            .first(where: { url in
-                guard let scheme = url.scheme?.lowercased(),
-                      scheme == "https" || scheme == "http",
-                      url.host?.isEmpty == false else {
-                    return false
-                }
-                return true
-            })
+        RecipeImportURL.firstSupportedWebURL(in: text)
     }
 }
 
-private struct RecipeBrowserImportSession: Identifiable {
+struct RecipeBrowserImportSession: Identifiable {
     let id = UUID()
     let url: URL
     var clearPendingURLOnSuccess = false
@@ -658,7 +658,7 @@ private struct RecipePendingAudioImport: Identifiable {
     }
 }
 
-private struct RecipeBrowserImportSheet: View {
+struct RecipeBrowserImportSheet: View {
     let url: URL
     let sourceHint: RecipeImportSourceHint
     let sharedText: String?
@@ -1458,297 +1458,7 @@ private enum RecipeBrowserImportJavaScript {
 """#
 }
 
-private struct SavedRecipeCard: View {
-    let recipe: SavedRecipe
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                thumbnail
-
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(recipe.title)
-                        .font(.system(size: 18, weight: .bold))
-                        .foregroundStyle(RecipesTokens.ink)
-                        .lineLimit(2)
-
-                    HStack(spacing: 8) {
-                        if let sourceLabel {
-                            Label(sourceLabel, systemImage: "link")
-                        }
-
-                        if let servings = recipe.servings, !servings.isEmpty {
-                            Label(servings, systemImage: "person.2")
-                        }
-                    }
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(RecipesTokens.muted)
-                    .lineLimit(1)
-                }
-
-                Spacer(minLength: 0)
-
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 14, weight: .heavy))
-                    .foregroundStyle(RecipesTokens.muted)
-                    .frame(width: 30, height: 30)
-                    .background(RecipesTokens.pressSurface, in: Circle())
-            }
-
-            HStack(spacing: 10) {
-                RecipeCountPill(value: recipe.ingredients.count, label: "ingredients")
-                RecipeCountPill(value: recipe.steps.count, label: "steps")
-            }
-        }
-        .padding(14)
-        .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(RecipesTokens.border, lineWidth: 1)
-        }
-        .shadow(color: RecipesTokens.shadow, radius: 14, y: 6)
-        .contentShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .accessibilityElement(children: .combine)
-    }
-
-    private var thumbnail: some View {
-        Group {
-            if let heroImageUrl = recipe.heroImageUrl,
-               let url = URL(string: heroImageUrl) {
-                AsyncImage(url: url) { phase in
-                    switch phase {
-                    case .success(let image):
-                        image
-                            .resizable()
-                            .scaledToFill()
-                    default:
-                        placeholderThumbnail
-                    }
-                }
-            } else {
-                placeholderThumbnail
-            }
-        }
-        .frame(width: 58, height: 58)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-    }
-
-    private var placeholderThumbnail: some View {
-        ZStack {
-            RecipesTokens.cardTint
-            Image(systemName: "book.closed.fill")
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(RecipesTokens.orange)
-        }
-    }
-
-    private var sourceLabel: String? {
-        if let sourceName = recipe.sourceName?.trimmingCharacters(in: .whitespacesAndNewlines), !sourceName.isEmpty {
-            return sourceName
-        }
-        if let sourceDomain = recipe.sourceDomain?.trimmingCharacters(in: .whitespacesAndNewlines), !sourceDomain.isEmpty {
-            return sourceDomain
-        }
-        return nil
-    }
-}
-
-private struct SavedRecipeDetailSheet: View {
-    let recipe: SavedRecipe
-    let onClose: () -> Void
-
-    var body: some View {
-        NavigationStack {
-            ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 16) {
-                    header
-                    summaryCard
-                    RecipeReadOnlyLineSection(
-                        title: "Ingredients",
-                        icon: "carrot.fill",
-                        lines: recipe.ingredients.map(\.text)
-                    )
-                    RecipeReadOnlyLineSection(
-                        title: "Steps",
-                        icon: "list.number",
-                        lines: recipe.steps.map(\.text)
-                    )
-                }
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 36)
-            }
-            .background(RecipesTokens.screenBackground.ignoresSafeArea())
-            .navigationTitle("Saved recipe")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button("Done") {
-                        AppHaptics.lightImpact()
-                        onClose()
-                    }
-                }
-            }
-        }
-    }
-
-    private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if let sourceLabel {
-                Label(sourceLabel, systemImage: "link")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(RecipesTokens.orange)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 8)
-                    .background(RecipesTokens.orangeSoft, in: Capsule())
-            }
-
-            Text(recipe.title)
-                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 40))
-                .foregroundStyle(RecipesTokens.ink)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var summaryCard: some View {
-        HStack(spacing: 12) {
-            RecipeMetricTile(value: "\(recipe.ingredients.count)", label: "Ingredients", icon: "carrot.fill")
-            RecipeMetricTile(value: "\(recipe.steps.count)", label: "Steps", icon: "list.number")
-        }
-    }
-
-    private var sourceLabel: String? {
-        if let sourceName = recipe.sourceName?.trimmingCharacters(in: .whitespacesAndNewlines), !sourceName.isEmpty {
-            return sourceName
-        }
-        if let sourceDomain = recipe.sourceDomain?.trimmingCharacters(in: .whitespacesAndNewlines), !sourceDomain.isEmpty {
-            return sourceDomain
-        }
-        return URL(string: recipe.sourceUrl ?? "")?.host
-    }
-}
-
-private struct RecipeMetricTile: View {
-    let value: String
-    let label: String
-    let icon: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(RecipesTokens.orange)
-                .frame(width: 34, height: 34)
-                .background(RecipesTokens.orangeSoft, in: Circle())
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(value)
-                    .font(.system(size: 21, weight: .heavy))
-                    .foregroundStyle(RecipesTokens.ink)
-
-                Text(label)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundStyle(RecipesTokens.muted)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 22, style: .continuous)
-                .stroke(RecipesTokens.fieldBorder, lineWidth: 1)
-        }
-    }
-}
-
-private struct RecipeReadOnlyLineSection: View {
-    let title: String
-    let icon: String
-    let lines: [String]
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(spacing: 9) {
-                Image(systemName: icon)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(RecipesTokens.orange)
-
-                Text(title)
-                    .font(.system(size: 15, weight: .heavy))
-                    .foregroundStyle(RecipesTokens.ink)
-
-                Spacer(minLength: 0)
-
-                Text("\(lines.count)")
-                    .font(.system(size: 12, weight: .heavy))
-                    .foregroundStyle(RecipesTokens.orange)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 6)
-                    .background(RecipesTokens.orangeSoft, in: Capsule())
-            }
-
-            VStack(spacing: 8) {
-                ForEach(Array(lines.enumerated()), id: \.offset) { index, line in
-                    RecipeReadOnlyLineRow(index: index + 1, text: line)
-                }
-            }
-        }
-        .padding(14)
-        .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(RecipesTokens.fieldBorder, lineWidth: 1)
-        }
-    }
-}
-
-private struct RecipeReadOnlyLineRow: View {
-    let index: Int
-    let text: String
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Text("\(index)")
-                .font(.system(size: 11, weight: .heavy))
-                .foregroundStyle(RecipesTokens.orange)
-                .frame(width: 24, height: 24)
-                .background(RecipesTokens.orangeSoft, in: Circle())
-
-            Text(text)
-                .font(.system(size: 14, weight: .semibold))
-                .foregroundStyle(RecipesTokens.ink)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Spacer(minLength: 0)
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RecipesTokens.fieldBackground, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .stroke(RecipesTokens.fieldBorder, lineWidth: 1)
-        }
-    }
-}
-
-private struct RecipeCountPill: View {
-    let value: Int
-    let label: String
-
-    var body: some View {
-        Text("\(value) \(label)")
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(RecipesTokens.orange)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(RecipesTokens.cardTint, in: Capsule())
-    }
-}
-
-private struct RecipeReviewSheet: View {
+struct RecipeReviewSheet: View {
     @EnvironmentObject private var appStore: AppStore
 
     @State private var draft: RecipeImportDraft
@@ -2395,13 +2105,24 @@ struct RecipeDetailView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if let source = recipeSourceLabel(recipe) {
-                RecipeMetaChip(icon: "link", text: source, tinted: true)
+            HStack(spacing: 8) {
+                if let source = recipeSourceLabel(recipe) {
+                    RecipeMetaChip(icon: "link", text: source, tinted: true)
+                }
+                if let time = RecipeDuration.humanLabel(from: recipe.totalTime ?? recipe.cookTime) {
+                    RecipeMetaChip(icon: "clock", text: time)
+                }
             }
             Text(recipe.title)
                 .font(OnboardingTypography.instrumentSerif(style: .regular, size: 34))
                 .foregroundStyle(RecipesTokens.ink)
                 .fixedSize(horizontal: false, vertical: true)
+            if let description = recipe.description?.trimmingCharacters(in: .whitespacesAndNewlines), !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundStyle(RecipesTokens.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
@@ -2513,7 +2234,6 @@ struct RecipeDetailView: View {
         HStack {
             circleButton(icon: "chevron.left", action: onClose)
             Spacer()
-            circleButton(icon: "square.and.arrow.up", action: {})
         }
         .padding(.horizontal, 16)
         .padding(.top, 6)
@@ -2632,7 +2352,14 @@ extension SavedRecipe {
         sourceDomain: String?,
         sourceName: String?,
         heroImageUrl: String?,
+        description: String? = nil,
         servings: String?,
+        prepTime: String? = nil,
+        cookTime: String? = nil,
+        totalTime: String? = nil,
+        categories: [String] = [],
+        cuisines: [String] = [],
+        keywords: [String] = [],
         ingredients: [String],
         steps: [String],
         createdAt: String? = nil,
@@ -2644,7 +2371,14 @@ extension SavedRecipe {
         self.sourceDomain = sourceDomain
         self.sourceName = sourceName
         self.heroImageUrl = heroImageUrl
+        self.description = description
         self.servings = servings
+        self.prepTime = prepTime
+        self.cookTime = cookTime
+        self.totalTime = totalTime
+        self.categories = categories
+        self.cuisines = cuisines
+        self.keywords = keywords
         self.ingredients = ingredients.map { RecipeTextLine(text: $0) }
         self.steps = steps.map { RecipeTextLine(text: $0) }
         self.createdAt = createdAt

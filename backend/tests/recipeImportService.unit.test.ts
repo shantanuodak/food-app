@@ -776,3 +776,35 @@ describe('recipeImportService.importRecipeFromUrl', () => {
     });
   });
 });
+
+describe('recipeImportService.deleteRecipe', () => {
+  test('deletes a recipe scoped to the owning user', async () => {
+    useTestDatabaseUrl();
+    const query = vi.fn(async () => ({ rows: [{ id: '99999999-9999-9999-9999-999999999990' }] }));
+    vi.doMock('../src/db.js', () => ({ pool: { query } }));
+
+    const { deleteRecipe } = await import('../src/services/recipeImportService.js');
+
+    await expect(
+      deleteRecipe('11111111-1111-1111-1111-111111111111', '99999999-9999-9999-9999-999999999990')
+    ).resolves.toEqual({ id: '99999999-9999-9999-9999-999999999990', status: 'deleted' });
+
+    // Scoped by BOTH id and user_id so one user can't delete another's recipe.
+    expect(query).toHaveBeenCalledWith(
+      expect.stringContaining('DELETE FROM recipes WHERE id = $1 AND user_id = $2'),
+      ['99999999-9999-9999-9999-999999999990', '11111111-1111-1111-1111-111111111111']
+    );
+  });
+
+  test('throws 404 when the recipe is missing or owned by someone else', async () => {
+    useTestDatabaseUrl();
+    const query = vi.fn(async () => ({ rows: [] }));
+    vi.doMock('../src/db.js', () => ({ pool: { query } }));
+
+    const { deleteRecipe } = await import('../src/services/recipeImportService.js');
+
+    await expect(
+      deleteRecipe('11111111-1111-1111-1111-111111111111', '99999999-9999-9999-9999-999999999990')
+    ).rejects.toThrow(expect.objectContaining({ code: 'RECIPE_NOT_FOUND' }));
+  });
+});

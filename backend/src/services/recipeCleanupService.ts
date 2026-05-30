@@ -150,6 +150,18 @@ function mapResponseToDraft(draft: RecipeDraft, parsed: LlmCleanResponse): Recip
   // If it returned nothing usable, treat the pass as unusable and keep raw.
   if (ingredients.length === 0) return null;
 
+  // Guardrail #2: the cleanup pass is meant to de-noise and split lines, not
+  // remove content. Dropping obvious junk (a "Jump to Recipe"/nutrition line)
+  // and merging a quantity-only line into the next legitimately shrink the
+  // count — typically by up to a third. A drop past HALF means the model
+  // discarded real ingredients, so treat the pass as unusable and keep the raw
+  // draft. (Threshold kept at 50%, not higher, so normal junk removal — e.g.
+  // the 6→4 de-noise case — clears it with margin.)
+  const rawIngredientCount = draft.ingredients.length;
+  if (rawIngredientCount > 0 && ingredients.length < Math.ceil(rawIngredientCount * 0.5)) {
+    return null;
+  }
+
   const steps: RecipeStepDraft[] = (parsed.steps ?? [])
     .map((text) => nonEmpty(text, 2000))
     .filter((x): x is string => x !== null)

@@ -29,12 +29,15 @@ import UIKit
 
 // MARK: - Filter chips
 
+// Data-backed filters — each one is computed from a field SavedRecipe actually
+// carries (see `filteredRecipes`). The previous chips (For today / High-protein
+// / Saved / Comfort) were decorative because the app has no nutrition or tag
+// data to back them.
 enum HomeRecipesDrawerFilter: String, CaseIterable, Identifiable {
-    case forToday    = "For today"
-    case highProtein = "High-protein"
-    case quick       = "Quick"
-    case saved       = "Saved"
-    case comfort     = "Comfort"
+    case all       = "All"
+    case recent    = "Recent"
+    case quick     = "Quick"
+    case withPhoto = "With photo"
 
     var id: String { rawValue }
 }
@@ -91,10 +94,41 @@ struct HomeRecipesDrawerContent: View {
     @State private var importErrorMessage: String?
 
     // ── Selection
-    @State private var selectedFilter: HomeRecipesDrawerFilter = .forToday
+    @State private var selectedFilter: HomeRecipesDrawerFilter = .all
     @State private var selectedRecipe: SavedRecipe?
 
+    // ── Import-flow + delete state. The drawer now drives the SAME browser-
+    // import and review sheets as RecipesScreen (see RecipeImportFlow.swift), so
+    // social/blocked links no longer dead-end here.
+    @State private var browserImportSession: RecipeBrowserImportSession?
+    @State private var draftForReview: RecipeImportDraft?
+    @State private var recipePendingDeletion: SavedRecipe?
+
     private var isExpanded: Bool { detent == .large }
+
+    /// Client-side filtering over the loaded set, keyed by `selectedFilter`.
+    /// Every case is backed by a real field so the chips actually do something.
+    private var filteredRecipes: [SavedRecipe] {
+        switch selectedFilter {
+        case .all:
+            return recipes
+        case .recent:
+            let cutoff = Date().addingTimeInterval(-14 * 24 * 60 * 60)
+            return recipes.filter { recipe in
+                guard let created = RecipeDateParsing.date(from: recipe.createdAt) else { return false }
+                return created >= cutoff
+            }
+        case .quick:
+            return recipes.filter { recipe in
+                guard let minutes = RecipeDuration.minutes(from: recipe.totalTime ?? recipe.cookTime) else {
+                    return false
+                }
+                return minutes <= 30
+            }
+        case .withPhoto:
+            return recipes.filter { ($0.heroImageUrl?.isEmpty == false) }
+        }
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -131,18 +165,73 @@ struct HomeRecipesDrawerContent: View {
         .task {
             await loadRecipesIfNeeded()
         }
+        // RecipeDetailView is presented the SAME bare way as on RecipesScreen —
+        // it owns its own back control via `onClose`, so wrapping it in a
+        // NavigationStack + Done toolbar here produced a dead floating back
+        // button and a hero/nav-bar layout clash.
         .sheet(item: $selectedRecipe) { recipe in
-            NavigationStack {
-                RecipeDetailView(recipe: recipe)
-                    .toolbar {
-                        ToolbarItem(placement: .topBarTrailing) {
-                            Button("Done") { selectedRecipe = nil }
-                                .fontWeight(.semibold)
-                        }
-                    }
+            RecipeDetailView(recipe: recipe) {
+                selectedRecipe = nil
             }
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
+            .presentationCornerRadius(24)
+        }
+        // Social/blocked links route here — the same in-app browser importer
+        // RecipesScreen uses, instead of the old dead-end error.
+        .sheet(item: $browserImportSession) { session in
+            RecipeBrowserImportSheet(
+                url: session.url,
+                sourceHint: session.sourceHint,
+                sharedText: session.sharedText
+            ) { draft in
+                browserImportSession = nil
+                // Let the browser sheet finish dismissing before the review
+                // sheet presents (same hand-off RecipesScreen uses).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    draftForReview = draft
+                }
+            } onCancel: {
+                browserImportSession = nil
+            }
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(24)
+        }
+        .sheet(item: $draftForReview) { draft in
+            RecipeReviewSheet(draft: draft) { saved in
+                recipes.removeAll { $0.id == saved.id }
+                recipes.insert(saved, at: 0)
+                draftForReview = nil
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                    selectedRecipe = saved
+                }
+            } onCancel: {
+                draftForReview = nil
+            }
+            .environmentObject(appStore)
+            .presentationDetents([.large])
+            .presentationDragIndicator(.visible)
+            .presentationCornerRadius(24)
+        }
+        .confirmationDialog(
+            "Delete recipe?",
+            isPresented: Binding(
+                get: { recipePendingDeletion != nil },
+                set: { if !$0 { recipePendingDeletion = nil } }
+            ),
+            presenting: recipePendingDeletion
+        ) { recipe in
+            Button("Delete recipe", role: .destructive) {
+                AppHaptics.warning()
+                Task { await deleteRecipe(recipe) }
+            }
+            Button("Cancel", role: .cancel) {
+                AppHaptics.lightImpact()
+                recipePendingDeletion = nil
+            }
+        } message: { recipe in
+            Text("“\(recipe.title)” will be removed from your recipes. This can’t be undone.")
         }
     }
 
@@ -556,10 +645,12 @@ struct HomeRecipesDrawerContent: View {
             errorState(loadError)
         } else if recipes.isEmpty {
             emptyState
+        } else if filteredRecipes.isEmpty {
+            noMatchesState
         } else {
             ScrollView {
                 LazyVStack(spacing: 10) {
-                    ForEach(recipes) { recipe in
+                    ForEach(filteredRecipes) { recipe in
                         Button {
                             AppHaptics.lightImpact()
                             selectedRecipe = recipe
@@ -567,6 +658,13 @@ struct HomeRecipesDrawerContent: View {
                             HomeRecipesDrawerCard(recipe: recipe)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                recipePendingDeletion = recipe
+                            } label: {
+                                Label("Delete recipe", systemImage: "trash")
+                            }
+                        }
                     }
                 }
                 .padding(.horizontal, 18)
@@ -574,6 +672,23 @@ struct HomeRecipesDrawerContent: View {
                 .padding(.bottom, 36)
             }
         }
+    }
+
+    private var noMatchesState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.system(size: 24, weight: .semibold))
+                .foregroundStyle(AppColor.brandOrange.opacity(0.65))
+            Text("No recipes match this filter")
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(AppColor.textPrimary)
+            Text("Tap “All” to see everything.")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(AppColor.textSecondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.top, 40)
     }
 
     private var loadingState: some View {
@@ -616,7 +731,7 @@ struct HomeRecipesDrawerContent: View {
             Text("Nothing saved yet")
                 .font(.system(size: 15, weight: .bold))
                 .foregroundStyle(AppColor.textPrimary)
-            Text("Paste a recipe link or text above and tap Save. Your library shows up here.")
+            Text("Copy a recipe link, then tap the paste button below to save it here.")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(AppColor.textSecondary)
                 .multilineTextAlignment(.center)
@@ -654,55 +769,95 @@ struct HomeRecipesDrawerContent: View {
     ///      draft as a real recipe and returns the saved record.
     /// The previous version called step 1 only and threw away the draft,
     /// which is why nothing showed up in the user's library.
+    /// Unified entry point (shared with RecipesScreen via RecipeImportFlow).
+    /// Normalizes the pasted text, routes social/blocked links to the in-app
+    /// browser importer, imports clean URLs directly, and — for high-confidence
+    /// direct scrapes — saves + opens immediately (the fast path the user
+    /// likes). Lower-confidence or fallback drafts go through the shared review
+    /// sheet so noisy scrapes can be fixed before saving.
     @MainActor
     private func submitPaste() async {
-        let trimmed = pasteText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
+        let normalized = RecipeImportURL.normalized(pasteText)
+        guard !normalized.isEmpty else { return }
+        guard RecipeImportURL.isSupported(normalized), let url = URL(string: normalized) else {
+            importErrorMessage = "That doesn’t look like a recipe link — copy the full web address first."
+            scheduleErrorAutoDismiss()
+            return
+        }
+
+        // Social/video links don't expose recipe schema to a server scrape —
+        // send them straight to the browser importer.
+        let sourceHint = RecipeImportSourceHint.infer(url: url)
+        if sourceHint.prefersBrowserImport {
+            pasteText = ""
+            isPasteFocused = false
+            browserImportSession = RecipeBrowserImportSession(url: url, sourceHint: sourceHint)
+            return
+        }
+
         isPasting = true
         importErrorMessage = nil
         defer { isPasting = false }
 
         do {
-            // Step 1 — scrape + extract recipe data into a draft.
             let importResponse = try await appStore.apiClient.importRecipeFromURL(
-                RecipeImportRequest(url: trimmed)
+                RecipeImportRequest(url: normalized)
             )
+            let draft = importResponse.draft
+            if (draft.confidence ?? 0) >= 0.9 {
+                await saveAndOpen(draft)
+            } else {
+                pasteText = ""
+                isPasteFocused = false
+                draftForReview = draft
+            }
+        } catch {
+            if RecipeImportFailure.shouldFallBackToBrowser(error) {
+                pasteText = ""
+                isPasteFocused = false
+                importErrorMessage = "That site blocked direct import — opening it so you can grab the recipe."
+                scheduleErrorAutoDismiss()
+                browserImportSession = RecipeBrowserImportSession(url: url, sourceHint: sourceHint)
+            } else {
+                importErrorMessage = RecipeImportFailure.friendlyMessage(error)
+                scheduleErrorAutoDismiss()
+            }
+        }
+    }
 
-            // Step 2 — persist the draft as a real recipe.
+    /// Persist a draft and open it — the drawer's "imported recipe opens
+    /// immediately" behavior, reused by the fast path and the review sheet.
+    @MainActor
+    private func saveAndOpen(_ draft: RecipeImportDraft) async {
+        do {
             let createResponse = try await appStore.apiClient.createRecipe(
-                CreateRecipeRequest(draft: importResponse.draft)
+                CreateRecipeRequest(draft: draft)
             )
-
-            // Add to the local list silently (so it's there when the user
-            // returns), then open the recipe detail directly — per
-            // 2026-05-24 feedback the user wants the imported recipe to
-            // open immediately, not just appear at the top of the list.
             recipes.removeAll { $0.id == createResponse.recipe.id }
             recipes.insert(createResponse.recipe, at: 0)
             pasteText = ""
             isPasteFocused = false
             selectedRecipe = createResponse.recipe
         } catch {
-            importErrorMessage = friendlyImportErrorMessage(for: error)
+            importErrorMessage = RecipeImportFailure.friendlyMessage(error)
             scheduleErrorAutoDismiss()
         }
     }
 
-    /// Translate raw backend errors into something a normal user can
-    /// understand. Falls back to the underlying description if no rule
-    /// matches.
-    private func friendlyImportErrorMessage(for error: Error) -> String {
-        let msg = error.localizedDescription.lowercased()
-        if msg.contains("blocked") || msg.contains("forbidden") || msg.contains("403") || msg.contains("402") {
-            return "This site blocks direct imports. Try a different recipe link."
+    /// Hard-delete via the backend, then drop it from the local list.
+    @MainActor
+    private func deleteRecipe(_ recipe: SavedRecipe) async {
+        do {
+            try await appStore.apiClient.deleteRecipe(id: recipe.id)
+            withAnimation(.easeOut(duration: 0.2)) {
+                recipes.removeAll { $0.id == recipe.id }
+            }
+            if selectedRecipe?.id == recipe.id { selectedRecipe = nil }
+        } catch {
+            importErrorMessage = RecipeImportFailure.friendlyMessage(error)
+            scheduleErrorAutoDismiss()
         }
-        if msg.contains("could not find") || msg.contains("structured") || msg.contains("not recognized") {
-            return "No recipe found on that page."
-        }
-        if msg.contains("timeout") || msg.contains("offline") || msg.contains("connection") {
-            return "Network issue — check your connection and try again."
-        }
-        return error.localizedDescription
+        recipePendingDeletion = nil
     }
 
     /// Auto-clear the inline error after 4 seconds so it doesn't linger.

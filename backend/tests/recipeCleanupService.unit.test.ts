@@ -104,7 +104,12 @@ describe('cleanupRecipeDraft — metadata extraction', () => {
     prepTime: '5 minutes',
     cookTime: '15 minutes',
     totalTime: '20 minutes',
-    ingredients: [{ quantity: '8', unit: 'oz', name: 'spaghetti', raw: '8 oz spaghetti' }],
+    ingredients: [
+      { quantity: '8', unit: 'oz', name: 'spaghetti', raw: '8 oz spaghetti' },
+      { quantity: '4', unit: 'cloves', name: 'garlic, minced', raw: '4 cloves garlic, minced' },
+      { quantity: '2', unit: 'tbsp', name: 'butter', raw: '2 tbsp butter' },
+      { quantity: '1', unit: 'cup', name: 'heavy cream', raw: '1 cup heavy cream' },
+    ],
     steps: ['Cook the pasta.'],
   });
 
@@ -150,10 +155,34 @@ describe('cleanupRecipeDraft — guardrails (never make it worse)', () => {
     expect(cleaned.ingredients).toHaveLength(6);
   });
 
+  test('LLM that drops more than half the ingredients is rejected (keeps raw)', async () => {
+    // Raw has 6 ingredient lines (2 are junk). Returning only 2 falls past the
+    // 50% floor — the model discarded real content — so the pass is rejected
+    // and the raw draft is kept rather than silently losing ingredients.
+    const dropped = JSON.stringify({
+      title: 'Creamy Garlic Pasta',
+      ingredients: [
+        { quantity: '8', unit: 'oz', name: 'spaghetti', raw: '8 oz spaghetti' },
+        { quantity: '2', unit: 'tbsp', name: 'butter', raw: '2 tbsp butter' },
+      ],
+      steps: ['Cook the pasta and toss with the sauce.'],
+    });
+    const raw = noisyRawDraft();
+    const { changed, cleaned, skippedReason } = await cleanupRecipeDraft(raw, { generate: fakeGenerate(dropped) });
+    expect(changed).toBe(false);
+    expect(skippedReason).toBe('llm_unusable');
+    expect(cleaned.ingredients).toHaveLength(6);
+  });
+
   test('LLM that drops all steps falls back to the original steps', async () => {
     const noSteps = JSON.stringify({
       title: 'Creamy Garlic Pasta',
-      ingredients: [{ quantity: '8', unit: 'oz', name: 'spaghetti', raw: '8 oz spaghetti' }],
+      ingredients: [
+        { quantity: '8', unit: 'oz', name: 'spaghetti', raw: '8 oz spaghetti' },
+        { quantity: '4', unit: 'cloves', name: 'garlic, minced', raw: '4 cloves garlic, minced' },
+        { quantity: '2', unit: 'tbsp', name: 'butter', raw: '2 tbsp butter' },
+        { quantity: '1', unit: 'cup', name: 'heavy cream', raw: '1 cup heavy cream' },
+      ],
       steps: [],
     });
     const raw = noisyRawDraft();

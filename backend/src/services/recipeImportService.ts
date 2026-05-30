@@ -1426,12 +1426,32 @@ export async function importRecipeFromUrl(input: {
       [input.userId, draft.sourceUrl, draft.sourceDomain, JSON.stringify(draft)]
     );
     await client.query('COMMIT');
-    return { importId: inserted.rows[0]!.id, draft };
+    const importId = inserted.rows[0]!.id;
+    // Best-effort: trim this user's abandoned draft imports. Fire-and-forget so
+    // it never adds latency to, or fails, the import response.
+    void pruneStaleDraftImports(input.userId);
+    return { importId, draft };
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
   } finally {
     client.release();
+  }
+}
+
+// Drafts accumulate when a user imports then abandons the review step. Trim this
+// user's 'draft' rows older than 7 days; user-scoped so it uses
+// idx_recipe_imports_user_created. Errors are swallowed — cleanup must never
+// affect an import.
+async function pruneStaleDraftImports(userId: string): Promise<void> {
+  try {
+    await pool.query(
+      `DELETE FROM recipe_imports
+       WHERE user_id = $1 AND status = 'draft' AND created_at < NOW() - INTERVAL '7 days'`,
+      [userId]
+    );
+  } catch {
+    // Best-effort cleanup.
   }
 }
 
@@ -1553,30 +1573,42 @@ async function insertRecipeChildren(
   ingredients: RecipeIngredientDraft[],
   steps: RecipeStepDraft[]
 ): Promise<void> {
-  for (const [index, ingredient] of ingredients.entries()) {
-    await client.query(
-      `
-      INSERT INTO recipe_ingredients (recipe_id, position, raw_text, quantity_text, unit_text, ingredient_name)
-      VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-      [
+  // Multi-row inserts instead of one round-trip per row — a recipe can carry up
+  // to 120 ingredients + 200 steps (zod caps), which was 320 sequential queries
+  // inside the save transaction. Param counts (720 / 600) stay well under PG's
+  // 65535 limit.
+  if (ingredients.length > 0) {
+    const values: unknown[] = [];
+    const rows = ingredients.map((ingredient, index) => {
+      const base = index * 6;
+      values.push(
         recipeId,
         index,
         ingredient.rawText,
         ingredient.quantityText,
         ingredient.unitText,
         ingredient.ingredientName
-      ]
+      );
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6})`;
+    });
+    await client.query(
+      `INSERT INTO recipe_ingredients (recipe_id, position, raw_text, quantity_text, unit_text, ingredient_name)
+       VALUES ${rows.join(', ')}`,
+      values
     );
   }
 
-  for (const [index, step] of steps.entries()) {
+  if (steps.length > 0) {
+    const values: unknown[] = [];
+    const rows = steps.map((step, index) => {
+      const base = index * 3;
+      values.push(recipeId, index, step.text);
+      return `($${base + 1}, $${base + 2}, $${base + 3})`;
+    });
     await client.query(
-      `
-      INSERT INTO recipe_steps (recipe_id, position, text)
-      VALUES ($1, $2, $3)
-      `,
-      [recipeId, index, step.text]
+      `INSERT INTO recipe_steps (recipe_id, position, text)
+       VALUES ${rows.join(', ')}`,
+      values
     );
   }
 }
@@ -1774,4 +1806,20 @@ export async function listRecipes(userId: string): Promise<{ recipes: SavedRecip
     [userId]
   );
   return { recipes: result.rows.map(toSavedRecipe) };
+}
+
+// Hard delete. recipe_ingredients and recipe_steps are removed automatically by
+// their `ON DELETE CASCADE` foreign keys (migrations/0039_recipes.sql). Scoped
+// by user_id so a user can never delete another user's recipe; a missing row
+// (wrong id OR not owned) is reported as 404.
+export async function deleteRecipe(userId: string, recipeId: string): Promise<{ id: string; status: 'deleted' }> {
+  const result = await pool.query<{ id: string }>(
+    `DELETE FROM recipes WHERE id = $1 AND user_id = $2 RETURNING id`,
+    [recipeId, userId]
+  );
+  const row = result.rows[0];
+  if (!row) {
+    throw new ApiError(404, 'RECIPE_NOT_FOUND', 'Recipe not found');
+  }
+  return { id: row.id, status: 'deleted' };
 }
