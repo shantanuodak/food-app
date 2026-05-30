@@ -2,7 +2,7 @@ import { Router } from 'express';
 import type { NextFunction, Request, Response } from 'express';
 import multer from 'multer';
 import { z } from 'zod';
-import { importRecipeFromUrl, listRecipes, saveRecipe, deleteRecipe } from '../services/recipeImportService.js';
+import { importRecipeFromUrl, listRecipes, saveRecipe, deleteRecipe, structureRecipeText } from '../services/recipeImportService.js';
 import { importRecipeFromAudio } from '../services/recipeAudioImportService.js';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
@@ -26,6 +26,13 @@ const importFromUrlSchema = z.object({
 
 const recipeIdParamSchema = z.object({
   id: z.string().uuid()
+});
+
+const structureTextSchema = z.object({
+  text: z.string().trim().min(1).max(8000),
+  sourceUrl: z.string().trim().min(1).max(3000),
+  sourceName: z.string().trim().max(180).nullable().optional(),
+  heroImageUrl: z.string().trim().max(1000).nullable().optional()
 });
 
 const importFromAudioSchema = z.object({
@@ -124,6 +131,25 @@ router.post('/import-from-url', async (req, res, next) => {
       userId: auth.userId,
       auth,
       url: body.url
+    });
+    res.status(201).json(result);
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.post('/structure-text', async (req, res, next) => {
+  try {
+    const auth = authContext(res);
+    enforceRecipeRateLimit(auth.userId, 'url');
+    const body = structureTextSchema.parse(req.body);
+    const result = await structureRecipeText({
+      userId: auth.userId,
+      auth,
+      text: body.text,
+      sourceUrl: body.sourceUrl,
+      sourceName: body.sourceName ?? null,
+      heroImageUrl: body.heroImageUrl ?? null
     });
     res.status(201).json(result);
   } catch (error) {

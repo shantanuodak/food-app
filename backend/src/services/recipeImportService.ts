@@ -7,6 +7,7 @@ import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import { ensureUserExists } from './userService.js';
 import { cleanupRecipeDraft } from './recipeCleanupService.js';
+import { buildRecipeDraftFromTranscript } from './recipeAudioImportService.js';
 
 const SCRAPE_TIMEOUT_MS = 8000;
 const READER_TIMEOUT_MS = 20000;
@@ -1509,6 +1510,42 @@ async function maybeCleanupDraft(draft: RecipeDraft): Promise<RecipeDraft> {
     console.warn('[recipeImport] cleanup pass threw; using raw draft', error);
     return draft;
   }
+}
+
+/**
+ * Social / in-app-browser lane: takes raw caption text (Instagram/TikTok/
+ * Facebook) that the iOS importer extracted client-side and runs it through the
+ * SAME pipeline the other lanes use — a free-text → raw draft builder followed
+ * by the optional Gemini structuring pass (`maybeCleanupDraft`). A caption is
+ * the same kind of free text as an audio transcript, so we reuse
+ * `buildRecipeDraftFromTranscript` rather than duplicate the heuristics. That
+ * builder throws ApiError 422 when it can't find any ingredients; we let it
+ * propagate so the route surfaces a clear "not enough recipe details" error.
+ *
+ * NOTE on imports: recipeAudioImportService already imports from this module
+ * (assertSafeRecipeUrl, cleanupRecipeDraft, types), so importing
+ * buildRecipeDraftFromTranscript here forms an ES-module cycle. It is safe:
+ * the function is a hoisted declaration and is only *called* at request time,
+ * never during module evaluation, so neither module observes an undefined
+ * binding. tsc + vitest confirm no init-order breakage.
+ */
+export async function structureRecipeText(input: {
+  userId: string;
+  auth?: AuthContext;
+  text: string;
+  sourceUrl: string;
+  sourceName?: string | null;
+  heroImageUrl?: string | null;
+}): Promise<{ draft: RecipeDraft }> {
+  const safeUrl = assertSafeRecipeUrl(input.sourceUrl);
+  const raw = buildRecipeDraftFromTranscript({
+    transcript: input.text,
+    sourceUrl: safeUrl.url,
+    sourceName: input.sourceName,
+    heroImageUrl: input.heroImageUrl
+  });
+  const draft = await maybeCleanupDraft(raw);
+  return { draft };
 }
 
 export async function importRecipeDraftForSmokeTest(url: string): Promise<RecipeDraft> {
