@@ -36,6 +36,12 @@ struct OB02eHowItWorksScreen: View {
     @State private var pauseStart: TimeInterval = 0
     @State private var isPaused = false
 
+    // Manual swipe rotation (added on top of the auto-spin angle).
+    @State private var manualAngle: Double = 0
+    @State private var dragStartManual: Double = 0
+    @State private var dragStartAuto: Double = 0
+    @State private var lastFrontIndex = 0
+
     var body: some View {
         ZStack {
             OnboardingStaticBackground()
@@ -95,7 +101,7 @@ struct OB02eHowItWorksScreen: View {
             let active = spinning
                 ? max(0, now - spinStart - pausedAccum - (isPaused ? (now - pauseStart) : 0))
                 : 0
-            let rotation = -WhyCarousel.speed * active
+            let rotation = -WhyCarousel.speed * active + manualAngle
 
             VStack(spacing: 20) {
                 ZStack {
@@ -119,7 +125,7 @@ struct OB02eHowItWorksScreen: View {
         }
         .frame(maxWidth: .infinity)
         .contentShape(Rectangle())
-        .gesture(pauseGesture)
+        .gesture(dragGesture)
     }
 
     private func pageDots(front: Int) -> some View {
@@ -146,13 +152,27 @@ struct OB02eHowItWorksScreen: View {
         return best
     }
 
-    /// Press-and-hold anywhere on the carousel to pause; release to resume.
-    private var pauseGesture: some Gesture {
+    /// One gesture does both jobs: a still press pauses the auto-spin; a drag
+    /// rotates the ring by hand. A haptic fires each time a new card reaches the
+    /// front. On release the auto-spin resumes from the new position.
+    private var dragGesture: some Gesture {
         DragGesture(minimumDistance: 0)
-            .onChanged { _ in
-                guard introComplete, !isPaused else { return }
-                isPaused = true
-                pauseStart = Date().timeIntervalSinceReferenceDate
+            .onChanged { value in
+                guard introComplete else { return }
+                if !isPaused {
+                    isPaused = true
+                    let t = Date().timeIntervalSinceReferenceDate
+                    pauseStart = t
+                    dragStartManual = manualAngle
+                    dragStartAuto = spinning ? (-WhyCarousel.speed * max(0, t - spinStart - pausedAccum)) : 0
+                    lastFrontIndex = frontIndex(dragStartAuto + dragStartManual)
+                }
+                manualAngle = dragStartManual + Double(value.translation.width) * WhyCarousel.dragSensitivity
+                let fi = frontIndex(dragStartAuto + manualAngle)
+                if fi != lastFrontIndex {
+                    lastFrontIndex = fi
+                    AppHaptics.softImpact(intensity: 0.6)   // per-card feedback while swiping
+                }
             }
             .onEnded { _ in
                 guard isPaused else { return }
@@ -258,6 +278,7 @@ private enum WhyCarousel {
     static let radius: CGFloat = 208   // wide enough that neighbours clear the front card
     static let step: Double = 60       // 360 / 6 cards
     static let speed: Double = 11      // degrees per second
+    static let dragSensitivity: Double = 0.55  // degrees of ring rotation per point dragged
 }
 
 // MARK: - Feature model
@@ -442,20 +463,15 @@ private struct WhyCarouselCard: View {
             Image("food_photo_demo")
                 .resizable()
                 .scaledToFill()
-                .frame(width: WhyCarousel.cardW, height: 150)
-                .clipped()
+                .frame(width: 126, height: 126)
+                .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
 
-            Image(systemName: "viewfinder")
-                .font(.system(size: 96, weight: .ultraLight))
-                .foregroundStyle(.white.opacity(0.85))
-                .shadow(color: .black.opacity(0.3), radius: 4)
-
-            Circle()
-                .fill(.white.opacity(0.95))
-                .frame(width: 28, height: 28)
-                .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 3))
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
-                .padding(.bottom, 10)
+            // Camera focus frame: four corner brackets sitting just inside the
+            // photo edges (the "four lines"), like a viewfinder.
+            CameraCorners(length: 17, inset: 8)
+                .stroke(.white, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .frame(width: 126, height: 126)
+                .shadow(color: .black.opacity(0.35), radius: 2)
         }
         .frame(width: WhyCarousel.cardW, height: 150)
     }
@@ -465,10 +481,12 @@ private struct WhyCarouselCard: View {
             ZStack {
                 Circle()
                     .stroke(OnboardingGlassTheme.textPrimary.opacity(0.12), lineWidth: 8)
+                    .padding(5)
                 Circle()
                     .trim(from: 0, to: 0.72)
                     .stroke(accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
                     .rotationEffect(.degrees(-90))
+                    .padding(5)
                 VStack(spacing: 0) {
                     Text("720")
                         .font(.system(size: 18, weight: .heavy, design: .rounded))
@@ -529,12 +547,12 @@ private struct WhyCarouselCard: View {
         }
         .frame(width: 154, height: 118)
         .overlay(alignment: .topLeading) {
-            Label("thekitchn", systemImage: "link")
-                .font(.system(size: 9, weight: .heavy))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 7).padding(.vertical, 3)
-                .background(.ultraThinMaterial, in: Capsule())
-                .padding(7)
+            HStack(spacing: 4) {
+                SocialIcon(.instagram)
+                SocialIcon(.tiktok)
+                SocialIcon(.facebook)
+            }
+            .padding(7)
         }
         .overlay(alignment: .topTrailing) {
             Label("Fits", systemImage: "checkmark.circle.fill")
@@ -633,6 +651,70 @@ private struct PlatformBadge: View {
     }
 }
 
+/// Four camera-style corner brackets, inset from the rect edges.
+private struct CameraCorners: Shape {
+    var length: CGFloat = 16
+    var inset: CGFloat = 8
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        let r = rect.insetBy(dx: inset, dy: inset)
+        let l = length
+        // top-left
+        p.move(to: CGPoint(x: r.minX, y: r.minY + l)); p.addLine(to: CGPoint(x: r.minX, y: r.minY)); p.addLine(to: CGPoint(x: r.minX + l, y: r.minY))
+        // top-right
+        p.move(to: CGPoint(x: r.maxX - l, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY)); p.addLine(to: CGPoint(x: r.maxX, y: r.minY + l))
+        // bottom-right
+        p.move(to: CGPoint(x: r.maxX, y: r.maxY - l)); p.addLine(to: CGPoint(x: r.maxX, y: r.maxY)); p.addLine(to: CGPoint(x: r.maxX - l, y: r.maxY))
+        // bottom-left
+        p.move(to: CGPoint(x: r.minX + l, y: r.maxY)); p.addLine(to: CGPoint(x: r.minX, y: r.maxY)); p.addLine(to: CGPoint(x: r.minX, y: r.maxY - l))
+        return p
+    }
+}
+
+/// Stylized social-platform chip (approximations — real brand glyphs would need
+/// image assets added to the catalog later). Used on the curated-recipes card.
+private struct SocialIcon: View {
+    enum Kind { case instagram, tiktok, facebook }
+    let kind: Kind
+    init(_ kind: Kind) { self.kind = kind }
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 6, style: .continuous)
+            .fill(fill)
+            .frame(width: 18, height: 18)
+            .overlay(glyph)
+            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+    }
+
+    private var fill: AnyShapeStyle {
+        switch kind {
+        case .instagram:
+            return AnyShapeStyle(LinearGradient(
+                colors: [Color(red: 1.0, green: 0.85, blue: 0.46),
+                         Color(red: 0.84, green: 0.16, blue: 0.46),
+                         Color(red: 0.59, green: 0.18, blue: 0.75)],
+                startPoint: .topLeading, endPoint: .bottomTrailing))
+        case .tiktok:
+            return AnyShapeStyle(Color.black)
+        case .facebook:
+            return AnyShapeStyle(Color(red: 0.09, green: 0.47, blue: 0.95))
+        }
+    }
+
+    @ViewBuilder
+    private var glyph: some View {
+        switch kind {
+        case .instagram:
+            Image(systemName: "camera").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+        case .tiktok:
+            Image(systemName: "music.note").font(.system(size: 9, weight: .black)).foregroundStyle(.white)
+        case .facebook:
+            Text("f").font(.system(size: 11, weight: .black, design: .serif)).foregroundStyle(.white)
+        }
+    }
+}
+
 // MARK: - Typewriter heading (reused)
 
 /// Types `fullText` one character at a time (driven by `typedCount`) without
@@ -720,14 +802,14 @@ struct LoggingDemoAnimation: View {
             HStack(alignment: .center, spacing: 0) {
                 HStack(spacing: 0) {
                     Text(displayedText)
-                        .font(.system(size: 13))
-                        .foregroundStyle(.primary)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Color(red: 0.11, green: 0.13, blue: 0.18))
                         .lineLimit(1)
 
                     if phase == .typing || phase == .idle {
                         Text("|")
                             .font(.system(size: 13, weight: .light))
-                            .foregroundStyle(Color.primary.opacity(0.4))
+                            .foregroundStyle(Color.black.opacity(0.4))
                             .opacity(phase == .typing ? 1 : 0.4)
                     }
                 }
@@ -824,19 +906,21 @@ private struct ShimmerCalorieText: View {
     @State private var shimmerOffset: CGFloat = -1
 
     var body: some View {
+        // Deeper, more saturated than the brand pastels so the calorie result
+        // pops against the light input field.
         let accentTint = LinearGradient(
-            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+            colors: [Color(red: 0.97, green: 0.45, blue: 0.10), Color(red: 0.04, green: 0.70, blue: 0.55)],
             startPoint: .leading,
             endPoint: .trailing
         )
 
         return HStack(spacing: 4) {
             Image(systemName: "sparkles")
-                .font(.system(size: 11))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(accentTint)
 
             Text(text)
-                .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                .font(.system(size: 14.5, weight: .heavy, design: .monospaced))
                 .foregroundStyle(accentTint)
         }
         .overlay(
