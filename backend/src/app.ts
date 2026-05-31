@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'url';
 import type { Request, Response, NextFunction } from 'express';
 import { requestIdMiddleware } from './utils/requestId.js';
+import { timingSafeKeyEqual } from './utils/internalKey.js';
 import { authRequired } from './middleware/auth.js';
 import onboardingRoutes from './routes/onboarding.js';
 import userRoutes from './routes/users.js';
@@ -172,7 +173,7 @@ export function createApp() {
 
   app.post('/testing-dashboard/login', (req, res) => {
     const submittedKey = typeof req.body?.dashboardKey === 'string' ? req.body.dashboardKey : '';
-    if (!config.internalMetricsKey || submittedKey !== config.internalMetricsKey) {
+    if (!config.internalMetricsKey || !timingSafeKeyEqual(submittedKey, config.internalMetricsKey)) {
       renderDashboardLogin(res, true);
       return;
     }

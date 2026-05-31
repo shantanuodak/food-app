@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { createHash } from 'crypto';
 import { z } from 'zod';
 import { config } from '../config.js';
+import { timingSafeKeyEqual } from '../utils/internalKey.js';
 import { ApiError } from '../utils/errors.js';
 import { getMetricsSnapshot } from '../services/metricsService.js';
 import { getAlertSnapshot } from '../services/alertRulesService.js';
@@ -161,7 +162,7 @@ function requireInternalKey(key: string | undefined): void {
   if (!config.internalMetricsKey) {
     throw new ApiError(503, 'INTERNAL_METRICS_DISABLED', 'Internal metrics key is not configured');
   }
-  if (!key || key !== config.internalMetricsKey) {
+  if (!key || !timingSafeKeyEqual(key, config.internalMetricsKey)) {
     throw new ApiError(403, 'FORBIDDEN', 'Invalid internal metrics key');
   }
 }
