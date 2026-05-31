@@ -1,42 +1,42 @@
 # End-to-End Code Review & Cleanup — PROGRESS / CHECKPOINT
 
-**Branch:** `end-to-end-code-debug-and-review`
-**Base (current main at start):** `e71e52d`
+**Branch:** `end-to-end-code-debug-and-review` · **Base:** `e71e52d`
 **Worktree (do ALL work here):** `/Users/shantanuodak/Desktop/Codex Folders/Food App/e2e-review-worktree`
-**Main repo (NEVER touch — user's, Xcode open here):** `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App`
-**Separate DerivedData:** `/Users/shantanuodak/Desktop/Codex Folders/Food App/e2e-derived-data`
+**Main repo (NEVER touch):** `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App` · **DerivedData:** `…/e2e-derived-data`
 
-## STRICT RULES (non-negotiable)
-- NEVER modify `main` (ref or working dir). main stays at `e71e52d`. Verify after each commit.
-- ALL edits/commits in THIS worktree on branch `end-to-end-code-debug-and-review`. Local only (no push/PR until approved).
-- If stuck, STAY stuck + document. Do NOT fall back to main.
-- Verify before commit: backend `tsc --noEmit` + `vitest` green; iOS `xcodebuild` green (separate DerivedData).
-- Do NOT touch parse/save/image save-path beyond clearly-dead code. Document HV items, never auto-fix.
-- Use `grep` not `rg` in Bash. iOS dead-code = in-file removals only (avoid project.pbxproj/whole-file deletes — queue those).
+## STRICT RULES
+- NEVER modify `main` (ref or dir). main stays `e71e52d`; verify after each commit. Local only.
+- ALL work in this worktree on the branch. If stuck, stay stuck + document; never fall back to main.
+- Verify before commit: backend `tsc --noEmit` + `vitest`; iOS `xcodebuild` green (separate DerivedData).
+- Do NOT touch save-path/auth beyond clearly-dead code. Document HV items, never auto-fix.
+- Use `grep` not `rg`. iOS = in-file removals only (no project.pbxproj / whole-file deletes — queue those).
 
 ## VERIFICATION LOOP
 - Backend: `"<wt>/backend/node_modules/.bin/tsc" --noEmit -p "<wt>/backend/tsconfig.json"` ; `npm --prefix "<wt>/backend" test`
 - iOS: `xcodebuild build -project "<wt>/Food App.xcodeproj" -scheme "Food App" -destination "generic/platform=iOS Simulator" -derivedDataPath "<dd>"`
 
 ## PHASES
-- [x] 0. Worktree setup + main isolation verified
-- [x] 1. Baselines — iOS build GREEN; backend tsc GREEN; vitest GREEN (245 pass/34 skip)
-- [x] 2. Exhaustive audit (10 agents) — AUDIT_FINDINGS.md + AUDIT_FINDINGS_WAVE2.md
-- [~] 3/4. Applying verified cleanups (IN PROGRESS)
-- [ ] 5. Final report + morning summary
+- [x] 0 setup + main isolation  · [x] 1 baselines GREEN (iOS build; backend tsc+vitest 245)  · [x] 2 audit (10 agents → AUDIT_FINDINGS*.md)
+- [~] 3/4 applying verified cleanups (IN PROGRESS — backend nearly done; iOS dead-code next)
+- [ ] 5 final report
 
-## APPLIED (committed on branch, verified)
-1. `refactor(backend): remove dead code` — streamGeminiJson(+extractCompleteJsonObjects,StreamItemCallback), tokenOverlapRatio, lookupByName; unexport isUnresolvedPlaceholderItem. **~230 LOC**. tsc+vitest GREEN.
+## APPLIED (committed, verified GREEN)
+1. backend dead code: streamGeminiJson(+helper,+StreamItemCallback), tokenOverlapRatio, lookupByName; unexport isUnresolvedPlaceholderItem. ~230 LOC. (f756d84)
+2. backend: remove getTodayEstimatedCostUsd; log SSE parse errors; void fire-and-forget telemetry; inline dead resolvedStatus ternary. (e814601)
+3. backend SECURITY: constant-time internal-admin-key compare across 7 endpoints (+ `utils/internalKey.ts`). (this commit)
 
-## NEXT (in order)
-- **Backend dead/fixes:** getTodayEstimatedCostUsd (check `startOfUtcDay` orphan after removal), resolvedStatus dead ternary (`routes/logs.ts:79`), recipeQualityScore `__testing`.
-- **Backend security (high value):** timing-safe internal-key compare → `utils/internalKey.ts` + 6 routes + `app.ts:175`; floating-promise `void` (`logs.ts:209`); SSE error log (`parse.ts:800`); DELETE token + timezone validation.
-- **Backend simplify:** extract `requireInternalKey`/`authContext`; rate-limiter factory.
-- **iOS (build-verified, per area):** in-file dead-code removals — onboarding (~600+: OnboardingComponents 5 structs, OnboardingAnimatedBackground orb, AgeWheelPicker, .planPreview, normalizedForActiveFlow, helpCard), home (HM0x ~340, StreakBadgeProgress, heroSubtitle), profile (profileHubSection/summaryHeaderSection/mealReminderSection/identityRow/heroData/trendData/BentoTokens), recipes (conservative), camera. Then: DateFormatter→static, reduce-motion `4:13` fix, dead @State/@FocusState removal, dedup helpers.
-- **DOCUMENT ONLY (HV, never auto-fix):** all save-path/auth/camera-behavioral/data-overwrite items (CalorieHeroTile draftStore overwrite, CameraService MainActor race, switchCamera black-screen, deferred-image disk-persist, upsertPendingItem, autoSavedParseIDs, etc.) — collect into REVIEW_NOTES_HUMAN_VERIFY.md.
-- Project hygiene (queue for user/Xcode): duplicate InstrumentSerif font entries in Copy Bundle Resources.
+## NEXT (priority order)
+- **iOS dead-code (PRIORITY — the big LOC wins; build-verify each area, commit per area):**
+  - Onboarding: OnboardingComponents 5 unused structs(+2 ButtonStyles) ~180; OnboardingAnimatedBackground orb+helpers ~185; OB03AgeScreen agePickerSelection/AgeWheelPickerRepresentable ~100 + dragOffset/dragStartAge; OB02cChallengeInsightScreen helpCard ~60; AppFlowCoordinator .planPreview ~20 + normalizedForActiveFlow ~15.
+  - Home: HomeFlowComponents HM00/HM02/HM03/HM04/HM06 ~340; StreakRewardModels StreakBadgeProgress+3 ~45; HomeStreakDrawerView heroSubtitle ~10; HomeGreetingAnimations greetingPrefix ~10; HomeFoodStoryDrawerView shareText; StreakAchievementPopup dismissTask.
+  - Profile: HomeProfileScreen profileHubSection ~59/summaryHeaderSection ~27/mealReminderSection ~38; HomeProfileBentoScreen identityRow ~22/heroData ~20/trendData ~31/BentoTokens ~55; ProfileDraftStore preferenceSymbol ~16.
+  - Recipes (CONSERVATIVE): RecipeAudioURLImportRequest+importRecipeFromAudioURL; RecipeImportPendingStore savePendingURL/consumePendingURL; ShareViewController with(url:).
+  - Camera: CameraView showPhotoLibrary; FoodCameraWidget FoodCameraURL.
+- **iOS safe bug fixes (build-verified):** DateFormatter→`static let` (HomeStreakDrawerView/HomeFoodStoryDrawerView/ExistingAccountDetectedView/MindfulPauseSheet/LoggingResultDrawerBody); reduce-motion `4:4`→`4:13` (HomeGreetingAnimations); dead @FocusState isPasteFocused; releaseVersion! force-unwrap.
+- **Backend remainder (optional, lower value):** DELETE token min(32)+timezone validation; evalDashboard `||`→`??`; rate-limiter size cap; DNS resolve timeout. (CSP re-enable = DEFER/document — risk of breaking dashboard.)
+- **DOCUMENT ONLY → write REVIEW_NOTES_HUMAN_VERIFY.md:** CalorieHeroTile draftStore overwrite; CameraService MainActor race + switchCamera black-screen; deferred-image disk-persist; upsertPendingItem rowID-OR-key; autoSavedParseIDs cleanup; clearPendingSaveContext; reconcile loggedAt string compare; AuthService single-flight metadata + mirroring-task leak; double-tap save sheet race. Plus project hygiene: duplicate InstrumentSerif font in Copy Bundle Resources.
 
-## HOW TO RESUME (after a usage-limit reset / fresh session)
-1. Read this file + CLAUDE.md. Confirm worktree exists and `main` still at `e71e52d`.
-2. Continue from NEXT. Apply one batch, verify (tsc/vitest or xcodebuild), commit, update this file.
-3. NEVER operate in the main repo dir. Stay in the worktree.
+## HOW TO RESUME
+1. Read this file + CLAUDE.md. Confirm worktree exists, `main` still `e71e52d`.
+2. Continue from NEXT. Apply one area, verify (xcodebuild / tsc+vitest), commit, update this file.
+3. NEVER operate in the main repo dir.
