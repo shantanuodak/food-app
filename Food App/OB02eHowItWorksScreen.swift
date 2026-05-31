@@ -1,4 +1,6 @@
 import SwiftUI
+import Combine
+import CoreMotion
 
 // MARK: - Why this works (3D carousel redesign, 2026-05-31)
 //
@@ -41,6 +43,9 @@ struct OB02eHowItWorksScreen: View {
     @State private var dragStartManual: Double = 0
     @State private var dragStartAuto: Double = 0
     @State private var lastFrontIndex = 0
+
+    // Device-motion parallax.
+    @StateObject private var parallax = ParallaxMotion()
 
     var body: some View {
         ZStack {
@@ -96,6 +101,8 @@ struct OB02eHowItWorksScreen: View {
             }
         }
         .task { await runIntro() }
+        .onAppear { if !reduceMotion { parallax.start() } }
+        .onDisappear { parallax.stop() }
     }
 
     // MARK: - Carousel
@@ -118,7 +125,9 @@ struct OB02eHowItWorksScreen: View {
                                 theta: theta,
                                 index: feature.id,
                                 revealed: cardsRevealed,
-                                reduceMotion: reduceMotion
+                                reduceMotion: reduceMotion,
+                                tiltX: parallax.tiltX,
+                                tiltY: parallax.tiltY
                             ))
                     }
                 }
@@ -284,6 +293,45 @@ private enum WhyCarousel {
     static let step: Double = 60       // 360 / 6 cards
     static let speed: Double = 11      // degrees per second
     static let dragSensitivity: Double = 0.55  // degrees of ring rotation per point dragged
+    static let parallaxAmplitude: CGFloat = 16 // max points a front card shifts on full tilt
+}
+
+// MARK: - Device-motion parallax
+
+/// Publishes a smoothed, normalized tilt (-1...1 on each axis) relative to the
+/// device's attitude when updates began, so the carousel can parallax-shift as
+/// the phone moves. No-op (and never started) under Reduce Motion.
+private final class ParallaxMotion: ObservableObject {
+    @Published var tiltX: Double = 0   // roll (left/right)
+    @Published var tiltY: Double = 0   // pitch (up/down)
+
+    private let manager = CMMotionManager()
+    private var reference: CMAttitude?
+
+    func start() {
+        guard manager.isDeviceMotionAvailable, !manager.isDeviceMotionActive else { return }
+        manager.deviceMotionUpdateInterval = 1.0 / 60.0
+        manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+            guard let self, let motion else { return }
+            let attitude = motion.attitude
+            guard let reference = self.reference else {
+                self.reference = attitude.copy() as? CMAttitude
+                return
+            }
+            attitude.multiply(byInverseOf: reference)          // relative to start
+            let targetX = max(-1, min(1, attitude.roll / 0.6))
+            let targetY = max(-1, min(1, attitude.pitch / 0.6))
+            self.tiltX += (targetX - self.tiltX) * 0.12         // low-pass smoothing
+            self.tiltY += (targetY - self.tiltY) * 0.12
+        }
+    }
+
+    func stop() {
+        manager.stopDeviceMotionUpdates()
+        reference = nil
+        tiltX = 0
+        tiltY = 0
+    }
 }
 
 // MARK: - Feature model
@@ -323,6 +371,8 @@ private struct RingPlacement: ViewModifier {
     let index: Int
     let revealed: Bool
     let reduceMotion: Bool
+    var tiltX: Double = 0
+    var tiltY: Double = 0
 
     func body(content: Content) -> some View {
         let rad = theta * .pi / 180
@@ -333,13 +383,17 @@ private struct RingPlacement: ViewModifier {
         let scale = CGFloat(0.66 + 0.34 * max(0, depth))
         let opacity = 0.42 + 0.58 * max(0, depth)
         let blur = reduceMotion ? 0 : CGFloat(max(0, 1 - depth) * 3.6)
+        // Parallax: front cards (depth→1) move more than the ones behind.
+        let parallaxFactor = CGFloat(0.4 + 0.6 * max(0, depth))
+        let px = CGFloat(tiltX) * WhyCarousel.parallaxAmplitude * parallaxFactor
+        let py = CGFloat(tiltY) * WhyCarousel.parallaxAmplitude * parallaxFactor
 
         return content
             .scaleEffect(revealed ? scale : 0.42)
             .opacity(revealed ? opacity : 0)
             .blur(radius: blur)
             .rotation3DEffect(.degrees(theta), axis: (x: 0, y: 1, z: 0), perspective: 0.45)
-            .offset(x: x)
+            .offset(x: x + px, y: py)
             .zIndex(depth)
             .animation(
                 reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.82).delay(Double(index) * 0.06),
