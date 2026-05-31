@@ -197,67 +197,6 @@ struct OB02cChallengeInsightScreen: View {
             )
         )
     }
-
-    // MARK: - Help Card
-
-    private var helpCard: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            // Header with shimmer
-            HStack(spacing: 10) {
-                Image(systemName: "sparkles")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(teal)
-
-                Text("This is how we help")
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(teal)
-                    .textCase(.uppercase)
-                    .tracking(1)
-            }
-            .overlay(helpShimmer)
-            .compositingGroup()
-
-            Text(content.help)
-                .font(.system(size: 20, weight: .semibold))
-                .foregroundStyle(colorScheme == .dark ? .white : .black)
-                .lineSpacing(5)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-        .padding(24)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .fill(teal.opacity(0.06))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 24, style: .continuous)
-                        .stroke(teal.opacity(0.12), lineWidth: 1)
-                )
-        )
-    }
-
-    // MARK: - Shimmer
-
-    private var helpShimmer: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let sweepWidth = w * 0.6
-
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .white.opacity(0.7), location: 0.4),
-                    .init(color: .white.opacity(0.85), location: 0.5),
-                    .init(color: .white.opacity(0.7), location: 0.6),
-                    .init(color: .clear, location: 1)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-            .frame(width: sweepWidth)
-            .offset(x: shimmerPhase * (w + sweepWidth) - sweepWidth)
-            .blendMode(.sourceAtop)
-        }
-    }
 }
 
 // MARK: - Shared Demo Card Helpers

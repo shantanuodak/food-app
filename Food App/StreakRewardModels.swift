@@ -62,14 +62,6 @@ extension StreakBadge.Tier {
     }
 }
 
-struct StreakBadgeProgress: Equatable {
-    let previousThreshold: Int
-    let targetThreshold: Int
-    let completedDays: Int
-    let daysRemaining: Int
-    let fraction: Double
-}
-
 enum StreakBadges {
     static var badges: [StreakBadge] {
         BadgeCatalog.streakDefinitions.map(StreakBadge.init(definition:))
@@ -83,28 +75,6 @@ enum StreakBadges {
         badges.first { currentDays < $0.requiredDays }
     }
 
-    static func earnedBadges(for currentDays: Int) -> [StreakBadge] {
-        badges.filter { currentDays >= $0.requiredDays }
-    }
-
-    static func lockedBadges(for currentDays: Int) -> [StreakBadge] {
-        badges.filter { currentDays < $0.requiredDays }
-    }
-
-    static func progressToNext(for currentDays: Int) -> StreakBadgeProgress? {
-        guard let next = nextBadge(for: currentDays) else { return nil }
-        let previousThreshold = currentBadge(for: currentDays)?.requiredDays ?? 0
-        let span = max(1, next.requiredDays - previousThreshold)
-        let completed = min(max(0, currentDays - previousThreshold), span)
-        let remaining = max(0, next.requiredDays - currentDays)
-        return StreakBadgeProgress(
-            previousThreshold: previousThreshold,
-            targetThreshold: next.requiredDays,
-            completedDays: completed,
-            daysRemaining: remaining,
-            fraction: Double(completed) / Double(span)
-        )
-    }
 }
 
 enum StreakBadgeCelebrationState {

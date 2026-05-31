@@ -348,17 +348,6 @@ struct HomeStreakDrawerView: View {
         )
     }
 
-    private func heroSubtitle(
-        for response: StreakResponse,
-        currentBadge: StreakBadge?,
-        nextBadge: StreakBadge?
-    ) -> String {
-        if let currentBadge {
-            return "\(currentBadge.subtitle) \(nextBadge.map { "Next: \($0.title)." } ?? "Every streak badge is unlocked.")"
-        }
-        return nextBadge.map { "\($0.requiredDays) logged day earns \($0.title)." } ?? "Every streak badge is unlocked."
-    }
-
     private func heroTagline(currentBadge: StreakBadge?, nextBadge: StreakBadge?) -> String {
         if let currentBadge {
             return currentBadge.subtitle
