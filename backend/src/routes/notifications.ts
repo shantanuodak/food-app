@@ -23,6 +23,16 @@ function requireInternalKey(key: string | undefined): void {
   }
 }
 
+function isValidTimezone(value: string): boolean {
+  try {
+    // Throws RangeError for unknown IANA zones.
+    new Intl.DateTimeFormat('en-US', { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const timeSchema = z.string().regex(/^\d{1,2}:\d{2}(:\d{2})?$/);
 
 const deviceSchema = z.object({
@@ -36,8 +46,17 @@ const deviceSchema = z.object({
   locale: z.string().trim().max(40).nullable().optional()
 });
 
-const preferenceSchema = z.object({
-  timezone: z.string().trim().min(1).max(80),
+// Unregister must demand the same proper-length token as registration, so junk
+// 1-char path params get rejected up front instead of hitting the DB.
+export const deviceTokenParamSchema = z.string().trim().min(32).max(512);
+
+export const preferenceSchema = z.object({
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(80)
+    .refine(isValidTimezone, 'timezone must be a valid IANA timezone'),
   remindersEnabled: z.boolean(),
   breakfastEnabled: z.boolean(),
   lunchEnabled: z.boolean(),
@@ -88,7 +107,7 @@ userRouter.delete('/devices/:token', async (req, res, next) => {
   try {
     const auth = res.locals.auth as { userId: string } | undefined;
     if (!auth?.userId) throw new ApiError(401, 'UNAUTHORIZED', 'Authentication required');
-    await deactivateNotificationDevice(auth.userId, z.string().min(1).parse(req.params.token));
+    await deactivateNotificationDevice(auth.userId, deviceTokenParamSchema.parse(req.params.token));
     res.status(204).send();
   } catch (err) {
     next(err);
