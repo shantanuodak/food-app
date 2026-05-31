@@ -426,8 +426,6 @@ extension OnboardingView {
             // Now rendered by `preferencesOptionalRouteView` (self-contained
             // screen). Kept here to satisfy the exhaustive switch.
             EmptyView()
-        case .planPreview:
-            EmptyView()
         case .account:
             OB08AccountScreen(
                 isLoading: isAccountLoading,
@@ -489,8 +487,6 @@ extension OnboardingView {
         case .preferencesOptional:
             // Self-contained screen renders its own centered Next button;
             // no skip button per design.
-            EmptyView()
-        case .planPreview:
             EmptyView()
         case .account:
             EmptyView()

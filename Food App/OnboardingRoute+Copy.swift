@@ -17,8 +17,6 @@ extension OnboardingRoute {
             return "How fast should your plan move?"
         case .preferencesOptional:
             return "Food Preferences"
-        case .planPreview:
-            return "Your plan is ready"
         case .account:
             return "Save your setup"
         case .permissions:
@@ -58,8 +56,6 @@ extension OnboardingRoute {
             return "This helps us set a daily target that matches how quickly you want to make progress while keeping the plan realistic."
         case .preferencesOptional:
             return ""
-        case .planPreview:
-            return "Here is your starting target. You can adjust this later."
         case .account:
             return "Create or connect an account to keep your progress synced."
         case .permissions:

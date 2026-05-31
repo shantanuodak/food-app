@@ -15,7 +15,6 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
     case activity = 5
     case pace = 6
     case preferencesOptional = 7
-    case planPreview = 8
     case account = 9
     case permissions = 10
     case ready = 11
@@ -72,7 +71,6 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
         case .howItWorks: return "How It Works"
         case .challengeInsight: return "Challenge Insight"
         case .preferencesOptional: return "Preferences"
-        case .planPreview: return "Plan Preview"
         case .account: return "Account"
         case .permissions: return "Apple Health"
         case .notificationsPermission: return "Notifications"
