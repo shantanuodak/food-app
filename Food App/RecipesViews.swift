@@ -504,7 +504,7 @@ struct RecipesScreen: View {
     }
 
     private var recipesSection: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 22) {
             if let featured = recipes.first {
                 Button {
                     AppHaptics.lightImpact()
@@ -523,22 +523,22 @@ struct RecipesScreen: View {
             }
 
             if recipes.count > 1 {
-                HStack(alignment: .firstTextBaseline) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Text("Your library")
-                        .font(.system(size: 17, weight: .heavy))
+                        .font(.system(size: 18, weight: .heavy))
                         .foregroundStyle(RecipesTokens.ink)
-                    Spacer()
-                    Text("\(recipes.count)")
+                    Text("\(recipes.count - 1)")
                         .font(.system(size: 13, weight: .heavy))
                         .foregroundStyle(RecipesTokens.orange)
                         .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
+                        .padding(.vertical, 4)
                         .background(RecipesTokens.orangeSoft, in: Capsule())
+                    Spacer(minLength: 0)
                 }
 
                 LazyVGrid(
                     columns: [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)],
-                    spacing: 14
+                    spacing: 16
                 ) {
                     ForEach(Array(recipes.dropFirst())) { recipe in
                         Button {
@@ -1994,26 +1994,38 @@ struct RecipeArtwork: View {
     var glyphSize: CGFloat = 40
 
     var body: some View {
-        ZStack {
-            RecipeDS.gradient(for: recipe.title)
-
-            Image(systemName: RecipeDS.glyph(for: recipe.title))
-                .font(.system(size: glyphSize, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.9))
-                .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
-
-            if let raw = recipe.heroImageUrl, let url = URL(string: raw) {
-                AsyncImage(url: url) { phase in
-                    if case .success(let image) = phase {
-                        image.resizable().scaledToFill()
-                    } else {
-                        Color.clear
-                    }
+        // The gradient is the layout-defining base: it's fully flexible, so it
+        // adopts exactly the frame each call site sets (140 / 220 / 234 tall).
+        // The glyph and the imported photo are *overlays* — an overlay never
+        // changes the size of the view it sits on, so a tall or oversized
+        // hero image can no longer stretch the card/hero past its fixed frame.
+        RecipeDS.gradient(for: recipe.title)
+            .overlay(
+                Image(systemName: RecipeDS.glyph(for: recipe.title))
+                    .font(.system(size: glyphSize, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .shadow(color: .black.opacity(0.18), radius: 6, y: 3)
+            )
+            .overlay {
+                if let raw = recipe.heroImageUrl, let url = URL(string: raw) {
+                    // Color.clear fixes the box to the gradient's bounds; the
+                    // photo fills it via scaledToFill and is clipped — it can
+                    // fill but never expand the layout.
+                    Color.clear
+                        .overlay {
+                            AsyncImage(url: url) { phase in
+                                if case .success(let image) = phase {
+                                    image.resizable().scaledToFill()
+                                } else {
+                                    Color.clear
+                                }
+                            }
+                        }
+                        .clipped()
                 }
             }
-        }
-        .clipped()
-        .accessibilityHidden(true)
+            .clipped()
+            .accessibilityHidden(true)
     }
 }
 
@@ -2158,57 +2170,138 @@ struct RecipeLibraryView: View {
     }
 }
 
+// MARK: - Rebuilt recipe section (2026-05-30)
+// Editorial featured hero + uniform 2-column library grid. The two card types
+// below are shared by RecipesScreen, the home recipes drawer, and
+// RecipeLibraryView so every recipe surface renders identically.
+
+/// One compact stat shown on a card (e.g. "12 ingr", "16 steps", "30 min").
+private struct RecipeStat: Identifiable {
+    let id: Int
+    let icon: String
+    let text: String
+}
+
+/// Builds a recipe's stat row, omitting zero/empty values so a card never
+/// renders "0 steps", a blank servings chip, or a stray separator — the exact
+/// junk visible in the old grid.
+private func recipeStats(
+    for recipe: SavedRecipe,
+    includeServings: Bool,
+    includeTime: Bool
+) -> [RecipeStat] {
+    var raw: [(String, String)] = []
+    if includeServings,
+       let servings = recipe.servings?.trimmingCharacters(in: .whitespacesAndNewlines),
+       !servings.isEmpty {
+        raw.append(("person.2.fill", servings))
+    }
+    if recipe.ingredients.count > 0 {
+        raw.append(("carrot.fill", "\(recipe.ingredients.count) ingr"))
+    }
+    if recipe.steps.count > 0 {
+        raw.append(("list.number", "\(recipe.steps.count) steps"))
+    }
+    if includeTime,
+       let time = RecipeDuration.humanLabel(from: recipe.totalTime ?? recipe.cookTime ?? recipe.prepTime) {
+        raw.append(("clock", time))
+    }
+    return raw.enumerated().map { RecipeStat(id: $0.offset, icon: $0.element.0, text: $0.element.1) }
+}
+
+/// Frosted-glass capsule used over recipe artwork (source name, "LATEST" badge).
+private struct RecipeGlassChip: View {
+    var icon: String? = nil
+    let text: String
+    var tracking: CGFloat = 0
+
+    var body: some View {
+        HStack(spacing: 4) {
+            if let icon {
+                Image(systemName: icon).font(.system(size: 10, weight: .heavy))
+            }
+            Text(text)
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(tracking)
+                .lineLimit(1)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(.ultraThinMaterial, in: Capsule())
+        .overlay(Capsule().stroke(.white.opacity(0.22), lineWidth: 0.5))
+        .shadow(color: .black.opacity(0.18), radius: 4, y: 2)
+    }
+}
+
+/// Inline white-on-photo stat row used by the featured hero.
+private struct RecipeStatStrip: View {
+    let stats: [RecipeStat]
+    var color: Color = .white.opacity(0.95)
+    var iconSize: CGFloat = 11
+    var textSize: CGFloat = 13
+
+    var body: some View {
+        HStack(spacing: 14) {
+            ForEach(stats) { stat in
+                HStack(spacing: 5) {
+                    Image(systemName: stat.icon).font(.system(size: iconSize, weight: .bold))
+                    Text(stat.text).font(.system(size: textSize, weight: .semibold))
+                }
+            }
+        }
+        .foregroundStyle(color)
+        .lineLimit(1)
+    }
+}
+
 private struct RecipeFeaturedCard: View {
     let recipe: SavedRecipe
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ZStack(alignment: .bottomLeading) {
-                RecipeArtwork(recipe: recipe, glyphSize: 54)
-                    .frame(height: 210)
-                    .frame(maxWidth: .infinity)
+        ZStack(alignment: .bottomLeading) {
+            RecipeArtwork(recipe: recipe, glyphSize: 56)
+                .frame(height: 234)
+                .frame(maxWidth: .infinity)
+                .clipped()
 
-                LinearGradient(
-                    colors: [.clear, .black.opacity(0.08), .black.opacity(0.62)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.18), .black.opacity(0.74)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("LATEST")
-                        .font(.system(size: 10.5, weight: .heavy))
-                        .tracking(1.4)
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(.white.opacity(0.22), in: Capsule())
-                        .background(.ultraThinMaterial, in: Capsule())
-
-                    Text(recipe.title)
-                        .font(OnboardingTypography.instrumentSerif(style: .regular, size: 28))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .shadow(color: .black.opacity(0.35), radius: 8, y: 2)
-                }
-                .padding(16)
-            }
-            .frame(height: 210)
-            .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
-
-            HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 10) {
                 if let source = recipeSourceLabel(recipe) {
-                    RecipeMetaChip(icon: "link", text: source, tinted: true)
+                    RecipeGlassChip(icon: "link", text: source)
                 }
-                if let servings = recipe.servings, !servings.isEmpty {
-                    RecipeMetaChip(icon: "person.2.fill", text: servings)
+
+                Text(recipe.title)
+                    .font(OnboardingTypography.instrumentSerif(style: .regular, size: 30))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .shadow(color: .black.opacity(0.4), radius: 8, y: 2)
+
+                let stats = recipeStats(for: recipe, includeServings: true, includeTime: true)
+                if !stats.isEmpty {
+                    RecipeStatStrip(stats: stats)
+                        .shadow(color: .black.opacity(0.3), radius: 4, y: 1)
                 }
-                RecipeMetaChip(icon: "carrot.fill", text: "\(recipe.ingredients.count)")
-                RecipeMetaChip(icon: "list.number", text: "\(recipe.steps.count) steps")
-                Spacer(minLength: 0)
             }
-            .padding(.top, 12)
-            .padding(.horizontal, 2)
+            .padding(18)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .frame(height: 234)
+        .overlay(alignment: .topLeading) {
+            RecipeGlassChip(text: "LATEST", tracking: 1.4)
+                .padding(14)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 28, style: .continuous)
+                .stroke(.white.opacity(0.06), lineWidth: 1)
+        )
+        .shadow(color: RecipesTokens.shadow, radius: 16, y: 8)
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Latest recipe: \(recipe.title)")
     }
@@ -2221,64 +2314,47 @@ struct RecipeLibraryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Image-forward: the title sits ON the photo over a bottom
-            // gradient scrim for legibility — the same treatment as the
-            // featured card, so every card on the page reads consistently.
+            // Image-forward: title sits ON the photo over a bottom scrim; the
+            // source rides a frosted-glass chip in the top corner — same
+            // treatment as the featured hero so the whole page reads as one set.
             ZStack(alignment: .bottomLeading) {
                 RecipeArtwork(recipe: recipe, glyphSize: 34)
-                    .frame(height: 132)
+                    .frame(height: 140)
                     .frame(maxWidth: .infinity)
+                    .clipped()
 
                 LinearGradient(
-                    colors: [.clear, .black.opacity(0.10), .black.opacity(0.66)],
+                    colors: [.clear, .black.opacity(0.12), .black.opacity(0.72)],
                     startPoint: .top,
                     endPoint: .bottom
                 )
 
                 Text(recipe.title)
-                    .font(.system(size: 15, weight: .bold))
+                    .font(.system(size: 15.5, weight: .bold))
                     .foregroundStyle(.white)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .shadow(color: .black.opacity(0.45), radius: 6, y: 1)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 12)
-                    .padding(.bottom, 11)
+                    .padding(.bottom, 10)
             }
-            .frame(height: 132)
+            .frame(height: 140)
+            .overlay(alignment: .topLeading) {
+                if let source = recipeSourceLabel(recipe) {
+                    RecipeGlassChip(text: source).padding(8)
+                }
+            }
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 6) {
-                    Image(systemName: "carrot.fill")
-                        .font(.system(size: 10, weight: .bold))
-                    Text("\(recipe.ingredients.count) ingr")
-                    Text("•")
-                    Text("\(recipe.steps.count) steps")
-                }
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(RecipesTokens.muted)
-                .lineLimit(1)
-
-                // Always reserve the source line (placeholder space when a
-                // recipe has no source) so every card has the same intrinsic
-                // height and the artwork lines up across the row WITHOUT a
-                // `maxHeight: .infinity` stretch — that stretch made LazyVGrid
-                // cells expand to the scroll view's height and overlap.
-                Text(recipeSourceLabel(recipe) ?? " ")
-                    .font(.system(size: 11.5, weight: .bold))
-                    .foregroundStyle(RecipesTokens.orange)
-                    .lineLimit(1)
-                    .opacity(recipeSourceLabel(recipe) == nil ? 0 : 1)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.top, 11)
-            .padding(.bottom, 13)
+            statRow
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 12)
         }
-        // Fill the column width and pin content to the top. Height is uniform
-        // across cards (fixed-height artwork + one meta line + one reserved
-        // source line), so the grid rows line up without stretching.
+        // Uniform height across the grid: fixed-height artwork + a single stat
+        // line (with a reserved-height blank when a recipe has no stats), so
+        // rows line up without a `maxHeight: .infinity` stretch.
         .frame(maxWidth: .infinity, alignment: .top)
         .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
@@ -2288,6 +2364,27 @@ struct RecipeLibraryCard: View {
         .shadow(color: RecipesTokens.shadow, radius: 12, y: 5)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(recipe.title)
+    }
+
+    @ViewBuilder
+    private var statRow: some View {
+        let stats = recipeStats(for: recipe, includeServings: false, includeTime: true)
+        if stats.isEmpty {
+            // Reserve the line's height so a stat-less card matches its row.
+            Text(" ").font(.system(size: 12, weight: .semibold))
+        } else {
+            HStack(spacing: 12) {
+                ForEach(stats) { stat in
+                    HStack(spacing: 5) {
+                        Image(systemName: stat.icon).font(.system(size: 10, weight: .bold))
+                        Text(stat.text)
+                    }
+                }
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(RecipesTokens.muted)
+            .lineLimit(1)
+        }
     }
 }
 
