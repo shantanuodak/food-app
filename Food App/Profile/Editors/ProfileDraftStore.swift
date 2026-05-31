@@ -221,23 +221,6 @@ final class ProfileDraftStore: ObservableObject {
         }
         return draft.preferences.map(\.rawValue).sorted().joined(separator: ",")
     }
-
-    private func preferenceSymbol(for preference: PreferenceChoice) -> String {
-        switch preference {
-        case .highProtein:   return "bolt.fill"
-        case .vegetarian:    return "leaf"
-        case .vegan:         return "leaf.fill"
-        case .pescatarian:   return "fish"
-        case .lowCarb:       return "minus.circle.fill"
-        case .keto:          return "bolt.circle.fill"
-        case .glutenFree:    return "checkmark.circle.fill"
-        case .dairyFree:     return "drop.fill"
-        case .halal:         return "moon.fill"
-        case .lowSodium:     return "heart.text.square.fill"
-        case .mediterranean: return "sun.max.fill"
-        case .noPreference:  return "fork.knife"
-        }
-    }
 }
 
 extension Notification.Name {

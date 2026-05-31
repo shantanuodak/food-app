@@ -517,7 +517,6 @@ private struct BadgeCelebrationPopup: View {
     @State private var raysOpacity: Double = 0
     @State private var titleOffset: CGFloat = 24
     @State private var titleOpacity: Double = 0
-    @State private var dismissTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -586,7 +585,6 @@ private struct BadgeCelebrationPopup: View {
         .contentShape(Rectangle())
         .onTapGesture { dismissNow() }
         .onAppear { runEntranceAnimation() }
-        .onDisappear { dismissTask?.cancel() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("Badge earned: \(badge.title). \(badge.subtitle)"))
         .accessibilityAddTraits(.isModal)
@@ -666,7 +664,6 @@ private struct BadgeCelebrationPopup: View {
     }
 
     private func dismissNow() {
-        dismissTask?.cancel()
         withAnimation(.easeOut(duration: 0.22)) {
             titleOpacity = 0
             raysOpacity = 0
