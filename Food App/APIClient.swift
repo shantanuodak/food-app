@@ -534,6 +534,19 @@ final class APIClient {
         )
     }
 
+    /// Sends extracted social-caption / page text to the backend so it can be
+    /// structured by the same Gemini cleanup pass the URL/audio lanes use.
+    /// Used by the in-app browser importer (Instagram/TikTok/Facebook), whose
+    /// client-side heuristic draft is otherwise unstructured.
+    func structureRecipeText(_ requestBody: RecipeStructureTextRequest) async throws -> RecipeImportResponse {
+        try await request(
+            path: "/v1/recipes/structure-text",
+            method: "POST",
+            body: requestBody,
+            requiresAuth: true
+        )
+    }
+
     func importRecipeFromAudioFile(
         fileData: Data,
         filename: String,
