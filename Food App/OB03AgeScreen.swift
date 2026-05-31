@@ -10,8 +10,6 @@ struct OB03AgeScreen: View {
 
     @Environment(\.colorScheme) private var colorScheme
     @State private var appeared = false
-    @State private var dragOffset: CGFloat = 0
-    @State private var dragStartAge: Int?
 
     private let ageRange = OnboardingBaselineRange.age
     private let itemHeight: CGFloat = 90
@@ -80,13 +78,6 @@ struct OB03AgeScreen: View {
 
     // MARK: - Hero Age Selector
 
-    private var agePickerSelection: Binding<Int> {
-        Binding(
-            get: { currentAge },
-            set: { age = Double($0) }
-        )
-    }
-
     private var heroAgeSelector: some View {
         SmoothScrollPicker(
             value: currentAge,
@@ -122,100 +113,3 @@ struct OB03AgeScreen: View {
     // MARK: - Helpers
 
 }
-
-// MARK: - Custom Age Wheel Picker
-
-#if canImport(UIKit)
-private struct AgeWheelPickerRepresentable: UIViewRepresentable {
-    let values: [Int]
-    @Binding var selection: Int
-    let width: CGFloat
-
-    func makeCoordinator() -> Coordinator {
-        Coordinator(self)
-    }
-
-    func makeUIView(context: Context) -> UIPickerView {
-        let picker = UIPickerView()
-        picker.delegate = context.coordinator
-        picker.dataSource = context.coordinator
-        picker.backgroundColor = .clear
-        picker.subviews.forEach { subview in
-            subview.backgroundColor = .clear
-        }
-        picker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        if let selectedIndex = values.firstIndex(of: selection) {
-            picker.selectRow(selectedIndex, inComponent: 0, animated: false)
-        }
-        return picker
-    }
-
-    func updateUIView(_ uiView: UIPickerView, context: Context) {
-        context.coordinator.parent = self
-        uiView.subviews.forEach { subview in
-            subview.backgroundColor = .clear
-        }
-        uiView.reloadAllComponents()
-        if let selectedIndex = values.firstIndex(of: selection),
-           uiView.selectedRow(inComponent: 0) != selectedIndex {
-            uiView.selectRow(selectedIndex, inComponent: 0, animated: false)
-        }
-    }
-
-    final class Coordinator: NSObject, UIPickerViewDelegate, UIPickerViewDataSource {
-        var parent: AgeWheelPickerRepresentable
-
-        init(_ parent: AgeWheelPickerRepresentable) {
-            self.parent = parent
-        }
-
-        func numberOfComponents(in pickerView: UIPickerView) -> Int { 1 }
-
-        func pickerView(_ pickerView: UIPickerView, numberOfRowsInComponent component: Int) -> Int {
-            parent.values.count
-        }
-
-        func pickerView(_ pickerView: UIPickerView, rowHeightForComponent component: Int) -> CGFloat {
-            64
-        }
-
-        func pickerView(_ pickerView: UIPickerView, widthForComponent component: Int) -> CGFloat {
-            parent.width
-        }
-
-        func pickerView(_ pickerView: UIPickerView, didSelectRow row: Int, inComponent component: Int) {
-            guard parent.values.indices.contains(row) else { return }
-            let newValue = parent.values[row]
-            if parent.selection != newValue {
-                parent.selection = newValue
-            }
-            pickerView.reloadAllComponents()
-        }
-
-        func pickerView(_ pickerView: UIPickerView, viewForRow row: Int, forComponent component: Int, reusing view: UIView?) -> UIView {
-            let label = (view as? UILabel) ?? UILabel()
-            let value = parent.values[row]
-            label.text = "\(value)"
-            label.textAlignment = .center
-            label.adjustsFontSizeToFitWidth = true
-            label.minimumScaleFactor = 0.7
-            label.baselineAdjustment = .alignCenters
-            label.clipsToBounds = true
-            label.frame = CGRect(x: 0, y: 0, width: parent.width, height: 64)
-
-            if value == parent.selection {
-                label.font = .systemFont(ofSize: 54, weight: .bold)
-                label.textColor = OnboardingGlassTheme.pickerSelectedTextUI
-            } else if abs(value - parent.selection) == 1 {
-                label.font = .systemFont(ofSize: 40, weight: .bold)
-                label.textColor = OnboardingGlassTheme.pickerAdjacentTextUI
-            } else {
-                label.font = .systemFont(ofSize: abs(value - parent.selection) == 2 ? 32 : 26, weight: .bold)
-                label.textColor = OnboardingGlassTheme.pickerDistantTextUI
-            }
-
-            return label
-        }
-    }
-}
-#endif
