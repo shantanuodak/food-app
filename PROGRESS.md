@@ -23,7 +23,9 @@
 ## APPLIED (committed, verified GREEN)
 1. backend dead code: streamGeminiJson(+helper,+StreamItemCallback), tokenOverlapRatio, lookupByName; unexport isUnresolvedPlaceholderItem. ~230 LOC. (f756d84)
 2. backend: remove getTodayEstimatedCostUsd; log SSE parse errors; void fire-and-forget telemetry; inline dead resolvedStatus ternary. (e814601)
-3. backend SECURITY: constant-time internal-admin-key compare across 7 endpoints (+ `utils/internalKey.ts`). (this commit)
+3. backend SECURITY: constant-time internal-admin-key compare across 7 endpoints (+ `utils/internalKey.ts`). (4031935)
+4. iOS dead code: StreakBadgeProgress + earnedBadges/lockedBadges/progressToNext; helpCard/helpShimmer; heroSubtitle. ~115 LOC. xcodebuild GREEN. (e8626d4)
+5. iOS dead code: 7 dead OnboardingComponents structs (Primary/SecondaryButton, SelectableTiles, PermissionBlock, InputField, 2 ButtonStyles). ~195 LOC. xcodebuild GREEN. (latest)
 
 ## NEXT (priority order)
 - **iOS dead-code (PRIORITY — the big LOC wins; build-verify each area, commit per area):**
