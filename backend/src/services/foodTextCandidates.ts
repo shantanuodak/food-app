@@ -51,22 +51,6 @@ export function normalizeFoodUnit(
   return aliases[first] || first;
 }
 
-export function tokenOverlapRatio(left: string, right: string): number {
-  const leftTokens = new Set(normalizeFoodText(left).split(' ').filter(Boolean));
-  const rightTokens = new Set(normalizeFoodText(right).split(' ').filter(Boolean));
-  if (leftTokens.size === 0 || rightTokens.size === 0) {
-    return 0;
-  }
-
-  let hits = 0;
-  for (const token of leftTokens) {
-    if (rightTokens.has(token)) {
-      hits += 1;
-    }
-  }
-  return hits / leftTokens.size;
-}
-
 function asNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return value;

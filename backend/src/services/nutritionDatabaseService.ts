@@ -518,30 +518,3 @@ export async function lookupByBarcode(code: string, opts?: LookupOptions): Promi
   return miss('Unknown packaged food', startedAt, barcode);
 }
 
-export async function lookupByName(
-  brand: string | undefined,
-  productName: string,
-  opts?: LookupOptions
-): Promise<NutritionLookupResult> {
-  const startedAt = Date.now();
-  const normalizedBrand = (brand ?? '').trim().toLowerCase();
-  const normalizedName = productName.trim().toLowerCase();
-  const key = `name:${normalizedBrand}|${normalizedName}`;
-  const cached = cacheGet(key, startedAt);
-  if (cached) return cached;
-  const query = [brand, productName].map((part) => part?.trim()).filter(Boolean).join(' ');
-
-  const usda = await fetchUSDA(query, undefined, opts);
-  if (usda) {
-    cacheSet(key, 'usda', usda);
-    return { ...usda, source: 'usda', latencyMs: elapsed(startedAt) };
-  }
-
-  const fatSecret = await fetchFatSecret(query, opts);
-  if (fatSecret) {
-    cacheSet(key, 'fatsecret', fatSecret);
-    return { ...fatSecret, source: 'fatsecret', latencyMs: elapsed(startedAt) };
-  }
-
-  return miss(productName || 'Unknown food', startedAt);
-}

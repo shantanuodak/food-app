@@ -133,7 +133,7 @@ export function hasManualOverride(item: LogItemSchema): boolean {
   return false;
 }
 
-export function isUnresolvedPlaceholderItem(item: LogItemSchema): boolean {
+function isUnresolvedPlaceholderItem(item: LogItemSchema): boolean {
   const sourceId = item.nutritionSourceId.trim().toLowerCase();
   const originalSourceId = (item.originalNutritionSourceId || '').trim().toLowerCase();
   const hasNutrition =
