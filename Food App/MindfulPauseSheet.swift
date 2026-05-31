@@ -88,10 +88,14 @@ enum MindfulPauseGate {
         defaults.set(true, forKey: key)
     }
 
-    private static func dateKey(_ date: Date) -> String {
+    private static let dateKeyFormatter: DateFormatter = {
         let f = DateFormatter()
         f.locale = Locale(identifier: "en_US_POSIX")
         f.dateFormat = "yyyy-MM-dd"
-        return f.string(from: date)
+        return f
+    }()
+
+    private static func dateKey(_ date: Date) -> String {
+        dateKeyFormatter.string(from: date)
     }
 }

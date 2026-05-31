@@ -46,12 +46,17 @@ struct ExistingAccountDetectedView: View {
         return mealsPart
     }
 
+    private static let iso8601WithFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let iso8601Plain = ISO8601DateFormatter()
+
     private var daysSinceCreated: Int? {
         guard let createdAt = status.createdAt else { return nil }
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let created = formatter.date(from: createdAt)
-            ?? ISO8601DateFormatter().date(from: createdAt)
+        let created = Self.iso8601WithFractional.date(from: createdAt)
+            ?? Self.iso8601Plain.date(from: createdAt)
         guard let created else { return nil }
         let components = Calendar.current.dateComponents([.day], from: created, to: Date())
         return components.day.map { max(0, $0) }
