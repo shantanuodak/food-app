@@ -51,13 +51,18 @@ struct OB02eHowItWorksScreen: View {
                     .padding(.top, 12)
                     .padding(.horizontal, 16)
 
+                // Placeholder app-icon mark above the heading. Loads the current
+                // app icon at runtime today; swap for the updated icon later.
+                AppIconBadge()
+                    .padding(.top, 8)
+
                 TypewriterHeading(
                     fullText: headingText,
                     typedCount: typedCount,
                     showCaret: showCaret
                 )
                 .padding(.horizontal, 24)
-                .padding(.top, 18)
+                .padding(.top, 14)
 
                 Spacer(minLength: 8)
 
@@ -712,6 +717,49 @@ private struct SocialIcon: View {
         case .facebook:
             Text("f").font(.system(size: 11, weight: .black, design: .serif)).foregroundStyle(.white)
         }
+    }
+}
+
+// MARK: - App icon badge
+
+/// Rounded app-icon mark shown above the heading. Loads the current app icon
+/// from the bundle at runtime (no asset wiring needed); falls back to an accent
+/// placeholder if it can't be found. Swap for the updated icon when ready.
+private struct AppIconBadge: View {
+    private static let icon: UIImage? = {
+        guard let icons = Bundle.main.infoDictionary?["CFBundleIcons"] as? [String: Any],
+              let primary = icons["CFBundlePrimaryIcon"] as? [String: Any],
+              let files = primary["CFBundleIconFiles"] as? [String],
+              let name = files.last else { return nil }
+        return UIImage(named: name)
+    }()
+
+    var body: some View {
+        Group {
+            if let icon = Self.icon {
+                Image(uiImage: icon)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                LinearGradient(
+                    colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
+                .overlay(
+                    Image(systemName: "fork.knife")
+                        .font(.system(size: 26, weight: .bold))
+                        .foregroundStyle(.white)
+                )
+            }
+        }
+        .frame(width: 64, height: 64)
+        .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 15, style: .continuous)
+                .strokeBorder(.white.opacity(0.5), lineWidth: 0.5)
+        )
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 6)
+        .accessibilityHidden(true)
     }
 }
 
