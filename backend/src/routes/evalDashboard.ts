@@ -519,6 +519,14 @@ function validateFatSecretModelLabCases(cases: z.infer<typeof fatSecretModelLabC
   }
 }
 
+/**
+ * Total cases to run = min(requested-or-default, max). Uses `??` not `||` so an
+ * empty cases array (length 0) is respected instead of falling through to maxCases.
+ */
+export function resolveTotalCases(caseCount: number | undefined, maxCases: number): number {
+  return Math.min(caseCount ?? maxCases, maxCases);
+}
+
 router.post('/fatsecret-model-lab/runs', async (req, res, next) => {
   try {
     requireInternalKey(req.header('x-internal-metrics-key'));
@@ -533,7 +541,7 @@ router.post('/fatsecret-model-lab/runs', async (req, res, next) => {
 
     const options = fatSecretModelLabRunSchema.parse(req.body ?? {});
     validateFatSecretModelLabCases(options.cases);
-    const totalCases = Math.min(options.cases?.length || options.maxCases, options.maxCases);
+    const totalCases = resolveTotalCases(options.cases?.length, options.maxCases);
 
     fatSecretModelLabStatus.state = 'running';
     fatSecretModelLabStatus.startedAt = new Date().toISOString();
