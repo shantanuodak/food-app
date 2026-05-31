@@ -32,7 +32,9 @@
 4. iOS: StreakBadgeProgress+helpers; helpCard/helpShimmer; heroSubtitle. ~115. (e8626d4)
 5. iOS: 7 dead OnboardingComponents structs. ~195. (e5c76d4)
 6. iOS: DELETE dead whole file HomeFlowComponents.swift (5 HM0x prototype views). 467. (b4afc92)
-7. iOS: dead Profile sections (profileHubSection/summaryHeaderSection/mealReminderSection/mealReminderSummaryText; identityRow/heroData/trendData). ~210. (latest)
+7. iOS: dead Profile sections (profileHubSection/summaryHeaderSection/mealReminderSection/mealReminderSummaryText; identityRow/heroData/trendData). ~210. (e4d9424)
+8. iOS misc dead: whole-file UIImage+FixedOrientation.swift; CameraView.showPhotoLibrary; FoodCameraURL; FoodStoryDay.shareText; RecipeAudioURLImportRequest+importRecipeFromAudioURL; RecipeImportPendingStore url helpers; StreakAchievementPopup dismissTask. ~60. (latest)
+NOTE: `greetingPrefix` NOT removed (used by live GreetingAnimationPlaygroundView via HomeProfileScreen:90). BadgesTrophyCaseView has its OWN dead dismissTask (separate, pending).
 
 ## NEXT (priority order; build-verify each)
 - iOS in-file dead: AppFlowCoordinator `.planPreview` route + `normalizedForActiveFlow`; OnboardingAnimatedBackground orb-variant (keep OnboardingStaticBackground; strip its #Preview); OB03AgeScreen agePickerSelection/AgeWheelPickerRepresentable + dragOffset/dragStartAge; HomeProfileBentoScreen BentoTokens unused aliases (~55); ProfileDraftStore preferenceSymbol; StreakAchievementPopup dismissTask; HomeGreetingAnimations greetingPrefix+CaseIterable; HomeFoodStoryDrawerView shareText; recipes (RecipeAudioURLImportRequest+importRecipeFromAudioURL, RecipeImportPendingStore savePendingURL/consumePendingURL, ShareViewController with(url:)); camera (CameraView showPhotoLibrary, FoodCameraWidget FoodCameraURL).
