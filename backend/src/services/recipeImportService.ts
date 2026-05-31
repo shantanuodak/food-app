@@ -1567,6 +1567,31 @@ export async function structureRecipeText(input: {
     try {
       const extracted = await extractRecipeFromText(input.text, base);
       if (extracted) {
+        // Keep extraction-first for title/ingredients, but if Gemini found the
+        // recipe and still omitted all instructions, preserve the heuristic
+        // transcript steps instead of returning a step-less draft.
+        if (extracted.steps.length === 0) {
+          try {
+            const heuristicRaw = buildRecipeDraftFromTranscript({
+              transcript: input.text,
+              sourceUrl: safeUrl.url,
+              sourceName: input.sourceName,
+              heroImageUrl: input.heroImageUrl
+            });
+            if (heuristicRaw.steps.length > 0) {
+              return {
+                draft: {
+                  ...extracted,
+                  steps: heuristicRaw.steps
+                }
+              };
+            }
+          } catch {
+            // If the heuristic path also can't recover steps, keep the
+            // extraction result rather than discarding its recovered title and
+            // ingredients.
+          }
+        }
         return { draft: extracted };
       }
     } catch (error) {
