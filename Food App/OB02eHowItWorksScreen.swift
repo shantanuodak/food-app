@@ -605,14 +605,6 @@ private struct WhyCarouselCard: View {
             .padding(9)
         }
         .frame(width: 154, height: 118)
-        .overlay(alignment: .topLeading) {
-            HStack(spacing: 4) {
-                SocialIcon(.instagram)
-                SocialIcon(.tiktok)
-                SocialIcon(.facebook)
-            }
-            .padding(7)
-        }
         .overlay(alignment: .topTrailing) {
             Label("Fits", systemImage: "checkmark.circle.fill")
                 .font(.system(size: 9, weight: .heavy))
@@ -626,12 +618,10 @@ private struct WhyCarouselCard: View {
 
     private var importVisual: some View {
         VStack(spacing: 9) {
-            HStack(spacing: 8) {
-                PlatformBadge(symbol: "camera.fill",
-                              gradient: [Color(red: 1, green: 0.85, blue: 0.46), Color(red: 0.84, green: 0.16, blue: 0.46), Color(red: 0.59, green: 0.18, blue: 0.75)])
-                PlatformBadge(symbol: "music.note", gradient: [.black, .black])
-                PlatformBadge(symbol: "globe",
-                              gradient: [Color(red: 0.23, green: 0.51, blue: 0.96), Color(red: 0.15, green: 0.39, blue: 0.92)])
+            HStack(spacing: 9) {
+                SocialIcon(.instagram, size: 28)
+                SocialIcon(.tiktok, size: 28)
+                SocialIcon(.facebook, size: 28)
             }
 
             HStack(spacing: 6) {
@@ -696,20 +686,6 @@ private struct WhyCarouselCard: View {
     }
 }
 
-/// Small rounded platform badge (Instagram / TikTok / web) for the import card.
-private struct PlatformBadge: View {
-    let symbol: String
-    let gradient: [Color]
-
-    var body: some View {
-        RoundedRectangle(cornerRadius: 9, style: .continuous)
-            .fill(LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
-            .frame(width: 29, height: 29)
-            .overlay(Image(systemName: symbol).font(.system(size: 13, weight: .bold)).foregroundStyle(.white))
-            .shadow(color: .black.opacity(0.18), radius: 3, y: 2)
-    }
-}
-
 /// Four camera-style corner brackets, inset from the rect edges.
 private struct CameraCorners: Shape {
     var length: CGFloat = 16
@@ -736,14 +712,15 @@ private struct CameraCorners: Shape {
 private struct SocialIcon: View {
     enum Kind { case instagram, tiktok, facebook }
     let kind: Kind
-    init(_ kind: Kind) { self.kind = kind }
+    var size: CGFloat = 18
+    init(_ kind: Kind, size: CGFloat = 18) { self.kind = kind; self.size = size }
 
     var body: some View {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
+        RoundedRectangle(cornerRadius: size * 0.32, style: .continuous)
             .fill(fill)
-            .frame(width: 18, height: 18)
+            .frame(width: size, height: size)
             .overlay(glyph)
-            .shadow(color: .black.opacity(0.25), radius: 2, y: 1)
+            .shadow(color: .black.opacity(0.25), radius: size * 0.11, y: 1)
     }
 
     private var fill: AnyShapeStyle {
@@ -765,11 +742,11 @@ private struct SocialIcon: View {
     private var glyph: some View {
         switch kind {
         case .instagram:
-            Image(systemName: "camera").font(.system(size: 9, weight: .bold)).foregroundStyle(.white)
+            Image(systemName: "camera").font(.system(size: size * 0.5, weight: .bold)).foregroundStyle(.white)
         case .tiktok:
-            Image(systemName: "music.note").font(.system(size: 9, weight: .black)).foregroundStyle(.white)
+            Image(systemName: "music.note").font(.system(size: size * 0.5, weight: .black)).foregroundStyle(.white)
         case .facebook:
-            Text("f").font(.system(size: 11, weight: .black, design: .serif)).foregroundStyle(.white)
+            Text("f").font(.system(size: size * 0.62, weight: .black, design: .serif)).foregroundStyle(.white)
         }
     }
 }
