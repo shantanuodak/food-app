@@ -356,10 +356,6 @@ struct OpenFoodCameraControlIntent: OpenIntent {
     }
 }
 
-enum FoodCameraURL {
-    nonisolated static let camera = URL(string: "foodapp://camera")!
-}
-
 @main
 struct FoodCameraWidgetBundle: WidgetBundle {
     var body: some Widget {

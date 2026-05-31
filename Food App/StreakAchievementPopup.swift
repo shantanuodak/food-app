@@ -19,7 +19,6 @@ struct StreakAchievementPopup: View {
     @State private var raysScale: CGFloat = 0.5
     @State private var titleOffset: CGFloat = 24
     @State private var titleOpacity: Double = 0
-    @State private var dismissTask: Task<Void, Never>?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     init(badge: StreakBadge, onDismiss: @escaping () -> Void) {
@@ -83,7 +82,6 @@ struct StreakAchievementPopup: View {
         .contentShape(Rectangle())
         .onTapGesture { dismissNow() }
         .onAppear { runEntranceAnimation() }
-        .onDisappear { dismissTask?.cancel() }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("Badge unlocked: \(badge.title). \(badge.subtitle)"))
         .accessibilityAddTraits(.isModal)
@@ -204,7 +202,6 @@ struct StreakAchievementPopup: View {
     }
 
     private func dismissNow() {
-        dismissTask?.cancel()
         withAnimation(.easeOut(duration: 0.22)) {
             titleOpacity = 0
             raysOpacity = 0

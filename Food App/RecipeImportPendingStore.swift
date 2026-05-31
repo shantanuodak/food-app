@@ -112,17 +112,6 @@ enum RecipeImportPendingStore {
     private static let pendingMediaByteCountKey = "recipeImport.pendingMediaByteCount.v1"
 
     @discardableResult
-    static func savePendingURL(_ url: URL, source: String) -> Bool {
-        savePendingPayload(
-            url: url,
-            source: source,
-            rawText: nil,
-            sourceHint: RecipeImportSourceHint.infer(url: url),
-            providerTypeIdentifiers: []
-        )
-    }
-
-    @discardableResult
     static func savePendingPayload(
         url: URL,
         source: String,
@@ -193,18 +182,6 @@ enum RecipeImportPendingStore {
 #endif
 
         return payload
-    }
-
-    static func pendingURL() -> URL? {
-        pendingPayload()?.url
-    }
-
-    static func consumePendingURL() -> URL? {
-        let payload = pendingPayload()
-        if payload != nil {
-            clearPendingURL()
-        }
-        return payload?.url
     }
 
     // MARK: - Single-flight processing guard

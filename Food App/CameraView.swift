@@ -10,7 +10,6 @@ struct CameraView: View {
     @State private var focusPoint: CGPoint?
     @State private var focusRingID = UUID()
     @State private var showCaptureFlash = false
-    @State private var showPhotoLibrary = false
     /// V3.1 Phase 3: one-time tip shown on first camera open. Initialized
     /// from UserDefaults so subsequent opens don't reshow it.
     @State private var showFirstLaunchTip = CameraFirstLaunchTip.shouldShow

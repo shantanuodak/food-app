@@ -152,14 +152,6 @@ struct RecipeImportRequest: Encodable {
     let url: String
 }
 
-struct RecipeAudioURLImportRequest: Encodable {
-    let sourceUrl: String
-    let sourceName: String?
-    let heroImageUrl: String?
-    let audioUrl: String
-    let language: String?
-}
-
 struct RecipeStructureTextRequest: Encodable {
     let text: String
     let sourceUrl: String

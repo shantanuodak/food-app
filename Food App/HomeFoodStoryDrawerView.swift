@@ -2011,10 +2011,6 @@ private struct FoodStoryDay: Identifiable {
     let meals: [FoodStoryMeal]
     let palette: FoodStoryPalette
 
-    var shareText: String {
-        "\(weekdayTitle) food story: \(caption) \(calories.formatted()) calories logged in Food App."
-    }
-
     var accessibilityDate: String {
         "\(weekdayTitle), \(dateTitle)"
     }

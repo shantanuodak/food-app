@@ -525,15 +525,6 @@ final class APIClient {
         )
     }
 
-    func importRecipeFromAudioURL(_ requestBody: RecipeAudioURLImportRequest) async throws -> RecipeImportResponse {
-        try await request(
-            path: "/v1/recipes/import-from-audio",
-            method: "POST",
-            body: requestBody,
-            requiresAuth: true
-        )
-    }
-
     /// Sends extracted social-caption / page text to the backend so it can be
     /// structured by the same Gemini cleanup pass the URL/audio lanes use.
     /// Used by the in-app browser importer (Instagram/TikTok/Facebook), whose
