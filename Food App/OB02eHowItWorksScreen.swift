@@ -253,11 +253,11 @@ struct OB02eHowItWorksScreen: View {
 // MARK: - Carousel geometry
 
 private enum WhyCarousel {
-    static let cardW: CGFloat = 196
+    static let cardW: CGFloat = 188
     static let cardH: CGFloat = 252
-    static let radius: CGFloat = 138
-    static let step: Double = 60      // 360 / 6 cards
-    static let speed: Double = 11     // degrees per second
+    static let radius: CGFloat = 208   // wide enough that neighbours clear the front card
+    static let step: Double = 60       // 360 / 6 cards
+    static let speed: Double = 11      // degrees per second
 }
 
 // MARK: - Feature model
@@ -302,9 +302,11 @@ private struct RingPlacement: ViewModifier {
         let rad = theta * .pi / 180
         let depth = cos(rad)                                   // 1 at front
         let x = CGFloat(sin(rad)) * WhyCarousel.radius
-        let scale = CGFloat(0.82 + 0.18 * ((depth + 1) / 2))
-        let opacity = 0.5 + 0.5 * max(0, depth)
-        let blur = reduceMotion ? 0 : CGFloat(max(0, 1 - depth) * 3.0)
+        // Side cards shrink faster than before so they sit visibly behind the
+        // front card instead of crowding it.
+        let scale = CGFloat(0.66 + 0.34 * max(0, depth))
+        let opacity = 0.42 + 0.58 * max(0, depth)
+        let blur = reduceMotion ? 0 : CGFloat(max(0, 1 - depth) * 3.6)
 
         return content
             .scaleEffect(revealed ? scale : 0.42)
@@ -370,13 +372,6 @@ private struct WhyCarouselCard: View {
             .frame(maxWidth: .infinity)
         }
         .frame(width: WhyCarousel.cardW, height: WhyCarousel.cardH)
-        .overlay(alignment: .topLeading) {
-            Text(feature.number)
-                .font(.system(size: 11, weight: .heavy))
-                .tracking(1.2)
-                .foregroundStyle(OnboardingGlassTheme.textSecondary.opacity(0.6))
-                .padding(12)
-        }
         .background(OnboardingGlassTheme.panelFill)
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay(
