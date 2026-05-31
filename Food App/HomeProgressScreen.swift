@@ -55,8 +55,12 @@ struct ProgressSectionView: View {
     @State var selectedHydrationDate: Date?
     @State var selectedWeightDate: Date?
     @State var selectedStepsDate: Date?
+    @State var selectedProteinDate: Date?
+    @State var selectedCarbsDate: Date?
+    @State var selectedFatDate: Date?
     @State var preferredUnits: UnitsOption = .imperial
     @State var lastHapticRange: ProgressRange = .week
+    @AppStorage(HydrationUnitPreference.storageKey) var hydrationUnitRaw: String = HydrationUnitPreference.metric.rawValue
 
     var body: some View {
         ScrollView {

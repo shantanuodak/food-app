@@ -345,7 +345,99 @@ enum LoggedSavedMealStore {
     }
 }
 
+/// User-selectable display unit for hydration (water) amounts. Backed by
+/// UserDefaults so it survives launches and is readable from any view via
+/// `@AppStorage`. Canonical storage everywhere else stays in milliliters;
+/// this only controls how amounts are shown and which quick-add servings and
+/// slider range are offered. Mirrors the `AppearancePreference` pattern.
+enum HydrationUnitPreference: String, CaseIterable, Identifiable {
+    case metric
+    case imperial
+
+    static let storageKey = "hydrationUnitPreference"
+    static let mlPerFluidOunce: Double = 29.5735
+
+    var id: String { rawValue }
+
+    /// Short label for the segmented unit toggle.
+    var segmentLabel: String {
+        switch self {
+        case .metric:   return "Metric"
+        case .imperial: return "fl oz"
+        }
+    }
+
+    /// Inclusive slider range expressed in this unit's *display* values.
+    /// metric → milliliters; imperial → fluid ounces.
+    ///
+    /// Imperial caps at 128 fl oz (1 gallon) — right at the National
+    /// Academies/USDA adequate-intake of ~125 fl oz (3.7 L) of total water for
+    /// men, the highest standard recommendation. 32 fl oz floor. (128−32)
+    /// divides evenly by the 2 fl oz step so the tick dots land cleanly.
+    var sliderRange: ClosedRange<Double> {
+        switch self {
+        case .metric:   return 1000...5000
+        case .imperial: return 32...128
+        }
+    }
+
+    /// Snap step in this unit's display values. Metric steps in 250 ml — the
+    /// range (1000…5000) divides evenly, so the native slider's tick dots land
+    /// exactly on each 250 ml stop.
+    var sliderStep: Double {
+        switch self {
+        case .metric:   return 250
+        case .imperial: return 2
+        }
+    }
+
+    /// Convert a canonical milliliter amount into this unit's display value.
+    func displayValue(fromMl ml: Double) -> Double {
+        switch self {
+        case .metric:   return ml
+        case .imperial: return ml / Self.mlPerFluidOunce
+        }
+    }
+
+    /// Convert a display value (ml or fl oz) back to canonical milliliters.
+    func ml(fromDisplayValue value: Double) -> Double {
+        switch self {
+        case .metric:   return value
+        case .imperial: return value * Self.mlPerFluidOunce
+        }
+    }
+
+    /// Snap a canonical milliliter amount to the nearest valid slider stop
+    /// for this unit, clamped to the slider range.
+    func snappedMl(fromMl milliliters: Double) -> Double {
+        let raw = displayValue(fromMl: milliliters)
+        let clamped = min(max(raw, sliderRange.lowerBound), sliderRange.upperBound)
+        let snapped = (clamped / sliderStep).rounded() * sliderStep
+        return ml(fromDisplayValue: snapped)
+    }
+
+    /// Human-readable label for a canonical milliliter amount in this unit.
+    func format(ml: Double) -> String {
+        HydrationDisplayText.shortLabel(amountMl: ml, unit: self)
+    }
+}
+
 enum HydrationDisplayText {
+    /// Format a canonical milliliter amount in the user's chosen unit.
+    /// metric rolls ml→L past 1,000; imperial renders whole fluid ounces.
+    nonisolated static func shortLabel(
+        amountMl: Double,
+        unit: HydrationUnitPreference
+    ) -> String {
+        switch unit {
+        case .metric:
+            return shortLabel(amountMl: amountMl)
+        case .imperial:
+            let oz = amountMl / HydrationUnitPreference.mlPerFluidOunce
+            return "\(formatAmount(oz)) fl oz"
+        }
+    }
+
     nonisolated static func shortLabel(
         amountMl: Double,
         inputAmount: Double? = nil,

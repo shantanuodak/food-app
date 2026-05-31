@@ -138,6 +138,10 @@ struct MainLoggingShellView: View {
     @State var latestParseInputKind: String = "text"
     @State var suppressDebouncedParseOnce = false
     @State var isCalendarPresented = false
+    /// How much the home feed has scrolled up under the top header, mapped to
+    /// 0...1. Drives the header occlusion scrim — 0 at rest so the header has
+    /// no visible background, ramping to 1 once content slides underneath.
+    @State var headerScrimOpacity: CGFloat = 0
     @State var isProfilePresented = false
     @State var isNutritionSummaryPresented = false
     @State var isProgressChartsPresented = false

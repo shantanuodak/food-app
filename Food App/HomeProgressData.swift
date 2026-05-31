@@ -77,6 +77,17 @@ extension ProgressSectionView {
         return nearestPoint(for: selectedCalorieDate, in: aggregateForRange(caloriePoints))
     }
 
+    func selectedMacroPoint(for metric: MacroMetric) -> NutritionChartPoint? {
+        let selectedDate: Date?
+        switch metric {
+        case .protein: selectedDate = selectedProteinDate
+        case .carbs:   selectedDate = selectedCarbsDate
+        case .fat:     selectedDate = selectedFatDate
+        }
+        guard let selectedDate else { return nil }
+        return nearestPoint(for: selectedDate, in: aggregateForRange(macroPoints(for: metric)))
+    }
+
     var hydrationPoints: [HydrationChartPoint] {
         guard let hydrationProgressResponse else { return [] }
         return hydrationProgressResponse.days.compactMap { day in
@@ -410,6 +421,10 @@ extension ProgressSectionView {
             } else {
                 selectedCalorieDate = nil
             }
+        } catch is CancellationError {
+            // Superseded by a newer refresh; keep the prior data instead of
+            // flashing the raw "Swift.CancellationError" string at the user.
+            return
         } catch {
             progressResponse = nil
             progressError = userFriendlyProgressError(error)
@@ -437,6 +452,11 @@ extension ProgressSectionView {
             } else {
                 selectedHydrationDate = nil
             }
+        } catch is CancellationError {
+            // A newer refresh (range switch, foreground, re-render) cancelled
+            // this in-flight fetch. Leave the previously loaded data in place
+            // rather than surfacing the raw "Swift.CancellationError" string.
+            return
         } catch {
             hydrationProgressResponse = nil
             hydrationProgressError = userFriendlyProgressError(error)
@@ -467,6 +487,9 @@ extension ProgressSectionView {
             } else {
                 selectedWeightDate = nil
             }
+        } catch is CancellationError {
+            // Superseded by a newer refresh; keep prior data, show no error.
+            return
         } catch {
             weightSamples = []
             selectedWeightDate = nil
@@ -524,6 +547,9 @@ extension ProgressSectionView {
             } else {
                 selectedStepsDate = nil
             }
+        } catch is CancellationError {
+            // Superseded by a newer refresh; keep prior data, show no error.
+            return
         } catch {
             stepsSamples = []
             selectedStepsDate = nil
@@ -609,8 +635,12 @@ extension ProgressSectionView {
         String(format: "%.1f", value)
     }
 
+    var hydrationUnit: HydrationUnitPreference {
+        HydrationUnitPreference(rawValue: hydrationUnitRaw) ?? .metric
+    }
+
     func formatHydrationAmount(_ amountMl: Double) -> String {
-        HydrationDisplayText.shortLabel(amountMl: amountMl)
+        HydrationDisplayText.shortLabel(amountMl: amountMl, unit: hydrationUnit)
     }
 
     func makePositiveScale(values: [Double], minimumUpperBound: Double) -> ChartScale {

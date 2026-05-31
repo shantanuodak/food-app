@@ -73,6 +73,8 @@ struct NotificationReminderSettingsView: View {
                 Text("Used as context for engagement nudges without creating extra meal reminders.")
             }
             .disabled(!appStore.mealReminderSettings.remindersEnabled)
+
+            smartNudgesSection
         }
         .navigationTitle("Notifications & Reminders")
         .navigationBarTitleDisplayMode(.inline)
@@ -83,6 +85,56 @@ struct NotificationReminderSettingsView: View {
             guard phase == .active else { return }
             Task { await appStore.refreshNotificationAuthState() }
         }
+    }
+
+    @ViewBuilder
+    private var smartNudgesSection: some View {
+        Section {
+            Toggle(isOn: healthNudgesEnabledBinding) {
+                Label("Smart health nudges", systemImage: "sparkles")
+            }
+        } header: {
+            Text("Smart nudges")
+        } footer: {
+            Text("Gentle, real-time reminders that only fire when you're falling behind on a goal for the day — never when you're already on track.")
+        }
+
+        Section {
+            Toggle(isOn: healthNudgeBoolBinding(\.hydrationEnabled)) {
+                Label("Hydration", systemImage: "drop.fill")
+            }
+            Toggle(isOn: healthNudgeBoolBinding(\.proteinEnabled)) {
+                Label("Protein", systemImage: "fork.knife")
+            }
+            Toggle(isOn: healthNudgeBoolBinding(\.movementEnabled)) {
+                Label("Movement", systemImage: "figure.walk")
+            }
+
+            if appStore.healthNudgeSettings.movementEnabled {
+                Stepper(value: stepGoalBinding, in: 2000...20000, step: 1000) {
+                    HStack {
+                        Label("Daily step goal", systemImage: "shoeprints.fill")
+                        Spacer()
+                        Text("\(appStore.healthNudgeSettings.stepGoal.formatted())")
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                }
+            }
+        } header: {
+            Text("What to nudge me about")
+        } footer: {
+            Text(smartNudgesFooterText)
+        }
+        .disabled(!appStore.healthNudgeSettings.enabled)
+    }
+
+    private var smartNudgesFooterText: String {
+        if appStore.healthNudgeSettings.movementEnabled,
+           !(appStore.isHealthSyncEnabled && appStore.healthAuthorizationState == .authorized) {
+            return "Movement nudges need Apple Health access. Turn on Apple Health sync in Settings to enable step-based reminders."
+        }
+        return "Hydration and protein nudges use what you've logged today. Movement uses your Apple Health step count."
     }
 
     private var notificationFooterText: String {
@@ -120,6 +172,69 @@ struct NotificationReminderSettingsView: View {
                 }
             }
         )
+    }
+
+    private var healthNudgesEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { appStore.healthNudgeSettings.enabled },
+            set: { enabled in
+                guard enabled else {
+                    appStore.setHealthNudgesEnabled(false)
+                    return
+                }
+
+                switch appStore.notificationAuthState {
+                case .authorized, .provisional, .ephemeral:
+                    appStore.setHealthNudgesEnabled(true)
+                case .notDetermined:
+                    requestPermissionThenEnableHealthNudges()
+                case .denied:
+                    appStore.setHealthNudgesEnabled(false)
+                    openAppSettings()
+                default:
+                    appStore.setHealthNudgesEnabled(false)
+                }
+            }
+        )
+    }
+
+    private func healthNudgeBoolBinding(_ keyPath: WritableKeyPath<HealthNudgeSettings, Bool>) -> Binding<Bool> {
+        Binding(
+            get: { appStore.healthNudgeSettings[keyPath: keyPath] },
+            set: { newValue in
+                var settings = appStore.healthNudgeSettings
+                settings[keyPath: keyPath] = newValue
+                appStore.setHealthNudgeSettings(settings)
+            }
+        )
+    }
+
+    private var stepGoalBinding: Binding<Int> {
+        Binding(
+            get: { appStore.healthNudgeSettings.stepGoal },
+            set: { newValue in
+                var settings = appStore.healthNudgeSettings
+                settings.stepGoal = newValue
+                appStore.setHealthNudgeSettings(settings)
+            }
+        )
+    }
+
+    private func requestPermissionThenEnableHealthNudges() {
+        guard !isRequestingPermission else { return }
+        isRequestingPermission = true
+        Task {
+            let status = await appStore.requestNotificationAuthorization()
+            await MainActor.run {
+                switch status {
+                case .authorized, .provisional, .ephemeral:
+                    appStore.setHealthNudgesEnabled(true)
+                default:
+                    appStore.setHealthNudgesEnabled(false)
+                }
+                isRequestingPermission = false
+            }
+        }
     }
 
     private func mealReminderRow(

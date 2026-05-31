@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { deleteFoodLog, saveFoodLogStrict, updateFoodLog, updateFoodLogImageRef } from '../services/logService.js';
 import { getDaySummary, getDaySummaryRange } from '../services/daySummaryService.js';
 import { getDayLogs, getDayLogsRange } from '../services/dayLogsService.js';
+import { getHydrationDayLogsRange } from '../services/hydrationService.js';
 import { getProgressSummary } from '../services/progressService.js';
 import { getFoodLogStreaks } from '../services/streakService.js';
 import { assertLoggedAtNotInFutureForUser } from '../services/dateIntegrityService.js';
@@ -386,11 +387,12 @@ router.get('/day-range', async (req, res, next) => {
   try {
     const query = dayRangeQuerySchema.parse(req.query);
     const userId = res.locals.auth.userId as string;
-    const [summaries, logs] = await Promise.all([
+    const [summaries, logs, hydration] = await Promise.all([
       getDaySummaryRange(userId, query.from, query.to, query.tz),
-      getDayLogsRange(userId, query.from, query.to, query.tz)
+      getDayLogsRange(userId, query.from, query.to, query.tz),
+      getHydrationDayLogsRange(userId, query.from, query.to, query.tz)
     ]);
-    res.status(200).json({ summaries, logs });
+    res.status(200).json({ summaries, logs, hydration });
   } catch (err) {
     next(err);
   }

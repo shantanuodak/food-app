@@ -71,6 +71,8 @@ extension MainLoggingShellView {
             }
             if let cachedHydration = dayCacheHydrationLogs[dateStr], cachedHydration.date == dateStr {
                 applyVisibleHydrationDayLogs(cachedHydration)
+            } else if let diskHydration = loadHydrationDayLogsFromCache(date: dateStr), diskHydration.date == dateStr {
+                applyVisibleHydrationDayLogs(diskHydration)
             }
             if let cachedSummary = dayCacheSummary[dateStr] {
                 daySummary = cachedSummary
@@ -110,6 +112,8 @@ extension MainLoggingShellView {
         }
         if let cachedHydration = dayCacheHydrationLogs[dateStr], cachedHydration.date == dateStr {
             applyVisibleHydrationDayLogs(cachedHydration)
+        } else if let diskHydration = loadHydrationDayLogsFromCache(date: dateStr), diskHydration.date == dateStr {
+            applyVisibleHydrationDayLogs(diskHydration)
         }
         if let cachedSummary = dayCacheSummary[dateStr] {
             daySummary = cachedSummary

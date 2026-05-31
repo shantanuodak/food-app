@@ -78,7 +78,7 @@ struct MainLoggingBottomDock: View {
             }
         }
         .padding(.horizontal, 16)
-        .padding(.bottom, 16)
+        .padding(.bottom, 6)
         .background(alignment: .bottom) {
             dockBackdrop
         }
@@ -320,16 +320,14 @@ struct MainLoggingTopHeaderStrip: View {
     let firstName: String?
     let dateTitle: String
     let colorScheme: ColorScheme
+    /// 0 at the scroll-top resting state, ramping to 1 as content scrolls up
+    /// under the header. Drives the occluding scrim so the header has *no*
+    /// background at rest (no visible "panel"), matching native nav-bar
+    /// scroll-edge behaviour.
+    let scrimOpacity: CGFloat
     @Binding var isFoodStoryPresented: Bool
     @Binding var isProfilePresented: Bool
     @Binding var isCalendarPresented: Bool
-
-    @State private var isTutorialPresented: Bool = false
-    /// Drives a 3D Y-axis wobble on the help affordance — oscillates ±22° so
-    /// the glyph face stays readable (no full flip), reading as "interactive"
-    /// instead of the previous flat Z-axis spin.
-    @State private var helpIconWobble: Bool = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
@@ -354,42 +352,6 @@ struct MainLoggingTopHeaderStrip: View {
             .buttonStyle(.plain)
             .accessibilityLabel(Text("Open food story"))
 
-            // Tutorial entry point. Filled play triangle on a rich
-            // orange-to-pink gradient so it reads as the "watch a quick
-            // intro" affordance — playful but on-brand. 3D Y-axis wobble
-            // (±22°, never past 90°) so the glyph face stays toward the
-            // camera. Hit area uses contentShape so the rotated transform
-            // doesn't shrink the tap target.
-            Button {
-                AppHaptics.lightImpact()
-                isTutorialPresented = true
-            } label: {
-                Image(systemName: "play.fill")
-                    .font(.system(size: 21, weight: .black, design: .rounded))
-                    .foregroundStyle(
-                        LinearGradient(
-                            colors: [
-                                Color(red: 1.00, green: 0.74, blue: 0.32),
-                                Color(red: 0.98, green: 0.55, blue: 0.18),
-                                Color(red: 0.90, green: 0.36, blue: 0.10)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .shadow(color: Color(red: 0.90, green: 0.36, blue: 0.10).opacity(0.36), radius: 7, y: 3)
-                    .shadow(color: Color(red: 1.00, green: 0.62, blue: 0.20).opacity(0.24), radius: 4, y: 1)
-                    .frame(width: 38, height: 38)
-                    .contentShape(Rectangle())
-                    .rotation3DEffect(
-                        .degrees(helpIconWobble ? 22 : -22),
-                        axis: (x: 0, y: 1, z: 0),
-                        perspective: 0.6
-                    )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(Text("Watch tutorial"))
-
             Button {
                 AppHaptics.selection()
                 isCalendarPresented = true
@@ -411,22 +373,8 @@ struct MainLoggingTopHeaderStrip: View {
             .accessibilityLabel(Text("Select date"))
         }
         .padding(.horizontal, 10)
-        .sheet(isPresented: $isTutorialPresented) {
-            TutorialLibrarySheet()
-                .presentationDetents([.large])
-                .presentationDragIndicator(.visible)
-                .presentationBackground(AppDrawerSurface.gradient)
-        }
-        .onAppear {
-            startHelpIconWobble()
-        }
-        .onChange(of: reduceMotion) { _, newValue in
-            if newValue {
-                // Settle to center when Reduce Motion turns on.
-                withAnimation(.none) { helpIconWobble = false }
-            } else {
-                startHelpIconWobble()
-            }
+        .background(alignment: .top) {
+            headerBackdrop
         }
     }
 
@@ -436,18 +384,55 @@ struct MainLoggingTopHeaderStrip: View {
             : Color.primary.opacity(0.72)
     }
 
-    /// 2026-05-23: implicit `.animation(_, value:)` + `repeatForever` was
-    /// unreliable when the bound value only flipped once on appear — the
-    /// loop never started. Triggering the autoreversing animation via an
-    /// explicit `withAnimation` block fixes the wobble.
-    private func startHelpIconWobble() {
-        guard !reduceMotion else { return }
-        helpIconWobble = false
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
-            withAnimation(.easeInOut(duration: 1.6).repeatForever(autoreverses: true)) {
-                helpIconWobble = true
-            }
-        }
+    private var headerSurfaceColor: Color {
+        colorScheme == .dark ? AppColor.shellBackgroundTop : Color(uiColor: .systemBackground)
+    }
+
+    /// The shell-gradient colour at the band's opaque-plateau end (the 0.62
+    /// stop ≈ 46pt below the screen top) — i.e. what the surface behind the
+    /// band has darkened to there.
+    ///
+    /// `AppColor.shellBackground` runs from `shellBackgroundTop` (white 0.08 in
+    /// dark) at y=0 to black at the screen bottom. ~46pt down is ~5.3% of the
+    /// full-screen gradient, so the matching colour is `0.08 * (1 - 0.053) ≈
+    /// 0.076`. The device-to-device variance of that fraction (812–932pt tall)
+    /// is < 0.001 in white value — imperceptible. Light mode resolves to
+    /// `systemBackground` (the shell gradient is a no-op there), so this matches
+    /// `headerSurfaceColor` and nothing changes.
+    private var headerBackdropBottomColor: Color {
+        colorScheme == .dark ? Color(white: 0.076) : Color(uiColor: .systemBackground)
+    }
+
+    /// Mirror of the bottom dock's `dockBackdrop`, flipped vertically: a scrim
+    /// that occludes content scrolling up behind the greeting, icons, and date.
+    ///
+    /// The opaque region is itself a slice of the shell gradient — top stop
+    /// `headerSurfaceColor` (shell at y=0), bottom stop `headerBackdropBottomColor`
+    /// (shell ~74pt down). Tracking the shell's darkening this way keeps the band
+    /// the *same colour as the surface behind it at every point*, so it stays
+    /// invisible at rest and never reads as a lighter rectangle on scroll. The
+    /// earlier flat-`headerSurfaceColor` plateau drifted lighter than the
+    /// darkening shell underneath and showed as a faint tint when the scrim
+    /// ramped in.
+    ///
+    /// safeAreaInset bleeds this background up into the status bar for free, so
+    /// the frame height only needs to span the controls + a short fade. `-6`
+    /// horizontal counters the outer `.padding(.horizontal, 6)` at the inset.
+    private var headerBackdrop: some View {
+        LinearGradient(
+            stops: [
+                .init(color: headerSurfaceColor, location: 0.0),
+                .init(color: headerBackdropBottomColor, location: 0.62),
+                .init(color: headerBackdropBottomColor.opacity(0), location: 1.0)
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .frame(height: 74)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, -6)
+        .opacity(Double(scrimOpacity))
+        .allowsHitTesting(false)
     }
 
 }
@@ -494,7 +479,10 @@ private struct FoodStoryHeaderPreviewIcon: View {
     }
 }
 
-private struct TutorialLibrarySheet: View {
+/// How-to video library. Pushed from the "Tutorials" tile in the profile
+/// (mirrors Saved Meals / Recipes) — its own nav title carries the heading,
+/// so there's no in-content title.
+struct TutorialLibrarySheet: View {
     @State private var activeTutorialID: TutorialVideoItem.ID? = TutorialVideoItem.logMeal.id
 
     private let tutorials: [TutorialVideoItem] = [
@@ -507,10 +495,6 @@ private struct TutorialLibrarySheet: View {
         GeometryReader { proxy in
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 18) {
-                    Text("Tutorial")
-                        .font(.system(size: 30, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-
                     ForEach(tutorials) { tutorial in
                         TutorialVideoCard(
                             tutorial: tutorial,
@@ -529,6 +513,8 @@ private struct TutorialLibrarySheet: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(AppDrawerSurface.gradient.ignoresSafeArea())
+        .navigationTitle("Tutorials")
+        .navigationBarTitleDisplayMode(.inline)
         .onDisappear {
             activeTutorialID = nil
         }

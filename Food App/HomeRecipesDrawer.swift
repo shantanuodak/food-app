@@ -449,6 +449,10 @@ struct HomeRecipesDrawerContent: View {
             // Periodic shimmer sweep — only when the link-detected pill
             // is showing. Cancelled when hasClipboardURL flips false.
             guard hasClipboardURL else { return }
+            // (Re)start the comet rotation now that the pill is visible — the
+            // onAppear call ran while the pill was hidden (and detection is
+            // async), so the repeatForever animation never attached.
+            startStrokeRotationLoop()
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: 800_000_000)
                 guard !Task.isCancelled && hasClipboardURL else { return }
@@ -573,13 +577,28 @@ struct HomeRecipesDrawerContent: View {
         )
     }
 
-    /// Silent clipboard probe — uses `hasURLs` which iOS does NOT count
-    /// as a paste access, so no "Pasted from X" privacy banner fires.
-    /// We only read the actual string in `pasteFromClipboard()` when
-    /// the user explicitly taps the button.
+    /// Silent clipboard probe — neither path counts as a paste access, so no
+    /// "Pasted from X" privacy banner fires. We only read the actual string in
+    /// `pasteFromClipboard()` when the user explicitly taps the button.
     private func checkClipboardForURL() {
+        // Fast path: a URL-typed item (Safari address bar, Share sheet, …).
+        if UIPasteboard.general.hasURLs {
+            setClipboardURLDetected(true)
+            return
+        }
+        // Many apps (Instagram "Copy link", Messages, Notes) copy a link as
+        // PLAIN TEXT, so `hasURLs` is false. `detectPatterns(for:)` still spots
+        // a URL-looking string, silently and without exposing the content.
+        let patterns: Set<UIPasteboard.DetectionPattern> = [.probableWebURL]
+        UIPasteboard.general.detectPatterns(for: patterns) { result in
+            let detected = ((try? result.get())?.contains(.probableWebURL)) ?? false
+            DispatchQueue.main.async { setClipboardURLDetected(detected) }
+        }
+    }
+
+    private func setClipboardURLDetected(_ detected: Bool) {
         withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-            hasClipboardURL = UIPasteboard.general.hasURLs
+            hasClipboardURL = detected
         }
     }
 
@@ -655,7 +674,7 @@ struct HomeRecipesDrawerContent: View {
                 // Same image-forward card + 2-column grid as RecipesScreen
                 // so the home peek and the full Recipes screen match.
                 LazyVGrid(
-                    columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
+                    columns: [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)],
                     spacing: 16
                 ) {
                     ForEach(filteredRecipes) { recipe in

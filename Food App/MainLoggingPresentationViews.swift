@@ -173,15 +173,47 @@ struct HydrationServingOption: Identifiable, Hashable {
         )
     ]
 
-    static func from(suggestion: HydrationSuggestion, index: Int) -> HydrationServingOption {
-        if let option = common.first(where: { abs($0.amountMl - suggestion.amountMl) < 0.5 }) {
+    /// Imperial quick-add servings: clean round fluid-ounce sizes. Canonical
+    /// `amountMl` is the exact conversion; the subtitle shows the ml equivalent.
+    static let commonImperial: [HydrationServingOption] = [8, 16, 24, 32].map { oz in
+        let ml = Double(oz) * HydrationUnitPreference.mlPerFluidOunce
+        return HydrationServingOption(
+            id: "oz-\(oz)",
+            title: "\(oz) fl oz",
+            subtitle: "\(Int(ml.rounded())) ml",
+            amountMl: ml,
+            inputAmount: Double(oz),
+            inputUnit: "oz",
+            rawText: "\(oz) fl oz water"
+        )
+    }
+
+    /// Quick-add servings for the user's chosen display unit.
+    static func options(for unit: HydrationUnitPreference) -> [HydrationServingOption] {
+        switch unit {
+        case .metric:   return common
+        case .imperial: return commonImperial
+        }
+    }
+
+    static func from(suggestion: HydrationSuggestion, index: Int, unit: HydrationUnitPreference) -> HydrationServingOption {
+        if let option = options(for: unit).first(where: { abs($0.amountMl - suggestion.amountMl) < 0.5 }) {
             return option
+        }
+
+        // Title in the user's preferred unit; subtitle shows the other unit.
+        let subtitle: String
+        switch unit {
+        case .metric:
+            subtitle = "\(String(format: "%.1f", suggestion.amountMl / HydrationUnitPreference.mlPerFluidOunce)) fl oz"
+        case .imperial:
+            subtitle = "\(Int(suggestion.amountMl.rounded())) ml"
         }
 
         return HydrationServingOption(
             id: "suggestion-\(index)-\(Int(suggestion.amountMl.rounded()))",
-            title: HydrationDisplayText.shortLabel(amountMl: suggestion.amountMl),
-            subtitle: "\(String(format: "%.1f", suggestion.amountMl / 29.5735)) fl oz",
+            title: HydrationDisplayText.shortLabel(amountMl: suggestion.amountMl, unit: unit),
+            subtitle: subtitle,
             amountMl: suggestion.amountMl,
             inputAmount: suggestion.amountMl,
             inputUnit: "ml",
@@ -196,11 +228,16 @@ struct HydrationAmountPromptSheet: View {
     let prompt: HydrationAmountPromptPresentation
     let onSelect: (HydrationServingOption) -> Void
     let onCancel: () -> Void
+    @AppStorage(HydrationUnitPreference.storageKey) private var unitRaw: String = HydrationUnitPreference.metric.rawValue
+
+    private var unit: HydrationUnitPreference {
+        HydrationUnitPreference(rawValue: unitRaw) ?? .metric
+    }
 
     private var servingOptions: [HydrationServingOption] {
-        var options = HydrationServingOption.common
+        var options = HydrationServingOption.options(for: unit)
         for (index, suggestion) in prompt.suggestions.enumerated() {
-            let option = HydrationServingOption.from(suggestion: suggestion, index: index)
+            let option = HydrationServingOption.from(suggestion: suggestion, index: index, unit: unit)
             if !options.contains(where: { abs($0.amountMl - option.amountMl) < 0.5 }) {
                 options.append(option)
             }
@@ -266,15 +303,29 @@ struct HydrationAmountPromptSheet: View {
 
 struct HydrationGoalPromptSheet: View {
     let isSaving: Bool
+    let initialGoalMl: Int?
     let onSelect: (Int) -> Void
     let onSkip: () -> Void
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(HydrationUnitPreference.storageKey) private var unitRaw: String = HydrationUnitPreference.metric.rawValue
 
-    private let goalOptions: [(ml: Int, title: String, subtitle: String)] = [
-        (2000, "2 L", "About 8 cups"),
-        (2500, "2.5 L", "A steady target"),
-        (3000, "3 L", "More active days")
-    ]
+    /// Working goal in canonical milliliters; the slider edits a unit-mapped
+    /// view of this value and writes back here.
+    @State private var goalMl: Double = 2000
+
+    private static let defaultGoalMl: Double = 2000
+
+    private var unit: HydrationUnitPreference {
+        HydrationUnitPreference(rawValue: unitRaw) ?? .metric
+    }
+
+    /// Slider works in display units (ml or fl oz); reads/writes `goalMl`.
+    private var sliderBinding: Binding<Double> {
+        Binding(
+            get: { unit.displayValue(fromMl: goalMl) },
+            set: { goalMl = unit.ml(fromDisplayValue: $0) }
+        )
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -290,12 +341,12 @@ struct HydrationGoalPromptSheet: View {
                     )
             }
 
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 22) {
                 HStack(alignment: .center, spacing: 16) {
                     HydrationGoalDropletPreview(reduceMotion: reduceMotion)
 
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Pick your daily water goal")
+                        Text("Set your daily water goal")
                             .font(.system(size: 22, weight: .semibold))
                             .foregroundStyle(.primary)
                             .fixedSize(horizontal: false, vertical: true)
@@ -305,48 +356,101 @@ struct HydrationGoalPromptSheet: View {
                     }
                 }
 
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: 126), spacing: 10)], spacing: 10) {
-                    ForEach(goalOptions.indices, id: \.self) { index in
-                        let option = goalOptions[index]
-                        Button {
-                            AppHaptics.selection()
-                            onSelect(option.ml)
-                        } label: {
-                            VStack(spacing: 6) {
-                                Text(option.title)
-                                    .font(.system(size: 21, weight: .semibold))
-                                Text(option.subtitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .multilineTextAlignment(.center)
-                                    .lineLimit(2)
-                            }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: 92)
-                            .glassyBackground(in: RoundedRectangle(cornerRadius: 14, style: .continuous), tint: Color.cyan.opacity(0.10))
-                            .overlay {
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .stroke(Color.cyan.opacity(0.22), lineWidth: 0.8)
-                            }
-                        }
-                        .buttonStyle(HydrationGoalOptionButtonStyle())
-                        .disabled(isSaving)
+                Picker("Units", selection: unitSelection) {
+                    ForEach(HydrationUnitPreference.allCases) { option in
+                        Text(option.segmentLabel).tag(option)
                     }
                 }
+                .pickerStyle(.segmented)
 
-                if isSaving {
-                    ProgressView()
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.top, 4)
+                VStack(spacing: 14) {
+                    Text(unit.format(ml: goalMl))
+                        .font(.system(size: 44, weight: .bold))
+                        .monospacedDigit()
+                        .foregroundStyle(
+                            LinearGradient(
+                                colors: [Color.cyan, Color.blue],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .contentTransition(.numericText())
+                        .animation(.snappy(duration: 0.18), value: goalMl)
+                        .frame(maxWidth: .infinity)
+                        .accessibilityLabel(Text("Daily water goal"))
+                        .accessibilityValue(Text(unit.format(ml: goalMl)))
+
+                    Slider(
+                        value: sliderBinding,
+                        in: unit.sliderRange,
+                        step: unit.sliderStep
+                    ) {
+                        Text("Daily water goal")
+                    } minimumValueLabel: {
+                        Text(unit.format(ml: unit.ml(fromDisplayValue: unit.sliderRange.lowerBound)))
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    } maximumValueLabel: {
+                        Text(unit.format(ml: unit.ml(fromDisplayValue: unit.sliderRange.upperBound)))
+                            .font(.caption2.weight(.medium))
+                            .foregroundStyle(.secondary)
+                    }
+                    .tint(Color.blue)
                 }
+
+                Button {
+                    AppHaptics.selection()
+                    onSelect(Int(goalMl.rounded()))
+                } label: {
+                    HStack(spacing: 8) {
+                        if isSaving {
+                            ProgressView()
+                                .controlSize(.small)
+                                .tint(.white)
+                        }
+                        Text(isSaving ? "Saving" : "Set goal")
+                            .font(.system(size: 17, weight: .semibold))
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 52)
+                    .background(
+                        LinearGradient(
+                            colors: [Color.cyan, Color.blue],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        ),
+                        in: RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    )
+                    .foregroundStyle(.white)
+                }
+                .buttonStyle(HydrationGoalOptionButtonStyle())
+                .disabled(isSaving)
             }
             .padding(.horizontal, 20)
-            .padding(.top, 18)
+            .padding(.top, 20)
             .padding(.bottom, 24)
 
             Spacer(minLength: 0)
         }
         .background(AppDrawerSurface.gradient.ignoresSafeArea())
+        .onAppear {
+            let seed = initialGoalMl.map(Double.init) ?? Self.defaultGoalMl
+            goalMl = unit.snappedMl(fromMl: seed)
+        }
+    }
+
+    /// Wraps the unit toggle so changing it re-snaps the goal to the new
+    /// unit's step while keeping the same underlying amount.
+    private var unitSelection: Binding<HydrationUnitPreference> {
+        Binding(
+            get: { unit },
+            set: { newUnit in
+                AppHaptics.selection()
+                let preservedMl = goalMl
+                unitRaw = newUnit.rawValue
+                goalMl = newUnit.snappedMl(fromMl: preservedMl)
+            }
+        )
     }
 }
 
@@ -539,6 +643,11 @@ private struct HydrationDropletDetailsBody: View {
     let onQuickLog: (HydrationServingOption) -> Void
     let onGoalTapped: () -> Void
     let onDeleteLastLog: () -> Void
+    @AppStorage(HydrationUnitPreference.storageKey) private var unitRaw: String = HydrationUnitPreference.metric.rawValue
+
+    private var unit: HydrationUnitPreference {
+        HydrationUnitPreference(rawValue: unitRaw) ?? .metric
+    }
 
     private var totalMl: Double {
         max(0, details.hydrationDayTotalMl ?? details.hydrationAmountMl ?? 0)
@@ -560,17 +669,20 @@ private struct HydrationDropletDetailsBody: View {
                 HydrationLiquidDropletView(
                     totalMl: displayedTotalMl,
                     goalMl: goalMl,
+                    unit: unit,
                     isAdding: !savingOptionIDs.isEmpty
                 )
                 Spacer(minLength: 0)
             }
 
             HydrationQuickLogPanel(
-                options: HydrationServingOption.common,
+                options: HydrationServingOption.options(for: unit),
+                goalLabel: goalMl.map { unit.format(ml: $0) },
                 savingOptionIDs: savingOptionIDs,
                 canDeleteLastLog: canDeleteLastLog,
                 isDeletingLastLog: isDeletingLastLog,
                 onQuickLog: onQuickLog,
+                onUpdateGoal: onGoalTapped,
                 onDeleteLastLog: onDeleteLastLog
             )
         }
@@ -582,10 +694,12 @@ private struct HydrationDropletDetailsBody: View {
 
 private struct HydrationQuickLogPanel: View {
     let options: [HydrationServingOption]
+    let goalLabel: String?
     let savingOptionIDs: Set<String>
     let canDeleteLastLog: Bool
     let isDeletingLastLog: Bool
     let onQuickLog: (HydrationServingOption) -> Void
+    let onUpdateGoal: () -> Void
     let onDeleteLastLog: () -> Void
 
     var body: some View {
@@ -636,6 +750,39 @@ private struct HydrationQuickLogPanel: View {
                 }
             }
 
+            Button {
+                AppHaptics.selection()
+                onUpdateGoal()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "target")
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(goalLabel == nil ? "Set a daily goal" : "Update daily goal")
+                        .font(.system(size: 15, weight: .semibold))
+                    Spacer(minLength: 0)
+                    if let goalLabel {
+                        Text(goalLabel)
+                            .font(.system(size: 15, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                    }
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .frame(height: 48)
+                .padding(.horizontal, 14)
+                .background(Color.cyan.opacity(0.10), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .stroke(Color.cyan.opacity(0.25), lineWidth: 1)
+                }
+            }
+            .buttonStyle(HydrationGoalOptionButtonStyle())
+            .foregroundStyle(Color.cyan)
+            .accessibilityLabel(Text(goalLabel == nil ? "Set a daily water goal" : "Update daily water goal, currently \(goalLabel ?? "")"))
+
             Button(role: .destructive) {
                 AppHaptics.selection()
                 onDeleteLastLog()
@@ -669,6 +816,7 @@ private struct HydrationQuickLogPanel: View {
 private struct HydrationLiquidDropletView: View {
     let totalMl: Double
     let goalMl: Double?
+    let unit: HydrationUnitPreference
     let isAdding: Bool
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -681,9 +829,13 @@ private struct HydrationLiquidDropletView: View {
         return min(max(totalMl / 2500, 0.16), 0.88)
     }
 
+    private var totalLabel: String {
+        HydrationDisplayText.shortLabel(amountMl: totalMl, unit: unit)
+    }
+
     private var goalLabel: String {
         if let goalMl {
-            return "of \(HydrationDisplayText.shortLabel(amountMl: goalMl))"
+            return "of \(HydrationDisplayText.shortLabel(amountMl: goalMl, unit: unit))"
         }
         return "logged today"
     }
@@ -752,7 +904,7 @@ private struct HydrationLiquidDropletView: View {
                         )
 
                     VStack(spacing: 5) {
-                        Text(HydrationDisplayText.shortLabel(amountMl: totalMl))
+                        Text(totalLabel)
                             .font(.system(size: 35, weight: .bold))
                             .monospacedDigit()
                             .foregroundStyle(Color.white)
@@ -777,7 +929,7 @@ private struct HydrationLiquidDropletView: View {
         }
         .frame(width: 240, height: 302)
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel(Text("Water logged \(HydrationDisplayText.shortLabel(amountMl: totalMl)) \(goalLabel)"))
+        .accessibilityLabel(Text("Water logged \(totalLabel) \(goalLabel)"))
     }
 
     private var dropletGlow: some View {

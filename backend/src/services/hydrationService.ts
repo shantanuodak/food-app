@@ -301,6 +301,49 @@ export async function getHydrationDayLogs(
   };
 }
 
+export async function getHydrationDayLogsRange(
+  userId: string,
+  from: string,
+  to: string,
+  timezoneOverride?: string
+): Promise<{ date: string; timezone: string; logs: HydrationLog[] }[]> {
+  validateDate(from);
+  validateDate(to);
+  const timezone = await resolveTimezone(userId, timezoneOverride);
+
+  const result = await pool.query<HydrationLogRow & { day_date: string }>(
+    `
+    SELECT id, logged_at, raw_text, amount_ml, input_amount, input_unit, source, confidence, created_at, updated_at,
+           (logged_at AT TIME ZONE $2)::date::text AS day_date
+    FROM hydration_logs
+    WHERE user_id = $1
+      AND (logged_at AT TIME ZONE $2)::date >= $3::date
+      AND (logged_at AT TIME ZONE $2)::date <= $4::date
+    ORDER BY logged_at ASC, created_at ASC, id ASC
+    `,
+    [userId, timezone, from, to]
+  );
+
+  const logsByDay = new Map<string, HydrationLog[]>();
+  for (const row of result.rows) {
+    if (!logsByDay.has(row.day_date)) {
+      logsByDay.set(row.day_date, []);
+    }
+    logsByDay.get(row.day_date)!.push(mapLog(row));
+  }
+
+  // Emit one entry per calendar day in [from, to], including empty days, so
+  // the client can warm its cache for the whole window in a single response.
+  const results: { date: string; timezone: string; logs: HydrationLog[] }[] = [];
+  const startDate = new Date(`${from}T00:00:00.000Z`);
+  const endDate = new Date(`${to}T00:00:00.000Z`);
+  for (let d = new Date(startDate); d <= endDate; d.setUTCDate(d.getUTCDate() + 1)) {
+    const dateStr = d.toISOString().slice(0, 10);
+    results.push({ date: dateStr, timezone, logs: logsByDay.get(dateStr) ?? [] });
+  }
+  return results;
+}
+
 export async function getHydrationDaySummary(
   userId: string,
   date: string,

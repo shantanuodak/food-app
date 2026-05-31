@@ -870,10 +870,17 @@ final class APIClient {
         case "/v1/recipes/import-from-audio":
             return RequestTimeout.recipeAudioImport
         // These endpoints are hit at launch and after onboarding — allow time for cold starts.
+        // Rewards/streaks belong here too: they're heavy (streaks reads a full
+        // year; summary recomputes every badge) and the trophy case can be the
+        // first thing opened against a cold backend. With the 20s default they
+        // were timing out and firing "Couldn't load badge progress. Check your
+        // connection." when the server was merely waking.
         case "/v1/onboarding",
              "/v1/logs/day-summary",
              "/v1/logs/day-logs",
              "/v1/logs/day-range",
+             "/v1/logs/streaks",
+             "/v1/rewards/summary",
              "/v1/hydration/goal",
              "/v1/hydration/day-summary",
              "/v1/hydration/day-logs",

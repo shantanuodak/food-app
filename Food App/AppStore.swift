@@ -26,6 +26,9 @@ final class AppStore: ObservableObject {
     /// `NotificationScheduler` to short-circuit cleanly when permission isn't granted.
     @Published private(set) var notificationAuthState: UNAuthorizationStatus = .notDetermined
     @Published private(set) var mealReminderSettings: MealReminderSettings
+    /// Real-time "smart" health nudges (hydration / protein / movement).
+    /// iOS-local only, opt-in. See `HealthNudgeScheduler`.
+    @Published private(set) var healthNudgeSettings: HealthNudgeSettings
     @Published private(set) var profileDashboardSnapshot: ProfileDashboardSnapshot? = nil
     @Published private(set) var progressChartsSnapshot: ProgressChartsSnapshot? = nil
     @Published private(set) var cachedFoodLogStreak: Int?
@@ -37,6 +40,7 @@ final class AppStore: ObservableObject {
     let imageStorageService: ImageStorageService
     let healthKitService: HealthKitService
     let notificationScheduler: NotificationScheduler
+    let healthNudgeScheduler: HealthNudgeScheduler
     /// Persistent backup for photo bytes that couldn't be uploaded inline
     /// during save. Drained on launch and whenever auth becomes valid.
     /// Optional because instantiation can fail if the file system is
@@ -48,6 +52,7 @@ final class AppStore: ObservableObject {
     private let healthSyncKey = "app.health.sync.enabled.v1"
     private let challengeKey = "app.challenge.choice.v1"
     private let mealReminderSettingsKey = "app.meal.reminder.settings.v1"
+    private let healthNudgeSettingsKey = "app.health.nudge.settings.v1"
     private let cachedFoodLogStreakKey = "app.rewards.current_food_log_streak.v1"
     private let todayHasLoggedFoodKey = "app.notifications.today.has_logged_food.v1"
     private let todayHasLoggedFoodDateKey = "app.notifications.today.has_logged_food.date.v1"
@@ -115,11 +120,13 @@ final class AppStore: ObservableObject {
         self.defaults = defaults
         self.networkMonitor = NetworkStatusMonitor()
         self.notificationScheduler = NotificationScheduler()
+        self.healthNudgeScheduler = HealthNudgeScheduler()
         self.isOnboardingComplete = defaults.bool(forKey: onboardingKey)
         self.isNetworkReachable = true
         self.networkQualityHint = L10n.networkOnline
         self.healthAuthorizationState = healthKitService.authorizationState
         self.mealReminderSettings = Self.loadMealReminderSettings(defaults: defaults, key: mealReminderSettingsKey)
+        self.healthNudgeSettings = Self.loadHealthNudgeSettings(defaults: defaults, key: healthNudgeSettingsKey)
         let cachedStreak = defaults.integer(forKey: cachedFoodLogStreakKey)
         self.cachedFoodLogStreak = defaults.object(forKey: cachedFoodLogStreakKey) == nil ? nil : cachedStreak
         self.isHealthSyncEnabled = defaults.bool(forKey: healthSyncKey)
@@ -290,6 +297,7 @@ final class AppStore: ObservableObject {
         OnboardingPersistence.clear(defaults: defaults)
         HomePendingSaveStore.clear(defaults: defaults)
         notificationScheduler.cancelAll()
+        healthNudgeScheduler.cancelAll()
         selectedChallenge = nil
         defaults.removeObject(forKey: challengeKey)
         lastAPIError = nil
@@ -585,6 +593,12 @@ final class AppStore: ObservableObject {
             timezone: timezone,
             loadedAt: Date()
         )
+
+        // Fresh protein/calorie progress → re-evaluate the smart nudges so a
+        // just-logged high-protein meal can cancel a pending protein nudge.
+        if summaryResult != nil {
+            await reconcileHealthNudges()
+        }
     }
 
     func preloadProgressCharts(
@@ -747,6 +761,30 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func setHealthNudgeSettings(_ settings: HealthNudgeSettings) {
+        healthNudgeSettings = settings
+        if let data = try? JSONEncoder().encode(settings) {
+            defaults.set(data, forKey: healthNudgeSettingsKey)
+        }
+        Task { await reconcileHealthNudges() }
+    }
+
+    /// Enable/disable the master smart-nudge switch. Turning it on requests
+    /// notification permission if it hasn't been granted yet (the same gate
+    /// meal reminders use), then reconciles.
+    func setHealthNudgesEnabled(_ enabled: Bool) {
+        var settings = healthNudgeSettings
+        settings.enabled = enabled
+        // If the user turns the master on but every sub-toggle is off, opt them
+        // into all three so the switch actually does something.
+        if enabled, !settings.hydrationEnabled, !settings.proteinEnabled, !settings.movementEnabled {
+            settings.hydrationEnabled = true
+            settings.proteinEnabled = true
+            settings.movementEnabled = true
+        }
+        setHealthNudgeSettings(settings)
+    }
+
     func setMealRemindersEnabled(_ enabled: Bool) {
         var settings = mealReminderSettings
         settings.remindersEnabled = enabled
@@ -857,6 +895,59 @@ final class AppStore: ObservableObject {
             mealReminders: mealReminderSettings,
             hasLoggedToday: todayHasLoggedFood
         )
+        await reconcileHealthNudges()
+    }
+
+    /// Re-evaluate the real-time health nudges (hydration / protein / movement)
+    /// against the user's *current* progress and schedule only the ones they're
+    /// behind on. Cheap and idempotent — safe to call on every foreground, after
+    /// a save, after a health sync, and on background refresh. Bails immediately
+    /// when nudges are off or notifications aren't authorized.
+    func reconcileHealthNudges() async {
+        guard healthNudgeSettings.hasAnyActiveNudge else {
+            healthNudgeScheduler.cancelAll()
+            return
+        }
+        let snapshot = await buildHealthNudgeSnapshot()
+        await healthNudgeScheduler.reconcile(
+            authState: notificationAuthState,
+            settings: healthNudgeSettings,
+            snapshot: snapshot
+        )
+    }
+
+    /// Assemble today's goal progress from whatever live data we have.
+    /// - Protein comes from the cached day-summary dashboard snapshot.
+    /// - Steps come from the HealthKit-backed `todaySteps` (only trusted when
+    ///   Health sync is on and authorized).
+    /// - Hydration is fetched fresh, best-effort; a failure just disables the
+    ///   hydration nudge for this pass rather than guessing.
+    private func buildHealthNudgeSnapshot() async -> HealthNudgeSnapshot {
+        var snapshot = HealthNudgeSnapshot.empty
+
+        if let daySummary = profileDashboardSnapshot?.daySummary {
+            snapshot.proteinConsumed = daySummary.totals.protein
+            snapshot.proteinTargetGrams = daySummary.targets.protein
+        }
+
+        let stepsAvailable = isHealthSyncEnabled && healthAuthorizationState == .authorized
+        snapshot.stepsAvailable = stepsAvailable
+        if stepsAvailable {
+            snapshot.steps = todaySteps
+            snapshot.stepGoal = Double(healthNudgeSettings.stepGoal)
+        }
+
+        if healthNudgeSettings.hydrationEnabled,
+           authSessionStore.session != nil,
+           isNetworkReachable {
+            let dateString = HomeLoggingDateUtils.summaryRequestFormatter.string(from: Date())
+            if let hydration = try? await apiClient.getHydrationDaySummary(date: dateString) {
+                snapshot.waterConsumedMl = hydration.totalMl
+                snapshot.waterGoalMl = hydration.goalMl
+            }
+        }
+
+        return snapshot
     }
 
     func syncNotificationsWithBackend() {
@@ -1038,6 +1129,12 @@ final class AppStore: ObservableObject {
                 }
             }
 
+            // Fresh step count → re-evaluate the movement nudge so a walk taken
+            // earlier today can cancel a pending "get moving" reminder.
+            if healthNudgeSettings.movementEnabled, healthNudgeSettings.enabled {
+                await reconcileHealthNudges()
+            }
+
             return syncedAnyActiveDay
         } catch {
             // Silently ignore read failures — card will show stale or zero values
@@ -1056,6 +1153,14 @@ final class AppStore: ObservableObject {
     private static func loadMealReminderSettings(defaults: UserDefaults, key: String) -> MealReminderSettings {
         guard let data = defaults.data(forKey: key),
               let decoded = try? JSONDecoder().decode(MealReminderSettings.self, from: data) else {
+            return .default
+        }
+        return decoded
+    }
+
+    private static func loadHealthNudgeSettings(defaults: UserDefaults, key: String) -> HealthNudgeSettings {
+        guard let data = defaults.data(forKey: key),
+              let decoded = try? JSONDecoder().decode(HealthNudgeSettings.self, from: data) else {
             return .default
         }
         return decoded

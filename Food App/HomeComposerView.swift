@@ -21,6 +21,11 @@ struct HM01LogComposerSection: View {
     /// rows.
     let onQuantityFastPathUpdated: (UUID) -> Void
     @State private var focusedMinimalRowID: UUID?
+    @AppStorage(HydrationUnitPreference.storageKey) private var hydrationUnitRaw: String = HydrationUnitPreference.metric.rawValue
+
+    private var hydrationUnit: HydrationUnitPreference {
+        HydrationUnitPreference(rawValue: hydrationUnitRaw) ?? .metric
+    }
 
     init(
         rows: Binding<[HomeLogRow]>,
@@ -146,7 +151,7 @@ struct HM01LogComposerSection: View {
                             }
 
                             trailingCaloriesView(for: row)
-                                .frame(width: 150, alignment: .trailing)
+                                .frame(width: 110, alignment: .trailing)
                         }
                         .opacity(row.isDeleting ? 0.35 : 1)
                         .animation(.easeOut(duration: 0.12), value: row.isDeleting)
@@ -557,7 +562,9 @@ struct HM01LogComposerSection: View {
 
     @ViewBuilder
     private func hydrationButton(for row: HomeLogRow) -> some View {
-        let label = row.hydrationDisplayLabel ?? "Water"
+        let label = row.hydrationAmountMl.map {
+            HydrationDisplayText.shortLabel(amountMl: $0, unit: hydrationUnit)
+        } ?? "Water"
         Button {
             AppHaptics.lightImpact()
             onHydrationTapped(row)

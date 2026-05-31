@@ -76,6 +76,10 @@ extension MainLoggingShellView {
                     }
             )
             .scrollDismissesKeyboard(.interactively)
+            // Header chrome (hide nav-bar band + scroll-driven scrim) lives in
+            // one extracted modifier so it costs this already-huge body a single
+            // `.modifier` rather than several inline modifiers + closures.
+            .modifier(HomeHeaderChromeModifier(scrimOpacity: $headerScrimOpacity))
             .onTapGesture {
                 handleComposerBackgroundTap()
             }
@@ -114,8 +118,9 @@ extension MainLoggingShellView {
                     isSavedMealsPresented = false
                 }))
                 .environmentObject(appStore)
-                .presentationDetents([.medium])
+                .presentationDetents([.large])
                 .presentationDragIndicator(.visible)
+                .presentationCornerRadius(24)
             }
             .sheet(isPresented: $isFoodStoryPresented) {
                 HomeFoodStoryDrawerView(
@@ -397,6 +402,7 @@ extension MainLoggingShellView {
             .sheet(isPresented: $isHydrationGoalPromptPresented) {
                 HydrationGoalPromptSheet(
                     isSaving: isSavingHydrationGoal,
+                    initialGoalMl: hydrationGoalMl,
                     onSelect: { goalMl in
                         saveHydrationGoal(goalMl)
                     },
@@ -406,7 +412,7 @@ extension MainLoggingShellView {
                         scheduleBadgeCelebrationCheckAfterHydrationSave(delayNanoseconds: 500_000_000)
                     }
                 )
-                .presentationDetents([.large])
+                .presentationDetents([.medium, .large])
                 .presentationDragIndicator(.visible)
                 .presentationBackground(AppDrawerSurface.gradient)
             }
@@ -570,20 +576,13 @@ extension MainLoggingShellView {
             .overlay(alignment: .bottom) {
                 if !isVoiceOverlayPresented {
                     bottomActionDock
-                        // Lift the dock above the recipes sheet peek
-                        // (.height(88)) so the icons aren't covered.
-                        .padding(.bottom, isKeyboardVisible ? 0 : 56)
+                        // Recipes peek was removed from home (2026-05-30); the
+                        // dock no longer needs to clear it, so it rests near the
+                        // bottom edge above the safe area.
+                        .padding(.bottom, isKeyboardVisible ? 0 : 8)
                         .transition(.opacity.combined(with: .scale(scale: 0.8)))
                 }
             }
-            .modifier(
-                HomeRecipesDrawerSheetModifier(
-                    isKeyboardVisible: isKeyboardVisible,
-                    isVoiceOverlayPresented: isVoiceOverlayPresented,
-                    isOtherModalPresented: isRecipesDrawerSuppressed,
-                    appStore: appStore
-                )
-            )
             .modifier(
                 MainLoggingTutorialModifier(
                     isHomeTutorialPresented: $isHomeTutorialPresented,
@@ -914,6 +913,28 @@ private struct MainLoggingTipsPromptModifier: ViewModifier {
                 .presentationDragIndicator(.visible)
                 .presentationCornerRadius(24)
                 .presentationBackground(AppDrawerSurface.gradient)
+            }
+    }
+}
+
+/// Bundles the home header's chrome tweaks into one modifier so they cost the
+/// (already very large) `MainLoggingShellView.body` only a single `.modifier`
+/// in its type-check budget:
+///   - hides the system nav-bar background (otherwise it paints a lighter band
+///     behind the header on iOS 17 & 18);
+///   - maps scroll position to a 0...1 header-scrim opacity (0 at the resting
+///     top, ramping up as content slides under the header).
+private struct HomeHeaderChromeModifier: ViewModifier {
+    @Binding var scrimOpacity: CGFloat
+
+    func body(content: Content) -> some View {
+        content
+            .toolbarBackground(.hidden, for: .navigationBar)
+            .onScrollGeometryChange(for: CGFloat.self) { geometry in
+                geometry.contentOffset.y + geometry.contentInsets.top
+            } action: { _, distanceScrolledUnder in
+                let ramp: CGFloat = 28
+                scrimOpacity = min(max(distanceScrolledUnder / ramp, 0), 1)
             }
     }
 }

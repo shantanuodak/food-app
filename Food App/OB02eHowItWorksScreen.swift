@@ -17,7 +17,7 @@ struct OB02eHowItWorksScreen: View {
     //   6. the Next button fades in last
     // Tapping anywhere during the intro skips straight to the final state.
     private let headingText = "Why this works"
-    private let cardCount = 5
+    private let cardCount = 6
 
     @State private var typedCount = 0
     @State private var showCaret = false
@@ -75,9 +75,13 @@ struct OB02eHowItWorksScreen: View {
                             .modifier(SequentialReveal(isVisible: revealedCardCount > 3))
                             .modifier(FloatingDrift(phaseSeed: 0.60))
 
-                        WidgetShortcutCardView()
+                        ImportRecipeCardView()
                             .modifier(SequentialReveal(isVisible: revealedCardCount > 4))
-                            .modifier(FloatingDrift(phaseSeed: 0.80))
+                            .modifier(FloatingDrift(phaseSeed: 0.70))
+
+                        WidgetShortcutCardView()
+                            .modifier(SequentialReveal(isVisible: revealedCardCount > 5))
+                            .modifier(FloatingDrift(phaseSeed: 0.85))
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 28)
@@ -943,6 +947,126 @@ private struct CuratedRecipesCardView: View {
                         .fill(Color(red: 0.85, green: 0.95, blue: 0.88))
                 )
                 .scaleEffect(checkPulse ? 1.06 : 1.0)
+            }
+            .padding(12)
+        }
+        .frame(width: 117, height: 117)
+    }
+}
+
+// MARK: - Import Recipe Card
+
+/// Sixth feature card (added 2026-05-30). Sits next to the curated-recipes
+/// card and covers the *other* way recipes get into the app: importing one
+/// you found yourself. The single card spans both web pages and social
+/// posts (Instagram / TikTok), matching the source hints used downstream in
+/// `RecipeImportPendingStore` ("import it from this page"). Left tile is a
+/// stylized "shared link" preview with web/photo/video source glyphs and a
+/// gently pulsing "Import" chip; title + subtitle on the right.
+private struct ImportRecipeCardView: View {
+    @State private var importPulse = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        HStack(spacing: 16) {
+            linkPreview
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Import recipes from the web")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
+
+                Text("Share a link from a site, Instagram, or TikTok — we'll pull in the recipe.")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                    .lineSpacing(2)
+            }
+
+            Spacer(minLength: 0)
+        }
+        .padding(.leading, 16)
+        .padding(.trailing, 20)
+        .padding(.vertical, 12)
+        .frame(height: 142)
+        .frame(maxWidth: .infinity)
+        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
+        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
+        .onAppear {
+            guard !reduceMotion else { return }
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
+                importPulse = true
+            }
+        }
+    }
+
+    /// Compact "shared link" preview — a link glyph in an accent disc, a row
+    /// of source glyphs (web / photo / video) signaling "from anywhere", and
+    /// a pulsing "Import" chip. Cool-toned to read distinct from the warm
+    /// curated-recipes tile while keeping the same 117pt square footprint.
+    private var linkPreview: some View {
+        let accent = LinearGradient(
+            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+
+        return ZStack {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(
+                    LinearGradient(
+                        colors: [
+                            Color(red: 0.90, green: 0.93, blue: 1.00),
+                            Color(red: 0.82, green: 0.87, blue: 1.00)
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+                )
+
+            VStack(spacing: 6) {
+                // Link glyph in an accent disc — same vocabulary as the
+                // curated card's dish illustration.
+                ZStack {
+                    Circle()
+                        .fill(accent)
+                        .frame(width: 38, height: 38)
+                    Circle()
+                        .fill(.white.opacity(0.85))
+                        .frame(width: 28, height: 28)
+                    Image(systemName: "link")
+                        .font(.system(size: 13, weight: .black))
+                        .foregroundStyle(accent)
+                }
+
+                // Source glyphs: web page, photo post, video post.
+                HStack(spacing: 7) {
+                    Image(systemName: "globe")
+                    Image(systemName: "photo.fill")
+                    Image(systemName: "play.rectangle.fill")
+                }
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color(red: 0.30, green: 0.34, blue: 0.55))
+
+                // "Import" chip — gently pulses to signal the one action.
+                HStack(spacing: 3) {
+                    Image(systemName: "square.and.arrow.down.fill")
+                        .font(.system(size: 9, weight: .bold))
+                    Text("Import")
+                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                }
+                .foregroundStyle(Color(red: 0.16, green: 0.20, blue: 0.42))
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2.5)
+                .background(
+                    Capsule(style: .continuous)
+                        .fill(Color(red: 0.84, green: 0.88, blue: 1.00))
+                )
+                .scaleEffect(importPulse ? 1.06 : 1.0)
             }
             .padding(12)
         }

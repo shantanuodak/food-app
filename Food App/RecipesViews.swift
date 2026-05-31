@@ -52,44 +52,85 @@ struct RecipesScreen: View {
     @State private var recipePendingDeletion: SavedRecipe?
     @State private var didPresentPendingDraft = false
 
+    /// True when iOS reports the clipboard holds a URL. Drives the animated
+    /// "Link detected" state on the docked Review button. Uses
+    /// `UIPasteboard.hasURLs` (silent — no paste-access privacy banner); the
+    /// actual string is only read when the user taps.
+    @State private var hasClipboardURL = false
+    /// Continuous 0→360 rotation driving the comet stroke around the button.
+    @State private var strokeRotation: Double = 0
+    /// 0→1 sweep position for the periodic horizontal shimmer band.
+    @State private var pillShimmerProgress: CGFloat = 0
+    @Environment(\.scenePhase) private var scenePhase
+
     init(pendingDraft: RecipeImportDraft? = nil, initialImportURL: String = "") {
         self.pendingDraft = pendingDraft
         _importURL = State(initialValue: initialImportURL)
     }
 
     var body: some View {
-        ScrollView(showsIndicators: false) {
-            VStack(alignment: .leading, spacing: 16) {
-                hero
-                importCard
-
-                if isLoading {
-                    RecipesLoadingCard()
-                } else if let errorMessage {
-                    RecipesStatusCard(
-                        icon: "exclamationmark.triangle.fill",
-                        title: "Couldn’t load recipes",
-                        message: errorMessage,
-                        tint: .red
-                    )
-                } else if recipes.isEmpty {
-                    RecipesStatusCard(
-                        icon: "book.closed.fill",
-                        title: "No recipes yet",
-                        message: "Import a recipe page, review the ingredients and steps, then save it here.",
-                        tint: RecipesTokens.orange
-                    )
-                } else {
-                    recipesSection
+        ZStack(alignment: .bottom) {
+            ScrollView(showsIndicators: false) {
+                VStack(alignment: .leading, spacing: 16) {
+                    if isLoading {
+                        RecipesLoadingCard()
+                    } else if let errorMessage {
+                        RecipesStatusCard(
+                            icon: "exclamationmark.triangle.fill",
+                            title: "Couldn’t load recipes",
+                            message: errorMessage,
+                            tint: .red
+                        )
+                    } else if recipes.isEmpty {
+                        RecipesStatusCard(
+                            icon: "book.closed.fill",
+                            title: "No recipes yet",
+                            message: "Import a recipe page, review the ingredients and steps, then save it here.",
+                            tint: RecipesTokens.orange
+                        )
+                    } else {
+                        recipesSection
+                    }
                 }
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                // Leave room so the last card clears the docked import bar.
+                .padding(.bottom, 260)
             }
-            .padding(.horizontal, 18)
-            .padding(.top, 18)
-            .padding(.bottom, 36)
+            .background(RecipesTokens.screenBackground.ignoresSafeArea())
+
+            dockedImportBar
         }
-        .background(RecipesTokens.screenBackground.ignoresSafeArea())
         .navigationTitle("Recipes")
         .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            checkClipboardForURL()
+            startStrokeRotationLoop()
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Users commonly copy a link in another app then return here.
+            if newPhase == .active { checkClipboardForURL() }
+        }
+        .task(id: hasClipboardURL) {
+            // Periodic shimmer sweep — runs only while the link-detected
+            // state is showing; cancelled when hasClipboardURL flips false.
+            guard hasClipboardURL else { return }
+            // (Re)start the comet rotation now that the pill is actually on
+            // screen. Kicking it off in onAppear didn't work: the pill is
+            // hidden then, so the repeatForever animation had no visible view
+            // to attach to (and detection is async, so it's never visible at
+            // onAppear anyway).
+            startStrokeRotationLoop()
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 800_000_000)
+                guard !Task.isCancelled && hasClipboardURL else { return }
+                withAnimation(.easeInOut(duration: 1.3)) { pillShimmerProgress = 1 }
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                var resetTxn = Transaction()
+                resetTxn.disablesAnimations = true
+                withTransaction(resetTxn) { pillShimmerProgress = 0 }
+            }
+        }
         .task {
             await loadRecipes()
             presentPendingDraftIfNeeded()
@@ -144,7 +185,7 @@ struct RecipesScreen: View {
                 selectedRecipe = nil
             }, onDelete: {
                 Task { await deleteRecipe(recipe) }
-            })
+            }, apiClient: appStore.apiClient)
             .presentationDetents([.large])
             .presentationDragIndicator(.visible)
             .presentationCornerRadius(24)
@@ -170,18 +211,24 @@ struct RecipesScreen: View {
         }
     }
 
-    private var hero: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Recipes")
-                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 44))
-                .foregroundStyle(RecipesTokens.ink)
+    /// The import card docked at the bottom of the screen. A short gradient
+    /// fade above it dissolves the scrolling recipe list as it passes
+    /// underneath, and a solid backing keeps the card legible.
+    private var dockedImportBar: some View {
+        VStack(spacing: 0) {
+            LinearGradient(
+                colors: [RecipesTokens.screenBackground.opacity(0), RecipesTokens.screenBackground],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .frame(height: 28)
+            .allowsHitTesting(false)
 
-            Text("Save recipes you find online, then review the ingredients and steps before they land in your library.")
-                .font(.system(size: 16, weight: .medium))
-                .foregroundStyle(RecipesTokens.muted)
-                .fixedSize(horizontal: false, vertical: true)
+            importCard
+                .padding(.horizontal, 18)
+                .padding(.bottom, 6)
+                .background(RecipesTokens.screenBackground)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var importCard: some View {
@@ -218,13 +265,6 @@ struct RecipesScreen: View {
             .padding(.trailing, 7)
             .padding(.vertical, 7)
             .background(RecipesTokens.fieldBackground, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(RecipesTokens.orange)
-                    .frame(width: 4)
-                    .clipShape(Capsule())
-                    .padding(.vertical, 11)
-            }
             .overlay {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
                     .stroke(RecipesTokens.fieldBorder, lineWidth: 1.25)
@@ -241,28 +281,7 @@ struct RecipesScreen: View {
                 sharedAudioImportCard(pendingAudioImport)
             }
 
-            Button {
-                AppHaptics.lightImpact()
-                Task { await importRecipe() }
-            } label: {
-                HStack(spacing: 8) {
-                    if isImporting {
-                        ProgressView()
-                            .tint(.white)
-                    } else {
-                        Image(systemName: "sparkles")
-                    }
-                    Text(isImporting ? "Reading recipe" : "Review recipe")
-                }
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 15)
-                .background(RecipesTokens.orange, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            }
-            .buttonStyle(.plain)
-            .disabled(isImporting || normalizedImportURL.isEmpty)
-            .opacity(isImporting || normalizedImportURL.isEmpty ? 0.55 : 1)
+            reviewButton
 
             if let browserURL = URL(string: normalizedImportURL), isSupportedRecipeURL(normalizedImportURL) {
                 let sourceHint = RecipeImportSourceHint.infer(url: browserURL)
@@ -293,6 +312,137 @@ struct RecipesScreen: View {
                 .stroke(RecipesTokens.border, lineWidth: 1)
         }
         .shadow(color: RecipesTokens.shadow, radius: 14, y: 6)
+    }
+
+    // MARK: - Review / Link-detected button
+    //
+    // When the clipboard holds a URL and the field is empty, the primary
+    // button becomes an animated "Link detected" pill (rotating comet stroke
+    // + shimmer sweep, mirroring the home recipes drawer) and a single tap
+    // pastes + imports the copied link. Otherwise it's the normal "Review
+    // recipe" action driven by whatever the user typed.
+
+    private var reviewButton: some View {
+        let linkMode = hasClipboardURL && normalizedImportURL.isEmpty && !isImporting
+        let isDisabled = !linkMode && normalizedImportURL.isEmpty
+
+        return Button {
+            AppHaptics.lightImpact()
+            if linkMode {
+                pasteAndImport()
+            } else {
+                Task { await importRecipe() }
+            }
+        } label: {
+            reviewButtonLabel(linkMode: linkMode)
+        }
+        .buttonStyle(.plain)
+        // Keep full vibrancy while importing (don't let .disabled dim it);
+        // just block re-taps via hit-testing.
+        .allowsHitTesting(!isImporting && !isDisabled)
+        .opacity(isDisabled ? 0.55 : 1)
+        .animation(.spring(response: 0.42, dampingFraction: 0.86), value: hasClipboardURL)
+    }
+
+    @ViewBuilder
+    private func reviewButtonLabel(linkMode: Bool) -> some View {
+        HStack(spacing: 9) {
+            if isImporting {
+                ProgressView().tint(.white)
+                Text("Reading recipe")
+            } else if linkMode {
+                Image(systemName: "doc.on.clipboard.fill")
+                    .font(.system(size: 16, weight: .semibold))
+                Text("Link detected")
+            } else {
+                Image(systemName: "sparkles")
+                Text("Review recipe")
+            }
+        }
+        .font(.system(size: 16, weight: .bold))
+        .foregroundStyle(.white)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 16)
+        .background(RecipesTokens.orange, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            if linkMode {
+                // Moving-light "comet" stroke rotating around the perimeter.
+                RoundedRectangle(cornerRadius: 20, style: .continuous)
+                    .stroke(
+                        AngularGradient(
+                            gradient: Gradient(stops: [
+                                .init(color: .clear, location: 0.00),
+                                .init(color: .clear, location: 0.35),
+                                .init(color: .white.opacity(0.95), location: 0.50),
+                                .init(color: .clear, location: 0.65),
+                                .init(color: .clear, location: 1.00)
+                            ]),
+                            center: .center,
+                            startAngle: .degrees(strokeRotation),
+                            endAngle: .degrees(strokeRotation + 360)
+                        ),
+                        lineWidth: 2.5
+                    )
+                    .blendMode(.plusLighter)
+                    .allowsHitTesting(false)
+            }
+        }
+        .overlay {
+            if linkMode {
+                // Periodic horizontal shimmer sweep, masked to the shape.
+                GeometryReader { proxy in
+                    let bandWidth: CGFloat = max(80, proxy.size.width * 0.4)
+                    let xPosition = -bandWidth + pillShimmerProgress * (proxy.size.width + bandWidth)
+                    LinearGradient(
+                        colors: [.white.opacity(0.0), .white.opacity(0.45), .white.opacity(0.0)],
+                        startPoint: .leading,
+                        endPoint: .trailing
+                    )
+                    .frame(width: bandWidth, height: proxy.size.height)
+                    .offset(x: xPosition)
+                    .blendMode(.plusLighter)
+                }
+                .mask(RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .allowsHitTesting(false)
+            }
+        }
+        .shadow(color: RecipesTokens.orange.opacity(linkMode ? 0.4 : 0), radius: 14, y: 6)
+    }
+
+    /// Silent clipboard probe — neither path reads the clipboard's contents,
+    /// so no paste-access privacy banner appears. The actual string is only
+    /// read on tap.
+    private func checkClipboardForURL() {
+        // Fast path: a URL-typed item (copied from Safari's address bar, a
+        // Share sheet, etc.).
+        if UIPasteboard.general.hasURLs {
+            setClipboardURLDetected(true)
+            return
+        }
+        // Many apps (Instagram "Copy link", Messages, Notes) copy a link as
+        // PLAIN TEXT, so `hasURLs` is false even though it's clearly a URL.
+        // `detectPatterns(for:)` spots a URL-looking string without exposing
+        // the content or showing the paste banner.
+        let patterns: Set<UIPasteboard.DetectionPattern> = [.probableWebURL]
+        UIPasteboard.general.detectPatterns(for: patterns) { result in
+            let detected = ((try? result.get())?.contains(.probableWebURL)) ?? false
+            DispatchQueue.main.async { setClipboardURLDetected(detected) }
+        }
+    }
+
+    private func setClipboardURLDetected(_ detected: Bool) {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+            hasClipboardURL = detected
+        }
+    }
+
+    /// Continuous 360° rotation driving the comet stroke. Safe to call
+    /// repeatedly — a new `withAnimation` simply replaces the prior one.
+    private func startStrokeRotationLoop() {
+        strokeRotation = 0
+        withAnimation(.linear(duration: 2.5).repeatForever(autoreverses: false)) {
+            strokeRotation = 360
+        }
     }
 
     private func sharedAudioImportCard(_ pendingImport: RecipePendingAudioImport) -> some View {
@@ -387,7 +537,7 @@ struct RecipesScreen: View {
                 }
 
                 LazyVGrid(
-                    columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
+                    columns: [GridItem(.flexible(), spacing: 14, alignment: .top), GridItem(.flexible(), spacing: 14, alignment: .top)],
                     spacing: 14
                 ) {
                     ForEach(Array(recipes.dropFirst())) { recipe in
@@ -1216,11 +1366,23 @@ private enum RecipeSharedTextParser {
 
     nonisolated private static func title(from lines: [String]) -> String? {
         lines.first { line in
+            // Titles are never bulleted/numbered. Rejecting marker lines stops
+            // a measurement-less ingredient like "- Salt and pepper to taste"
+            // (which slips past `looksLikeIngredient`) from becoming the title.
+            !hasListMarker(line) &&
             !line.localizedCaseInsensitiveContains("ingredient") &&
             !isStepHeader(line.lowercased()) &&
             !looksLikeIngredient(line) &&
+            line.count >= 3 &&
             line.count <= 80
         }
+    }
+
+    /// True when the line begins with a bullet (`- `, `* `) or a numbered-list
+    /// marker (`1.`, `2)`). Mirrors `stripListMarker`'s pattern but requires
+    /// trailing whitespace, so titles like "5-Ingredient Pasta" aren't flagged.
+    nonisolated private static func hasListMarker(_ line: String) -> Bool {
+        line.range(of: #"^\s*([-*]|\d+[\.)])\s+"#, options: .regularExpression) != nil
     }
 
     nonisolated private static func looksLikeIngredient(_ line: String) -> Bool {
@@ -1432,6 +1594,10 @@ private enum RecipeBrowserImportJavaScript {
 
   const stripListMarker = (line) => cleanLine(line.replace(/^\s*([-*]|\d+[\.)])\s*/, ""));
 
+  // Titles are never bulleted/numbered — reject marker lines so a
+  // measurement-less ingredient ("- Salt and pepper to taste") can't win.
+  const hasListMarker = (line) => /^\s*([-*]|\d+[\.)])\s+/.test(String(line || ""));
+
   const looksLikeIngredient = (line) => {
     const value = cleanLine(line).toLowerCase();
     if (!value || value.length > 120) return false;
@@ -1455,7 +1621,9 @@ private enum RecipeBrowserImportJavaScript {
     const ingredients = uniqueClean(ingredientSection.map(stripListMarker).filter(looksLikeIngredient));
     const steps = uniqueClean(stepSection.map(stripListMarker).filter((line) => line.length >= 12 && !looksLikeIngredient(line)));
     const title = clean(lines.find((line) =>
+      line.length >= 3 &&
       line.length <= 80 &&
+      !hasListMarker(line) &&
       !line.toLowerCase().includes("ingredient") &&
       !isStepHeader(line) &&
       !looksLikeIngredient(line)
@@ -1585,10 +1753,6 @@ struct RecipeReviewSheet: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Check the scrape")
-                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 38))
-                .foregroundStyle(RecipesTokens.ink)
-
             if let sourceLabel {
                 Label(sourceLabel, systemImage: "link")
                     .font(.system(size: 13, weight: .semibold))
@@ -1898,8 +2062,8 @@ struct RecipeLibraryView: View {
     var onImport: () -> Void = {}
 
     private let columns = [
-        GridItem(.flexible(), spacing: 14),
-        GridItem(.flexible(), spacing: 14)
+        GridItem(.flexible(), spacing: 14, alignment: .top),
+        GridItem(.flexible(), spacing: 14, alignment: .top)
     ]
 
     var body: some View {
@@ -2057,19 +2221,34 @@ struct RecipeLibraryCard: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            RecipeArtwork(recipe: recipe, glyphSize: 34)
-                .frame(height: 120)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            // Image-forward: the title sits ON the photo over a bottom
+            // gradient scrim for legibility — the same treatment as the
+            // featured card, so every card on the page reads consistently.
+            ZStack(alignment: .bottomLeading) {
+                RecipeArtwork(recipe: recipe, glyphSize: 34)
+                    .frame(height: 132)
+                    .frame(maxWidth: .infinity)
 
-            VStack(alignment: .leading, spacing: 7) {
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.10), .black.opacity(0.66)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+
                 Text(recipe.title)
-                    .font(.system(size: 15.5, weight: .bold))
-                    .foregroundStyle(RecipesTokens.ink)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.white)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
+                    .shadow(color: .black.opacity(0.45), radius: 6, y: 1)
                     .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.bottom, 11)
+            }
+            .frame(height: 132)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
+            VStack(alignment: .leading, spacing: 5) {
                 HStack(spacing: 6) {
                     Image(systemName: "carrot.fill")
                         .font(.system(size: 10, weight: .bold))
@@ -2081,17 +2260,26 @@ struct RecipeLibraryCard: View {
                 .foregroundStyle(RecipesTokens.muted)
                 .lineLimit(1)
 
-                if let source = recipeSourceLabel(recipe) {
-                    Text(source)
-                        .font(.system(size: 11.5, weight: .bold))
-                        .foregroundStyle(RecipesTokens.orange)
-                        .lineLimit(1)
-                }
+                // Always reserve the source line (placeholder space when a
+                // recipe has no source) so every card has the same intrinsic
+                // height and the artwork lines up across the row WITHOUT a
+                // `maxHeight: .infinity` stretch — that stretch made LazyVGrid
+                // cells expand to the scroll view's height and overlap.
+                Text(recipeSourceLabel(recipe) ?? " ")
+                    .font(.system(size: 11.5, weight: .bold))
+                    .foregroundStyle(RecipesTokens.orange)
+                    .lineLimit(1)
+                    .opacity(recipeSourceLabel(recipe) == nil ? 0 : 1)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 12)
             .padding(.top, 11)
             .padding(.bottom, 13)
         }
+        // Fill the column width and pin content to the top. Height is uniform
+        // across cards (fixed-height artwork + one meta line + one reserved
+        // source line), so the grid rows line up without stretching.
+        .frame(maxWidth: .infinity, alignment: .top)
         .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
         .overlay {
             RoundedRectangle(cornerRadius: 22, style: .continuous)
@@ -2108,75 +2296,92 @@ struct RecipeLibraryCard: View {
 struct RecipeDetailView: View {
     let recipe: SavedRecipe
     var onClose: () -> Void = {}
-    /// When set, a trash button appears in the floating bar; tapping it
+    /// When set, a trash button appears in the navigation bar; tapping it
     /// confirms, then invokes this to hard-delete + dismiss. Wired by both
     /// the full Recipes screen and the home recipes drawer to their own
     /// `deleteRecipe(_:)`.
     var onDelete: (() -> Void)? = nil
+    /// Supplied by the full Recipes screen so the per-serving nutrition button
+    /// can call the parse endpoint on demand. Nil in previews / surfaces without
+    /// an authenticated client — the nutrition section simply hides in that case.
+    var apiClient: APIClient? = nil
 
     @State private var checkedIngredients: Set<Int> = []
     @State private var showDeleteConfirm = false
+    @State private var servingNutrition: NutritionTotals?
+    @State private var isCalculatingNutrition = false
+    @State private var nutritionErrorMessage: String?
     @Environment(\.openURL) private var openURL
 
     var body: some View {
-        ZStack(alignment: .top) {
-            RecipesTokens.screenBackground.ignoresSafeArea()
-
+        NavigationStack {
             ScrollView(showsIndicators: false) {
                 VStack(spacing: 0) {
                     hero
                     VStack(alignment: .leading, spacing: 22) {
                         titleBlock
                         metaRow
+                        nutritionSection
                         ingredientsSection
                         stepsSection
                         sourceFooter
                     }
                     .padding(.horizontal, 18)
-                    .padding(.top, 18)
+                    .padding(.top, 20)
                     .padding(.bottom, 40)
-                    .background(
-                        RecipesTokens.screenBackground
-                            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-                    )
-                    .offset(y: -26)
                 }
             }
-            .ignoresSafeArea(edges: .top)
-
-            floatingBar
-        }
-        .confirmationDialog(
-            "Delete recipe?",
-            isPresented: $showDeleteConfirm,
-            titleVisibility: .visible
-        ) {
-            Button("Delete recipe", role: .destructive) {
-                AppHaptics.warning()
-                onDelete?()
+            .background(RecipesTokens.screenBackground.ignoresSafeArea())
+            .navigationTitle("Recipe Details")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("Done") {
+                        AppHaptics.lightImpact()
+                        onClose()
+                    }
+                    .fontWeight(.semibold)
+                }
+                if onDelete != nil {
+                    ToolbarItem(placement: .topBarTrailing) {
+                        Button(role: .destructive) {
+                            AppHaptics.lightImpact()
+                            showDeleteConfirm = true
+                        } label: {
+                            Image(systemName: "trash")
+                        }
+                        .accessibilityLabel("Delete recipe")
+                    }
+                }
             }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("“\(recipe.title)” will be removed from your recipes. This can’t be undone.")
+            .confirmationDialog(
+                "Delete recipe?",
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button("Delete recipe", role: .destructive) {
+                    AppHaptics.warning()
+                    onDelete?()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("“\(recipe.title)” will be removed from your recipes. This can’t be undone.")
+            }
         }
     }
 
     private var hero: some View {
-        ZStack(alignment: .bottomLeading) {
-            RecipeArtwork(recipe: recipe, glyphSize: 64)
-                .frame(height: 280)
-                .frame(maxWidth: .infinity)
-                .clipped()
-
-            LinearGradient(
-                colors: [.clear, .black.opacity(0.10), .black.opacity(0.45)],
-                startPoint: .top,
-                endPoint: .bottom
+        RecipeArtwork(recipe: recipe, glyphSize: 64)
+            .frame(height: 220)
+            .frame(maxWidth: .infinity)
+            .overlay(
+                LinearGradient(
+                    colors: [.clear, .black.opacity(0.04), .black.opacity(0.22)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
             )
-        }
-        .frame(height: 280)
-        .frame(maxWidth: .infinity)
-        .clipped()
+            .clipped()
     }
 
     private var titleBlock: some View {
@@ -2213,6 +2418,169 @@ struct RecipeDetailView: View {
                 icon: "person.2.fill"
             )
         }
+    }
+
+    // MARK: Per-serving nutrition (on-demand, one parse call, cached)
+
+    @ViewBuilder
+    private var nutritionSection: some View {
+        if apiClient != nil, !recipe.ingredients.isEmpty {
+            VStack(alignment: .leading, spacing: 12) {
+                sectionHeader(title: "Nutrition", icon: "flame.fill", trailing: "1 serving")
+
+                if let servingNutrition {
+                    nutritionCard(servingNutrition)
+                } else {
+                    calculateNutritionButton
+                }
+
+                if let nutritionErrorMessage {
+                    Text(nutritionErrorMessage)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.red)
+                }
+            }
+        }
+    }
+
+    private var calculateNutritionButton: some View {
+        Button {
+            AppHaptics.lightImpact()
+            Task { await calculateNutrition() }
+        } label: {
+            HStack(spacing: 9) {
+                if isCalculatingNutrition {
+                    ProgressView().tint(RecipesTokens.orange)
+                } else {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 15, weight: .bold))
+                }
+                Text(isCalculatingNutrition ? "Calculating…" : "Calculate nutrition")
+                    .font(.system(size: 15, weight: .bold))
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(RecipesTokens.orange)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 15)
+            .frame(maxWidth: .infinity)
+            .background(RecipesTokens.orangeSoft, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(isCalculatingNutrition)
+        .accessibilityLabel("Calculate nutrition for one serving")
+    }
+
+    private func nutritionCard(_ totals: NutritionTotals) -> some View {
+        let macroCalories = max(1.0, totals.protein * 4 + totals.carbs * 4 + totals.fat * 9)
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text("\(Int(totals.calories.rounded()))")
+                    .font(.system(size: 30, weight: .heavy))
+                    .foregroundStyle(RecipesTokens.ink)
+                    .monospacedDigit()
+                Text("kcal")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(RecipesTokens.muted)
+                Spacer(minLength: 0)
+            }
+
+            RecipeMacroBar(title: "Protein", grams: totals.protein, percent: (totals.protein * 4) / macroCalories, color: .blue)
+            RecipeMacroBar(title: "Carbs", grams: totals.carbs, percent: (totals.carbs * 4) / macroCalories, color: .green)
+            RecipeMacroBar(title: "Fat", grams: totals.fat, percent: (totals.fat * 9) / macroCalories, color: .orange)
+
+            Text("Estimated per serving from the ingredient list.")
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(RecipesTokens.muted)
+        }
+        .padding(16)
+        .background(RecipesTokens.cardBackground, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 22, style: .continuous)
+                .stroke(RecipesTokens.border, lineWidth: 1)
+        }
+    }
+
+    @MainActor
+    private func calculateNutrition() async {
+        guard let apiClient, !recipe.ingredients.isEmpty, !isCalculatingNutrition else { return }
+        isCalculatingNutrition = true
+        nutritionErrorMessage = nil
+        defer { isCalculatingNutrition = false }
+
+        let lines = recipe.ingredients
+            .map { $0.text }
+            .filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        guard !lines.isEmpty else {
+            nutritionErrorMessage = "This recipe has no ingredients to total up."
+            return
+        }
+
+        // The /v1/logs/parse endpoint caps `text` at 500 chars — it's tuned
+        // for a single meal. A full ingredient list (e.g. a 31-ingredient
+        // recipe) blows past that, which is why nutrition silently failed.
+        // Batch the lines into sub-500-char chunks, parse each, and sum the
+        // totals so the recipe total is the same regardless of length.
+        let batches = Self.batchIngredientLines(lines, maxChars: 480)
+        let loggedAt = HomeLoggingDateUtils.loggedAtFormatter.string(from: Date())
+
+        do {
+            var calories = 0.0, protein = 0.0, carbs = 0.0, fat = 0.0
+            for batch in batches {
+                let response = try await apiClient.parseLog(ParseLogRequest(text: batch, loggedAt: loggedAt))
+                calories += response.totals.calories
+                protein += response.totals.protein
+                carbs += response.totals.carbs
+                fat += response.totals.fat
+            }
+            let divisor = Self.servingCount(from: recipe.servings)
+            servingNutrition = NutritionTotals(
+                calories: calories / divisor,
+                protein: protein / divisor,
+                carbs: carbs / divisor,
+                fat: fat / divisor
+            )
+            AppHaptics.lightImpact()
+        } catch {
+            nutritionErrorMessage = "Couldn’t calculate nutrition right now. Try again."
+        }
+    }
+
+    /// Group ingredient lines into newline-joined chunks no longer than
+    /// `maxChars`, keeping each within the parse endpoint's 500-char limit.
+    /// Ingredient nutrition is additive and each line is self-contained, so
+    /// splitting and summing yields the same total as one call. A single line
+    /// longer than the cap is truncated rather than stalling the batch.
+    static func batchIngredientLines(_ lines: [String], maxChars: Int) -> [String] {
+        var batches: [String] = []
+        var current = ""
+        for line in lines {
+            let candidate = current.isEmpty ? line : current + "\n" + line
+            if candidate.count <= maxChars {
+                current = candidate
+            } else {
+                if !current.isEmpty { batches.append(current) }
+                current = line.count <= maxChars ? line : String(line.prefix(maxChars))
+            }
+        }
+        if !current.isEmpty { batches.append(current) }
+        return batches
+    }
+
+    /// Pulls the first number out of a freeform servings string ("4",
+    /// "Serves 4", "1 loaf", "2-3" → 2). Falls back to 1 so the parse total
+    /// is shown as-is when servings is unknown.
+    static func servingCount(from servings: String?) -> Double {
+        guard let servings else { return 1 }
+        var digits = ""
+        for ch in servings {
+            if ch.isNumber || (ch == "." && !digits.isEmpty) {
+                digits.append(ch)
+            } else if !digits.isEmpty {
+                break
+            }
+        }
+        let value = Double(digits) ?? 1
+        return value > 0 ? value : 1
     }
 
     private var ingredientsSection: some View {
@@ -2306,32 +2674,6 @@ struct RecipeDetailView: View {
         }
     }
 
-    private var floatingBar: some View {
-        HStack {
-            circleButton(icon: "chevron.left", action: onClose)
-            Spacer()
-            if onDelete != nil {
-                circleButton(icon: "trash") { showDeleteConfirm = true }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
-    }
-
-    private func circleButton(icon: String, action: @escaping () -> Void) -> some View {
-        Button {
-            AppHaptics.lightImpact()
-            action()
-        } label: {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .bold))
-                .foregroundStyle(RecipesTokens.ink)
-                .frame(width: 38, height: 38)
-                .background(.ultraThinMaterial, in: Circle())
-                .overlay(Circle().stroke(.white.opacity(0.25), lineWidth: 0.5))
-        }
-        .buttonStyle(.plain)
-    }
 }
 
 private struct RecipeStatTile: View {
@@ -2359,6 +2701,39 @@ private struct RecipeStatTile: View {
         .overlay {
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .stroke(RecipesTokens.border, lineWidth: 1)
+        }
+    }
+}
+
+/// Compact macro progress bar — mirrors the home-screen nutrition summary
+/// rows so the per-serving breakdown reads consistently across the app.
+private struct RecipeMacroBar: View {
+    let title: String
+    let grams: Double
+    let percent: Double
+    let color: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(title)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(RecipesTokens.ink)
+                Spacer()
+                Text("\(Int(grams.rounded()))g · \(Int((percent * 100).rounded()))%")
+                    .font(.system(size: 13, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(RecipesTokens.muted)
+            }
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color(.systemGray5))
+                    Capsule()
+                        .fill(color.gradient)
+                        .frame(width: max(0, min(proxy.size.width, proxy.size.width * percent)))
+                }
+            }
+            .frame(height: 9)
         }
     }
 }
@@ -2400,9 +2775,10 @@ private struct RecipeStepRow: View {
         HStack(alignment: .top, spacing: 14) {
             Text("\(number)")
                 .font(OnboardingTypography.instrumentSerif(style: .regular, size: 22))
-                .foregroundStyle(RecipesTokens.orange)
+                .foregroundStyle(RecipesTokens.ink)
                 .frame(width: 38, height: 38)
-                .background(RecipesTokens.orangeSoft, in: Circle())
+                .background(Color.primary.opacity(0.10), in: Circle())
+                .overlay(Circle().stroke(Color.primary.opacity(0.16), lineWidth: 1))
 
             Text(text)
                 .font(.system(size: 15, weight: .medium))

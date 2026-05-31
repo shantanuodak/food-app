@@ -173,6 +173,9 @@ extension MainLoggingShellView {
             } else {
                 dayCacheHydrationLogs[dateToLoad] = response
             }
+            // Persist to disk on every successful load (both branches) so water
+            // survives cold starts and paints instantly, matching food logs.
+            persistHydrationDayLogsToCache(response, date: dateToLoad)
         } catch is CancellationError {
             // ignore
         } catch {
@@ -210,6 +213,18 @@ extension MainLoggingShellView {
 
     func removeDayLogsCacheEntry(date: String) {
         HomeDayLogsDiskCache.remove(date: date, defaults: defaults)
+    }
+
+    func persistHydrationDayLogsToCache(_ response: HydrationDayLogsResponse, date: String) {
+        HomeHydrationDayLogsDiskCache.persist(response, date: date, defaults: defaults)
+    }
+
+    func loadHydrationDayLogsFromCache(date: String) -> HydrationDayLogsResponse? {
+        HomeHydrationDayLogsDiskCache.load(date: date, defaults: defaults)
+    }
+
+    func removeHydrationDayLogsCacheEntry(date: String) {
+        HomeHydrationDayLogsDiskCache.remove(date: date, defaults: defaults)
     }
 
     func removeDaySummaryCacheEntry(date: String) {
@@ -553,7 +568,7 @@ extension MainLoggingShellView {
             for offset in 1...count {
                 let pastDate = calendar.date(byAdding: .day, value: -offset, to: date) ?? date
                 let dateStr = formatter.string(from: pastDate)
-                if dayCacheSummary[dateStr] == nil || dayCacheLogs[dateStr] == nil {
+                if dayCacheSummary[dateStr] == nil || dayCacheLogs[dateStr] == nil || dayCacheHydrationLogs[dateStr] == nil {
                     needsFetch = true
                     break
                 }
@@ -579,16 +594,21 @@ extension MainLoggingShellView {
                     dayCacheLogs[logs.date] = logs
                     persistDayLogsToCache(logs, date: logs.date)
                 }
+                for hydration in range.hydration ?? [] {
+                    dayCacheHydrationLogs[hydration.date] = hydration
+                    persistHydrationDayLogsToCache(hydration, date: hydration.date)
+                }
             } catch {
                 // Fallback: fetch individually if batch fails
                 for offset in 1...count {
                     guard !Task.isCancelled else { return }
                     let pastDate = calendar.date(byAdding: .day, value: -offset, to: date) ?? date
                     let dateStr = formatter.string(from: pastDate)
-                    guard dayCacheSummary[dateStr] == nil || dayCacheLogs[dateStr] == nil else { continue }
+                    guard dayCacheSummary[dateStr] == nil || dayCacheLogs[dateStr] == nil || dayCacheHydrationLogs[dateStr] == nil else { continue }
 
                     async let summaryResult = try? appStore.apiClient.getDaySummary(date: dateStr)
                     async let logsResult = try? appStore.apiClient.getDayLogs(date: dateStr)
+                    async let hydrationResult = try? appStore.apiClient.getHydrationDayLogs(date: dateStr)
                     if let summary = await summaryResult {
                         dayCacheSummary[dateStr] = summary
                         persistDaySummaryToCache(summary, date: dateStr)
@@ -596,6 +616,10 @@ extension MainLoggingShellView {
                     if let logs = await logsResult {
                         dayCacheLogs[dateStr] = logs
                         persistDayLogsToCache(logs, date: dateStr)
+                    }
+                    if let hydration = await hydrationResult {
+                        dayCacheHydrationLogs[dateStr] = hydration
+                        persistHydrationDayLogsToCache(hydration, date: dateStr)
                     }
                 }
             }
@@ -609,6 +633,7 @@ extension MainLoggingShellView {
         dayCacheHydrationLogs.removeValue(forKey: dateString)
         removeDaySummaryCacheEntry(date: dateString)
         removeDayLogsCacheEntry(date: dateString)
+        removeHydrationDayLogsCacheEntry(date: dateString)
     }
 
     /// Returns true for errors that are transient and worth retrying automatically.

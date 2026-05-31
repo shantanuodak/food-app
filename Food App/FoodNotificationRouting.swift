@@ -21,6 +21,7 @@ enum FoodNotificationCategory {
     static let mealReminder = "food-app.category.meal-reminder"
     static let engagement = "food-app.category.engagement"
     static let discovery = "food-app.category.discovery"
+    static let healthNudge = "food-app.category.health-nudge"
 
     static func categories() -> Set<UNNotificationCategory> {
         let voice = UNNotificationAction(
@@ -62,8 +63,16 @@ enum FoodNotificationCategory {
             intentIdentifiers: [],
             options: []
         )
+        // Health nudges: a quick log path plus a snooze. Movement nudges
+        // carry the same actions — logging a post-walk snack is fair game.
+        let healthNudge = UNNotificationCategory(
+            identifier: Self.healthNudge,
+            actions: [text, voice, snooze],
+            intentIdentifiers: [],
+            options: []
+        )
 
-        return [mealReminder, engagement, discovery]
+        return [mealReminder, engagement, discovery, healthNudge]
     }
 
     static func configure(center: UNUserNotificationCenter = .current()) {

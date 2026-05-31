@@ -546,7 +546,7 @@ struct HydrationLogResponse: Decodable, Equatable {
     let log: HydrationLog
 }
 
-struct HydrationLog: Decodable, Identifiable, Equatable, Hashable {
+struct HydrationLog: Codable, Identifiable, Equatable, Hashable {
     let id: String
     let loggedAt: String
     let rawText: String
@@ -575,7 +575,7 @@ struct HydrationDaySummaryResponse: Decodable, Equatable {
     let logsCount: Int
 }
 
-struct HydrationDayLogsResponse: Decodable, Equatable {
+struct HydrationDayLogsResponse: Codable, Equatable {
     let date: String
     let timezone: String
     let logs: [HydrationLog]
@@ -801,6 +801,9 @@ struct DayLogItem: Codable, Identifiable {
 struct DayRangeResponse: Decodable {
     let summaries: [DaySummaryResponse]
     let logs: [DayLogsResponse]
+    // Optional so the app keeps decoding against a backend that predates the
+    // hydration batch. Absent → treated as "no hydration prefetched".
+    let hydration: [HydrationDayLogsResponse]?
 }
 
 struct ProgressResponse: Decodable {

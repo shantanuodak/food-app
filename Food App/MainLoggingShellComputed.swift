@@ -52,6 +52,7 @@ extension MainLoggingShellView {
             firstName: loggedInFirstName,
             dateTitle: todayPillTitle,
             colorScheme: colorScheme,
+            scrimOpacity: headerScrimOpacity,
             isFoodStoryPresented: $isFoodStoryPresented,
             isProfilePresented: $isProfilePresented,
             isCalendarPresented: $isCalendarPresented

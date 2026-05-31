@@ -120,6 +120,12 @@ enum FoodAppNotificationIdentifier {
     static let reactivation48h = "food-app.engagement.reactivation.48h"
     static let featureDiscovery = "food-app.discovery.next"
 
+    // Real-time health nudges (see HealthNudgeScheduler).
+    static let hydrationMidday = "food-app.health.hydration.midday"
+    static let hydrationEvening = "food-app.health.hydration.evening"
+    static let proteinNudge = "food-app.health.protein"
+    static let movementNudge = "food-app.health.movement"
+
     static let allFoodAppPrefix = "food-app."
 }
 
@@ -258,6 +264,9 @@ enum AdminTestNotificationKind: String, CaseIterable, Identifiable {
     case dinner
     case endOfDay
     case discovery
+    case hydration
+    case protein
+    case movement
 
     var id: String { rawValue }
 
@@ -273,6 +282,12 @@ enum AdminTestNotificationKind: String, CaseIterable, Identifiable {
             return "Still time for a tiny save 🌙"
         case .discovery:
             return "Try the lazy log lane 📸"
+        case .hydration:
+            return "Hydration check 💧"
+        case .protein:
+            return "Protein is lagging 🍗"
+        case .movement:
+            return "Let's get moving 🚶"
         }
     }
 
@@ -288,6 +303,12 @@ enum AdminTestNotificationKind: String, CaseIterable, Identifiable {
             return "One sentence beats a blank day. Drop in the meal you remember and call it a win."
         case .discovery:
             return "Voice, text, or camera — pick the least annoying one and let Amy do the math."
+        case .hydration:
+            return "You're a little behind on water today. A glass now keeps you on pace — tap to log it."
+        case .protein:
+            return "You're behind on protein. Plan a protein-forward dinner — tap to log."
+        case .movement:
+            return "A short walk now closes the gap on your step goal — every bit counts."
         }
     }
 
@@ -303,6 +324,12 @@ enum AdminTestNotificationKind: String, CaseIterable, Identifiable {
             return "clock.badge.exclamationmark.fill"
         case .discovery:
             return "camera.fill"
+        case .hydration:
+            return "drop.fill"
+        case .protein:
+            return "fork.knife"
+        case .movement:
+            return "figure.walk"
         }
     }
 
@@ -314,6 +341,8 @@ enum AdminTestNotificationKind: String, CaseIterable, Identifiable {
             return FoodNotificationCategory.engagement
         case .discovery:
             return FoodNotificationCategory.discovery
+        case .hydration, .protein, .movement:
+            return FoodNotificationCategory.healthNudge
         }
     }
 
@@ -323,6 +352,10 @@ enum AdminTestNotificationKind: String, CaseIterable, Identifiable {
             return .voice
         case .discovery:
             return .camera
+        case .hydration, .protein:
+            return .text
+        case .movement:
+            return .home
         }
     }
 }

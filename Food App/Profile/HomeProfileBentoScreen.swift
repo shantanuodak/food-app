@@ -120,6 +120,7 @@ struct HomeProfileBentoScreen: View {
                         // on every glance.
                         SavedMealsTile()
                         RecipesTile()
+                        TutorialsTile()
                         HStack(alignment: .top, spacing: 12) {
                             NavigationLink {
                                 BadgesTrophyCaseView(currentStreakDays: streakDays)
@@ -563,6 +564,70 @@ struct HomeProfileBentoScreen: View {
 
 // MARK: - Tiles
 
+/// One warm, orange-tinted gradient theme for the calorie hero card. The
+/// card rotates through `all` on each open (see `CalorieHeroTile.onAppear`)
+/// so the surface feels alive without ever straying from the brand's orange
+/// identity — every variant shares the same temperature and depth, nudged
+/// only across hue (amber → coral → tangerine → rose).
+struct HeroGradientPalette {
+    let top: Color
+    let mid: Color
+    let bottom: Color
+    /// Soft top-right spotlight strength. Deliberately low — a strong white
+    /// glow was washing out the upper-right and dulling the color. Just enough
+    /// to keep the "lit from above" read without graying the gradient.
+    var spotlight: Double = 0.16
+
+    var gradient: LinearGradient {
+        LinearGradient(
+            colors: [top, mid, bottom],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+
+    // Display P3 + low blue channels = high-chroma, vivid oranges that punch
+    // on modern displays instead of reading pastel. Each variant keeps a near-
+    // 1.0 red and drives blue toward 0 so the color stays saturated, not washed.
+    private static func p3(_ r: Double, _ g: Double, _ b: Double) -> Color {
+        Color(.displayP3, red: r, green: g, blue: b)
+    }
+
+    static let all: [HeroGradientPalette] = [
+        // Classic brand orange — vivid.
+        HeroGradientPalette(
+            top:    p3(1.00, 0.58, 0.10),
+            mid:    p3(1.00, 0.42, 0.04),
+            bottom: p3(0.93, 0.30, 0.02)
+        ),
+        // Amber gold — saturated golden, near-zero blue.
+        HeroGradientPalette(
+            top:    p3(1.00, 0.72, 0.08),
+            mid:    p3(1.00, 0.54, 0.02),
+            bottom: p3(0.96, 0.40, 0.00)
+        ),
+        // Sunset coral — vivid warm coral with deep pink-red shadows.
+        HeroGradientPalette(
+            top:    p3(1.00, 0.48, 0.26),
+            mid:    p3(1.00, 0.32, 0.16),
+            bottom: p3(0.93, 0.18, 0.10)
+        ),
+        // Tangerine red — deep, fully saturated red-orange.
+        HeroGradientPalette(
+            top:    p3(1.00, 0.46, 0.06),
+            mid:    p3(1.00, 0.30, 0.02),
+            bottom: p3(0.86, 0.16, 0.00)
+        ),
+        // Peach rose — the lightest variant, but punched up so it no longer
+        // reads pastel: still warm-pink, just far more saturated.
+        HeroGradientPalette(
+            top:    p3(1.00, 0.54, 0.30),
+            mid:    p3(1.00, 0.38, 0.20),
+            bottom: p3(0.95, 0.24, 0.14)
+        )
+    ]
+}
+
 /// Hero card — full-width warm gradient, calorie ring + 2×2 macro stats.
 struct CalorieHeroTile: View {
     struct Data {
@@ -619,6 +684,13 @@ struct CalorieHeroTile: View {
     /// hero card — background highlight, specular sweep, and ring/macros
     /// each respond at different intensities so the card reads as 3D.
     @StateObject private var tilt = DeviceTiltMotion()
+    /// Persisted rotation cursor — advanced once per card open so each visit
+    /// lands on the next orange palette and cycles through all of them.
+    @AppStorage("heroGradientRotationIndex") private var gradientRotationIndex: Int = 0
+    /// The palette chosen for this card's lifetime. Picked once in `onAppear`
+    /// so it stays stable while the card is on screen, then a fresh one is
+    /// chosen the next time the card appears.
+    @State private var activePalette: HeroGradientPalette?
 
     private var progress: Double {
         guard data.target > 0 else { return 0 }
@@ -662,6 +734,12 @@ struct CalorieHeroTile: View {
     private let cardPerspective: CGFloat = 0.55
 
     private var parallaxEnabled: Bool { !reduceMotion }
+
+    /// Wrap an arbitrary (possibly negative) cursor into a valid palette index.
+    private func paletteIndex(for cursor: Int) -> Int {
+        let count = HeroGradientPalette.all.count
+        return ((cursor % count) + count) % count
+    }
 
     var body: some View {
         Button(action: { isTargetsEditorPresented = true }) {
@@ -716,6 +794,14 @@ struct CalorieHeroTile: View {
         .buttonStyle(.plain)
         .accessibilityLabel("Today's progress. Tap to edit daily targets.")
         .onAppear {
+            // Rotate to the next orange palette on each open, then advance the
+            // persisted cursor so the following open lands on a fresh one.
+            // Guarded so re-renders during this card's lifetime don't re-roll.
+            if activePalette == nil {
+                let index = paletteIndex(for: gradientRotationIndex)
+                activePalette = HeroGradientPalette.all[index]
+                gradientRotationIndex = index + 1
+            }
             if parallaxEnabled { tilt.start() }
         }
         .onDisappear { tilt.stop() }
@@ -747,27 +833,24 @@ struct CalorieHeroTile: View {
     /// highlight reads more vivid, and the whole-card translation gives the
     /// motion feel without the layered jitter.
     private var premiumBackground: some View {
-        ZStack {
+        // One of several orange-family palettes, rotated per open. Until
+        // onAppear locks this visit's theme, derive it read-only from the
+        // persisted cursor so the very first frame already shows the right
+        // palette (no flash from a fallback to the chosen one).
+        let palette = activePalette ?? HeroGradientPalette.all[paletteIndex(for: gradientRotationIndex)]
+        return ZStack {
             // Boosted-saturation brand orange gradient. Slightly more
             // vivid than BentoTokens.heroGradient — punches up the card so
             // the rim light and shadows still read as "lifted" without a
             // glass overlay damping the color.
-            LinearGradient(
-                colors: [
-                    Color(red: 1.00, green: 0.65, blue: 0.22),
-                    Color(red: 0.98, green: 0.48, blue: 0.16),
-                    Color(red: 0.93, green: 0.36, blue: 0.10)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
+            palette.gradient
 
             // Soft spotlight in the top-right corner. Static (no
             // counter-parallax) so it always feels like the light source
             // is "above" — the whole-card translation moves this with the
             // rest of the card, which reads correctly.
             RadialGradient(
-                colors: [Color.white.opacity(0.34), .clear],
+                colors: [Color.white.opacity(palette.spotlight), .clear],
                 center: .init(x: 0.85, y: 0.08),
                 startRadius: 4,
                 endRadius: 260
@@ -959,16 +1042,21 @@ struct CalorieHeroTile: View {
                 .font(.system(size: 10, weight: .black, design: .rounded))
                 .tracking(0.7)
                 .foregroundStyle(.white.opacity(0.82))
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(.system(size: 20, weight: .heavy, design: .rounded))
-                    .contentTransition(reduceMotion ? .identity : .numericText())
+            Group {
                 if let suffix {
-                    Text(" \(suffix)")
+                    Text(value)
+                        .font(.system(size: 20, weight: .heavy, design: .rounded))
+                    + Text(" \(suffix)")
                         .font(.system(size: 12, weight: .semibold, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.74))
+                        .foregroundColor(.white.opacity(0.74))
+                } else {
+                    Text(value)
+                        .font(.system(size: 20, weight: .heavy, design: .rounded))
                 }
             }
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .contentTransition(reduceMotion ? .identity : .numericText())
             .foregroundStyle(.white)
         }
         .accessibilityElement(children: .ignore)
@@ -1089,6 +1177,45 @@ private struct RecipesTile: View {
             .accessibilityElement(children: .ignore)
             .accessibilityLabel("Recipes. Review recipes imported from the web.")
             .accessibilityHint("Opens recipes")
+        }
+    }
+}
+
+/// Tutorials — short how-to videos for learning the app. Moved out of the
+/// home dock so the header stays focused on logging; lives here next to the
+/// other "learn / manage" entries.
+private struct TutorialsTile: View {
+    var body: some View {
+        BentoTappableTile(
+            background: BentoTokens.whiteTileBackground,
+            border: BentoTokens.whiteTileBorder
+        ) {
+            TutorialLibrarySheet()
+        } label: {
+            HStack(alignment: .center, spacing: 14) {
+                Image(systemName: "play.rectangle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(BentoTokens.orange700)
+                    .frame(width: 42, height: 42, alignment: .center)
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Tutorials")
+                        .font(.system(size: 19, weight: .bold))
+                        .foregroundStyle(BentoTokens.gray900)
+
+                    Text("See how to use the app in a few short videos.")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(BentoTokens.gray700)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 0)
+            }
+            .frame(maxWidth: .infinity, minHeight: 74, alignment: .leading)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel("Tutorials. See how to use the app in a few short videos.")
+            .accessibilityHint("Opens tutorials")
         }
     }
 }

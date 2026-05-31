@@ -8,37 +8,6 @@ import UIKit
 // See docs/CLAUDE_PHASE_7A_REMAINING_HANDOFF.md Part 2.
 
 extension MainLoggingShellView {
-    /// Whether the always-on recipes peek drawer should yield the home
-    /// view's single sheet-presentation slot. True whenever any other
-    /// home modal is up — the recipes sheet must dismiss so that modal
-    /// can present at its full detent, then re-present when it closes.
-    /// (Deliberately excludes keyboard + voice, which the modifier
-    /// already handles via its own params.)
-    var isRecipesDrawerSuppressed: Bool {
-        isDetailsDrawerPresented ||
-            selectedRowDetails != nil ||
-            isProfilePresented ||
-            isCalendarPresented ||
-            isNutritionSummaryPresented ||
-            isProgressChartsPresented ||
-            isSavedMealsPresented ||
-            isRecipesPresented ||
-            isFoodStoryPresented ||
-            isLoggingTipsPresented ||
-            isLoggingTipsPromptPresented ||
-            isStreakDrawerPresented ||
-            isBadgesTrophyCasePresented ||
-            isHydrationGoalPromptPresented ||
-            hydrationAmountPrompt != nil ||
-            saveMealDraft != nil ||
-            isImagePickerPresented ||
-            isCustomCameraPresented ||
-            isCameraAnalysisSheetPresented ||
-            isHomeTutorialPresented ||
-            isDaySwipeTutorialPresented ||
-            triggeredBadgeAchievement != nil
-    }
-
     var isComposerBackgroundTapBlocked: Bool {
         isVoiceOverlayPresented ||
             isDetailsDrawerPresented ||
@@ -411,6 +380,7 @@ extension MainLoggingShellView {
 
     func refreshHydrationDayAfterMutation(_ dateString: String) async {
         dayCacheHydrationLogs.removeValue(forKey: dateString)
+        removeHydrationDayLogsCacheEntry(date: dateString)
         await loadHydrationDayLogs(forcedDate: dateString, skipCache: true)
         NotificationCenter.default.post(
             name: .nutritionProgressDidChange,

@@ -35,8 +35,9 @@ extension ProgressSectionView {
     var caloriesHeroCard: some View {
         VStack(alignment: .leading, spacing: 16) {
             HStack {
-                Text("Calorie Adherence")
+                Label("Calories", systemImage: "flame.fill")
                     .font(.headline)
+                    .foregroundStyle(AppColor.brandOrange)
                 Spacer()
                 if isLoadingProgress {
                     ProgressView()
@@ -188,8 +189,9 @@ extension ProgressSectionView {
     /// stack and the standalone Streak / Weekly Delta cards.
     var macroAdherenceCard: some View {
         VStack(alignment: .leading, spacing: 24) {
-            Text("Macro Adherence")
+            Label("Macros", systemImage: "fork.knife")
                 .font(.headline)
+                .foregroundStyle(AppColor.brandOrange)
 
             ForEach(MacroMetric.allCases, id: \.rawValue) { metric in
                 macroSubChart(for: metric)
@@ -419,6 +421,22 @@ extension ProgressSectionView {
                         .lineStyle(StrokeStyle(lineWidth: 1, dash: [3, 4]))
                         .interpolationMethod(.linear)
                     }
+
+                    if let selected = selectedMacroPoint(for: metric) {
+                        RuleMark(x: .value("Selected", selected.date))
+                            .lineStyle(StrokeStyle(lineWidth: 1, dash: [2, 2]))
+                            .foregroundStyle(ChartPalette.scrubLine)
+                            .annotation(
+                                position: .top,
+                                spacing: 12,
+                                overflowResolution: .init(x: .fit(to: .chart), y: .fit(to: .chart))
+                            ) {
+                                tooltipBubble(
+                                    title: Self.dayLabelFormatter.string(from: selected.date),
+                                    value: "\(formatOneDecimal(selected.consumed)) / \(formatOneDecimal(selected.target)) g"
+                                )
+                            }
+                    }
                 }
                 .chartXAxis(.hidden)
                 .chartYAxis {
@@ -437,6 +455,27 @@ extension ProgressSectionView {
                 .chartYScale(domain: scale.minY ... scale.maxY)
                 .chartXScale(domain: chartXDomain(dates: displayedPoints.map(\.date)) ?? Date()...Date())
                 .frame(height: 80)
+                .chartOverlay { proxy in
+                    GeometryReader { geometry in
+                        Rectangle()
+                            .fill(Color.clear)
+                            .contentShape(Rectangle())
+                            .gesture(
+                                DragGesture(minimumDistance: 0)
+                                    .onChanged { value in
+                                        let sourceDates = aggregateForRange(macroPoints(for: metric)).map(\.date)
+                                        switch metric {
+                                        case .protein:
+                                            selectClosestDate(from: value.location, proxy: proxy, geometry: geometry, sourceDates: sourceDates, selectedDate: &selectedProteinDate, hapticID: "progress.protein")
+                                        case .carbs:
+                                            selectClosestDate(from: value.location, proxy: proxy, geometry: geometry, sourceDates: sourceDates, selectedDate: &selectedCarbsDate, hapticID: "progress.carbs")
+                                        case .fat:
+                                            selectClosestDate(from: value.location, proxy: proxy, geometry: geometry, sourceDates: sourceDates, selectedDate: &selectedFatDate, hapticID: "progress.fat")
+                                        }
+                                    }
+                            )
+                    }
+                }
             }
         }
     }

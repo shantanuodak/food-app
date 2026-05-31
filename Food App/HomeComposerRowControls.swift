@@ -237,6 +237,8 @@ struct RowThoughtProcessStatusView: View {
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(aiShimmerGradient)
                 .lineLimit(1)
+                .contentTransition(.opacity)
+                .animation(.easeInOut(duration: 0.25), value: text)
                 .frame(maxWidth: .infinity, alignment: .trailing)
                 .overlay(alignment: .trailing) {
                     GeometryReader { geometry in
@@ -272,23 +274,23 @@ struct RowThoughtProcessStatusView: View {
         switch routeHint {
         case .foodDatabase:
             phrases = [
-                "Looking up food",
-                "Finding best match",
-                "Checking serving size",
-                "Estimating calories"
+                "Searching",
+                "Matching",
+                "Checking",
+                "Estimating"
             ]
         case .ai:
             phrases = [
-                "Reading your note",
-                "Cross-checking 3 sources",
-                "Resolving serving assumptions",
-                "Estimating calories"
+                "Reading",
+                "Checking",
+                "Resolving",
+                "Estimating"
             ]
         case .unknown:
             phrases = [
-                "Analyzing entry",
-                "Searching matches",
-                "Estimating calories"
+                "Analyzing",
+                "Searching",
+                "Estimating"
             ]
         }
 
