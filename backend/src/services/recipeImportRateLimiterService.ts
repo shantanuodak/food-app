@@ -16,6 +16,7 @@ type RecipeBucket = {
 
 const buckets = new Map<string, RecipeBucket>();
 let lastPruneAtMs = 0;
+let maxBuckets = 100_000;
 
 function sanitizeWindowMs(): number {
   return Math.max(1_000, config.recipeRateLimitWindowMs);
@@ -46,6 +47,19 @@ function pruneBuckets(nowMs: number): void {
   }
 }
 
+function enforceBucketCap(): void {
+  // Memory safety valve. pruneBuckets is time-gated, so under a flood of
+  // distinct keys the Map could grow unbounded between prunes. Map keeps
+  // insertion order, so the first key is the oldest-tracked — evict FIFO.
+  while (buckets.size > maxBuckets) {
+    const oldest = buckets.keys().next().value as string | undefined;
+    if (oldest === undefined) {
+      break;
+    }
+    buckets.delete(oldest);
+  }
+}
+
 export function checkRecipeImportRateLimit(
   userId: string,
   lane: RecipeRateLane,
@@ -63,6 +77,7 @@ export function checkRecipeImportRateLimit(
   const existing = buckets.get(key);
   if (!existing || nowMs - existing.windowStartMs >= windowMs) {
     buckets.set(key, { windowStartMs: nowMs, count: 1 });
+    enforceBucketCap();
     return { allowed: true, retryAfterSeconds: 0 };
   }
 
@@ -81,4 +96,13 @@ export function checkRecipeImportRateLimit(
 export function resetRecipeImportRateLimitStateForTests(): void {
   buckets.clear();
   lastPruneAtMs = 0;
+  maxBuckets = 100_000;
+}
+
+export function setRecipeImportRateLimitMaxBucketsForTests(value: number): void {
+  maxBuckets = value;
+}
+
+export function getRecipeImportRateLimitBucketCountForTests(): number {
+  return buckets.size;
 }
