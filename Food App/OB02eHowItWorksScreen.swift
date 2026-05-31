@@ -1,5 +1,16 @@
 import SwiftUI
 
+// MARK: - Why this works (3D carousel redesign, 2026-05-31)
+//
+// Replaces the old vertical card list with a slowly auto-rotating 3D ring of
+// feature cards (one in focus at a time; side/back cards blur + dim for depth).
+// Intro choreography is preserved: the heading types itself out, then the cards
+// spring into the ring, then the ring starts spinning. Hold anywhere on the
+// carousel to pause it. Reduce Motion presents a static ring with no spin.
+//
+// Ported from the HTML exploration (onboarding-why-this-works-carousel.html).
+// First SwiftUI pass — expect to iterate on feel.
+
 struct OB02eHowItWorksScreen: View {
     let onBack: () -> Void
     let onContinue: () -> Void
@@ -7,26 +18,23 @@ struct OB02eHowItWorksScreen: View {
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    // Cinematic intro choreography (2026-05-24 redesign):
-    //   1. blank screen
-    //   2. heading types itself out (typewriter + a soft haptic per letter),
-    //      sitting low/centered as the lone hero element
-    //   3. brief hold so the line lands
-    //   4. heading rises to the top with a motion-blur as it travels
-    //   5. the cards reveal one at a time below it (blur+lift in)
-    //   6. the Next button fades in last
-    // Tapping anywhere during the intro skips straight to the final state.
     private let headingText = "Why this works"
-    private let cardCount = 6
+    private let features = WhyFeature.all
 
+    // Intro choreography
     @State private var typedCount = 0
     @State private var showCaret = false
-    @State private var headingSettled = false
-    @State private var headingBlur: CGFloat = 0
-    @State private var revealedCardCount = 0
+    @State private var cardsRevealed = false
     @State private var nextVisible = false
     @State private var introComplete = false
     @State private var skipRequested = false
+
+    // Spin state (continuous rotation driven by TimelineView elapsed time).
+    @State private var spinning = false
+    @State private var spinStart: TimeInterval = 0
+    @State private var pausedAccum: TimeInterval = 0
+    @State private var pauseStart: TimeInterval = 0
+    @State private var isPaused = false
 
     var body: some View {
         ZStack {
@@ -37,63 +45,20 @@ struct OB02eHowItWorksScreen: View {
                     .padding(.top, 12)
                     .padding(.horizontal, 16)
 
-                // Voice rewrite (2026-05-01): "Why Food App's approach works"
-                // → "Why this works". 2026-05-24: now types itself out as a
-                // typewriter, then rises to its resting position with a
-                // motion-blur. `padding(.top)` animates 168→24 to carry the
-                // line up from its lower hero position to the top.
                 TypewriterHeading(
                     fullText: headingText,
                     typedCount: typedCount,
                     showCaret: showCaret
                 )
                 .padding(.horizontal, 24)
-                .padding(.top, headingSettled ? 24 : 168)
-                .blur(radius: headingBlur)
-
-                // Feature cards — staggered entry per card so they cascade in.
-                // 2026-05-24: each card also gets a subtle FloatingDrift so the
-                // grid reads as "infographic floating in space" rather than
-                // "list of tappable rows". Testers were tapping the cards
-                // expecting them to do something; the drift signals that the
-                // cards are display content and Next is the only action.
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 26) {
-                        typingCard
-                            .modifier(SequentialReveal(isVisible: revealedCardCount > 0))
-                            .modifier(FloatingDrift(phaseSeed: 0.00))
-
-                        TrackProgressCardView()
-                            .modifier(SequentialReveal(isVisible: revealedCardCount > 1))
-                            .modifier(FloatingDrift(phaseSeed: 0.20))
-
-                        TakePhotoCardView()
-                            .modifier(SequentialReveal(isVisible: revealedCardCount > 2))
-                            .modifier(FloatingDrift(phaseSeed: 0.40))
-
-                        CuratedRecipesCardView()
-                            .modifier(SequentialReveal(isVisible: revealedCardCount > 3))
-                            .modifier(FloatingDrift(phaseSeed: 0.60))
-
-                        ImportRecipeCardView()
-                            .modifier(SequentialReveal(isVisible: revealedCardCount > 4))
-                            .modifier(FloatingDrift(phaseSeed: 0.70))
-
-                        WidgetShortcutCardView()
-                            .modifier(SequentialReveal(isVisible: revealedCardCount > 5))
-                            .modifier(FloatingDrift(phaseSeed: 0.85))
-                    }
-                    .padding(.horizontal, 16)
-                    .padding(.top, 28)
-                    .padding(.bottom, 16)
-                }
-                // No scrolling until the reveal finishes — the cards are
-                // present (for layout) but transparent during the intro.
-                .scrollDisabled(!introComplete)
+                .padding(.top, 18)
 
                 Spacer(minLength: 8)
 
-                // CTA — fades in last, once every card has revealed.
+                carousel
+
+                Spacer(minLength: 8)
+
                 Button(action: onContinue) {
                     HStack(spacing: 8) {
                         Text("Next")
@@ -112,9 +77,6 @@ struct OB02eHowItWorksScreen: View {
                 .padding(.bottom, 24)
             }
 
-            // Skip layer — present only while the intro is running. Captures
-            // a tap anywhere and jumps to the final state. Removed once the
-            // intro completes so it never blocks scrolling or the Next button.
             if !introComplete {
                 Color.clear
                     .contentShape(Rectangle())
@@ -125,67 +87,140 @@ struct OB02eHowItWorksScreen: View {
         .task { await runIntro() }
     }
 
+    // MARK: - Carousel
+
+    private var carousel: some View {
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !spinning || reduceMotion)) { timeline in
+            let now = timeline.date.timeIntervalSinceReferenceDate
+            let active = spinning
+                ? max(0, now - spinStart - pausedAccum - (isPaused ? (now - pauseStart) : 0))
+                : 0
+            let rotation = -WhyCarousel.speed * active
+
+            VStack(spacing: 20) {
+                ZStack {
+                    ForEach(features) { feature in
+                        let theta = rotation + Double(feature.id) * WhyCarousel.step
+                        let depth = cos(theta * .pi / 180)
+                        WhyCarouselCard(feature: feature, front: depth >= -0.05)
+                            .modifier(RingPlacement(
+                                theta: theta,
+                                index: feature.id,
+                                revealed: cardsRevealed,
+                                reduceMotion: reduceMotion
+                            ))
+                    }
+                }
+                .frame(height: WhyCarousel.cardH + 18)
+
+                pageDots(front: frontIndex(rotation))
+                    .opacity(cardsRevealed ? 1 : 0)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .contentShape(Rectangle())
+        .gesture(pauseGesture)
+    }
+
+    private func pageDots(front: Int) -> some View {
+        HStack(spacing: 9) {
+            ForEach(0..<features.count, id: \.self) { i in
+                Capsule()
+                    .fill(i == front
+                          ? OnboardingGlassTheme.accentStart
+                          : OnboardingGlassTheme.textPrimary.opacity(0.18))
+                    .frame(width: i == front ? 16 : 6, height: 6)
+                    .animation(.easeInOut(duration: 0.4), value: front)
+            }
+        }
+    }
+
+    /// Index of the card closest to facing the viewer (largest cos).
+    private func frontIndex(_ rotation: Double) -> Int {
+        var best = 0
+        var bestCos = -2.0
+        for i in 0..<features.count {
+            let c = cos((rotation + Double(i) * WhyCarousel.step) * .pi / 180)
+            if c > bestCos { bestCos = c; best = i }
+        }
+        return best
+    }
+
+    /// Press-and-hold anywhere on the carousel to pause; release to resume.
+    private var pauseGesture: some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { _ in
+                guard introComplete, !isPaused else { return }
+                isPaused = true
+                pauseStart = Date().timeIntervalSinceReferenceDate
+            }
+            .onEnded { _ in
+                guard isPaused else { return }
+                pausedAccum += Date().timeIntervalSinceReferenceDate - pauseStart
+                isPaused = false
+            }
+    }
+
+    // MARK: - Top Bar
+
+    private var topBar: some View {
+        HStack {
+            Button(action: onBack) {
+                Image(systemName: "chevron.left")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(colorScheme == .dark ? .white : .black)
+                    .frame(width: 44, height: 44)
+                    .background(
+                        Circle()
+                            .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.white)
+                            .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
+                    )
+            }
+            .buttonStyle(.plain)
+            Spacer()
+        }
+        .frame(height: 44)
+    }
+
     // MARK: - Intro choreography
 
     @MainActor
     private func runIntro() async {
-        // Reduce Motion: skip the cinematic sequence, present final state.
         if reduceMotion {
             typedCount = headingText.count
-            headingSettled = true
-            revealedCardCount = cardCount
+            cardsRevealed = true
             nextVisible = true
+            spinning = false       // static ring, no spin
             introComplete = true
             return
         }
 
         func stillRunning() -> Bool { !Task.isCancelled && !skipRequested }
 
-        // 1. A beat of stillness before anything happens.
-        try? await Task.sleep(nanoseconds: 450_000_000)
+        await sleep(0.45)
         guard stillRunning() else { return }
 
-        // 2. Typewriter — one character at a time, soft haptic per letter.
         showCaret = true
         let chars = Array(headingText)
         for index in 1...chars.count {
             guard stillRunning() else { return }
             typedCount = index
-            let character = chars[index - 1]
-            if character != " " {
-                AppHaptics.softImpact(intensity: 0.5)
-            }
-            // Slightly slower on spaces for a natural cadence + light jitter.
-            let base: UInt64 = character == " " ? 92_000_000 : 60_000_000
-            try? await Task.sleep(nanoseconds: base + UInt64.random(in: 0...26_000_000))
+            if chars[index - 1] != " " { AppHaptics.softImpact(intensity: 0.5) }
+            await sleep(chars[index - 1] == " " ? 0.092 : 0.06)
         }
 
-        // 3. Hold so the completed line registers.
         guard stillRunning() else { return }
-        try? await Task.sleep(nanoseconds: 600_000_000)
-
-        // 4. Rise to the top with a motion-blur: blur ramps up as it starts
-        //    moving, then resolves to sharp as it arrives.
+        await sleep(0.55)
         showCaret = false
         AppHaptics.mediumImpact()
-        withAnimation(.easeIn(duration: 0.22)) { headingBlur = 7 }
-        withAnimation(.easeInOut(duration: 0.6)) { headingSettled = true }
-        try? await Task.sleep(nanoseconds: 240_000_000)
-        guard stillRunning() else { return }
-        withAnimation(.easeOut(duration: 0.34)) { headingBlur = 0 }
-        try? await Task.sleep(nanoseconds: 320_000_000)
 
-        // 5. Cards in, one at a time. SequentialReveal owns the spring.
-        for _ in 0..<cardCount {
-            guard stillRunning() else { return }
-            revealedCardCount += 1
-            AppHaptics.softImpact(intensity: 0.4)
-            try? await Task.sleep(nanoseconds: 240_000_000)
-        }
-
-        // 6. Next button.
+        // Cards spring into the ring (RingPlacement staggers per index).
+        withAnimation { cardsRevealed = true }
+        await sleep(0.7)
         guard stillRunning() else { return }
+
         withAnimation(.easeOut(duration: 0.4)) { nextVisible = true }
+        beginSpin()
         introComplete = true
     }
 
@@ -194,67 +229,420 @@ struct OB02eHowItWorksScreen: View {
         guard !introComplete else { return }
         skipRequested = true
         showCaret = false
-        withAnimation(.easeOut(duration: 0.28)) {
+        withAnimation(.easeOut(duration: 0.3)) {
             typedCount = headingText.count
-            headingSettled = true
-            headingBlur = 0
-            revealedCardCount = cardCount
+            cardsRevealed = true
             nextVisible = true
         }
+        if !reduceMotion { beginSpin() }
         introComplete = true
     }
 
-    // MARK: - Typing Card (frosted glass)
-
-    private var typingCard: some View {
-        VStack(spacing: 0) {
-            LoggingDemoAnimation()
-                .padding(.horizontal, 12)
-                .padding(.top, 29)
-
-            Text("Type anything — get instant nutrition facts")
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                .padding(.top, 10)
-                .padding(.bottom, 20)
-        }
-        .frame(height: 142)
-        .frame(maxWidth: .infinity)
-        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
-        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
+    private func beginSpin() {
+        spinStart = Date().timeIntervalSinceReferenceDate
+        pausedAccum = 0
+        isPaused = false
+        spinning = true
     }
 
-    // MARK: - Top Bar
-
-    private var topBar: some View {
-        ZStack {
-            HStack {
-                Button(action: onBack) {
-                    Image(systemName: "chevron.left")
-                        .font(.system(size: 18, weight: .semibold))
-                        .foregroundStyle(colorScheme == .dark ? .white : .black)
-                        .frame(width: 44, height: 44)
-                        .background(
-                            Circle()
-                                .fill(colorScheme == .dark ? Color.white.opacity(0.12) : Color.white)
-                                .shadow(color: Color.black.opacity(0.10), radius: 20, y: 10)
-                        )
-                }
-                .buttonStyle(.plain)
-                Spacer()
-            }
-        }
-        .frame(height: 44)
+    private func sleep(_ seconds: Double) async {
+        try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
     }
 }
 
-// MARK: - Typewriter heading
+// MARK: - Carousel geometry
 
-/// Types `fullText` in one character at a time (driven by `typedCount`)
-/// without any layout reflow: an invisible full-text copy reserves the
-/// final frame, and the visible prefix is leading-anchored within that
-/// centered block — so the line types in from the left of where the
-/// finished, centered heading will sit. A blinking caret rides the end.
+private enum WhyCarousel {
+    static let cardW: CGFloat = 196
+    static let cardH: CGFloat = 252
+    static let radius: CGFloat = 138
+    static let step: Double = 60      // 360 / 6 cards
+    static let speed: Double = 11     // degrees per second
+}
+
+// MARK: - Feature model
+
+private struct WhyFeature: Identifiable {
+    let id: Int
+    let number: String
+    let title: String
+    let subtitle: String
+    let kind: Kind
+
+    enum Kind { case type, photo, progress, recipe, importWeb, widget }
+
+    static let all: [WhyFeature] = [
+        .init(id: 0, number: "01", title: "Type anything",
+              subtitle: "Instant calories & macros from plain words.", kind: .type),
+        .init(id: 1, number: "02", title: "Take a food photo",
+              subtitle: "Snap a picture — we’ll log the rest.", kind: .photo),
+        .init(id: 2, number: "03", title: "Track your progress",
+              subtitle: "See your daily progress and trends.", kind: .progress),
+        .init(id: 3, number: "04", title: "Curated recipes",
+              subtitle: "Hand-picked meals that hit your targets.", kind: .recipe),
+        .init(id: 4, number: "05", title: "Import from the web",
+              subtitle: "A link from a site, Instagram, or TikTok.", kind: .importWeb),
+        .init(id: 5, number: "06", title: "Add a widget later",
+              subtitle: "Home & Lock Screen shortcuts keep logging close.", kind: .widget),
+    ]
+}
+
+// MARK: - Ring placement modifier
+
+/// Positions a card on the rotating ring: horizontal arc offset, depth-based
+/// scale/opacity/blur (front sharp, sides/back blurred), a Y-axis 3D tilt, and
+/// a spring-in keyed off `revealed`. Per-card stagger via `index`.
+private struct RingPlacement: ViewModifier {
+    let theta: Double
+    let index: Int
+    let revealed: Bool
+    let reduceMotion: Bool
+
+    func body(content: Content) -> some View {
+        let rad = theta * .pi / 180
+        let depth = cos(rad)                                   // 1 at front
+        let x = CGFloat(sin(rad)) * WhyCarousel.radius
+        let scale = CGFloat(0.82 + 0.18 * ((depth + 1) / 2))
+        let opacity = 0.5 + 0.5 * max(0, depth)
+        let blur = reduceMotion ? 0 : CGFloat(max(0, 1 - depth) * 3.0)
+
+        return content
+            .scaleEffect(revealed ? scale : 0.42)
+            .opacity(revealed ? opacity : 0)
+            .blur(radius: blur)
+            .rotation3DEffect(.degrees(theta), axis: (x: 0, y: 1, z: 0), perspective: 0.45)
+            .offset(x: x)
+            .zIndex(depth)
+            .animation(
+                reduceMotion ? nil : .spring(response: 0.55, dampingFraction: 0.82).delay(Double(index) * 0.06),
+                value: revealed
+            )
+    }
+}
+
+// MARK: - Carousel card (front + back faces)
+
+private struct WhyCarouselCard: View {
+    let feature: WhyFeature
+    /// True when this card faces the viewer; false shows the frosted back.
+    let front: Bool
+
+    private var accent: LinearGradient {
+        LinearGradient(
+            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
+            startPoint: .topLeading, endPoint: .bottomTrailing
+        )
+    }
+
+    var body: some View {
+        ZStack {
+            frontFace.opacity(front ? 1 : 0)
+            backFace
+                .rotation3DEffect(.degrees(180), axis: (x: 0, y: 1, z: 0))
+                .opacity(front ? 0 : 1)
+        }
+        .frame(width: WhyCarousel.cardW, height: WhyCarousel.cardH)
+    }
+
+    // Front: visual on top, then title + subtitle.
+    private var frontFace: some View {
+        VStack(spacing: 0) {
+            visual
+                .frame(width: WhyCarousel.cardW, height: 150)
+                .clipped()
+
+            VStack(spacing: 4) {
+                Text(feature.title)
+                    .font(.system(size: 15.5, weight: .heavy))
+                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
+                    .lineLimit(1)
+
+                Text(feature.subtitle)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+                    .frame(height: 32, alignment: .top)
+            }
+            .padding(.horizontal, 14)
+            .padding(.top, 12)
+            .padding(.bottom, 14)
+            .frame(maxWidth: .infinity)
+        }
+        .frame(width: WhyCarousel.cardW, height: WhyCarousel.cardH)
+        .overlay(alignment: .topLeading) {
+            Text(feature.number)
+                .font(.system(size: 11, weight: .heavy))
+                .tracking(1.2)
+                .foregroundStyle(OnboardingGlassTheme.textSecondary.opacity(0.6))
+                .padding(12)
+        }
+        .background(OnboardingGlassTheme.panelFill)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+        )
+        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 14, y: 8)
+    }
+
+    private var backFace: some View {
+        ZStack {
+            Text(feature.number)
+                .font(OnboardingTypography.instrumentSerif(style: .regular, size: 110))
+                .foregroundStyle(OnboardingGlassTheme.textPrimary.opacity(0.05))
+
+            Circle()
+                .fill(accent)
+                .frame(width: 46, height: 46)
+                .overlay(
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundStyle(.white)
+                )
+                .shadow(color: OnboardingGlassTheme.accentStart.opacity(0.35), radius: 10, y: 6)
+        }
+        .frame(width: WhyCarousel.cardW, height: WhyCarousel.cardH)
+        .background(OnboardingGlassTheme.panelFill)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 26, style: .continuous)
+                .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
+        )
+    }
+
+    // MARK: Per-feature visuals
+
+    @ViewBuilder
+    private var visual: some View {
+        switch feature.kind {
+        case .type:     typeVisual
+        case .photo:    photoVisual
+        case .progress: progressVisual
+        case .recipe:   recipeVisual
+        case .importWeb: importVisual
+        case .widget:   widgetVisual
+        }
+    }
+
+    private var typeVisual: some View {
+        VStack(spacing: 14) {
+            Circle()
+                .fill(accent)
+                .frame(width: 50, height: 50)
+                .overlay(
+                    Image(systemName: "sparkle")
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundStyle(.white)
+                )
+            LoggingDemoAnimation()
+                .padding(.horizontal, 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.horizontal, 6)
+    }
+
+    private var photoVisual: some View {
+        ZStack {
+            Image("food_photo_demo")
+                .resizable()
+                .scaledToFill()
+                .frame(width: WhyCarousel.cardW, height: 150)
+                .clipped()
+
+            Image(systemName: "viewfinder")
+                .font(.system(size: 96, weight: .ultraLight))
+                .foregroundStyle(.white.opacity(0.85))
+                .shadow(color: .black.opacity(0.3), radius: 4)
+
+            Circle()
+                .fill(.white.opacity(0.95))
+                .frame(width: 28, height: 28)
+                .overlay(Circle().stroke(.white.opacity(0.5), lineWidth: 3))
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                .padding(.bottom, 10)
+        }
+        .frame(width: WhyCarousel.cardW, height: 150)
+    }
+
+    private var progressVisual: some View {
+        HStack(spacing: 14) {
+            ZStack {
+                Circle()
+                    .stroke(OnboardingGlassTheme.textPrimary.opacity(0.12), lineWidth: 8)
+                Circle()
+                    .trim(from: 0, to: 0.72)
+                    .stroke(accent, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                VStack(spacing: 0) {
+                    Text("720")
+                        .font(.system(size: 18, weight: .heavy, design: .rounded))
+                        .foregroundStyle(OnboardingGlassTheme.textPrimary)
+                    Text("of 2000")
+                        .font(.system(size: 8.5, weight: .semibold))
+                        .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                }
+            }
+            .frame(width: 72, height: 72)
+
+            VStack(alignment: .leading, spacing: 7) {
+                macroBar("P", 0.72, "90g")
+                macroBar("C", 0.54, "68g")
+                macroBar("F", 0.40, "24g")
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func macroBar(_ label: String, _ frac: CGFloat, _ value: String) -> some View {
+        HStack(spacing: 6) {
+            Text(label)
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                .frame(width: 12, alignment: .leading)
+            ZStack(alignment: .leading) {
+                Capsule().fill(OnboardingGlassTheme.textPrimary.opacity(0.12)).frame(width: 50, height: 6)
+                Capsule().fill(accent).frame(width: 50 * frac, height: 6)
+            }
+            Text(value)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                .monospacedDigit()
+        }
+    }
+
+    private var recipeVisual: some View {
+        ZStack(alignment: .bottomLeading) {
+            Image("food_photo_demo")
+                .resizable()
+                .scaledToFill()
+                .frame(width: 154, height: 118)
+                .clipped()
+
+            LinearGradient(colors: [.clear, .black.opacity(0.72)], startPoint: .center, endPoint: .bottom)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Greek Yogurt Bowl")
+                    .font(.system(size: 12.5, weight: .heavy))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                Text("9 ingr · 4 steps · 320 cal")
+                    .font(.system(size: 9.5, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+            .padding(9)
+        }
+        .frame(width: 154, height: 118)
+        .overlay(alignment: .topLeading) {
+            Label("thekitchn", systemImage: "link")
+                .font(.system(size: 9, weight: .heavy))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(.ultraThinMaterial, in: Capsule())
+                .padding(7)
+        }
+        .overlay(alignment: .topTrailing) {
+            Label("Fits", systemImage: "checkmark.circle.fill")
+                .font(.system(size: 9, weight: .heavy))
+                .foregroundStyle(Color(red: 0.13, green: 0.55, blue: 0.30))
+                .padding(.horizontal, 7).padding(.vertical, 3)
+                .background(Color(red: 0.85, green: 0.95, blue: 0.88), in: Capsule())
+                .padding(7)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+    }
+
+    private var importVisual: some View {
+        VStack(spacing: 9) {
+            HStack(spacing: 8) {
+                PlatformBadge(symbol: "camera.fill",
+                              gradient: [Color(red: 1, green: 0.85, blue: 0.46), Color(red: 0.84, green: 0.16, blue: 0.46), Color(red: 0.59, green: 0.18, blue: 0.75)])
+                PlatformBadge(symbol: "music.note", gradient: [.black, .black])
+                PlatformBadge(symbol: "globe",
+                              gradient: [Color(red: 0.23, green: 0.51, blue: 0.96), Color(red: 0.15, green: 0.39, blue: 0.92)])
+            }
+
+            HStack(spacing: 6) {
+                Image(systemName: "link")
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
+                Capsule()
+                    .fill(OnboardingGlassTheme.textPrimary.opacity(0.18))
+                    .frame(width: 50, height: 6)
+            }
+            .padding(.horizontal, 11).padding(.vertical, 6)
+            .background(OnboardingGlassTheme.panelFill, in: Capsule())
+            .overlay(Capsule().strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1))
+
+            Label("Import", systemImage: "square.and.arrow.down.fill")
+                .font(.system(size: 9.5, weight: .heavy))
+                .foregroundStyle(Color(red: 0.16, green: 0.20, blue: 0.42))
+                .padding(.horizontal, 9).padding(.vertical, 3)
+                .background(Color(red: 0.84, green: 0.88, blue: 1.0), in: Capsule())
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var widgetVisual: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                HStack(spacing: 4) {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(accent)
+                        .frame(width: 15, height: 15)
+                        .overlay(Image(systemName: "sparkle").font(.system(size: 7, weight: .black)).foregroundStyle(.white))
+                    Text("Calorie").font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                }
+                Spacer()
+                Image(systemName: "flame.fill").font(.system(size: 11)).foregroundStyle(OnboardingGlassTheme.accentStart)
+            }
+            HStack(alignment: .lastTextBaseline, spacing: 4) {
+                Text("842").font(.system(size: 25, weight: .black, design: .rounded)).foregroundStyle(.white)
+                Text("/ 2000").font(.system(size: 10, weight: .semibold)).foregroundStyle(.white.opacity(0.55))
+            }
+            Capsule().fill(.white.opacity(0.16)).frame(height: 6)
+                .overlay(alignment: .leading) { Capsule().fill(accent).frame(width: 56, height: 6) }
+            HStack(spacing: 7) {
+                ForEach(["camera.fill", "mic.fill", "plus"], id: \.self) { symbol in
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(.white.opacity(0.1))
+                        .frame(height: 26)
+                        .overlay(Image(systemName: symbol).font(.system(size: 11, weight: .bold)).foregroundStyle(.white))
+                        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(.white.opacity(0.12), lineWidth: 1))
+                }
+            }
+        }
+        .padding(13)
+        .frame(width: 158)
+        .background(
+            RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .fill(LinearGradient(
+                    colors: [Color(red: 0.10, green: 0.09, blue: 0.16), Color(red: 0.06, green: 0.10, blue: 0.11)],
+                    startPoint: .topLeading, endPoint: .bottomTrailing))
+        )
+        .overlay(RoundedRectangle(cornerRadius: 20).strokeBorder(.white.opacity(0.14), lineWidth: 1))
+    }
+}
+
+/// Small rounded platform badge (Instagram / TikTok / web) for the import card.
+private struct PlatformBadge: View {
+    let symbol: String
+    let gradient: [Color]
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(LinearGradient(colors: gradient, startPoint: .topLeading, endPoint: .bottomTrailing))
+            .frame(width: 29, height: 29)
+            .overlay(Image(systemName: symbol).font(.system(size: 13, weight: .bold)).foregroundStyle(.white))
+            .shadow(color: .black.opacity(0.18), radius: 3, y: 2)
+    }
+}
+
+// MARK: - Typewriter heading (reused)
+
+/// Types `fullText` one character at a time (driven by `typedCount`) without
+/// layout reflow: an invisible full-text copy reserves the final frame, and the
+/// visible prefix is leading-anchored within that centered block.
 private struct TypewriterHeading: View {
     let fullText: String
     let typedCount: Int
@@ -264,7 +652,6 @@ private struct TypewriterHeading: View {
 
     var body: some View {
         ZStack(alignment: .leading) {
-            // Invisible reservation — keeps geometry stable + centered.
             Text(fullText)
                 .font(serif)
                 .lineLimit(1)
@@ -304,38 +691,15 @@ private struct CaretView: View {
     }
 }
 
-// MARK: - Sequential Reveal
+// MARK: - Logging Demo Animation (reused)
 
-/// Reveals a card when `isVisible` flips true: it lifts up, sharpens from
-/// a blur, and scales to full size on a spring. Driven one-at-a-time by
-/// the intro choreography so the cards arrive in sequence rather than all
-/// at once. Collapses to a plain show/hide under Reduce Motion.
-private struct SequentialReveal: ViewModifier {
-    let isVisible: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        content
-            .opacity(isVisible ? 1 : 0)
-            .blur(radius: isVisible ? 0 : (reduceMotion ? 0 : 7))
-            .offset(y: isVisible ? 0 : (reduceMotion ? 0 : 24))
-            .scaleEffect(isVisible ? 1 : (reduceMotion ? 1 : 0.97), anchor: .top)
-            .animation(reduceMotion ? nil : .spring(response: 0.5, dampingFraction: 0.84), value: isVisible)
-    }
-}
-
-// MARK: - Logging Demo Animation
-
-/// Simulates the real home-screen logging experience:
-/// 1. Text types in character by character
-/// 2. A brief "thinking" shimmer appears on the right
-/// 3. The calorie estimate fades in
-/// 4. Pauses, then resets and loops with a new food item
+/// Simulates the real home-screen logging experience: text types in, a brief
+/// "thinking" shimmer appears, the calorie estimate fades in, then it loops.
 struct LoggingDemoAnimation: View {
     @Environment(\.colorScheme) private var colorScheme
 
     private let items: [(text: String, calories: String)] = [
-        ("2 eggs and toast", "310 cal"),
+        ("eggs & toast", "310 cal"),
         ("chicken salad", "420 cal"),
         ("greek yogurt", "180 cal"),
         ("cheese pizza", "285 cal")
@@ -346,13 +710,7 @@ struct LoggingDemoAnimation: View {
     @State private var phase: DemoPhase = .idle
     @State private var timerTask: Task<Void, Never>?
 
-    private enum DemoPhase {
-        case idle
-        case typing
-        case thinking
-        case result
-        case hold
-    }
+    private enum DemoPhase { case idle, typing, thinking, result, hold }
 
     private var currentItem: (text: String, calories: String) {
         items[currentIndex % items.count]
@@ -364,25 +722,22 @@ struct LoggingDemoAnimation: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // The simulated input row
             HStack(alignment: .center, spacing: 0) {
-                // Typed text + cursor
                 HStack(spacing: 0) {
                     Text(displayedText)
-                        .font(.system(size: 14))
+                        .font(.system(size: 13))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     if phase == .typing || phase == .idle {
                         Text("|")
-                            .font(.system(size: 14, weight: .light))
+                            .font(.system(size: 13, weight: .light))
                             .foregroundStyle(Color.primary.opacity(0.4))
                             .opacity(phase == .typing ? 1 : 0.4)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                // Right side: thinking or result with shimmer
                 Group {
                     if phase == .thinking {
                         thinkingIndicator
@@ -392,18 +747,16 @@ struct LoggingDemoAnimation: View {
                             .transition(.opacity.combined(with: .scale(scale: 0.9)))
                     }
                 }
-                .frame(width: 110, alignment: .trailing)
+                .frame(width: 92, alignment: .trailing)
                 .animation(.easeInOut(duration: 0.3), value: phase)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
+            .padding(.horizontal, 13)
+            .padding(.vertical, 12)
             .onboardingGlassPanel(cornerRadius: 14, fillOpacity: 0.10, strokeOpacity: 0.14)
         }
         .onAppear { startAnimation() }
         .onDisappear { timerTask?.cancel() }
     }
-
-    // MARK: - Thinking shimmer
 
     private var thinkingIndicator: some View {
         HStack(spacing: 3) {
@@ -422,12 +775,9 @@ struct LoggingDemoAnimation: View {
         }
     }
 
-    // MARK: - Animation loop
-
     private func startAnimation() {
         timerTask?.cancel()
 
-        // Reduced-motion: jump straight to the final result of the first item, no loop.
         if UIAccessibility.isReduceMotionEnabled {
             typedCount = currentItem.text.count
             phase = .hold
@@ -435,41 +785,33 @@ struct LoggingDemoAnimation: View {
         }
 
         timerTask = Task {
-            // Initial pause
             try? await Task.sleep(nanoseconds: 800_000_000)
 
             while !Task.isCancelled {
-                // Reset for new item
                 typedCount = 0
                 phase = .typing
 
-                // Type each character
                 let text = currentItem.text
                 for charIndex in 1...text.count {
                     guard !Task.isCancelled else { return }
                     typedCount = charIndex
-                    // Variable speed — faster for spaces, slight randomness
                     let char = text[text.index(text.startIndex, offsetBy: charIndex - 1)]
                     let baseDelay: UInt64 = char == " " ? 30_000_000 : 55_000_000
                     let jitter = UInt64.random(in: 0...20_000_000)
                     try? await Task.sleep(nanoseconds: baseDelay + jitter)
                 }
 
-                // Thinking phase
                 guard !Task.isCancelled else { return }
                 phase = .thinking
                 try? await Task.sleep(nanoseconds: 1_200_000_000)
 
-                // Result
                 guard !Task.isCancelled else { return }
                 phase = .result
                 try? await Task.sleep(nanoseconds: 300_000_000)
                 phase = .hold
 
-                // Hold so user can read
                 try? await Task.sleep(nanoseconds: 2_500_000_000)
 
-                // Advance to next item
                 guard !Task.isCancelled else { return }
                 currentIndex = (currentIndex + 1) % items.count
                 phase = .idle
@@ -479,7 +821,7 @@ struct LoggingDemoAnimation: View {
     }
 }
 
-// MARK: - Shimmer Calorie Text
+// MARK: - Shimmer Calorie Text (reused)
 
 /// A calorie label with a continuous lighting sweep across the text.
 private struct ShimmerCalorieText: View {
@@ -499,7 +841,7 @@ private struct ShimmerCalorieText: View {
                 .foregroundStyle(accentTint)
 
             Text(text)
-                .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                .font(.system(size: 14, weight: .semibold, design: .monospaced))
                 .foregroundStyle(accentTint)
         }
         .overlay(
@@ -525,551 +867,10 @@ private struct ShimmerCalorieText: View {
         )
         .compositingGroup()
         .onAppear {
-            // Reduced-motion: skip the sweeping shimmer (still keeps the gradient tint)
             guard !UIAccessibility.isReduceMotionEnabled else { return }
-            withAnimation(
-                .easeInOut(duration: 1.8)
-                .repeatForever(autoreverses: false)
-            ) {
+            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: false)) {
                 shimmerOffset = 1
             }
         }
-    }
-}
-
-// MARK: - Track Your Progress Card
-
-private struct TrackProgressCardView: View {
-    @State private var barProgress: CGFloat = 0
-
-    var body: some View {
-        let accentBar = LinearGradient(
-            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
-            startPoint: .leading,
-            endPoint: .trailing
-        )
-
-        return HStack(spacing: 19) {
-            // Left: nested glass tile with calorie summary + animated progress bar
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 6) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Total")
-                            .font(.system(size: 13, weight: .medium))
-                            .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                        Text("720 cal")
-                            .font(.system(size: 17, weight: .bold, design: .rounded))
-                            .foregroundStyle(OnboardingGlassTheme.textPrimary)
-                    }
-
-                    Image(systemName: "flame.fill")
-                        .font(.system(size: 26))
-                        .foregroundStyle(OnboardingGlassTheme.accentStart)
-                }
-
-                // Single accent-gradient progress bar
-                ZStack(alignment: .leading) {
-                    Capsule()
-                        .fill(OnboardingGlassTheme.textPrimary.opacity(0.10))
-                        .frame(width: 92, height: 8)
-
-                    Capsule()
-                        .fill(accentBar)
-                        .frame(width: 92 * barProgress, height: 8)
-                }
-                .frame(width: 92, height: 8, alignment: .leading)
-            }
-            .padding(12)
-            .frame(width: 124)
-            .onboardingGlassPanel(cornerRadius: 15, fillOpacity: 0.10, strokeOpacity: 0.14)
-
-            // Right: text
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Track your progress")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
-
-                Text("See your daily progress and trends")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .lineSpacing(2)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 18)
-        .padding(.trailing, 20)
-        .padding(.vertical, 16)
-        .frame(height: 142)
-        .frame(maxWidth: .infinity)
-        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
-        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
-        .onAppear {
-            // Reduced-motion: jump straight to filled state.
-            guard !UIAccessibility.isReduceMotionEnabled else {
-                barProgress = 1.0
-                return
-            }
-            withAnimation(.easeOut(duration: 1.5).delay(0.8)) {
-                barProgress = 1.0
-            }
-        }
-    }
-}
-
-// MARK: - Take a Food Photo Card
-
-private struct TakePhotoCardView: View {
-    @State private var shimmerPhase: CGFloat = -1
-
-    var body: some View {
-        HStack(spacing: 16) {
-            // Food photo with a diagonal white sweep — same vocabulary as the
-            // intro photos on `OB01WelcomeScreen` so the "this is a captured
-            // photo" feeling reads consistently.
-            Image("food_photo_demo")
-                .resizable()
-                .scaledToFill()
-                .frame(width: 117, height: 117)
-                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(
-                    shimmerSweep
-                        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
-                )
-
-            // Text
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Take a food photo")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
-
-                Text("Snap a picture —\nwe'll log the rest.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .lineSpacing(2)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 16)
-        .padding(.trailing, 20)
-        .padding(.vertical, 12)
-        .frame(height: 142)
-        .frame(maxWidth: .infinity)
-        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
-        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
-        .onAppear { startShimmer() }
-    }
-
-    /// Diagonal top-left → bottom-right specular sweep that loops every 2.5s.
-    /// Uses `.plusLighter` blend mode so the highlight *adds* brightness to
-    /// the photo instead of overlaying translucent white — that way the gleam
-    /// is visible even on light/bright food shots where a plain white overlay
-    /// would disappear into the background.
-    /// Pure decoration; fully suppressed under `accessibilityReduceMotion`.
-    private var shimmerSweep: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let sweepWidth = w * 0.5
-
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0),
-                    .init(color: .white.opacity(0.45), location: 0.4),
-                    .init(color: .white.opacity(0.75), location: 0.5),
-                    .init(color: .white.opacity(0.45), location: 0.6),
-                    .init(color: .clear, location: 1)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-            .frame(width: sweepWidth)
-            .offset(x: shimmerPhase * (w + sweepWidth) - sweepWidth)
-            .blendMode(.plusLighter)
-            .allowsHitTesting(false)
-        }
-    }
-
-    private func startShimmer() {
-        guard !UIAccessibility.isReduceMotionEnabled else { return }
-        withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: false)) {
-            shimmerPhase = 1
-        }
-    }
-}
-
-// MARK: - Widget Shortcut Card
-
-private struct WidgetShortcutCardView: View {
-    @State private var glow = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(spacing: 16) {
-            widgetPreview
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Add a widget later")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
-
-                Text("Home Screen and Lock Screen shortcuts keep logging close.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .lineSpacing(2)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 16)
-        .padding(.trailing, 20)
-        .padding(.vertical, 12)
-        .frame(height: 142)
-        .frame(maxWidth: .infinity)
-        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
-        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                glow = true
-            }
-        }
-    }
-
-    private var widgetPreview: some View {
-        ZStack {
-            RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.055, green: 0.060, blue: 0.085),
-                            Color(red: 0.090, green: 0.075, blue: 0.125),
-                            Color(red: 0.060, green: 0.085, blue: 0.115)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .strokeBorder(.white.opacity(0.16), lineWidth: 1)
-                )
-                .shadow(color: OnboardingGlassTheme.accentEnd.opacity(glow ? 0.34 : 0.12), radius: glow ? 18 : 8, y: 8)
-
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .firstTextBaseline, spacing: 4) {
-                    Text("842")
-                        .font(.system(size: 23, weight: .black, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                    Text("cal")
-                        .font(.system(size: 11, weight: .black, design: .rounded))
-                        .foregroundStyle(.white.opacity(0.62))
-                }
-
-                Capsule()
-                    .fill(.white.opacity(0.16))
-                    .frame(height: 5)
-                    .overlay(alignment: .leading) {
-                        Capsule()
-                            .fill(
-                                LinearGradient(
-                                    colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
-                                    startPoint: .leading,
-                                    endPoint: .trailing
-                                )
-                            )
-                            .frame(width: 56, height: 5)
-                    }
-
-                HStack(spacing: 8) {
-                    Image(systemName: "camera.fill")
-                    Image(systemName: "mic.fill")
-                }
-                .font(.system(size: 13, weight: .black))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .center)
-            }
-            .padding(12)
-        }
-        .frame(width: 117, height: 117)
-    }
-}
-
-// MARK: - Floating Drift modifier
-
-/// Subtly drifts a view via sin-wave-driven offset + rotation. Used to
-/// signal "this is a display element floating in space" rather than
-/// "this is a tappable settings row" — testers were tapping the
-/// feature cards in onboarding expecting them to do something. Each
-/// card gets a different `phaseSeed` so they don't drift in sync.
-///
-/// Drift amplitudes are intentionally tiny (±1.5pt translate, ±0.4°
-/// rotate) — enough to read as motion, small enough that content stays
-/// stable to read. Respects `accessibilityReduceMotion`.
-private struct FloatingDrift: ViewModifier {
-    let phaseSeed: Double
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func body(content: Content) -> some View {
-        if reduceMotion {
-            content
-        } else {
-            TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { context in
-                let t = context.date.timeIntervalSinceReferenceDate
-                let twoPi = Double.pi * 2
-                let dx = sin(t * 0.40 + phaseSeed * twoPi)        * 1.5
-                let dy = sin(t * 0.32 + phaseSeed * twoPi * 1.5)  * 1.5
-                let rotation = sin(t * 0.22 + phaseSeed * twoPi)  * 0.4
-
-                content
-                    .offset(x: dx, y: dy)
-                    .rotationEffect(.degrees(rotation))
-            }
-        }
-    }
-}
-
-// MARK: - Curated Recipes Card
-
-/// Fifth feature card (added 2026-05-24). Positions the recipe feature
-/// as "we did the curation work" rather than "we dump 10,000 random
-/// recipes on you" — the differentiator vs. competitors. Shows a
-/// stylized recipe preview tile on the left with macros + a
-/// "Fits your targets" chip; title + subtitle on the right.
-private struct CuratedRecipesCardView: View {
-    @State private var checkPulse = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(spacing: 16) {
-            recipePreview
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Recipes worth your goals")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
-
-                Text("Hand-picked meals that hit your targets — no endless scrolling.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .lineSpacing(2)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 16)
-        .padding(.trailing, 20)
-        .padding(.vertical, 12)
-        .frame(height: 142)
-        .frame(maxWidth: .infinity)
-        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
-        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                checkPulse = true
-            }
-        }
-    }
-
-    /// Compact recipe preview — circular dish illustration at top, name,
-    /// macros, and a "Fits your targets" check chip at the bottom. Same
-    /// 117pt square footprint as the other cards' left panels.
-    private var recipePreview: some View {
-        let accent = LinearGradient(
-            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-
-        return ZStack {
-            // Outer card chrome — matches widget preview style
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 1.00, green: 0.94, blue: 0.84),
-                            Color(red: 1.00, green: 0.88, blue: 0.72)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
-                )
-
-            VStack(spacing: 6) {
-                // Dish illustration: stacked circles signaling a bowl
-                ZStack {
-                    Circle()
-                        .fill(accent)
-                        .frame(width: 38, height: 38)
-                    Circle()
-                        .fill(.white.opacity(0.85))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "fork.knife")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(accent)
-                }
-
-                Text("Greek bowl")
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.30, green: 0.18, blue: 0.08))
-                    .lineLimit(1)
-
-                Text("320 cal · 22g P")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded))
-                    .foregroundStyle(Color(red: 0.42, green: 0.30, blue: 0.18))
-                    .monospacedDigit()
-
-                // "Fits your targets" check chip — gently pulses to draw
-                // attention to the curated/personalized angle
-                HStack(spacing: 3) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 9, weight: .bold))
-                    Text("Fits")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                }
-                .foregroundStyle(Color(red: 0.13, green: 0.55, blue: 0.30))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2.5)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color(red: 0.85, green: 0.95, blue: 0.88))
-                )
-                .scaleEffect(checkPulse ? 1.06 : 1.0)
-            }
-            .padding(12)
-        }
-        .frame(width: 117, height: 117)
-    }
-}
-
-// MARK: - Import Recipe Card
-
-/// Sixth feature card (added 2026-05-30). Sits next to the curated-recipes
-/// card and covers the *other* way recipes get into the app: importing one
-/// you found yourself. The single card spans both web pages and social
-/// posts (Instagram / TikTok), matching the source hints used downstream in
-/// `RecipeImportPendingStore` ("import it from this page"). Left tile is a
-/// stylized "shared link" preview with web/photo/video source glyphs and a
-/// gently pulsing "Import" chip; title + subtitle on the right.
-private struct ImportRecipeCardView: View {
-    @State private var importPulse = false
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        HStack(spacing: 16) {
-            linkPreview
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Import recipes from the web")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(OnboardingGlassTheme.textPrimary)
-
-                Text("Share a link from a site, Instagram, or TikTok — we'll pull in the recipe.")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(OnboardingGlassTheme.textSecondary)
-                    .lineSpacing(2)
-            }
-
-            Spacer(minLength: 0)
-        }
-        .padding(.leading, 16)
-        .padding(.trailing, 20)
-        .padding(.vertical, 12)
-        .frame(height: 142)
-        .frame(maxWidth: .infinity)
-        .onboardingGlassPanel(cornerRadius: 24, fillOpacity: 0.07, strokeOpacity: 0.14)
-        .shadow(color: OnboardingGlassTheme.buttonShadow, radius: 8, y: 3)
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                importPulse = true
-            }
-        }
-    }
-
-    /// Compact "shared link" preview — a link glyph in an accent disc, a row
-    /// of source glyphs (web / photo / video) signaling "from anywhere", and
-    /// a pulsing "Import" chip. Cool-toned to read distinct from the warm
-    /// curated-recipes tile while keeping the same 117pt square footprint.
-    private var linkPreview: some View {
-        let accent = LinearGradient(
-            colors: [OnboardingGlassTheme.accentStart, OnboardingGlassTheme.accentEnd],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-
-        return ZStack {
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .fill(
-                    LinearGradient(
-                        colors: [
-                            Color(red: 0.90, green: 0.93, blue: 1.00),
-                            Color(red: 0.82, green: 0.87, blue: 1.00)
-                        ],
-                        startPoint: .topLeading,
-                        endPoint: .bottomTrailing
-                    )
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .strokeBorder(OnboardingGlassTheme.panelStroke, lineWidth: 1)
-                )
-
-            VStack(spacing: 6) {
-                // Link glyph in an accent disc — same vocabulary as the
-                // curated card's dish illustration.
-                ZStack {
-                    Circle()
-                        .fill(accent)
-                        .frame(width: 38, height: 38)
-                    Circle()
-                        .fill(.white.opacity(0.85))
-                        .frame(width: 28, height: 28)
-                    Image(systemName: "link")
-                        .font(.system(size: 13, weight: .black))
-                        .foregroundStyle(accent)
-                }
-
-                // Source glyphs: web page, photo post, video post.
-                HStack(spacing: 7) {
-                    Image(systemName: "globe")
-                    Image(systemName: "photo.fill")
-                    Image(systemName: "play.rectangle.fill")
-                }
-                .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(Color(red: 0.30, green: 0.34, blue: 0.55))
-
-                // "Import" chip — gently pulses to signal the one action.
-                HStack(spacing: 3) {
-                    Image(systemName: "square.and.arrow.down.fill")
-                        .font(.system(size: 9, weight: .bold))
-                    Text("Import")
-                        .font(.system(size: 9, weight: .bold, design: .rounded))
-                }
-                .foregroundStyle(Color(red: 0.16, green: 0.20, blue: 0.42))
-                .padding(.horizontal, 6)
-                .padding(.vertical, 2.5)
-                .background(
-                    Capsule(style: .continuous)
-                        .fill(Color(red: 0.84, green: 0.88, blue: 1.00))
-                )
-                .scaleEffect(importPulse ? 1.06 : 1.0)
-            }
-            .padding(12)
-        }
-        .frame(width: 117, height: 117)
     }
 }
