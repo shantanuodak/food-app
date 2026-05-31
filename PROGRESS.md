@@ -20,10 +20,12 @@
 - Backend: `"<wt>/backend/node_modules/.bin/tsc" --noEmit -p "<wt>/backend/tsconfig.json"` ; `npm --prefix "<wt>/backend" test`
 - iOS: `xcodebuild build -project "<wt>/Food App.xcodeproj" -scheme "Food App" -destination "generic/platform=iOS Simulator" -derivedDataPath "<dd>"` (-quiet; EXIT=0 = green)
 
-## PHASES
-- [x] 0 setup  · [x] 1 baselines GREEN  · [x] 2 audit (10 agents → AUDIT_FINDINGS*.md)
-- [~] 3/4 applying verified cleanups (IN PROGRESS)
-- [ ] 5 final report (REVIEW_NOTES_HUMAN_VERIFY.md + summary)
+## PHASES — COMPLETE ✅
+- [x] 0 setup · [x] 1 baselines GREEN · [x] 2 audit (10 agents → AUDIT_FINDINGS*.md)
+- [x] 3/4 applied verified cleanups — 22 commits, **1,672 LOC dead code removed** (54 added), all build/test-verified
+- [x] 5 final report → FINAL_REPORT.md + REVIEW_NOTES_HUMAN_VERIFY.md
+
+**Autonomous loop STOPPED: safe cleanups done. Remaining items (BentoTokens ~55 LOC; perf nits; backend low-risk) are documented in FINAL_REPORT.md / REVIEW_NOTES_HUMAN_VERIFY.md — they need human verify or are low priority. If resuming for more: continue from "Remaining optional cleanups" in FINAL_REPORT.md.**
 
 ## APPLIED (committed, verified GREEN) — running total ~1,237 LOC dead code removed
 1. backend dead code: streamGeminiJson/tokenOverlapRatio/lookupByName; unexport helper. ~230. (f756d84)
