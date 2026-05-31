@@ -26,25 +26,6 @@ function startOfUtcDay(date = new Date()): Date {
   return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
 }
 
-export async function getTodayEstimatedCostUsd(feature?: CostEventInput['feature']): Promise<number> {
-  const start = startOfUtcDay();
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
-
-  const result = await pool.query<{ total_cost: string }>(
-    `
-    SELECT COALESCE(SUM(estimated_cost_usd), 0) AS total_cost
-    FROM ai_cost_events
-    WHERE created_at >= $1
-      AND created_at < $2
-      ${feature ? 'AND feature = $3' : ''}
-    `,
-    feature ? [start.toISOString(), end.toISOString(), feature] : [start.toISOString(), end.toISOString()]
-  );
-
-  return Number(result.rows[0]?.total_cost || 0);
-}
-
 export async function writeAiCostEvent(input: CostEventInput): Promise<void> {
   await ensureUserExists(input.userId);
 

@@ -798,6 +798,7 @@ router.post('/', async (req, res, next) => {
       })}\n\n`);
       res.end();
     } catch (err) {
+      console.error('[sse_parse_error]', err);
       if (!res.writableEnded) {
         const message = err instanceof Error ? err.message : 'Parse failed';
         res.write(`event: error\ndata: ${JSON.stringify({ message })}\n\n`);

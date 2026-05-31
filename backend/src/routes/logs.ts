@@ -76,7 +76,7 @@ router.post('/', async (req, res, next) => {
       }
       const payload = existing.responseJson as { logId?: string; status?: string; healthSync?: { healthWriteKey?: string } };
       const resolvedLogId = (payload?.logId && payload.logId.trim()) || existing.logId;
-      const resolvedStatus = payload?.status === 'saved' ? 'saved' : 'saved';
+      const resolvedStatus = 'saved';
       const resolvedHealthSync =
         payload?.healthSync?.healthWriteKey && payload.healthSync.healthWriteKey.trim().length > 0
           ? payload.healthSync
@@ -206,7 +206,7 @@ router.post('/', async (req, res, next) => {
   } catch (err) {
     const code = err instanceof ApiError ? err.code : err instanceof Error ? err.name : 'UNKNOWN_ERROR';
     if (parsedBody?.parseRequestId || telemetryUserId || telemetryIdempotencyKey) {
-      safeRecordSaveAttempt({
+      void safeRecordSaveAttempt({
         userId: telemetryUserId,
         parseRequestId: parsedBody?.parseRequestId,
         idempotencyKey: telemetryIdempotencyKey,
