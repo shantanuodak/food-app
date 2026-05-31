@@ -1,49 +1,42 @@
 # End-to-End Code Review & Cleanup — PROGRESS / CHECKPOINT
 
 **Branch:** `end-to-end-code-debug-and-review`
-**Base (current main at start):** `e71e52d` — "Recipes: rebuild card grid + lock artwork size"
+**Base (current main at start):** `e71e52d`
 **Worktree (do ALL work here):** `/Users/shantanuodak/Desktop/Codex Folders/Food App/e2e-review-worktree`
 **Main repo (NEVER touch — user's, Xcode open here):** `/Users/shantanuodak/Desktop/Codex Folders/Food App/Food App`
-**Separate DerivedData (keep out of git):** `/Users/shantanuodak/Desktop/Codex Folders/Food App/e2e-derived-data`
-**Started:** 2026-05-31, overnight autonomous run.
+**Separate DerivedData:** `/Users/shantanuodak/Desktop/Codex Folders/Food App/e2e-derived-data`
 
-## STRICT RULES (user-mandated, non-negotiable)
-- NEVER modify `main` (branch ref or working dir). No checkout/commit/push/merge into main. main stays at `e71e52d`.
-- ALL edits/commits happen in THIS worktree on branch `end-to-end-code-debug-and-review`.
-- If stuck, STAY stuck and document here. Do NOT fall back to main.
-- Local only — no push, no PR until the user approves in the morning.
-- Verify before claiming done: backend = `tsc --noEmit` + `vitest` green; iOS = `xcodebuild` green (separate DerivedData).
-- Do NOT touch the parse/save/image save-path (see CLAUDE.md save-path rule) beyond clearly-dead code; no autonomous prod-DB end-to-end saves.
-- Use `grep` not `rg` in Bash (shell `rg` is proxied/unreliable here). The Grep tool is fine.
-- `RecipesViews.swift` was just rewritten on main (`e71e52d`) — user actively iterating; be conservative.
+## STRICT RULES (non-negotiable)
+- NEVER modify `main` (ref or working dir). main stays at `e71e52d`. Verify after each commit.
+- ALL edits/commits in THIS worktree on branch `end-to-end-code-debug-and-review`. Local only (no push/PR until approved).
+- If stuck, STAY stuck + document. Do NOT fall back to main.
+- Verify before commit: backend `tsc --noEmit` + `vitest` green; iOS `xcodebuild` green (separate DerivedData).
+- Do NOT touch parse/save/image save-path beyond clearly-dead code. Document HV items, never auto-fix.
+- Use `grep` not `rg` in Bash. iOS dead-code = in-file removals only (avoid project.pbxproj/whole-file deletes — queue those).
 
 ## VERIFICATION LOOP
-- Backend: `node_modules` + `.env` are symlinked into the worktree from the main repo.
-  - typecheck: `"<wt>/backend/node_modules/.bin/tsc" --noEmit -p "<wt>/backend/tsconfig.json"`
-  - tests: `npm --prefix "<wt>/backend" test`  (vitest unit; integration is gated separately)
+- Backend: `"<wt>/backend/node_modules/.bin/tsc" --noEmit -p "<wt>/backend/tsconfig.json"` ; `npm --prefix "<wt>/backend" test`
 - iOS: `xcodebuild build -project "<wt>/Food App.xcodeproj" -scheme "Food App" -destination "generic/platform=iOS Simulator" -derivedDataPath "<dd>"`
 
 ## PHASES
 - [x] 0. Worktree setup + main isolation verified
-- [ ] 1. Baselines (backend tsc/vitest; iOS build green)
-- [ ] 2. Exhaustive audit (read-only fan-out) — findings appended below
-- [ ] 3. Adversarial verification of findings (kill false positives)
-- [ ] 4. Apply safe cleanups (backend verified; iOS build-verified), isolated commits
+- [x] 1. Baselines — iOS build GREEN; backend tsc GREEN; vitest GREEN (245 pass/34 skip)
+- [x] 2. Exhaustive audit (10 agents) — AUDIT_FINDINGS.md + AUDIT_FINDINGS_WAVE2.md
+- [~] 3/4. Applying verified cleanups (IN PROGRESS)
 - [ ] 5. Final report + morning summary
 
-## BASELINES
-- backend `tsc --noEmit`: PASS (0 errors) — confirmed pre-fast-forward; re-confirm in worktree
-- backend `vitest`: PENDING
-- iOS build: PENDING
+## APPLIED (committed on branch, verified)
+1. `refactor(backend): remove dead code` — streamGeminiJson(+extractCompleteJsonObjects,StreamItemCallback), tokenOverlapRatio, lookupByName; unexport isUnresolvedPlaceholderItem. **~230 LOC**. tsc+vitest GREEN.
 
-## AUDIT FINDINGS (appended as agents report)
-_pending — wave 1 dispatched: logging-shell, save/parse-core, auth/services, backend-services, backend-routes_
-
-## COMMITS MADE ON BRANCH
-_none yet (this PROGRESS.md will be the first)_
+## NEXT (in order)
+- **Backend dead/fixes:** getTodayEstimatedCostUsd (check `startOfUtcDay` orphan after removal), resolvedStatus dead ternary (`routes/logs.ts:79`), recipeQualityScore `__testing`.
+- **Backend security (high value):** timing-safe internal-key compare → `utils/internalKey.ts` + 6 routes + `app.ts:175`; floating-promise `void` (`logs.ts:209`); SSE error log (`parse.ts:800`); DELETE token + timezone validation.
+- **Backend simplify:** extract `requireInternalKey`/`authContext`; rate-limiter factory.
+- **iOS (build-verified, per area):** in-file dead-code removals — onboarding (~600+: OnboardingComponents 5 structs, OnboardingAnimatedBackground orb, AgeWheelPicker, .planPreview, normalizedForActiveFlow, helpCard), home (HM0x ~340, StreakBadgeProgress, heroSubtitle), profile (profileHubSection/summaryHeaderSection/mealReminderSection/identityRow/heroData/trendData/BentoTokens), recipes (conservative), camera. Then: DateFormatter→static, reduce-motion `4:13` fix, dead @State/@FocusState removal, dedup helpers.
+- **DOCUMENT ONLY (HV, never auto-fix):** all save-path/auth/camera-behavioral/data-overwrite items (CalorieHeroTile draftStore overwrite, CameraService MainActor race, switchCamera black-screen, deferred-image disk-persist, upsertPendingItem, autoSavedParseIDs, etc.) — collect into REVIEW_NOTES_HUMAN_VERIFY.md.
+- Project hygiene (queue for user/Xcode): duplicate InstrumentSerif font entries in Copy Bundle Resources.
 
 ## HOW TO RESUME (after a usage-limit reset / fresh session)
-1. Read this file top to bottom. Confirm the worktree still exists and `main` is still at `e71e52d` (untouched).
-2. Re-read `CLAUDE.md` in the worktree for the save-path safety rule.
-3. Continue from the first unchecked phase. Update checkboxes + findings as you go.
-4. NEVER operate in the main repo dir. Stay in the worktree.
+1. Read this file + CLAUDE.md. Confirm worktree exists and `main` still at `e71e52d`.
+2. Continue from NEXT. Apply one batch, verify (tsc/vitest or xcodebuild), commit, update this file.
+3. NEVER operate in the main repo dir. Stay in the worktree.
