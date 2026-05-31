@@ -6,7 +6,7 @@ import { pool } from '../db.js';
 import { config } from '../config.js';
 import { ApiError } from '../utils/errors.js';
 import { ensureUserExists } from './userService.js';
-import { cleanupRecipeDraft } from './recipeCleanupService.js';
+import { cleanupRecipeDraft, extractRecipeFromText } from './recipeCleanupService.js';
 import { buildRecipeDraftFromTranscript } from './recipeAudioImportService.js';
 
 const SCRAPE_TIMEOUT_MS = 8000;
@@ -1538,6 +1538,43 @@ export async function structureRecipeText(input: {
   heroImageUrl?: string | null;
 }): Promise<{ draft: RecipeDraft }> {
   const safeUrl = assertSafeRecipeUrl(input.sourceUrl);
+
+  // Extraction-first: hand Gemini the FULL caption so it recovers the dish
+  // title, ALL ingredients (incl. quantity-less ones like "Tomato"), and steps.
+  // The heuristic builder only keeps quantity-bearing lines and mangles the
+  // title, so running it first is lossy. Fall back to it only if Gemini is
+  // unavailable/unusable.
+  if (config.recipeCleanupEnabled) {
+    const base: RecipeDraft = {
+      title: cleanString(input.sourceName, 180) ?? safeUrl.domain,
+      sourceUrl: safeUrl.url,
+      sourceDomain: safeUrl.domain,
+      sourceName: cleanString(input.sourceName, 180) ?? safeUrl.domain,
+      heroImageUrl: cleanString(input.heroImageUrl, 1000),
+      description: null,
+      servings: null,
+      prepTime: null,
+      cookTime: null,
+      totalTime: null,
+      categories: [],
+      cuisines: [],
+      keywords: [],
+      ingredients: [],
+      steps: [],
+      confidence: 0.5,
+      warnings: ['Imported from shared text. Review before saving.']
+    };
+    try {
+      const extracted = await extractRecipeFromText(input.text, base);
+      if (extracted) {
+        return { draft: extracted };
+      }
+    } catch (error) {
+      console.warn('[recipeImport] structure-text extraction threw; falling back to heuristic', error);
+    }
+  }
+
+  // Fallback: heuristic builder (quantity-line extraction) + optional cleanup.
   const raw = buildRecipeDraftFromTranscript({
     transcript: input.text,
     sourceUrl: safeUrl.url,
