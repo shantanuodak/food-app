@@ -1,5 +1,19 @@
 # Human-Verify Notes — bugs found but NOT auto-fixed
 
+## ⚠️ SESSION UPDATE (worked through together after the overnight run — READ FIRST)
+**Fixed + verified on the branch (each its own commit, tests green):**
+- Backend: rate-limiter memory cap; notification timezone (IANA) + device-token validation; evalDashboard empty-list counter.
+- iOS perf: cached 2 fixed-config `DateFormatter`s.
+
+**Investigated → NOT REAL (false positives — do NOT chase these):**
+- 🟢 `image_ref = NULL` on save failure (was the headline #1) — the durable pending-save *queue* persists the photo bytes (`PendingSaveQueueItem.imageUploadData` is `Codable`), so they survive a relaunch and the re-save re-uploads. The audit only saw the ephemeral in-memory dict and missed the queue.
+- 🟢 "ghost rows" in `handleServerBackedRowCleared` — only runs for rows already saved on the server (no in-flight POST to ghost), and it deliberately *removes* the row from delete-tracking (opposite intent to its sibling). Discarding the keys is correct.
+
+**Still open (minor, your call):** reduce-motion `4:4` value (needs a design decision). The remaining save-path / auth / camera items below are UNVERIFIED — given 2 of 2 checked turned out false-positive, treat them skeptically and ping me to verify any specific one before changing safety-critical code.
+
+---
+
+
 These were surfaced during the e2e review but **deliberately left untouched** because they
 touch the save/parse/image path, auth, camera behavior, or otherwise need a behavioral
 decision the build alone can't validate (per CLAUDE.md save-path rule). Each needs your eyes
