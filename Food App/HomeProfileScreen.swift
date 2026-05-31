@@ -102,67 +102,6 @@ struct HomeProfileScreen: View {
 
     // MARK: - Sections
 
-    private var profileHubSection: some View {
-        Section {
-            NavigationLink {
-                ProgressSectionView()
-                    .navigationTitle("Progress")
-                    .navigationBarTitleDisplayMode(.inline)
-            } label: {
-                ProfileHubRow(
-                    title: "Progress & insights",
-                    systemImage: "chart.bar.fill"
-                )
-            }
-
-            NavigationLink {
-                PlanProfileDetailView {
-                    planSection
-                }
-            } label: {
-                ProfileHubRow(
-                    title: "Plan & goals",
-                    systemImage: "scope"
-                )
-            }
-
-            NavigationLink {
-                BodyProfileDetailView {
-                    bodySection
-                }
-            } label: {
-                ProfileHubRow(
-                    title: "Body details",
-                    systemImage: "person.text.rectangle"
-                )
-            }
-
-            NavigationLink {
-                FoodPreferencesProfileDetailView {
-                    foodPreferencesIntroSection
-                    dietSection
-                    allergiesSection
-                }
-            } label: {
-                ProfileHubRow(
-                    title: "Food preferences",
-                    systemImage: "fork.knife"
-                )
-            }
-
-            NavigationLink {
-                HealthInsightsProfileDetailView {
-                    healthSection
-                }
-            } label: {
-                ProfileHubRow(
-                    title: "Health & insights",
-                    systemImage: "heart.text.square"
-                )
-            }
-        }
-    }
-
     private var appHubSection: some View {
         Section {
             NavigationLink {
@@ -217,35 +156,6 @@ struct HomeProfileScreen: View {
             }
         } header: {
             Text("Account & App")
-        }
-    }
-
-    @ViewBuilder
-    private var summaryHeaderSection: some View {
-        if draft.hasBaselineValues, let goal = draft.goal {
-            let metrics = OnboardingCalculator.metrics(from: draft)
-            let calorieTarget = draft.savedCalorieTarget ?? metrics.targetKcal
-            let proteinTarget = draft.savedMacroTargets?.protein ?? metrics.proteinTarget
-            let carbTarget = draft.savedMacroTargets?.carbs ?? metrics.carbTarget
-            let fatTarget = draft.savedMacroTargets?.fat ?? metrics.fatTarget
-            Section {
-                LabeledContent("Daily target", value: "\(calorieTarget) kcal")
-                LabeledContent("Protein", value: "\(proteinTarget) g")
-                LabeledContent("Carbs", value: "\(carbTarget) g")
-                LabeledContent("Fat", value: "\(fatTarget) g")
-            } header: {
-                Text("Daily targets")
-            } footer: {
-                Text("\(L10n.goalLabel(goal)) · \(draft.pace?.title ?? "Balanced") pace")
-            }
-        } else {
-            Section {
-                ContentUnavailableView(
-                    "Complete your profile",
-                    systemImage: "chart.bar",
-                    description: Text("Set your goal and body details to see your daily target.")
-                )
-            }
         }
     }
 
@@ -644,30 +554,6 @@ struct HomeProfileScreen: View {
         }
     }
 
-    private var mealReminderSection: some View {
-        Section {
-            reminderTimePicker(
-                title: "Breakfast",
-                systemImage: "sunrise.fill",
-                keyPath: \.breakfast
-            )
-            reminderTimePicker(
-                title: "Lunch",
-                systemImage: "sun.max.fill",
-                keyPath: \.lunch
-            )
-            reminderTimePicker(
-                title: "Dinner",
-                systemImage: "moon.fill",
-                keyPath: \.dinner
-            )
-        } header: {
-            Text("Meal reminders")
-        } footer: {
-            Text("Used for local food reminders when notifications are enabled.")
-        }
-    }
-
     @ViewBuilder
     private var adminSection: some View {
         Section("Feature flags") {
@@ -833,23 +719,6 @@ struct HomeProfileScreen: View {
 
     private var accountEmail: String {
         appStore.authSessionStore.session?.email ?? "Email unavailable"
-    }
-
-    private var mealReminderSummaryText: String {
-        let settings = appStore.mealReminderSettings
-        guard settings.remindersEnabled else { return "Off" }
-
-        var enabledMeals: [String] = []
-        if settings.breakfastEnabled {
-            enabledMeals.append("Breakfast \(timeLabel(for: settings.breakfastStart))-\(timeLabel(for: settings.breakfast))")
-        }
-        if settings.lunchEnabled {
-            enabledMeals.append("Lunch \(timeLabel(for: settings.lunchStart))-\(timeLabel(for: settings.lunch))")
-        }
-        if settings.dinnerEnabled {
-            enabledMeals.append("Dinner \(timeLabel(for: settings.dinnerStart))-\(timeLabel(for: settings.dinner))")
-        }
-        return enabledMeals.isEmpty ? "No meal times selected" : enabledMeals.joined(separator: " · ")
     }
 
     private func preferenceSymbol(for preference: PreferenceChoice) -> String {

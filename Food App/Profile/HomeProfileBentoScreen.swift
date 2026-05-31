@@ -245,31 +245,6 @@ struct HomeProfileBentoScreen: View {
         }
     }
 
-    // MARK: - Identity row
-
-    private var identityRow: some View {
-        HStack {
-            Text(displayName)
-                .font(.system(size: 16, weight: .bold))
-                .foregroundStyle(BentoTokens.gray900)
-
-            Spacer()
-
-            Button {
-                isManageAccountPresented = true
-            } label: {
-                HStack(spacing: 4) {
-                    Text("Manage Account")
-                        .font(.system(size: 13, weight: .semibold))
-                    Image(systemName: "chevron.right")
-                        .font(.system(size: 11, weight: .semibold))
-                }
-                .foregroundStyle(BentoTokens.orange700)
-            }
-            .buttonStyle(.plain)
-        }
-    }
-
     /// Pulled from the auth session. Google / Apple sign-in only gives us
     /// `firstName`; until the backend exposes a full-name field we show
     /// just that, falling back to the email local-part if no firstName.
@@ -409,27 +384,6 @@ struct HomeProfileBentoScreen: View {
 
     // MARK: - View data adapters
 
-    private var heroData: CalorieHeroTile.Data {
-        let totals = daySummary?.totals
-        let calorieTarget = Double(profile?.calorieTarget ?? 2_500)
-        let proteinTarget = profile?.macroTargets.protein ?? 0
-        let carbsTarget = profile?.macroTargets.carbs ?? 0
-        let fatTarget = profile?.macroTargets.fat ?? 0
-
-        return CalorieHeroTile.Data(
-            consumed: totals?.calories ?? 0,
-            target: calorieTarget,
-            protein: totals?.protein ?? 0,
-            proteinTarget: proteinTarget,
-            carbs: totals?.carbs ?? 0,
-            carbsTarget: carbsTarget,
-            fat: totals?.fat ?? 0,
-            fatTarget: fatTarget,
-            logs: todayLogsCount,
-            isLoading: isInitialLoad && totals == nil
-        )
-    }
-
     private var streakDays: Int {
         streaks?.currentDays ?? progress?.streaks.currentDays ?? 0
     }
@@ -508,39 +462,6 @@ struct HomeProfileBentoScreen: View {
             preferencesCount: dietPreferenceCount(profile.dietPreference),
             allergiesCount: profile.allergies.count,
             pace: paceLabel(profile.pace)
-        )
-    }
-
-    private var trendData: SevenDayTrendTile.Data {
-        let weekday = DateFormatter()
-        weekday.locale = Locale(identifier: "en_US_POSIX")
-        weekday.dateFormat = "EEE"
-
-        let days: [SevenDayTrendTile.DayPoint] = (progress?.days ?? []).map { day in
-            let date = HomeLoggingDateUtils.summaryRequestFormatter.date(from: day.date) ?? Date()
-            return SevenDayTrendTile.DayPoint(
-                label: weekday.string(from: date),
-                value: day.totals.calories,
-                logged: day.hasLogs
-            )
-        }
-
-        let logged = days.filter(\.logged)
-        let average = logged.isEmpty ? 0 : Int((logged.reduce(0.0) { $0 + $1.value } / Double(logged.count)).rounded())
-        let total = Int(days.reduce(0.0) { $0 + $1.value }.rounded())
-        let best = days.max { $0.value < $1.value }?.label ?? "—"
-        let target = Double(profile?.calorieTarget ?? 2_500)
-        let deltaPct = progress?.weeklyDelta.calories.deltaPct ?? 0
-
-        return SevenDayTrendTile.Data(
-            days: days,
-            target: target,
-            average: average,
-            deltaPercent: deltaPct,
-            total: total,
-            bestDayLabel: best,
-            loggedDays: logged.count,
-            isLoading: progress == nil && isInitialLoad
         )
     }
 
