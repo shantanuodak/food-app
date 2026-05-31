@@ -106,7 +106,7 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
 
     var previous: OnboardingRoute? {
         let flow = OnboardingRoute.activeFlow
-        guard let index = flow.firstIndex(of: normalizedForActiveFlow),
+        guard let index = flow.firstIndex(of: self),
               index > 0 else {
             return nil
         }
@@ -115,19 +115,11 @@ enum OnboardingRoute: Int, CaseIterable, Equatable, Hashable {
 
     var next: OnboardingRoute? {
         let flow = OnboardingRoute.activeFlow
-        guard let index = flow.firstIndex(of: normalizedForActiveFlow),
+        guard let index = flow.firstIndex(of: self),
               index < (flow.count - 1) else {
             return nil
         }
         return flow[index + 1]
-    }
-
-    var normalizedForActiveFlow: OnboardingRoute {
-        // Was used to redirect away from `.preferencesOptional` when it was
-        // pulled from the active flow. Now that the route is back, every
-        // case maps to itself — the function is kept as a hook for future
-        // route deprecations.
-        return self
     }
 }
 
@@ -159,7 +151,7 @@ final class AppFlowCoordinator: ObservableObject {
 
     func moveToOnboarding(_ route: OnboardingRoute) {
         self.route = .onboarding
-        onboardingRoute = route.normalizedForActiveFlow
+        onboardingRoute = route
     }
 
     func moveNextOnboarding() {

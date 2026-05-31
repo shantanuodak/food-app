@@ -251,15 +251,6 @@ private struct SharedRecipePayload {
     var sourceHint: SharedRecipeSourceHint {
         SharedRecipeSourceHint.infer(url: url, text: rawText)
     }
-
-    func with(url: URL) -> SharedRecipePayload {
-        SharedRecipePayload(
-            url: url,
-            rawText: rawText,
-            mediaAttachment: mediaAttachment,
-            providerTypeIdentifiers: providerTypeIdentifiers
-        )
-    }
 }
 
 private struct SharedRecipeMediaAttachment {

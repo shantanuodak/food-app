@@ -72,7 +72,6 @@ struct HomeRecipesDrawerContent: View {
     @State private var pasteText: String = ""
     @State private var isPasting: Bool = false
     @State private var pasteError: String?
-    @FocusState private var isPasteFocused: Bool
 
     /// True when iOS reports the clipboard contains a URL. Drives the
     /// "Link detected" pill state on the bottom paste bar. Uses
@@ -817,7 +816,6 @@ struct HomeRecipesDrawerContent: View {
         let sourceHint = RecipeImportSourceHint.infer(url: url)
         if sourceHint.prefersBrowserImport {
             pasteText = ""
-            isPasteFocused = false
             browserImportSession = RecipeBrowserImportSession(url: url, sourceHint: sourceHint)
             return
         }
@@ -835,13 +833,11 @@ struct HomeRecipesDrawerContent: View {
                 await saveAndOpen(draft)
             } else {
                 pasteText = ""
-                isPasteFocused = false
                 draftForReview = draft
             }
         } catch {
             if RecipeImportFailure.shouldFallBackToBrowser(error) {
                 pasteText = ""
-                isPasteFocused = false
                 importErrorMessage = "That site blocked direct import — opening it so you can grab the recipe."
                 scheduleErrorAutoDismiss()
                 browserImportSession = RecipeBrowserImportSession(url: url, sourceHint: sourceHint)
@@ -863,7 +859,6 @@ struct HomeRecipesDrawerContent: View {
             recipes.removeAll { $0.id == createResponse.recipe.id }
             recipes.insert(createResponse.recipe, at: 0)
             pasteText = ""
-            isPasteFocused = false
             selectedRecipe = createResponse.recipe
         } catch {
             importErrorMessage = RecipeImportFailure.friendlyMessage(error)
