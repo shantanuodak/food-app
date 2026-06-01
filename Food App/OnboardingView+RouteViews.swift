@@ -147,9 +147,16 @@ extension OnboardingView {
         )
     }
 
+    /// The connect screen is image-forward: the value proposition sits over a
+    /// full-bleed, swappable food-photo mosaic. Flip this to `false` for a pure
+    /// image-first layout that drops the inline AI preview card.
+    private var accountShowsAIPreviewCard: Bool { true }
+
     var accountRouteView: some View {
         ZStack {
             AccountLiquidGlassBackground()
+            AccountFoodMosaicBackground(appeared: accountScreenAppeared)
+            AccountMosaicScrim()
 
             VStack(spacing: 0) {
                 if !isExistingAccountSignIn {
@@ -189,6 +196,10 @@ extension OnboardingView {
                         .padding(.top, 12)
                 }
 
+                // Hero imagery breathes in the upper portion; the content
+                // cluster gravitates to the lower half over the scrim.
+                Spacer(minLength: 16)
+
                 VStack(spacing: 12) {
                     HStack(spacing: 8) {
                         Circle()
@@ -213,17 +224,18 @@ extension OnboardingView {
                         .multilineTextAlignment(.center)
                         .lineSpacing(2)
                 }
-                .padding(.top, 32)
                 .padding(.horizontal, 24)
+                // Guarantees legibility no matter which photo lands behind it.
+                .shadow(color: Color.black.opacity(0.55), radius: 18, y: 8)
                 .opacity(accountScreenAppeared ? 1 : 0)
                 .offset(y: accountScreenAppeared ? 0 : 12)
                 .animation(.easeOut(duration: 0.5).delay(0.05), value: accountScreenAppeared)
 
-                AccountPreviewGlassStack(appeared: accountScreenAppeared)
-                    .padding(.top, 36)
-                    .padding(.horizontal, 24)
-
-                Spacer(minLength: 24)
+                if accountShowsAIPreviewCard {
+                    AccountPreviewGlassStack(appeared: accountScreenAppeared)
+                        .padding(.top, 30)
+                        .padding(.horizontal, 24)
+                }
 
                 VStack(spacing: 24) {
                     OB08AccountScreen(
@@ -246,10 +258,15 @@ extension OnboardingView {
                             .multilineTextAlignment(.center)
                     }
                 }
+                .padding(.top, 30)
                 .padding(.horizontal, 24)
                 .padding(.bottom, 28)
             }
         }
+        // The mosaic + scrim make this an immersive dark moment in both system
+        // appearances, so the existing adaptive palettes resolve to their dark
+        // (light-on-dark) variants and read correctly over the photos.
+        .environment(\.colorScheme, .dark)
         .onAppear {
             accountScreenAppeared = true
         }
@@ -772,72 +789,131 @@ private enum AccountRoutePalette {
 private struct AccountPreviewGlassStack: View {
     let appeared: Bool
 
-    private let previewText = "2 eggs, toast, iced coffee"
+    // Auto-advancing "marquee" of logging modes — text, photo, recipe, voice,
+    // barcode — so the card shows the full breadth of how you can log. Add or
+    // reorder modes by editing `items`.
+    private struct PreviewItem: Identifiable {
+        let mode: String
+        let glyph: String
+        let example: String
+        let kcal: String
+        let macro: String
+        let fill: CGFloat
+        var id: String { mode }
+    }
+
+    private let items: [PreviewItem] = [
+        PreviewItem(mode: "AI text", glyph: "sparkles", example: "2 eggs, toast, iced coffee", kcal: "512 kcal", macro: "24g protein", fill: 0.78),
+        PreviewItem(mode: "Photo", glyph: "camera.fill", example: "Grilled chicken & rice bowl", kcal: "545 kcal", macro: "48g protein", fill: 0.88),
+        PreviewItem(mode: "Recipe", glyph: "book.closed.fill", example: "Creamy tomato pasta", kcal: "612 kcal", macro: "21g protein", fill: 0.70),
+        PreviewItem(mode: "Voice", glyph: "mic.fill", example: "A latte and a banana", kcal: "232 kcal", macro: "9g protein", fill: 0.58),
+        PreviewItem(mode: "Barcode", glyph: "barcode.viewfinder", example: "Chobani Greek yogurt", kcal: "120 kcal", macro: "15g protein", fill: 0.50)
+    ]
+
+    @State private var index = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         ZStack(alignment: .bottom) {
-            VStack(alignment: .leading, spacing: 0) {
-                HStack {
-                    Label("AI text", systemImage: "sparkles")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(AccountRoutePalette.ink)
-                    Spacer()
-                    Circle()
-                        .fill(Color.orange.opacity(0.78))
-                        .frame(width: 7, height: 7)
-                        .shadow(color: Color.orange.opacity(0.22), radius: 5)
-                }
-
-                VStack(alignment: .leading, spacing: 12) {
-                    HStack(alignment: .top, spacing: 10) {
-                        RoundedRectangle(cornerRadius: 14, style: .continuous)
-                            .fill(AccountRoutePalette.textBubbleFill)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .strokeBorder(AccountRoutePalette.textBubbleStroke, lineWidth: 1)
-                            )
-                            .frame(width: 34, height: 34)
-                            .overlay(
-                                Text("AI")
-                                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                                    .foregroundStyle(AccountRoutePalette.accentInk)
-                            )
-
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(previewText)
-                                .font(.system(size: 15, weight: .medium))
-                                .foregroundStyle(AccountRoutePalette.ink)
-                                .opacity(0.96)
-                                .lineLimit(1)
-
-                            previewLine(width: 0.78)
-                                .frame(height: 8)
-                        }
-                    }
-
-                    previewResultStrip
-                }
-                .padding(.top, 17)
-
-            }
-            .padding(.horizontal, 18)
-            .padding(.vertical, 17)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .frame(height: 146)
-            .background(AccountRoutePalette.cardFront)
-            .background(.ultraThinMaterial)
-            .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 28, style: .continuous)
-                    .strokeBorder(AccountRoutePalette.cardStrokeStrong, lineWidth: 1)
-            )
-            .shadow(color: Color.black.opacity(0.11), radius: 22, y: 14)
+            cardBody
+                .frame(height: 146)
+                .background(AccountRoutePalette.cardFront)
+                .background(.ultraThinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 28, style: .continuous)
+                        .strokeBorder(AccountRoutePalette.cardStrokeStrong, lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.11), radius: 22, y: 14)
         }
         .frame(height: 184)
         .opacity(appeared ? 1 : 0)
         .offset(y: appeared ? 0 : 10)
         .scaleEffect(appeared ? 1 : 0.985)
         .animation(.easeOut(duration: 0.48).delay(0.14), value: appeared)
+        .task { await runCarousel() }
+    }
+
+    // Sliding content sits behind a persistent status dot; the card's clip
+    // shape masks the slide so modes "marquee" through the same frame.
+    private var cardBody: some View {
+        ZStack(alignment: .topTrailing) {
+            ZStack {
+                itemView(items[index])
+                    .id(index)
+                    .transition(slideTransition)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+
+            Circle()
+                .fill(Color.orange.opacity(0.78))
+                .frame(width: 7, height: 7)
+                .shadow(color: Color.orange.opacity(0.22), radius: 5)
+        }
+        .padding(.horizontal, 18)
+        .padding(.vertical, 17)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func itemView(_ item: PreviewItem) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Label(item.mode, systemImage: item.glyph)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(AccountRoutePalette.ink)
+
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(alignment: .top, spacing: 10) {
+                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .fill(AccountRoutePalette.textBubbleFill)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                .strokeBorder(AccountRoutePalette.textBubbleStroke, lineWidth: 1)
+                        )
+                        .frame(width: 34, height: 34)
+                        .overlay(
+                            Image(systemName: item.glyph)
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundStyle(AccountRoutePalette.accentInk)
+                        )
+
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(item.example)
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundStyle(AccountRoutePalette.ink)
+                            .opacity(0.96)
+                            .lineLimit(1)
+
+                        previewLine(width: item.fill)
+                            .frame(height: 8)
+                    }
+                }
+
+                previewResultStrip(kcal: item.kcal, macro: item.macro)
+            }
+            .padding(.top, 17)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var slideTransition: AnyTransition {
+        reduceMotion
+            ? .opacity
+            : .asymmetric(
+                insertion: .move(edge: .trailing).combined(with: .opacity),
+                removal: .move(edge: .leading).combined(with: .opacity)
+            )
+    }
+
+    @MainActor
+    private func runCarousel() async {
+        guard items.count > 1 else { return }
+        while !Task.isCancelled {
+            try? await Task.sleep(for: .seconds(2.6))
+            if Task.isCancelled { break }
+            withAnimation(.easeInOut(duration: reduceMotion ? 0.4 : 0.55)) {
+                index = (index + 1) % items.count
+            }
+        }
     }
 
     private func previewLine(width: CGFloat) -> some View {
@@ -864,9 +940,9 @@ private struct AccountPreviewGlassStack: View {
         .frame(height: 8)
     }
 
-    private var previewResultStrip: some View {
+    private func previewResultStrip(kcal: String, macro: String) -> some View {
         HStack(spacing: 10) {
-            Text("512 kcal")
+            Text(kcal)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundStyle(AccountRoutePalette.accentInk)
 
@@ -874,7 +950,7 @@ private struct AccountPreviewGlassStack: View {
                 .fill(AccountRoutePalette.pillStroke)
                 .frame(width: 1, height: 12)
 
-            Text("24g protein")
+            Text(macro)
                 .font(.system(size: 12, weight: .semibold, design: .rounded))
                 .foregroundStyle(AccountRoutePalette.secondaryInk)
         }
@@ -882,5 +958,276 @@ private struct AccountPreviewGlassStack: View {
         .padding(.vertical, 8)
         .background(AccountRoutePalette.pillFill, in: Capsule())
         .overlay(Capsule().strokeBorder(AccountRoutePalette.pillStroke, lineWidth: 1))
+    }
+}
+
+// MARK: - Connect screen food mosaic
+//
+// The connect screen is image-forward: a full-bleed, gently drifting mosaic of
+// food photos sits behind the headline and sign-in buttons (HeyGen-style).
+//
+// SWAPPING / ADDING PHOTOS — no code change required:
+//   • The mosaic renders the asset names in `AccountMosaicCatalog.slots`,
+//     cycling them across the tiles. ConnectFood01…08 are wired to real photos
+//     in Assets.xcassets.
+//   • To REPLACE a photo, swap the image inside its existing image set.
+//   • To ADD more, drop new image sets into Assets.xcassets (e.g. ConnectFood09)
+//     and append their names to `slots`.
+//   • Photos are center-cropped to fill, so any aspect ratio works; bright,
+//     slightly moody, high-resolution shots read best under the scrim.
+//   • If a named slot is missing at runtime, the tile falls back to an in-app
+//     food shot, then to a styled placeholder — so the layout never breaks.
+
+private enum AccountMosaicCatalog {
+    /// The named asset slots the mosaic cycles through. Append more names here
+    /// after adding the matching image sets to Assets.xcassets.
+    static let slots: [String] = [
+        "ConnectFood01", "ConnectFood02", "ConnectFood03", "ConnectFood04",
+        "ConnectFood05", "ConnectFood06", "ConnectFood07", "ConnectFood08"
+    ]
+
+    /// Existing in-app food photos, cycled as a fallback so the screen looks
+    /// photographic out of the box before any ConnectFoodNN slots are added.
+    private static let demos: [String] = ["IntroFood1", "food_photo_demo", "IntroFood2"]
+
+    static func slot(at index: Int) -> String { slots[wrap(index, slots.count)] }
+    static func demo(at index: Int) -> String { demos[wrap(index, demos.count)] }
+
+    private static func wrap(_ index: Int, _ count: Int) -> Int {
+        ((index % count) + count) % count
+    }
+}
+
+private struct MosaicColumnSpec {
+    let heights: [CGFloat]
+    let scrollsUp: Bool
+    /// Scroll speed in points per second. Lower = slower. Kept intentionally
+    /// low for a calm backdrop; tune here to taste.
+    let speed: CGFloat
+}
+
+private struct AccountFoodMosaicBackground: View {
+    let appeared: Bool
+
+    private let columnSpacing: CGFloat = 10
+    private let tilesPerColumn = 6
+
+    // Interlocking masonry columns that scroll vertically forever. Directions
+    // alternate (up / down / up) for a parallax feel; tile heights sum well
+    // past the tallest iPhone so the screen is always covered.
+    private let columns: [MosaicColumnSpec] = [
+        MosaicColumnSpec(heights: [206, 158, 230, 172, 214, 186], scrollsUp: true, speed: 10),
+        MosaicColumnSpec(heights: [164, 222, 178, 208, 156, 226], scrollsUp: false, speed: 8),
+        MosaicColumnSpec(heights: [232, 176, 198, 160, 220, 184], scrollsUp: true, speed: 9)
+    ]
+
+    var body: some View {
+        GeometryReader { proxy in
+            HStack(spacing: columnSpacing) {
+                ForEach(Array(columns.enumerated()), id: \.offset) { columnIndex, spec in
+                    MosaicScrollingColumn(
+                        heights: spec.heights,
+                        spacing: columnSpacing,
+                        scrollsUp: spec.scrollsUp,
+                        speed: spec.speed,
+                        slotStartIndex: columnIndex * tilesPerColumn
+                    )
+                }
+            }
+            .frame(width: proxy.size.width)
+            .frame(maxHeight: .infinity, alignment: .top)
+        }
+        .ignoresSafeArea()
+        .scaleEffect(appeared ? 1 : 1.06)
+        .opacity(appeared ? 1 : 0)
+        .animation(.easeOut(duration: 0.85), value: appeared)
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+    }
+}
+
+/// One mosaic column that scrolls vertically forever with a seamless wrap.
+///
+/// The tile stack is rendered twice and the column is translated by exactly one
+/// set-height, so the moment the loop restarts the second copy sits precisely
+/// where the first began — no visible seam. Honors Reduce Motion (renders
+/// static).
+private struct MosaicScrollingColumn: View {
+    let heights: [CGFloat]
+    let spacing: CGFloat
+    let scrollsUp: Bool
+    let speed: CGFloat
+    let slotStartIndex: Int
+
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var offset: CGFloat = 0
+
+    // One full period: every tile plus the trailing gap that separates the two
+    // copies. Translating by this amount lands copy 2 exactly on copy 1.
+    private var setHeight: CGFloat {
+        heights.reduce(0, +) + spacing * CGFloat(heights.count)
+    }
+
+    var body: some View {
+        VStack(spacing: spacing) {
+            tileStack
+            tileStack
+        }
+        .frame(maxWidth: .infinity)
+        .offset(y: offset)
+        .onAppear(perform: startScrolling)
+    }
+
+    private var tileStack: some View {
+        VStack(spacing: spacing) {
+            ForEach(Array(heights.enumerated()), id: \.offset) { tileIndex, tileHeight in
+                let slot = slotStartIndex + tileIndex
+                MosaicTile(
+                    slot: AccountMosaicCatalog.slot(at: slot),
+                    demoFallback: AccountMosaicCatalog.demo(at: slot),
+                    height: tileHeight,
+                    paletteSeed: slot
+                )
+            }
+        }
+    }
+
+    private func startScrolling() {
+        // The visible window slides within [-setHeight, 0]; both ends render an
+        // identical frame, so the repeat is invisible.
+        offset = scrollsUp ? 0 : -setHeight
+        guard !reduceMotion else { return }
+        let target: CGFloat = scrollsUp ? -setHeight : 0
+        let duration = Double(setHeight / max(speed, 1))
+        withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+            offset = target
+        }
+    }
+}
+
+private struct MosaicTile: View {
+    let slot: String
+    let demoFallback: String
+    let height: CGFloat
+    let paletteSeed: Int
+
+    var body: some View {
+        tileSurface
+            .frame(maxWidth: .infinity)
+            .frame(height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            // Soft diagonal gloss for the "shiny" read the design calls for.
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .fill(
+                        LinearGradient(
+                            colors: [Color.white.opacity(0.16), .clear, Color.white.opacity(0.04)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+                    .blendMode(.softLight)
+                    .allowsHitTesting(false)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16, style: .continuous)
+                    .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+            )
+    }
+
+    @ViewBuilder
+    private var tileSurface: some View {
+        if let assetName = resolvedAssetName {
+            Color.clear.overlay(
+                Image(assetName)
+                    .resizable()
+                    .interpolation(.high)
+                    .scaledToFill()
+            )
+        } else {
+            placeholder
+        }
+    }
+
+    private var resolvedAssetName: String? {
+        if UIImage(named: slot) != nil { return slot }
+        if UIImage(named: demoFallback) != nil { return demoFallback }
+        return nil
+    }
+
+    private var placeholder: some View {
+        ZStack {
+            LinearGradient(
+                colors: MosaicPalette.gradient(for: paletteSeed),
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+            Image(systemName: MosaicPalette.glyph(for: paletteSeed))
+                .font(.system(size: height * 0.26, weight: .regular))
+                .foregroundStyle(Color.white.opacity(0.10))
+        }
+    }
+}
+
+private enum MosaicPalette {
+    // Dark, appetizing, food-toned gradients that stay cohesive under the scrim.
+    private static let gradients: [[Color]] = [
+        [Color(red: 0.42, green: 0.27, blue: 0.15), Color(red: 0.28, green: 0.16, blue: 0.09)],
+        [Color(red: 0.22, green: 0.30, blue: 0.18), Color(red: 0.12, green: 0.19, blue: 0.12)],
+        [Color(red: 0.36, green: 0.16, blue: 0.20), Color(red: 0.21, green: 0.10, blue: 0.13)],
+        [Color(red: 0.40, green: 0.31, blue: 0.20), Color(red: 0.25, green: 0.18, blue: 0.12)],
+        [Color(red: 0.27, green: 0.19, blue: 0.15), Color(red: 0.15, green: 0.10, blue: 0.08)],
+        [Color(red: 0.15, green: 0.28, blue: 0.27), Color(red: 0.09, green: 0.17, blue: 0.17)]
+    ]
+    private static let glyphs: [String] = [
+        "fork.knife", "cup.and.saucer.fill", "leaf.fill",
+        "birthday.cake.fill", "takeoutbag.and.cup.and.straw.fill", "wineglass.fill"
+    ]
+
+    static func gradient(for seed: Int) -> [Color] { gradients[wrap(seed, gradients.count)] }
+    static func glyph(for seed: Int) -> String { glyphs[wrap(seed, glyphs.count)] }
+
+    private static func wrap(_ index: Int, _ count: Int) -> Int {
+        ((index % count) + count) % count
+    }
+}
+
+private struct AccountMosaicScrim: View {
+    // Near-black base used for the grout between tiles and the bottom fade.
+    private let base = Color(red: 0.05, green: 0.042, blue: 0.038)
+
+    var body: some View {
+        ZStack {
+            // Even veil so the imagery sits back behind the content.
+            base.opacity(0.24)
+
+            // Top fade keeps the back button and "Final step" chip legible.
+            LinearGradient(
+                stops: [
+                    .init(color: base.opacity(0.55), location: 0.0),
+                    .init(color: .clear, location: 0.16)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            // Bottom fade carries the headline, preview card, and buttons.
+            // Raised higher (starts ~16% down) and ramps stronger so the
+            // serif headline keeps strong contrast over any photo behind it.
+            LinearGradient(
+                stops: [
+                    .init(color: .clear, location: 0.16),
+                    .init(color: base.opacity(0.42), location: 0.40),
+                    .init(color: base.opacity(0.78), location: 0.60),
+                    .init(color: base.opacity(0.96), location: 0.82),
+                    .init(color: base, location: 1.0)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+        }
+        .ignoresSafeArea()
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
     }
 }

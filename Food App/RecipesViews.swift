@@ -2175,7 +2175,7 @@ struct RecipeLibraryView: View {
 // below are shared by RecipesScreen, the home recipes drawer, and
 // RecipeLibraryView so every recipe surface renders identically.
 
-/// One compact stat shown on a card (e.g. "12 ingr", "16 steps", "30 min").
+/// One icon-led stat shown on a card (carrot + "12", list + "16", clock + "30 min").
 private struct RecipeStat: Identifiable {
     let id: Int
     let icon: String
@@ -2185,6 +2185,10 @@ private struct RecipeStat: Identifiable {
 /// Builds a recipe's stat row, omitting zero/empty values so a card never
 /// renders "0 steps", a blank servings chip, or a stray separator — the exact
 /// junk visible in the old grid.
+///
+/// Each stat is icon-led: the icon carries the meaning so the value drops its
+/// word label and stays compact — the fix for stats being truncated on narrow
+/// cards.
 private func recipeStats(
     for recipe: SavedRecipe,
     includeServings: Bool,
@@ -2197,13 +2201,13 @@ private func recipeStats(
         raw.append(("person.2.fill", servings))
     }
     if recipe.ingredients.count > 0 {
-        raw.append(("carrot.fill", "\(recipe.ingredients.count) ingr"))
+        raw.append(("carrot.fill", "\(recipe.ingredients.count)"))
     }
     if recipe.steps.count > 0 {
-        raw.append(("list.number", "\(recipe.steps.count) steps"))
+        raw.append(("list.number", "\(recipe.steps.count)"))
     }
     if includeTime,
-       let time = RecipeDuration.humanLabel(from: recipe.totalTime ?? recipe.cookTime ?? recipe.prepTime) {
+       let time = RecipeDuration.compactLabel(from: recipe.totalTime ?? recipe.cookTime ?? recipe.prepTime) {
         raw.append(("clock", time))
     }
     return raw.enumerated().map { RecipeStat(id: $0.offset, icon: $0.element.0, text: $0.element.1) }
@@ -2252,6 +2256,7 @@ private struct RecipeStatStrip: View {
         }
         .foregroundStyle(color)
         .lineLimit(1)
+        .minimumScaleFactor(0.8)
     }
 }
 
@@ -2384,6 +2389,7 @@ struct RecipeLibraryCard: View {
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(RecipesTokens.muted)
             .lineLimit(1)
+            .minimumScaleFactor(0.8)
         }
     }
 }
@@ -2487,7 +2493,7 @@ struct RecipeDetailView: View {
                 if let source = recipeSourceLabel(recipe) {
                     RecipeMetaChip(icon: "link", text: source, tinted: true)
                 }
-                if let time = RecipeDuration.humanLabel(from: recipe.totalTime ?? recipe.cookTime) {
+                if let time = RecipeDuration.compactLabel(from: recipe.totalTime ?? recipe.cookTime) {
                     RecipeMetaChip(icon: "clock", text: time)
                 }
             }

@@ -76,25 +76,15 @@ struct OB08AccountScreen: View {
 
                 Text("Continue with \(option.shortTitle)")
                     .font(.system(size: 17, weight: .semibold))
-                    .foregroundStyle(AccountScreenPalette.ink)
+                    .foregroundStyle(AccountScreenPalette.buttonInk)
 
                 Spacer(minLength: 0)
 
                 Image(systemName: "arrow.right")
                     .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(option.isPrimary ? AccountScreenPalette.primaryAccent : AccountScreenPalette.secondaryInk)
+                    .foregroundStyle(AccountScreenPalette.buttonInk)
                     .frame(width: 30, height: 30)
-                    .background(
-                        Group {
-                            if option.isPrimary {
-                                Circle()
-                                    .fill(AccountScreenPalette.primaryAccentFill)
-                            } else {
-                                Circle()
-                                    .fill(AccountScreenPalette.secondaryIconFill)
-                            }
-                        }
-                    )
+                    .background(Circle().fill(AccountScreenPalette.buttonArrowCircle))
             }
             .padding(.horizontal, 18)
             .frame(maxWidth: .infinity, minHeight: 72)
@@ -111,25 +101,19 @@ struct OB08AccountScreen: View {
     private func providerIcon(provider: AccountProvider, isPrimary: Bool) -> some View {
         switch provider {
         case .apple:
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isPrimary ? AccountScreenPalette.primaryIconFill : AccountScreenPalette.iconFill)
-                Image(systemName: "apple.logo")
-                    .font(.system(size: 18, weight: .medium))
-                    .foregroundStyle(AccountScreenPalette.ink)
-            }
-            .frame(width: 38, height: 38)
+            // Black Apple mark on the white card.
+            Image(systemName: "apple.logo")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(AccountScreenPalette.buttonInk)
+                .frame(width: 38, height: 38)
         case .google:
-            ZStack {
-                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .fill(isPrimary ? AccountScreenPalette.primaryIconFill : AccountScreenPalette.iconFill)
-                Image("ios_light_rd_na")
-                    .resizable()
-                    .interpolation(.high)
-                    .scaledToFit()
-                    .frame(width: 20, height: 20)
-            }
-            .frame(width: 38, height: 38)
+            // Full-color Google "G" on the white card.
+            Image("ios_light_rd_na")
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+                .frame(width: 22, height: 22)
+                .frame(width: 38, height: 38)
         }
     }
 
@@ -216,6 +200,15 @@ private enum AccountScreenPalette {
         dark: UIColor(red: 0.33, green: 0.23, blue: 0.17, alpha: 0.92)
     )
 
+    // Fixed white-card sign-in style. The connect screen renders over a dark
+    // photo mosaic, so these stay white / near-black regardless of color scheme.
+    static let buttonCardTop = Color.white
+    static let buttonCardBottom = Color(white: 0.965)
+    static let buttonCardBorder = Color.black.opacity(0.06)
+    static let buttonCardShadow = Color.black.opacity(0.22)
+    static let buttonInk = Color(white: 0.10)
+    static let buttonArrowCircle = Color(white: 0.92)
+
     private static func adaptiveColor(light: UIColor, dark: UIColor) -> Color {
         Color(uiColor: UIColor { traits in
             traits.userInterfaceStyle == .dark ? dark : light
@@ -238,26 +231,18 @@ private struct SignInUnifiedButtonStyle: ButtonStyle {
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
                     .fill(
                         LinearGradient(
-                            colors: isPrimary
-                                ? [AccountScreenPalette.primaryButtonTop, AccountScreenPalette.primaryButtonBottom]
-                                : [AccountScreenPalette.secondaryButtonTop, AccountScreenPalette.secondaryButtonBottom],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
+                            colors: [AccountScreenPalette.buttonCardTop, AccountScreenPalette.buttonCardBottom],
+                            startPoint: .top,
+                            endPoint: .bottom
                         )
                     )
-                    .background(.ultraThinMaterial)
-                    .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .strokeBorder(isPrimary ? AccountScreenPalette.borderPrimary : AccountScreenPalette.borderSecondary, lineWidth: 1)
+                    .strokeBorder(AccountScreenPalette.buttonCardBorder, lineWidth: 1)
             )
-            .shadow(
-                color: isPrimary ? AccountScreenPalette.primaryAccent.opacity(0.14) : Color.black.opacity(0.10),
-                radius: isPrimary ? 26 : 22,
-                y: 10
-            )
-            .opacity(configuration.isPressed ? 0.86 : 1.0)
+            .shadow(color: AccountScreenPalette.buttonCardShadow, radius: 22, y: 12)
+            .opacity(configuration.isPressed ? 0.9 : 1.0)
             .scaleEffect(configuration.isPressed ? 0.975 : 1.0)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }

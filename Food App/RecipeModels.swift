@@ -548,6 +548,21 @@ enum RecipeDuration {
         return "\(remainder) min"
     }
 
+    /// Compact, normalized duration for the card stat row — always collapses to
+    /// the shortest legible form ("30 min", "1 hr 30 min") so a long raw value
+    /// like "30 minutes" or "PT1H30M" can never overflow a narrow card. Falls
+    /// back to the trimmed raw string only when no duration can be parsed.
+    static func compactLabel(from raw: String?) -> String? {
+        guard let mins = minutes(from: raw), mins > 0 else {
+            return humanLabel(from: raw)
+        }
+        let hours = mins / 60
+        let remainder = mins % 60
+        if hours > 0 && remainder > 0 { return "\(hours) hr \(remainder) min" }
+        if hours > 0 { return "\(hours) hr" }
+        return "\(remainder) min"
+    }
+
     private static func isoMinutes(_ lowered: String) -> Int? {
         guard lowered.hasPrefix("pt") else { return nil }
         let body = lowered.dropFirst(2)
