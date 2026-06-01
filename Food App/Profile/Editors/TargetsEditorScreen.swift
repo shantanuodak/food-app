@@ -75,23 +75,9 @@ struct TargetsEditorScreen: View {
                         )
                     }
 
-                    Button {
+                    Button("How we calculate this") {
                         showExplainer = true
-                    } label: {
-                        HStack(spacing: 12) {
-                            metricIcon("function", color: .accentColor)
-                            Text("How we calculate this")
-                                .font(.system(size: 16, weight: .medium))
-                                .foregroundStyle(.primary)
-                            Spacer(minLength: 12)
-                            Image(systemName: "chevron.right")
-                                .font(.system(size: 13, weight: .semibold))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.vertical, 4)
-                        .contentShape(Rectangle())
                     }
-                    .buttonStyle(.plain)
                 } header: {
                     Text("Calculated Targets")
                 } footer: {
