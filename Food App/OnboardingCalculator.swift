@@ -7,92 +7,109 @@ struct OnboardingMetrics {
     let proteinTarget: Int
     let carbTarget: Int
     let fatTarget: Int
+
+    // V5 (2026-05-31) breakdown intermediates for the "How we calculate this"
+    // explainer. `bmr` is the raw Mifflin–St Jeor resting estimate;
+    // `goalAdjustment` is the signed pace delta (negative for Lose, positive
+    // for Gain, 0 for Maintain). When `hasCompleteBaseline` is false the draft
+    // is mid-onboarding and the explainer shows its "finish your profile" state
+    // instead of a fabricated equation.
+    let bmr: Int
+    let activityMultiplier: Double
+    let goalAdjustment: Int
+    let hasCompleteBaseline: Bool
 }
 
 enum OnboardingCalculator {
     static func metrics(from draft: OnboardingDraft, now: Date = Date()) -> OnboardingMetrics {
-        let maintenance = estimatedMaintenanceKcal(from: draft)
-        let target = targetKcal(from: draft, maintenance: maintenance)
+        let baseline = baselineEnergy(from: draft)
+        let goalAdjustment = goalAdjustmentKcal(from: draft)
+        let minFloor = draft.sex == .male ? 1500 : 1200
+        let target = max(minFloor, baseline.maintenance + goalAdjustment)
+        let macros = macroTargets(for: target, weightKg: draft.weightInKg, goal: draft.goal ?? .maintain)
         let projectedDate = projectedGoalDate(from: draft, now: now)
-        let macros = macroTargets(for: target)
 
         return OnboardingMetrics(
-            estimatedMaintenanceKcal: maintenance,
+            estimatedMaintenanceKcal: baseline.maintenance,
             targetKcal: target,
             projectedGoalDate: projectedDate,
             proteinTarget: macros.protein,
             carbTarget: macros.carbs,
-            fatTarget: macros.fat
+            fatTarget: macros.fat,
+            bmr: baseline.bmr,
+            activityMultiplier: baseline.multiplier,
+            goalAdjustment: goalAdjustment,
+            hasCompleteBaseline: draft.hasBaselineValues
         )
     }
 
-    private static func macroTargets(for targetKcal: Int) -> (protein: Int, carbs: Int, fat: Int) {
-        let desiredProtein = Double(targetKcal) * 0.30 / 4.0
-        let desiredCarbs = Double(targetKcal) * 0.40 / 4.0
-        let desiredFat = Double(targetKcal) * 0.30 / 9.0
+    /// V5 (2026-05-31) bodyweight-anchored macro split. Mirrors the backend
+    /// `resolveMacroTargets` in onboardingService.ts byte-for-byte (a backend
+    /// test asserts the shared fixtures). Protein scales with total bodyweight
+    /// (1.8 g/kg while cutting to protect lean mass, 1.6 g/kg otherwise — ISSN
+    /// Position Stand, Jäger 2017), fat is 30% of calories with a 0.6 g/kg
+    /// essential-fat floor, carbs take the remainder. Whole-gram macros can't
+    /// always sum exactly to the calorie target, so the result lands within
+    /// ~2 kcal. `Int(x.rounded())` matches JS `Math.round` for the non-negative
+    /// values used here, and the clamp uses `floor()` to match `Math.floor`.
+    static func macroTargets(
+        for targetKcal: Int,
+        weightKg: Double,
+        goal: GoalOption
+    ) -> (protein: Int, carbs: Int, fat: Int) {
+        let proteinPerKg = goal == .lose ? 1.8 : 1.6
+        var protein = max(0, Int((weightKg * proteinPerKg).rounded()))
 
-        let baseProtein = max(0, Int(desiredProtein.rounded()))
-        let baseCarbs = max(0, Int(desiredCarbs.rounded()))
-        let baseFat = max(0, Int(desiredFat.rounded()))
+        let fatFloorGrams = Int((weightKg * 0.6).rounded())
+        var fat = max(Int((Double(targetKcal) * 0.30 / 9.0).rounded()), fatFloorGrams)
 
-        var best: (protein: Int, carbs: Int, fat: Int, score: Double)?
-        let proteinSearch = max(0, baseProtein - 18)...(baseProtein + 18)
-        let carbSearch = max(0, baseCarbs - 24)...(baseCarbs + 24)
-
-        for protein in proteinSearch {
-            for carbs in carbSearch {
-                let remainingKcal = targetKcal - (4 * protein) - (4 * carbs)
-                if remainingKcal < 0 || remainingKcal % 9 != 0 {
-                    continue
-                }
-
-                let fat = remainingKcal / 9
-                if fat < 0 {
-                    continue
-                }
-
-                let score =
-                    pow(Double(protein) - desiredProtein, 2) +
-                    pow(Double(carbs) - desiredCarbs, 2) +
-                    pow(Double(fat) - desiredFat, 2)
-
-                if let currentBest = best {
-                    if score < currentBest.score {
-                        best = (protein, carbs, fat, score)
-                    }
-                } else {
-                    best = (protein, carbs, fat, score)
-                }
+        // Heavy person on a low target: protein + fat can exceed the budget.
+        // Keep the essential-fat floor, trim any fat above it first, then cap
+        // protein so carbs never go negative. (No real profile hits this — DB
+        // audit 2026-05-31 — but the calculator must stay total.)
+        if protein * 4 + fat * 9 > targetKcal {
+            let maxFatGrams = max(fatFloorGrams, Int(floor(Double(targetKcal - protein * 4) / 9.0)))
+            fat = max(0, min(fat, maxFatGrams))
+            if protein * 4 + fat * 9 > targetKcal {
+                protein = max(0, Int(floor(Double(targetKcal - fat * 9) / 4.0)))
             }
         }
 
-        if let best {
-            return (best.protein, best.carbs, best.fat)
-        }
-
-        return (baseProtein, baseCarbs, baseFat)
+        let carbs = max(0, Int((Double(targetKcal - protein * 4 - fat * 9) / 4.0).rounded()))
+        return (protein, carbs, fat)
     }
 
-    private static func estimatedMaintenanceKcal(from draft: OnboardingDraft) -> Int {
-        guard draft.hasBaselineValues else { return 2200 }
+    private static func activityMultiplier(for activity: ActivityChoice?) -> Double {
+        // Activity multiplier (same scale as MyFitnessPal).
+        switch activity {
+        case .mostlySitting:    return 1.2
+        case .lightlyActive:    return 1.375
+        case .moderatelyActive: return 1.55
+        case .veryActive:       return 1.725
+        case .none:             return 1.2
+        }
+    }
+
+    /// Returns the Mifflin–St Jeor BMR, the activity multiplier, and the
+    /// resulting maintenance (TDEE) estimate. For an incomplete draft (live
+    /// onboarding preview before biometrics are entered) it mirrors the legacy
+    /// 2200 fallback so the preview calorie number stays stable; `bmr` is 0 and
+    /// `metrics(from:)` flags the breakdown incomplete so the explainer never
+    /// renders a fabricated Mifflin equation.
+    private static func baselineEnergy(from draft: OnboardingDraft) -> (bmr: Int, multiplier: Double, maintenance: Int) {
+        let multiplier = activityMultiplier(for: draft.activity)
+        guard draft.hasBaselineValues else {
+            return (bmr: 0, multiplier: multiplier, maintenance: 2200)
+        }
         let age = Double(draft.age) ?? 30
         let weight = draft.weightInKg
         let height = draft.heightInCm
-        let sexOffset = draft.sex == .male ? 5 : -161
-        let bmr = (10 * weight) + (6.25 * height) - (5 * age) + Double(sexOffset)
-
-        // Activity multiplier (same scale as MyFitnessPal)
-        let activityMultiplier: Double
-        switch draft.activity {
-        case .mostlySitting:    activityMultiplier = 1.2
-        case .lightlyActive:    activityMultiplier = 1.375
-        case .moderatelyActive: activityMultiplier = 1.55
-        case .veryActive:       activityMultiplier = 1.725
-        case .none:             activityMultiplier = 1.2
-        }
+        let sexOffset = draft.sex == .male ? 5.0 : -161.0
+        let bmr = (10 * weight) + (6.25 * height) - (5 * age) + sexOffset
 
         let minFloor = draft.sex == .male ? 1500 : 1200
-        return max(minFloor, Int((bmr * activityMultiplier).rounded()))
+        let maintenance = max(minFloor, Int((bmr * multiplier).rounded()))
+        return (bmr: Int(bmr.rounded()), multiplier: multiplier, maintenance: maintenance)
     }
 
     /// Single source of truth for "what does this pace mean in pounds per
@@ -124,18 +141,16 @@ enum OnboardingCalculator {
         return Int((weekly * 3500.0 / 7.0).rounded())
     }
 
-    private static func targetKcal(from draft: OnboardingDraft, maintenance: Int) -> Int {
+    /// Signed daily calorie delta applied to maintenance: negative for Lose,
+    /// positive for Gain, zero for Maintain. The calorie floor is applied by
+    /// the caller (`metrics(from:)`).
+    private static func goalAdjustmentKcal(from draft: OnboardingDraft) -> Int {
         let deficit = dailyDeficitForPace(draft.pace)
-
-        let target: Int
         switch draft.goal ?? .maintain {
-        case .lose:     target = maintenance - deficit
-        case .maintain: target = maintenance
-        case .gain:     target = maintenance + deficit
+        case .lose:     return -deficit
+        case .gain:     return deficit
+        case .maintain: return 0
         }
-
-        let minFloor = draft.sex == .male ? 1500 : 1200
-        return max(minFloor, target)
     }
 
     /// Projected weeks based on a 10 lb (4.5 kg) goal using the pace's weekly rate.

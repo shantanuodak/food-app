@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { ApiError } from '../utils/errors.js';
 
 const ONBOARDING_PROVENANCE_MODE = 'computed_provenance_v1' as const;
-const ONBOARDING_CALCULATOR_VERSION = 'onboarding-target-calculator-v4' as const;
+export const ONBOARDING_CALCULATOR_VERSION = 'onboarding-target-calculator-v5' as const;
 
 export type OnboardingInput = {
   userId: string;
@@ -69,7 +69,15 @@ export type OnboardingTargetCalculation = {
   fat: number;
   calculatorVersion: string;
   normalizedInputs: Record<string, unknown>;
-  calculationMode: 'biometric' | 'legacy';
+  calculationMode: 'biometric';
+  // V5 (2026-05-31) breakdown intermediates — surfaced so the "How we
+  // calculate this" explainer and the iOS/backend parity tests can read the
+  // same numbers the calorie target was derived from. Not persisted; the
+  // iOS app recomputes these locally for display.
+  bmr: number;
+  activityMultiplier: number;
+  maintenanceCalories: number;
+  goalAdjustment: number;
 };
 
 export async function getOnboardingParsePreferences(userId: string): Promise<{ units: 'metric' | 'imperial' | null; timezone: string | null }> {
@@ -278,53 +286,49 @@ export async function getOnboardingProfile(userId: string): Promise<OnboardingPr
   };
 }
 
-function resolveMacroTargets(calorieTarget: number): { protein: number; carbs: number; fat: number } {
-  const desiredProtein = (calorieTarget * 0.30) / 4;
-  const desiredCarbs = (calorieTarget * 0.4) / 4;
-  const desiredFat = (calorieTarget * 0.30) / 9;
+/**
+ * V5 (2026-05-31) bodyweight-anchored macro split. Replaces the previous
+ * fixed 30/40/30 percentage split so the numbers line up with the research
+ * the in-app "How we calculate this" explainer cites:
+ *   - Protein scales with total bodyweight — 1.8 g/kg during a deficit to
+ *     protect lean mass, 1.6 g/kg otherwise (ISSN Position Stand, Jäger 2017,
+ *     recommends 1.4–2.0 g/kg for active individuals, higher when cutting).
+ *   - Fat is 30% of calories but never below a 0.6 g/kg essential-fat floor.
+ *   - Carbs fill whatever calories remain.
+ *
+ * MUST stay byte-for-byte equivalent to the Swift implementation in
+ * `OnboardingCalculator.macroTargets(for:weightKg:goal:)` — the backend test
+ * asserts the shared fixtures. Whole-gram macros can't always sum exactly to
+ * the calorie target (protein & carbs are 4 kcal/g, fat 9 kcal/g), so the
+ * result lands within ~2 kcal; no downstream consumer re-derives calories by
+ * summing the target macros (verified 2026-05-31).
+ */
+export function resolveMacroTargets(
+  targetKcal: number,
+  weightKg: number,
+  goal: OnboardingInput['goal']
+): { protein: number; carbs: number; fat: number } {
+  const proteinPerKg = goal === 'lose' ? 1.8 : 1.6;
+  let protein = Math.max(0, Math.round(weightKg * proteinPerKg));
 
-  const baseProtein = Math.max(0, Math.round(desiredProtein));
-  const baseCarbs = Math.max(0, Math.round(desiredCarbs));
-  const baseFat = Math.max(0, Math.round(desiredFat));
+  const fatFloorGrams = Math.round(weightKg * 0.6);
+  let fat = Math.max(Math.round((targetKcal * 0.30) / 9), fatFloorGrams);
 
-  let best: { protein: number; carbs: number; fat: number; score: number } | null = null;
-
-  for (let protein = Math.max(0, baseProtein - 18); protein <= baseProtein + 18; protein += 1) {
-    for (let carbs = Math.max(0, baseCarbs - 24); carbs <= baseCarbs + 24; carbs += 1) {
-      const remainingCalories = calorieTarget - 4 * protein - 4 * carbs;
-      if (remainingCalories < 0 || remainingCalories % 9 !== 0) {
-        continue;
-      }
-
-      const fat = remainingCalories / 9;
-      if (fat < 0) {
-        continue;
-      }
-
-      const score =
-        (protein - desiredProtein) ** 2 +
-        (carbs - desiredCarbs) ** 2 +
-        (fat - desiredFat) ** 2;
-
-      if (!best || score < best.score) {
-        best = { protein, carbs, fat, score };
-      }
+  // Heavy person on a low target: protein + fat can exceed the budget. Keep
+  // the essential-fat floor, trim any fat above it first, then cap protein so
+  // carbs never go negative. (No real profile hits this — DB audit
+  // 2026-05-31 — but the calculator must stay total.)
+  if (protein * 4 + fat * 9 > targetKcal) {
+    const maxFatGrams = Math.max(fatFloorGrams, Math.floor((targetKcal - protein * 4) / 9));
+    fat = Math.max(0, Math.min(fat, maxFatGrams));
+    if (protein * 4 + fat * 9 > targetKcal) {
+      protein = Math.max(0, Math.floor((targetKcal - fat * 9) / 4));
     }
   }
 
-  if (best) {
-    return {
-      protein: best.protein,
-      carbs: best.carbs,
-      fat: best.fat
-    };
-  }
+  const carbs = Math.max(0, Math.round((targetKcal - protein * 4 - fat * 9) / 4));
 
-  return {
-    protein: baseProtein,
-    carbs: baseCarbs,
-    fat: baseFat
-  };
+  return { protein, carbs, fat };
 }
 
 function roundTo(value: number, digits: number): number {
@@ -399,51 +403,56 @@ function resolveDailyDeficitForPace(pace?: OnboardingInput['pace']): number {
 export function calculateOnboardingTargets(input: OnboardingInput): OnboardingTargetCalculation {
   const normalizedInputs = normalizeInputs(input);
 
-  if (hasBiometricInputs(input)) {
-    const sexOffset = input.sex === 'male' ? 5 : -161;
-    const bmr = (10 * input.weightKg) + (6.25 * input.heightCm) - (5 * input.age) + sexOffset;
-    const minFloor = input.sex === 'male' ? 1500 : 1200;
-    const maintenance = Math.max(minFloor, Math.round(bmr * resolveActivityMultiplier(input)));
-    const paceCalories = resolveDailyDeficitForPace(input.pace);
-    let calorieTarget = maintenance;
-
-    switch (input.goal) {
-      case 'lose':
-        calorieTarget -= paceCalories;
-        break;
-      case 'gain':
-        calorieTarget += paceCalories;
-        break;
-      case 'maintain':
-        break;
-    }
-
-    calorieTarget = Math.max(minFloor, calorieTarget);
-
-    const macros = resolveMacroTargets(calorieTarget);
-    return {
-      calorieTarget,
-      protein: macros.protein,
-      carbs: macros.carbs,
-      fat: macros.fat,
-      calculatorVersion: ONBOARDING_CALCULATOR_VERSION,
-      normalizedInputs,
-      calculationMode: 'biometric'
-    };
+  // V5 (2026-05-31): the legacy non-biometric estimate (flat 2200-ish base
+  // with a 30/40/30 split) was removed — bodyweight-anchored macros need a
+  // real weight. iOS only submits once baseline biometrics are valid
+  // (`OnboardingDraft.hasBaselineValues`), and the DB audit on 2026-05-31
+  // found 0/23 profiles without biometrics, so this guard is unreachable in
+  // practice. We fail loud rather than silently fabricate numbers. The old
+  // legacy formula is preserved in the agent memory note, not in code.
+  if (!hasBiometricInputs(input)) {
+    throw new ApiError(
+      400,
+      'BIOMETRICS_REQUIRED',
+      'Age, sex, height and weight are required to calculate targets.'
+    );
   }
 
-  const base = input.activityLevel === 'high' ? 2500 : input.activityLevel === 'moderate' ? 2200 : 1900;
-  const adjusted = input.goal === 'lose' ? base - 350 : input.goal === 'gain' ? base + 300 : base;
-  const macros = resolveMacroTargets(adjusted);
+  const sexOffset = input.sex === 'male' ? 5 : -161;
+  const bmr = (10 * input.weightKg) + (6.25 * input.heightCm) - (5 * input.age) + sexOffset;
+  const activityMultiplier = resolveActivityMultiplier(input);
+  const minFloor = input.sex === 'male' ? 1500 : 1200;
+  const maintenance = Math.max(minFloor, Math.round(bmr * activityMultiplier));
+  const paceCalories = resolveDailyDeficitForPace(input.pace);
+
+  let goalAdjustment = 0;
+  switch (input.goal) {
+    case 'lose':
+      goalAdjustment = -paceCalories;
+      break;
+    case 'gain':
+      goalAdjustment = paceCalories;
+      break;
+    case 'maintain':
+      goalAdjustment = 0;
+      break;
+  }
+
+  const calorieTarget = Math.max(minFloor, maintenance + goalAdjustment);
+  const macros = resolveMacroTargets(calorieTarget, input.weightKg, input.goal);
 
   return {
-    calorieTarget: adjusted,
+    calorieTarget,
     protein: macros.protein,
     carbs: macros.carbs,
     fat: macros.fat,
     calculatorVersion: ONBOARDING_CALCULATOR_VERSION,
     normalizedInputs,
-    calculationMode: 'legacy'
+    calculationMode: 'biometric',
+    bmr: Math.round(bmr),
+    activityMultiplier,
+    maintenanceCalories: maintenance,
+    goalAdjustment
   };
 }
 

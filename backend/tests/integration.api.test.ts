@@ -522,7 +522,7 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     const firstProv = await request(app).get('/v1/onboarding/provenance').set(authHeader);
     expect(firstProv.status).toBe(200);
     expect(firstProv.body.mode).toBe('computed_provenance_v1');
-    expect(firstProv.body.calculatorVersion).toBe('onboarding-target-calculator-v4');
+    expect(firstProv.body.calculatorVersion).toBe('onboarding-target-calculator-v5');
     expect(typeof firstProv.body.inputsHash).toBe('string');
     expect(firstProv.body.inputsHash.length).toBe(64);
     expect(firstProv.body.inputs.timezone).toBe('America/New_York');
@@ -540,12 +540,15 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
     const secondProv = await request(app).get('/v1/onboarding/provenance').set(authHeader);
     expect(secondProv.status).toBe(200);
     expect(secondProv.body.mode).toBe('computed_provenance_v1');
-    expect(secondProv.body.calculatorVersion).toBe('onboarding-target-calculator-v4');
+    expect(secondProv.body.calculatorVersion).toBe('onboarding-target-calculator-v5');
     expect(secondProv.body.inputsHash).toBe(firstProv.body.inputsHash);
     expect(secondProv.body.inputs).toEqual(firstProv.body.inputs);
   });
 
-  test('legacy onboarding request without biometric fields still succeeds', async () => {
+  test('onboarding request without biometric fields is rejected (V5)', async () => {
+    // V5 (2026-05-31): the legacy non-biometric estimate (flat 2200 + 30/40/30)
+    // was removed — bodyweight-anchored macros require a real weight. iOS only
+    // submits once baseline biometrics are valid, so this now fails loud.
     const response = await request(app)
       .post('/v1/onboarding')
       .set(authHeader)
@@ -559,17 +562,8 @@ describe.skipIf(!hasTestDb)('Integration API flow', () => {
         overwriteExisting: true
       });
 
-    expect(response.status).toBe(200);
-    expect(response.body.calorieTarget).toBe(2200);
-    expect(response.body.macroTargets.protein).toBeGreaterThan(0);
-
-    const provenance = await request(app).get('/v1/onboarding/provenance').set(authHeader);
-    expect(provenance.status).toBe(200);
-    expect(provenance.body.calculatorVersion).toBe('onboarding-target-calculator-v4');
-    expect(provenance.body.inputs.age).toBeNull();
-    expect(provenance.body.inputs.sex).toBeNull();
-    expect(provenance.body.inputs.heightCm).toBeNull();
-    expect(provenance.body.inputs.weightKg).toBeNull();
+    expect(response.status).toBe(400);
+    expect(response.body.error.code).toBe('BIOMETRICS_REQUIRED');
   });
 
   test('cache key namespace changes when onboarding units change', async () => {

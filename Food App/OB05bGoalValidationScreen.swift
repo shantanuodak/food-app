@@ -13,6 +13,7 @@ struct OB05bGoalValidationScreen: View {
     @State private var metricsVisible = false
     @State private var glowShift = false
     @State private var kcalAnimatedValue: Double = 0
+    @State private var showExplainer = false
 
     private var paceWeeks: Int {
         switch draft.pace ?? .balanced {
@@ -92,6 +93,19 @@ struct OB05bGoalValidationScreen: View {
 
                         planCard
                             .padding(.horizontal, 18)
+
+                        Button {
+                            showExplainer = true
+                        } label: {
+                            HStack(spacing: 6) {
+                                Image(systemName: "info.circle")
+                                Text("How we calculate this")
+                            }
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundStyle(GoalValidationPalette.secondaryInk)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint("Opens a plain-language explanation of your calorie and macro targets")
                     }
                     .padding(.bottom, 28)
                 }
@@ -103,6 +117,11 @@ struct OB05bGoalValidationScreen: View {
         }
         .onAppear {
             runEntranceAnimation()
+        }
+        .sheet(isPresented: $showExplainer) {
+            CalculationExplainerView(breakdown: CalculationBreakdown.make(from: draft, metrics: metrics))
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 

@@ -12,6 +12,7 @@ import SwiftUI
 struct TargetsEditorScreen: View {
     @EnvironmentObject private var appStore: AppStore
     @EnvironmentObject private var draftStore: ProfileDraftStore
+    @State private var showExplainer = false
 
     var body: some View {
         Form {
@@ -73,6 +74,24 @@ struct TargetsEditorScreen: View {
                             color: Self.fatColor
                         )
                     }
+
+                    Button {
+                        showExplainer = true
+                    } label: {
+                        HStack(spacing: 12) {
+                            metricIcon("function", color: .accentColor)
+                            Text("How we calculate this")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundStyle(.primary)
+                            Spacer(minLength: 12)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                        .padding(.vertical, 4)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
                 } header: {
                     Text("Calculated Targets")
                 } footer: {
@@ -94,6 +113,11 @@ struct TargetsEditorScreen: View {
         }
         .task {
             await draftStore.loadIfNeeded(appStore: appStore)
+        }
+        .sheet(isPresented: $showExplainer) {
+            CalculationExplainerView(breakdown: CalculationBreakdown.make(from: draftStore.draft))
+                .presentationDetents([.large])
+                .presentationDragIndicator(.visible)
         }
     }
 
